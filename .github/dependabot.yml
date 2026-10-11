@@ -1,0 +1,25 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    # One PR a week for compatible bumps instead of one per crate; breaking ones still come alone.
+    groups:
+      cargo:
+        update-types: [minor, patch]
+    ignore:
+      # `gpui` and `gpui_platform` come from one Zed tag and must move together, by hand: Dependabot bumps
+      # one at a time, which leaves two incompatible copies of gpui in Cargo.lock.
+      - dependency-name: gpui
+      - dependency-name: gpui_platform
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    ignore:
+      # Its refs name the Rust toolchain (`stable`, the MSRV `1.88`), not versions of the action.
+      - dependency-name: dtolnay/rust-toolchain

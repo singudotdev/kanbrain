@@ -1,0 +1,42 @@
+[package]
+# Not on crates.io: GPUI comes from Zed's repository, and crates.io takes no git dependencies. The program is still
+# `kanbrain`; the crate `kanbrain` there is the command line.
+name = "kanbrain-app"
+description = "The kanbrain desktop app, which also takes the command line's commands: a kanban board with tasks in todo, doing, parked and done columns, with notes, decisions and time reports, over the same markdown files as the command line."
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+publish = false
+# tests/ holds this crate's unit tests, included into their modules with #[path], not integration tests.
+autotests = false
+
+[[bin]]
+name = "kanbrain"
+path = "src/main.rs"
+
+[dependencies]
+kanbrain-core.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+# GPUI from Zed 1.23.2: the crates.io release (0.2.2) can't draw on NVIDIA + Wayland
+# (its Vulkan surface stays "out of date" and the window never updates). Newer GPUI isn't on crates.io.
+# The `[patch]` entries Zed builds it with are in the workspace Cargo.toml.
+gpui = { git = "https://github.com/zed-industries/zed", tag = "v1.23.2", version = "0.2.2" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", tag = "v1.23.2", features = ["wayland", "x11"] }
+pulldown-cmark = { version = "0.13", default-features = false }
+
+# The window's icon on X11, decoded from the PNG built in (GPUI takes it as an image::RgbaImage).
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+# The icon in kanbrain.exe, on Windows only (see build.rs).
+[build-dependencies]
+winresource = { version = "0.1.31", default-features = false }
+
+[dev-dependencies]
+gpui = { git = "https://github.com/zed-industries/zed", tag = "v1.23.2", version = "0.2.2", features = ["test-support"] }
+tempfile.workspace = true
+
+[lints]
+workspace = true

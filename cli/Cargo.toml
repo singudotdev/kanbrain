@@ -1,0 +1,26 @@
+[package]
+# The crate is `kanbrain` on crates.io (`kb` was taken there); the program it installs is `kb`.
+name = "kanbrain"
+description = "Project memory for you and your coding agents: tasks, notes and decisions in plain markdown files next to the code, kept current by agents that stop to ask you when a choice is yours, with time tracked automatically. Installs the `kb` command line."
+version.workspace = true
+edition.workspace = true
+rust-version = "1.88"
+repository.workspace = true
+license.workspace = true
+readme = "README.md"
+keywords = ["kanban", "ai-agents", "markdown", "productivity", "time-tracking"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "kb"
+path = "src/main.rs"
+
+[dependencies]
+kanbrain-core.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

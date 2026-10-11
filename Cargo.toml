@@ -1,0 +1,49 @@
+[workspace]
+resolver = "3"
+members = ["core", "cli", "gui", "xtask"]
+# `cargo build` / `cargo test` at the top cover the command line only, which builds fast and on Rust 1.88.
+# The kanban app needs GPUI: add `-p kanbrain-app` or `--workspace` (see docs/development.md).
+default-members = ["core", "cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+repository = "https://github.com/singudotdev/kanbrain"
+license = "AGPL-3.0-only"
+
+[workspace.dependencies]
+# The version is what crates.io resolves it to: keep it at the workspace version.
+kanbrain-core = { path = "core", version = "0.1.0" }
+anyhow = "1.0.104"
+chrono = "0.4.45"
+dirs = "7"
+# The effective user id for the root check, without `unsafe` (already in the tree through tempfile and GPUI).
+rustix = { version = "1.1.5", default-features = false, features = ["std", "process"] }
+serde = { version = "1.0.228", features = ["derive"] }
+# preserve_order: settings files `init` merges into keep their keys in the order they had.
+serde_json = { version = "1.0.149", features = ["preserve_order"] }
+tempfile = "3.27"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Every item says why it exists, private ones too: most of this code is private to its crate.
+missing_docs_in_private_items = "warn"
+# Binaries and a crate only they use: no public API to document errors and panics for, or to mark #[must_use].
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+return_self_not_must_use = "allow"
+
+[profile.release]
+strip = true
+lto = true
+
+# The patches Zed 1.23.2 builds GPUI with (from its workspace Cargo.toml and Cargo.lock), for the kanban app;
+# a git dependency doesn't carry them over. The command line doesn't use these crates.
+[patch.crates-io]
+async-process = { git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d" }
+async-task = { git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd71e4e94fbda54ce6302444de14f4d190e" }
+calloop = { git = "https://github.com/zed-industries/calloop", rev = "eb6b4fd17b9af5ecc226546bdd04185391b3e265" }

@@ -1,0 +1,58 @@
+# What `cargo deny check` (run by CI) accepts in the dependency tree.
+
+[advisories]
+# Unmaintained crates GPUI pulls in, with no maintained release it could move to yet. They're checked again
+# whenever GPUI moves to a newer Zed release.
+ignore = [
+    { id = "RUSTSEC-2024-0436", reason = "paste, unmaintained, through gpui" },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser, unmaintained, through gpui's font stack" },
+    { id = "RUSTSEC-2026-0206", reason = "rustybuzz, unmaintained, through gpui's usvg" },
+]
+
+[licenses]
+# Licenses an AGPL-3.0-only program may include.
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+    "bzip2-1.0.6",
+]
+# This workspace's own crates, the two published on crates.io among them: their license is the program's.
+exceptions = [
+    { crate = "kanbrain", allow = ["AGPL-3.0-only"] },
+    { crate = "kanbrain-core", allow = ["AGPL-3.0-only"] },
+]
+
+[licenses.private]
+# The kanban app's crate isn't published.
+ignore = true
+
+[bans]
+# GPUI's tree carries two versions of a few crates; that's GPUI's to resolve.
+multiple-versions = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+# GPUI comes from Zed's repository, with the forks Zed builds it with.
+allow-git = [
+    "https://github.com/proptest-rs/proptest",
+    "https://github.com/smol-rs/async-task.git",
+    "https://github.com/zed-industries/async-process.git",
+    "https://github.com/zed-industries/calloop",
+    "https://github.com/zed-industries/font-kit",
+    "https://github.com/zed-industries/wasm_thread",
+    "https://github.com/zed-industries/xim-rs.git",
+    "https://github.com/zed-industries/zed",
+]

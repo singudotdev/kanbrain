@@ -1,0 +1,472 @@
+//! The brains the window shows: the central one and every registered project repository, each
+//! with its own entries, and the scope that filters them (all, the central brain, a project, or one
+//! repository of a project with several). Entries are known by [`Key`]: which brain, and the id
+//! there, since every brain numbers its entries from 1.
+
+use super::{AddProject, Board, Form, Mode, Picker, PickerKey, ProjectOption, WhereFor};
+use crate::text::editor::LineInput;
+use crate::text::event::KeyEvent;
+use anyhow::Result;
+use kanbrain_core::brain::{Brain, Calendar, CalendarView, Report, ReportView};
+use kanbrain_core::cli;
+use kanbrain_core::model::{RepoLink, Task};
+use kanbrain_core::projects::{self, Repo};
+use kanbrain_core::store::{PROJECT_DIR, Store};
+use std::path::{Path, PathBuf};
+
+/// An entry in one of the brains: the brain's index in [`Board::sources`], and the entry's id there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Key {
+    /// Index of the brain in `Board::sources`.
+    pub src: usize,
+    /// The entry's id in that brain.
+    pub id: u32,
+}
+
+impl Key {
+    /// An entry of the brain at `src`.
+    pub const fn new(src: usize, id: u32) -> Self {
+        Self { src, id }
+    }
+}
+
+/// One brain the window shows.
+#[derive(Debug)]
+pub struct Source {
+    /// Its entries.
+    pub brain: Brain,
+    /// How it's named on cards and in the scope filter (`shop`, `shop/api`); `None` for the central brain.
+    pub label: Option<String>,
+    /// The project it's a repository of; `None` for the central brain.
+    pub project: Option<String>,
+}
+
+/// Which brains the window shows.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Scope {
+    /// Every brain together.
+    #[default]
+    All,
+    /// The central brain: what's outside any project.
+    Central,
+    /// Every repository of this project.
+    Project(String),
+    /// One repository, of a project with several (index in `Board::sources`).
+    Repo(usize),
+}
+
+/// The central brain, then every repository [`repos`] lists.
+pub(super) fn load(central: &Path, also: Option<&Path>) -> Result<Vec<Source>> {
+    let repos = repos(central, also)?;
+    let mut sources = vec![Source { brain: Brain::open_in(Store::at(central)?, central)?, label: None, project: None }];
+    for repo in repos.iter().filter(|r| r.dir.is_dir()) {
+        sources.push(Source {
+            brain: Brain::open_in(Store::at(&repo.dir)?, central)?,
+            label: Some(repo.label(&repos)),
+            project: Some(repo.project.clone()),
+        });
+    }
+    Ok(sources)
+}
+
+/// Every registered repository, and `also`, a `.brain/` the window was opened in that isn't registered
+/// (from before projects were), under its folder's name. Those whose folder is gone are listed but not
+/// shown, rather than created again.
+fn repos(central: &Path, also: Option<&Path>) -> Result<Vec<Repo>> {
+    let mut repos = projects::load(central)?;
+    if let Some(dir) = also.filter(|d| !repos.iter().any(|r| projects::same_dir(&r.dir, d))) {
+        let project = projects::read_repo_card(dir).map_or_else(|| folder_name(dir), |(name, _)| name);
+        repos.push(Repo { project, dir: dir.to_path_buf() });
+    }
+    Ok(repos)
+}
+
+/// The name of the folder holding a `.brain/`.
+fn folder_name(dir: &Path) -> String {
+    dir.parent().and_then(Path::file_name).map_or_else(|| "project".into(), |n| n.to_string_lossy().into_owned())
+}
+
+impl Board {
+    /// The brain at `src`.
+    pub fn brain(&self, src: usize) -> &Brain {
+        &self.sources[src].brain
+    }
+
+    /// The brain at `src`, to change.
+    pub fn brain_mut(&mut self, src: usize) -> &mut Brain {
+        &mut self.sources[src].brain
+    }
+
+    /// The entry `key` names.
+    pub fn task(&self, key: Key) -> Option<&Task> {
+        self.sources.get(key.src)?.brain.task(key.id)
+    }
+
+    /// Whether the scope shows the brain at `src`.
+    pub fn in_scope(&self, src: usize) -> bool {
+        let source = &self.sources[src];
+        match &self.scope {
+            Scope::All => true,
+            Scope::Central => source.project.is_none(),
+            Scope::Project(name) => source.project.as_ref() == Some(name),
+            Scope::Repo(repo) => *repo == src,
+        }
+    }
+
+    /// The brains the scope shows, with their index.
+    pub fn scoped(&self) -> impl Iterator<Item = (usize, &Brain)> {
+        (0..self.sources.len()).filter(|&src| self.in_scope(src)).map(|src| (src, self.brain(src)))
+    }
+
+    /// Whether cards say which brain they're from: when the scope shows more than one.
+    pub fn several(&self) -> bool {
+        self.scoped().nth(1).is_some()
+    }
+
+    /// The label to show on an entry of the brain at `src`, when the scope shows several brains.
+    pub fn source_label(&self, src: usize) -> Option<&str> {
+        self.several().then(|| self.sources[src].label.as_deref().unwrap_or(projects::CENTRAL))
+    }
+
+    /// The scopes there are, with their names, in the order the filter shows them: all, the central
+    /// brain, then each project followed by its repositories if it has several.
+    pub fn scopes(&self) -> Vec<(Scope, String)> {
+        let mut scopes = vec![(Scope::All, "All".to_string()), (Scope::Central, "Central".to_string())];
+        let mut seen: Vec<&str> = Vec::new();
+        for source in &self.sources {
+            let Some(project) = source.project.as_deref() else { continue };
+            if seen.contains(&project) {
+                continue;
+            }
+            seen.push(project);
+            scopes.push((Scope::Project(project.to_string()), project.to_string()));
+            let repos: Vec<usize> = self.repos_of(project).collect();
+            if repos.len() > 1 {
+                for src in repos {
+                    let label = self.sources[src].label.clone().unwrap_or_default();
+                    scopes.push((Scope::Repo(src), label));
+                }
+            }
+        }
+        scopes
+    }
+
+    /// Shows only what `scope` covers, keeping the selection if it's still shown.
+    pub fn set_scope(&mut self, scope: Scope) {
+        self.scope = scope;
+        self.keep_selection();
+    }
+
+    /// The scopes whose name contains every word of the picker's search, ignoring case, in the
+    /// filter's order.
+    pub fn scope_candidates(&self, picker: &Picker) -> Vec<(Scope, String)> {
+        self.scopes().into_iter().filter(|(_, name)| picker.matches(name)).collect()
+    }
+
+    /// Opens the project filter's dropdown, on the scope shown.
+    pub fn open_scopes(&mut self) {
+        let picker = Picker::default();
+        let sel = self.scope_candidates(&picker).iter().position(|(s, _)| *s == self.scope).unwrap_or(0);
+        self.mode = Mode::Scopes(Picker { sel, ..picker });
+    }
+
+    /// Shows the dropdown's candidate at `index` and closes it.
+    pub fn choose_scope(&mut self, index: usize) {
+        let Mode::Scopes(picker) = &self.mode else { return };
+        let Some((scope, _)) = self.scope_candidates(picker).into_iter().nth(index) else { return };
+        self.mode = Mode::Normal;
+        self.set_scope(scope);
+    }
+
+    /// Asks which project the folder `dir`, picked in the system's dialog, joins or starts. The name begins as the
+    /// one its `.brain/` card gives if it has one (it was a repository before), else the folder's, selected so that
+    /// typing replaces it.
+    pub fn name_project(&mut self, dir: PathBuf) {
+        let card = projects::read_repo_card(&dir.join(PROJECT_DIR)).map(|(name, _)| name);
+        let name = card.or_else(|| Some(dir.file_name()?.to_string_lossy().into_owned())).unwrap_or_default();
+        let mut search = LineInput::new(&name);
+        search.select_all();
+        self.mode = Mode::AddProject(AddProject { dir, picker: Picker { search, sel: 0 } });
+    }
+
+    /// The add-project dialog's rows for what's typed: a new project of that name unless there's one already, then
+    /// the projects there are whose name contains every word typed (all of them with nothing typed).
+    pub fn add_project_options(&self, picker: &Picker) -> Vec<ProjectOption> {
+        let typed = picker.search.text().trim().to_string();
+        let mut names: Vec<&str> = Vec::new();
+        for project in self.sources.iter().filter_map(|s| s.project.as_deref()) {
+            if !names.contains(&project) {
+                names.push(project);
+            }
+        }
+        let new = (!typed.is_empty() && !names.contains(&typed.as_str())).then_some(ProjectOption::New(typed));
+        let existing = names.into_iter().filter(|name| picker.matches(name));
+        new.into_iter().chain(existing.map(|name| ProjectOption::Existing(name.to_string()))).collect()
+    }
+
+    /// The add-project dialog's keys: arrows move, typing names or searches, `enter` adds the folder to the
+    /// highlighted row's project, `esc` cancels.
+    pub(super) fn key_add_project(&mut self, mut add: AddProject, key: KeyEvent) {
+        let count = self.add_project_options(&add.picker).len();
+        let outcome = add.picker.key(key, count);
+        let sel = add.picker.sel;
+        if outcome != PickerKey::Close {
+            self.mode = Mode::AddProject(add);
+        }
+        if outcome == PickerKey::Choose {
+            self.choose_add_project(sel);
+        }
+    }
+
+    /// Makes the folder a repository of the project at `index` among the dialog's rows, as `kb init` does there,
+    /// and shows that project. The dialog stays open, with the reason, when nothing is typed or the folder can't be
+    /// written.
+    pub fn choose_add_project(&mut self, index: usize) {
+        let Mode::AddProject(add) = &self.mode else { return };
+        let Some(option) = self.add_project_options(&add.picker).into_iter().nth(index) else {
+            self.notify("type the project's name");
+            return;
+        };
+        let name = option.name().to_string();
+        let dir = add.dir.clone();
+        if let Err(e) = cli::init(&dir, Some(&name), &self.central) {
+            self.notify(format!("{e:#}"));
+            return;
+        }
+        self.mode = Mode::Normal;
+        let result = self.reload();
+        self.report_error(result);
+        let repos = self.repos_of(&name).count();
+        self.set_scope(Scope::Project(name.clone()));
+        self.notify(if repos > 1 {
+            format!("added {} to project `{name}`; its agent instructions tell agents to use kanbrain", dir.display())
+        } else {
+            format!("added project `{name}`; its agent instructions tell agents to use kanbrain")
+        });
+    }
+
+    /// A brain of the project shown, if the scope shows one project (or one of its repositories):
+    /// the repository shown, else the project's first.
+    pub fn project_src(&self) -> Option<usize> {
+        match &self.scope {
+            Scope::Repo(src) => Some(*src),
+            Scope::Project(_) => self.scoped().next().map(|(src, _)| src),
+            Scope::All | Scope::Central => None,
+        }
+    }
+
+    /// The brains of project `name`, its repositories, in order.
+    pub fn repos_of(&self, name: &str) -> impl Iterator<Item = usize> {
+        (0..self.sources.len()).filter(move |&s| self.sources[s].project.as_deref() == Some(name))
+    }
+
+    /// The brains of the project the brain at `src` belongs to, in order.
+    pub fn project_repos(&self, src: usize) -> Vec<usize> {
+        self.sources[src].project.as_deref().map_or_else(Vec::new, |project| self.repos_of(project).collect())
+    }
+
+    /// Opens the info of the project shown, else of the selected entry's project. With neither, says
+    /// how to get one rather than doing nothing, since a key that does nothing reads as broken.
+    pub fn open_project_info(&mut self) {
+        let selected = self.selected.map(|key| key.src).filter(|&src| self.sources[src].project.is_some());
+        match self.project_src().or(selected) {
+            Some(src) => self.mode = Mode::ProjectInfo(src),
+            None => self.notify("no project here: select one of its cards, or show it with P"),
+        }
+    }
+
+    /// The brain the status bar names: the selected entry's if the scope shows it, else the first
+    /// brain the scope shows (the central one for all).
+    pub fn home(&self) -> usize {
+        match self.selected.filter(|k| self.in_scope(k.src)) {
+            Some(key) => key.src,
+            None => self.scoped().next().map_or(0, |(src, _)| src),
+        }
+    }
+
+    /// The brains the "which project?" picker offers, named as cards name them, whose name contains
+    /// every word of the picker's search, ignoring case: for a quick-added task, those the scope shows;
+    /// for a move, every brain but the entry's own, since it may go anywhere.
+    pub fn where_candidates(&self, picker: &Picker, then: WhereFor) -> Vec<(usize, String)> {
+        let offered: Vec<usize> = match then {
+            WhereFor::Move(key) => (0..self.sources.len()).filter(|&src| src != key.src).collect(),
+            WhereFor::QuickAdd(_) => self.scoped().map(|(src, _)| src).collect(),
+        };
+        offered
+            .into_iter()
+            .map(|src| (src, self.brain_name(src).to_string()))
+            .filter(|(_, name)| picker.matches(name))
+            .collect()
+    }
+
+    /// The brains the form's project field offers: every one, whatever the scope, in order, whose name
+    /// contains every word of its search; none on a form without the field.
+    pub fn form_projects(&self, form: &Form) -> Vec<(usize, String)> {
+        let Some(picker) = &form.project else { return Vec::new() };
+        (0..self.sources.len())
+            .map(|src| (src, self.brain_name(src).to_string()))
+            .filter(|(_, name)| picker.matches(name))
+            .collect()
+    }
+
+    /// Entries of the project's other repositories related to `key`'s, whichever side stores the link: the
+    /// core's `Brain::repo_related`, but from the brains already loaded, since it's drawn every frame.
+    pub fn repo_related(&self, key: Key) -> Vec<Key> {
+        let Some(here) = &self.brain(key.src).project else { return Vec::new() };
+        let links = self.task(key).map_or(&[][..], |t| t.repo_links.as_slice());
+        let back = RepoLink { repo: here.repo.clone(), id: key.id };
+        let mut related = Vec::new();
+        for (src, source) in self.sources.iter().enumerate().filter(|&(src, _)| src != key.src) {
+            let Some(there) = source.brain.project.as_ref().filter(|p| p.name == here.name) else { continue };
+            let linked = |t: &&Task| {
+                links.contains(&RepoLink { repo: there.repo.clone(), id: t.id }) || t.repo_links.contains(&back)
+            };
+            related.extend(source.brain.tasks.iter().filter(linked).map(|t| Key::new(src, t.id)));
+        }
+        related
+    }
+
+    /// The brains whose entries one in the brain at `src` can be related to: its own, then the other
+    /// repositories of its project, if it's in one.
+    pub fn link_scope(&self, src: usize) -> Vec<usize> {
+        let project = self.brain(src).project.as_ref().map(|p| p.name.as_str());
+        let others = (0..self.sources.len()).filter(|&other| {
+            other != src && project.is_some() && self.brain(other).project.as_ref().map(|p| p.name.as_str()) == project
+        });
+        std::iter::once(src).chain(others).collect()
+    }
+
+    /// Every entry one in the brain at `src` can be related to (see [`Board::link_scope`]), with its key.
+    pub fn linkable(&self, src: usize) -> impl Iterator<Item = (Key, &Task)> {
+        self.link_scope(src)
+            .into_iter()
+            .flat_map(move |other| self.brain(other).tasks.iter().map(move |t| (Key::new(other, t.id), t)))
+    }
+
+    /// How a link from the brain at `src` names `to`: `#3` in the same brain, `shop/api #3` in another.
+    pub fn link_name(&self, src: usize, to: Key) -> String {
+        if to.src == src { format!("#{}", to.id) } else { format!("{} #{}", self.brain_name(to.src), to.id) }
+    }
+
+    /// Every entry related to `key`'s, in its brain and the project's other repositories.
+    pub fn related_keys(&self, key: Key) -> Vec<Key> {
+        let here = self.brain(key.src).related(key.id).into_iter().map(|t| Key::new(key.src, t.id));
+        here.chain(self.repo_related(key)).collect()
+    }
+
+    /// Relates two entries, or unrelates them if they already are, in one brain or across a project's
+    /// repositories (see `Brain::toggle_link`, `Brain::toggle_repo_link`). Returns whether they are now.
+    pub fn toggle_link_between(&mut self, a: Key, b: Key) -> Result<bool> {
+        if a.src == b.src {
+            return self.brain_mut(a.src).toggle_link(a.id, b.id);
+        }
+        // Two brains of `sources` at once, as a move does.
+        if a.src < b.src {
+            let (left, right) = self.sources.split_at_mut(b.src);
+            left[a.src].brain.toggle_repo_link(a.id, &mut right[0].brain, b.id)
+        } else {
+            let (left, right) = self.sources.split_at_mut(a.src);
+            right[0].brain.toggle_repo_link(a.id, &mut left[b.src].brain, b.id)
+        }
+    }
+
+    /// How an entry of another repository of its project names `key`'s entry in its links.
+    pub fn repo_link(&self, key: Key) -> RepoLink {
+        let repo = self.brain(key.src).project.as_ref().map_or_else(String::new, |p| p.repo.clone());
+        RepoLink { repo, id: key.id }
+    }
+
+    /// Removes the links the project's other repositories have to `key`'s entry, once it's deleted or
+    /// moved away, so they don't point at an entry that's gone.
+    pub fn drop_links_from_other_repos(&mut self, key: Key) -> Result<()> {
+        let link = self.repo_link(key);
+        for other in self.link_scope(key.src).into_iter().skip(1) {
+            self.brain_mut(other).drop_repo_links_to(&link)?;
+        }
+        Ok(())
+    }
+
+    /// How a brain is named in lists of them: its label, or `Central`.
+    pub fn brain_name(&self, src: usize) -> &str {
+        self.sources[src].label.as_deref().unwrap_or("Central")
+    }
+
+    /// The brain whose colors a tag is shown in where it isn't on any one entry (the report's and the
+    /// calendar's filters): the first in scope that uses it.
+    pub fn tag_brain(&self, tag: &str) -> &Brain {
+        let uses = |brain: &Brain| brain.tasks.iter().any(|t| t.tags.iter().any(|t| t == tag));
+        self.scoped().map(|(_, b)| b).find(|b| uses(b)).unwrap_or_else(|| self.brain(0))
+    }
+
+    /// Every tag the scope's entries use, sorted.
+    pub fn all_tags(&self) -> Vec<String> {
+        let mut tags: Vec<String> = self.scoped().flat_map(|(_, b)| b.all_tags()).collect();
+        tags.sort();
+        tags.dedup();
+        tags
+    }
+
+    /// The tasks whose clocks run: at most one per brain, whatever the scope shows.
+    pub fn running(&self) -> Vec<(Key, &Task)> {
+        self.sources
+            .iter()
+            .enumerate()
+            .filter_map(|(src, s)| s.brain.running().map(|t| (Key::new(src, t.id), t)))
+            .collect()
+    }
+
+    /// The report tab's view with the tab's search.
+    pub fn report_view(&self) -> ReportView {
+        ReportView { query: self.search.text().to_string(), ..self.report.clone() }
+    }
+
+    /// The calendar tab's view with the tab's search.
+    pub fn calendar_view(&self) -> CalendarView {
+        CalendarView { query: self.search.text().to_string(), ..self.calendar.clone() }
+    }
+
+    /// The report of every brain in scope, merged; task rows say their brain when there are several.
+    pub fn report(&self) -> Report {
+        let view = self.report_view();
+        let parts = self
+            .scoped()
+            .map(|(src, brain)| (self.source_label(src).map(str::to_string), brain.report(&view)))
+            .collect();
+        Report::merge(parts, view.group)
+    }
+
+    /// The calendar of every brain in scope, merged, and which brain each part came from: an event's
+    /// `source` indexes the returned list.
+    pub fn calendar(&self) -> (Calendar, Vec<usize>) {
+        let view = self.calendar_view();
+        let (srcs, parts): (Vec<usize>, Vec<Calendar>) = self.scoped().map(|(src, b)| (src, b.calendar(&view))).unzip();
+        (Calendar::merge(parts), srcs)
+    }
+
+    /// Writes the report tab's report, filtered as shown: into the one brain shown, or the central
+    /// brain for several.
+    pub(super) fn write_report(&self) -> Result<PathBuf> {
+        let (report, view) = (self.report(), self.report_view());
+        let mut scoped = self.scoped();
+        let brain = match (scoped.next(), scoped.next()) {
+            (Some((_, one)), None) => one,
+            _ => self.brain(0),
+        };
+        brain.write_report(&report, &view)
+    }
+
+    /// Whether the repositories shown are still those registered, with the same projects.
+    pub(super) fn same_repos(&self) -> Result<bool> {
+        let repos = repos(&self.central, self.opened_in.as_deref())?;
+        let registered = repos.iter().filter(|r| r.dir.is_dir()).map(|r| (r.dir.as_path(), Some(r.project.as_str())));
+        let shown = self.sources.iter().skip(1).map(|s| (s.brain.store.dir(), s.project.as_deref()));
+        Ok(registered.eq(shown))
+    }
+
+    /// The data folders to watch: every brain's, and the central brain's project cards.
+    pub fn watched_dirs(&self) -> Vec<PathBuf> {
+        let mut dirs: Vec<PathBuf> = self.sources.iter().map(|s| s.brain.store.dir().to_path_buf()).collect();
+        dirs.push(self.central.join("projects"));
+        dirs
+    }
+}

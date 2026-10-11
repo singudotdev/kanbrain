@@ -1,0 +1,174 @@
+//! Dropdowns with a search box, hanging from the button that opens them: the project filter and the
+//! tag filters. Typing filters the rows, so a long list of projects or tags stays usable.
+//!
+//! Also [`list`], the scrolling list every dropdown and picker uses: the same number of rows shown
+//! everywhere, the highlighted row kept in view, and how many more there are below.
+
+use super::BrainView;
+use super::pointer::TextBox;
+use super::theme::{self, BORDER, GREEN};
+use super::widgets::{self, dim};
+use crate::state::{Board, Mode, Picker};
+use gpui::{
+    AnyElement, ClickEvent, Context, Div, ElementId, ScrollHandle, Stateful, Styled, anchored, deferred, div,
+    prelude::*, px, rgb,
+};
+
+/// Height of a row in every list, fixed so a list of `MAX_ROWS` is exactly that many rows tall and
+/// the rows out of view can be counted from the scroll offset.
+pub const ROW_HEIGHT: f32 = 28.;
+/// Rows a dropdown or picker shows before it scrolls.
+pub const MAX_ROWS: usize = 8;
+/// Height of the "↓ N more" line under a list that scrolls.
+const MORE_HEIGHT: f32 = 20.;
+
+/// One row: its content, whether it's the current choice (checked), and whether it's indented
+/// under the row before it.
+pub struct Row {
+    /// What the row shows.
+    pub content: AnyElement,
+    /// Whether it's what's shown now.
+    pub checked: bool,
+    /// Whether it belongs to the row above, like a project's repository.
+    pub nested: bool,
+}
+
+/// A dropdown: its search box (a `picker`), then `rows`. `name` makes the rows' ids (`name 3`) and
+/// says what's missing when nothing matches.
+pub struct Dropdown<'a> {
+    /// What the rows are: `project`, `tag`.
+    pub name: &'static str,
+    /// The search typed and the highlighted row.
+    pub picker: &'a Picker,
+    /// Which text box its search is, for the mouse.
+    pub search: TextBox,
+    /// What's offered.
+    pub rows: Vec<Row>,
+    /// What a click on row `i` runs.
+    pub choose: fn(&mut Board, usize),
+    /// How wide it is.
+    pub width: f32,
+}
+
+impl Dropdown<'_> {
+    /// Draws it under the button that opened it; a click outside closes it. `scroll` and `follow`
+    /// are its list's (see [`list`]).
+    pub fn draw(self, scroll: &ScrollHandle, follow: bool, cx: &mut Context<BrainView>) -> impl IntoElement {
+        let Self { name, picker, search, rows, choose, width } = self;
+        let empty = rows.is_empty();
+        let rows: Vec<_> = rows
+            .into_iter()
+            .enumerate()
+            .map(|(index, option)| {
+                row((name, index), format!("{name} {index}"), index == picker.sel, true)
+                    .when(option.nested, Styled::pl_6)
+                    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| choose(b, index))))
+                    .child(div().w(px(14.)).flex_none().text_color(rgb(GREEN)).child(if option.checked {
+                        "✓"
+                    } else {
+                        ""
+                    }))
+                    .child(div().min_w_0().flex().items_center().child(option.content))
+            })
+            .collect();
+        let list = list((name, usize::MAX), rows, picker.sel, MAX_ROWS, scroll, follow)
+            .when(empty, |d| d.child(dim(format!("No {name} matches.")).px_2().py_1()));
+        let panel: Div = div()
+            .occlude()
+            .w(px(width))
+            .mt_1()
+            .p_2()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .rounded_md()
+            .border_1()
+            .border_color(rgb(BORDER))
+            .bg(rgb(theme::POPUP))
+            .shadow_lg()
+            .text_size(px(13.))
+            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                if matches!(this.board.mode, Mode::Scopes(_) | Mode::Tags(..)) {
+                    this.act(cx, |b| b.mode = Mode::Normal);
+                }
+            }))
+            .child(widgets::text_field(search, &picker.search, true, &format!("Search {name}s"), cx))
+            .child(list);
+        // Drawn after everything else, so it covers what's under it.
+        deferred(anchored().child(panel)).with_priority(1)
+    }
+}
+
+/// A row of a [`list`]: `ROW_HEIGHT` tall, as the list counts on, and highlighted while it's the list's
+/// selection. A `clickable` one shows a pointer and lights up under the mouse; `selector` names it for
+/// tests. What it shows and what a click does are the caller's.
+pub fn row(id: impl Into<ElementId>, selector: String, highlighted: bool, clickable: bool) -> Stateful<Div> {
+    div()
+        .id(id)
+        .debug_selector(move || selector)
+        .flex()
+        .items_center()
+        .gap_2()
+        .h(px(ROW_HEIGHT))
+        .flex_none()
+        .px_2()
+        .rounded_sm()
+        .when(highlighted, |d| d.bg(rgb(theme::SELECTED)))
+        .when(clickable, Styled::cursor_pointer)
+        .when(clickable && !highlighted, |d| d.hover(|s| s.bg(rgb(theme::HOVER))))
+}
+
+/// A list of `rows` (each `ROW_HEIGHT` tall) showing at most `max_rows` before it scrolls. While the
+/// keyboard moved the highlight (`follow`), row `sel` is scrolled into view; while rows are out of
+/// view below, a line under the list says how many, since GPUI draws no scroll bar.
+pub fn list(
+    id: impl Into<ElementId>,
+    rows: Vec<Stateful<Div>>,
+    sel: usize,
+    max_rows: usize,
+    scroll: &ScrollHandle,
+    follow: bool,
+) -> Div {
+    let count = rows.len();
+    if follow {
+        scroll.scroll_to_item(sel);
+    }
+    // The first row in view, from how far the list is scrolled; the offset is negative going down.
+    let scrolled = f32::from(-scroll.offset().y);
+    let mut top = (0..count).take_while(|&i| rows_height(i) + ROW_HEIGHT / 2. <= scrolled).count();
+    // The offset is last frame's; when the keyboard moved, the list is about to scroll just enough to
+    // show `sel`, so count from where that leaves it.
+    if follow {
+        top = top.min(sel).max((sel + 1).saturating_sub(max_rows));
+    }
+    let below = count.saturating_sub(top + max_rows);
+    let id = id.into();
+    let selector = format!("{id}-list");
+    let rows = div()
+        .debug_selector(move || selector)
+        .id(id)
+        .flex()
+        .flex_col()
+        .max_h(px(rows_height(max_rows)))
+        .overflow_y_scroll()
+        .track_scroll(scroll)
+        .children(rows);
+    // A list that scrolls keeps the line's room even when nothing is below, so reaching the end
+    // doesn't change its height: the dialogs are centered, and a jump would shift the rows under the
+    // scroll the keyboard just asked for.
+    div().flex().flex_col().child(rows).children((count > max_rows).then(|| {
+        div()
+            .when(below > 0, |d| d.debug_selector(|| "list more".into()))
+            .h(px(MORE_HEIGHT))
+            .px_2()
+            .pt_1()
+            .text_size(px(12.))
+            .text_color(rgb(theme::DIM))
+            .when(below > 0, |d| d.child(format!("↓ {below} more · type to filter")))
+    }))
+}
+
+/// How tall `n` rows are; lists are short, so `n` fits a `u16`.
+fn rows_height(n: usize) -> f32 {
+    ROW_HEIGHT * f32::from(u16::try_from(n).unwrap_or(u16::MAX))
+}

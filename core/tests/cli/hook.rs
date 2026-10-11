@@ -1,0 +1,82 @@
+use super::*;
+use crate::projects;
+
+/// A central brain and a repository folder registered as project `shop`, with its card as `init` makes
+/// it; the folders live as long as the returned ones.
+fn project() -> (tempfile::TempDir, tempfile::TempDir, PathBuf) {
+    let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let dir = code.path().join("api/.brain");
+    std::fs::create_dir_all(&dir).unwrap();
+    projects::register(central.path(), "shop", &dir).unwrap();
+    projects::write_repo_card(&dir, "shop", "").unwrap();
+    projects::ensure_description(central.path(), "shop").unwrap();
+    let root = code.path().join("api");
+    (central, code, root)
+}
+
+/// The hook's input as Claude Code sends it, from `cwd`.
+fn input(cwd: &Path, stop_hook_active: bool) -> String {
+    json!({ "hook_event_name": "Stop", "cwd": cwd, "stop_hook_active": stop_hook_active }).to_string()
+}
+
+#[test]
+fn an_undescribed_project_is_asked_for_with_every_prompt_and_holds_the_turn_once() {
+    let (central, _code, root) = project();
+    let prompt = respond(HookEvent::Prompt, &input(&root, false), central.path()).expect("it asks");
+    assert!(
+        prompt.contains("Before anything else in this turn") && prompt.contains("`kb project describe -`"),
+        "{prompt}"
+    );
+    assert!(!prompt.contains("role"), "one repository has no role to describe: {prompt}");
+
+    let stop: Value =
+        serde_json::from_str(&respond(HookEvent::Stop, &input(&root, false), central.path()).unwrap()).unwrap();
+    let reminder = stop["hookSpecificOutput"]["additionalContext"].as_str().expect("the turn goes on with it");
+    assert_eq!(stop["hookSpecificOutput"]["hookEventName"], "Stop");
+    assert!(reminder.contains("Before ending this turn") && reminder.contains("`kb project describe -`"), "{reminder}");
+    assert_eq!(respond(HookEvent::Stop, &input(&root, true), central.path()), None, "but only once: no loop");
+}
+
+#[test]
+fn a_described_project_costs_nothing_and_outside_one_too() {
+    let (central, _code, root) = project();
+    projects::write_description(central.path(), "shop", "An online shop.").unwrap();
+    for event in [HookEvent::Prompt, HookEvent::Stop] {
+        assert_eq!(respond(event, &input(&root, false), central.path()), None);
+    }
+    let elsewhere = tempfile::tempdir().unwrap();
+    assert_eq!(respond(HookEvent::Stop, &input(elsewhere.path(), false), central.path()), None, "not a project");
+    assert_eq!(respond(HookEvent::Stop, "not json", central.path()), None, "bad input never breaks a session");
+}
+
+#[test]
+fn with_several_repositories_this_ones_role_counts_too() {
+    let (central, code, root) = project();
+    let web = code.path().join("web/.brain");
+    std::fs::create_dir_all(&web).unwrap();
+    projects::register(central.path(), "shop", &web).unwrap();
+    projects::write_description(central.path(), "shop", "An online shop.").unwrap();
+    let prompt = respond(HookEvent::Prompt, &input(&root, false), central.path()).expect("the role is missing");
+    assert!(prompt.contains("`kb project notes -`") && !prompt.contains("describe -"), "{prompt}");
+    projects::write_repo_card(&root.join(".brain"), "shop", "The API.").unwrap();
+    assert_eq!(respond(HookEvent::Prompt, &input(&root, false), central.path()), None);
+}
+
+#[test]
+fn a_task_an_agent_started_and_never_commented_on_is_reminded_once() {
+    let (central, _code, root) = project();
+    projects::write_description(central.path(), "shop", "An online shop.").unwrap();
+    let mut brain = crate::brain::Brain::open(Store::at(root.join(".brain")).unwrap()).unwrap();
+    let new = |title: &str| crate::brain::NewEntry { title: title.into(), start: true, ..Default::default() };
+    let users = brain.add(new("The user's")).unwrap();
+    assert_eq!(respond(HookEvent::Stop, &input(&root, false), central.path()), None, "not the agent's to report");
+
+    brain.author = Author::Agent;
+    let task = brain.add(new("Cache sessions")).unwrap();
+    assert_ne!(users, task);
+    let stop = respond(HookEvent::Stop, &input(&root, false), central.path()).expect("a reminder");
+    assert!(stop.contains(&format!("`kb comment {task}`")), "{stop}");
+    assert_eq!(respond(HookEvent::Stop, &input(&root, true), central.path()), None, "once a turn");
+    brain.comment(task, "sessions cached; next: expiry").unwrap();
+    assert_eq!(respond(HookEvent::Stop, &input(&root, false), central.path()), None);
+}

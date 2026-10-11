@@ -1,0 +1,30 @@
+[package]
+name = "kanbrain-core"
+description = "The core of kanbrain (the `kb` command line and the kanban app): entries, markdown storage, tags and time tracking. Internal: its API follows kanbrain's versions and isn't meant for other crates."
+version.workspace = true
+edition.workspace = true
+rust-version = "1.88"
+repository.workspace = true
+license.workspace = true
+readme = "README.md"
+keywords = ["kanban", "ai-agents", "markdown", "productivity", "time-tracking"]
+categories = ["development-tools"]
+# tests/ holds this crate's unit tests, included into their modules with #[path], not integration tests.
+autotests = false
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+dirs.workspace = true
+# JSON output for agents and scripts (`--json`).
+serde.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

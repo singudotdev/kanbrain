@@ -1,0 +1,187 @@
+# Publishes a release when a version tag is pushed:
+#
+#   git tag -s v0.1.0 -m "v0.1.0" && git push origin v0.1.0
+#
+# Builds one self-contained binary per platform for the command line (`kb`) and for the kanban app
+# (`kanbrain`) and attaches them, with SHA-256 checksums, under the file names install.sh and install.ps1
+# download (see docs/development.md), with tag-changelog/<tag>.md as the release notes.
+#
+# Every app and platform is its own job, so a failing build doesn't stop the others: their files can still be
+# downloaded from the run. The release itself is only published when all of them succeed, so the installers never
+# meet a release with a missing file.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-version:
+    name: tag matches Cargo.toml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Compare
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME doesn't match Cargo.toml version $version"
+            exit 1
+          fi
+
+  # The licenses of everything compiled into each program, once for all its archives (see xtask/src/main.rs).
+  notices:
+    name: third-party licenses
+    needs: check-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.2
+      - name: Generate
+        run: |
+          mkdir -p notices/kb notices/kanbrain
+          cargo xtask notices kb > notices/kb/THIRD-PARTY-LICENSES.txt
+          cargo xtask notices kanbrain > notices/kanbrain/THIRD-PARTY-LICENSES.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: notices
+          path: notices
+
+  build:
+    name: ${{ matrix.app }} · ${{ matrix.platform }}
+    needs: notices
+    strategy:
+      # One failing build must not cancel the others.
+      fail-fast: false
+      matrix:
+        include:
+          # `app` is the program and its archive's name, `package` the crate that builds it.
+          # Command line. On Linux, musl gives a fully static binary that runs on any distribution.
+          - { app: kb, package: kanbrain, platform: linux x86_64, runner: ubuntu-latest, target: x86_64-unknown-linux-musl }
+          - { app: kb, package: kanbrain, platform: linux aarch64, runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl }
+          - { app: kb, package: kanbrain, platform: macos universal, runner: macos-latest, target: universal-apple-darwin }
+          - { app: kb, package: kanbrain, platform: windows x86_64, runner: windows-latest, target: x86_64-pc-windows-msvc }
+          # Kanban app. It links the system's graphics libraries, so on Linux it can't be static: it's built against
+          # glibc on the oldest supported Ubuntu, to run on any distribution with glibc 2.35 or newer.
+          - { app: kanbrain, package: kanbrain-app, platform: linux x86_64, runner: ubuntu-22.04, target: x86_64-unknown-linux-gnu }
+          - { app: kanbrain, package: kanbrain-app, platform: linux aarch64, runner: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu }
+          - { app: kanbrain, package: kanbrain-app, platform: macos universal, runner: macos-latest, target: universal-apple-darwin }
+          - { app: kanbrain, package: kanbrain-app, platform: windows x86_64, runner: windows-latest, target: x86_64-pc-windows-msvc }
+    runs-on: ${{ matrix.runner }}
+    # A cold build of the kanban app takes about 20 minutes on the slowest runner.
+    timeout-minutes: 60
+    env:
+      APP: ${{ matrix.app }}
+      PACKAGE: ${{ matrix.package }}
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: notices
+          path: notices
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # macOS builds both CPUs and joins them; the others build their own target.
+          targets: ${{ runner.os == 'macOS' && 'x86_64-apple-darwin, aarch64-apple-darwin' || matrix.target }}
+      - if: endsWith(matrix.target, 'linux-musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - if: endsWith(matrix.target, 'linux-gnu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig-dev libwayland-dev libx11-xcb-dev libxkbcommon-x11-dev libvulkan1
+
+      - name: Build
+        if: runner.os != 'macOS'
+        shell: bash
+        run: |
+          cargo build --release --locked -p "$PACKAGE" --bin "$APP" --target "$TARGET"
+          exe=""
+          if [ "$RUNNER_OS" = Windows ]; then exe=.exe; fi
+          mkdir dist
+          cp "target/$TARGET/release/$APP$exe" dist/
+      # One file that runs on both Intel and Apple Silicon Macs.
+      - name: Build (universal)
+        if: runner.os == 'macOS'
+        run: |
+          cargo build --release --locked -p "$PACKAGE" --bin "$APP" --target x86_64-apple-darwin
+          cargo build --release --locked -p "$PACKAGE" --bin "$APP" --target aarch64-apple-darwin
+          mkdir dist
+          lipo -create -output "dist/$APP" \
+            "target/x86_64-apple-darwin/release/$APP" \
+            "target/aarch64-apple-darwin/release/$APP"
+
+      - name: Package
+        if: runner.os != 'Windows'
+        run: |
+          asset="$APP-$TARGET.tar.gz"
+          # The AGPL and its additional terms travel with every copy of the program, and so do the licenses of
+          # what's compiled into it.
+          cp LICENSE NOTICE "notices/$APP/THIRD-PARTY-LICENSES.txt" dist/
+          files="$APP LICENSE NOTICE THIRD-PARTY-LICENSES.txt"
+          # On macOS the kanban app's icon goes along, for the app bundle install.sh makes.
+          if [ "$RUNNER_OS" = macOS ] && [ "$APP" = kanbrain ]; then
+            cp gui/icons/kanbrain.icns dist/
+            files="$files kanbrain.icns"
+          fi
+          # shellcheck disable=SC2086 # the file names are split on purpose
+          tar -czf "$asset" -C dist $files
+          if command -v sha256sum >/dev/null; then sha256sum "$asset"; else shasum -a 256 "$asset"; fi > "$asset.sha256"
+      - name: Package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $asset = "$env:APP-$env:TARGET.zip"
+          # The AGPL and its additional terms travel with every copy of the program, and so do the licenses of
+          # what's compiled into it.
+          Compress-Archive -Path "dist/$env:APP.exe", LICENSE, NOTICE, "notices/$env:APP/THIRD-PARTY-LICENSES.txt" `
+            -DestinationPath $asset
+          # Same format as sha256sum: "<hash>  <file>".
+          $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
+          Set-Content -NoNewline -Path "$asset.sha256" -Value "$hash  $asset`n"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.app }}-${{ matrix.target }}
+          path: |
+            ${{ matrix.app }}-${{ matrix.target }}.*
+
+  publish:
+    name: publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # Signing the provenance: a short-lived certificate from GitHub's OIDC token, stored as the repo's attestations.
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
+      # The archives and their checksums: every build's artifact, not the notices.
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: k*-*
+          merge-multiple: true
+      # Lets anyone check a download came from this repo and this workflow: `gh attestation verify <file> -R
+      # singudotdev/kanbrain`.
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -l dist
+          gh release create "$GITHUB_REF_NAME" dist/* install.sh install.ps1 \
+            --title "kanbrain $GITHUB_REF_NAME" --notes-file "tag-changelog/$GITHUB_REF_NAME.md"

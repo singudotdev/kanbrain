@@ -1,0 +1,494 @@
+# Development
+
+## Building and testing
+
+The repository is a Cargo workspace with four crates:
+
+| crate | folder | what |
+| --- | --- | --- |
+| `kanbrain-core` | `core/` | everything shared: entries, files, tags, the `Brain` and its actions, reports, the command line |
+| `kanbrain` | `cli/` | the command line, `kb`: a `main` that runs the core's `cli::Program` |
+| `kanbrain-app` | `gui/` | the kanban app, `kanbrain` (GPUI); given arguments, it runs `cli::Program` too |
+| `xtask` | `xtask/` | the workspace's own tasks, `cargo xtask`: the release archives' third-party notices |
+
+Plain `cargo` commands cover the core and the command line (the workspace's default members), which build fast
+and without GPUI. Add `-p kanbrain-app` or `--workspace` for the kanban app.
+
+Run a command of the command line:
+
+```sh
+cargo run -- list all
+```
+
+Run the kanban app:
+
+```sh
+cargo run -p kanbrain-app
+```
+
+The core and command line tests:
+
+```sh
+cargo test
+```
+
+All the tests, the kanban app's too:
+
+```sh
+cargo test --workspace
+```
+
+Lints, which must be warning-free (pedantic is on, see below):
+
+```sh
+cargo clippy --workspace --all-targets
+```
+
+Formatting (`rustfmt.toml`):
+
+```sh
+cargo fmt --all
+```
+
+Optimized, stripped binaries of both programs, in `target/release/`:
+
+```sh
+cargo build --release --workspace
+```
+
+The kanban app needs its graphics libraries' development packages on Linux, see
+[Build from source](getting-started.md#requirements).
+
+kanbrain refuses to run as root. In containers where you are root, add `-e KANBRAIN_ALLOW_ROOT=1` (tests
+don't need it).
+
+Use a throwaway data folder while developing so you don't touch your real tasks. With the board open, commands run
+in another terminal move its cards. The board, on Linux or macOS:
+
+```sh
+KANBRAIN_DIR=/tmp/kanbrain-dev cargo run -p kanbrain-app
+```
+
+A command, in another terminal:
+
+```sh
+KANBRAIN_DIR=/tmp/kanbrain-dev cargo run -- add --start "Try the board"
+```
+
+On Windows (PowerShell), the board:
+
+```powershell
+$env:KANBRAIN_DIR = "$env:TEMP\kanbrain-dev"; cargo run -p kanbrain-app
+```
+
+A command, in another terminal:
+
+```powershell
+$env:KANBRAIN_DIR = "$env:TEMP\kanbrain-dev"; cargo run -- add --start "Try the board"
+```
+
+No local Rust toolchain? Build in a container instead:
+
+```sh
+podman run --rm -v "$PWD":/src:Z -w /src docker.io/library/rust:1 cargo test
+```
+
+## Code style
+
+- **Formatting:** `cargo fmt`, configured in `rustfmt.toml` (120 columns; short constructs stay on one line).
+- **Lints:** `Cargo.toml` enables clippy's `pedantic` group and `missing_docs_in_private_items` for the whole
+  workspace, and forbids `unsafe` code. The few allowed exceptions are listed there with their reason.
+- **Small modules with one job**, each starting with a `//!` comment that says what it's for. Functions stay short;
+  when a `match` arm grows, it becomes a named helper.
+- **Comments:** every item (type, field, variant, function, constant) has a `///` doc comment saying what it's for,
+  and every file starts with a `//!` comment describing the module. Inside functions, comments explain *why* (or the
+  non-obvious *what*), not what each line already says. Clippy reports undocumented items; check broken doc
+  references with:
+
+  ```sh
+  RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items   # also browsable: target/doc/kanbrain_core/, target/doc/kanbrain/, target/doc/kanbrain_gui/
+  ```
+- **Fixed lists of values are declared once.** Statuses, kinds, report units and groups are declared with the macros
+  in `enums.rs`: one line per variant, `Variant => "name"`. The list of all variants (`ALL`), their order
+  (`position`, `next`), and the conversions to and from text (`as_str`, `parse`) are generated from that line, so they
+  can't get out of sync. The `--help` text is built from the same names.
+- **Named constants** instead of magic numbers (`DONE_LIMIT`, `MESSAGE_TTL`, `watch::INTERVAL`, …).
+- **Errors:** `anyhow::Result` with context (`writing <path>`) at the edges; refusals an agent can act on are typed
+  (`api::ApiError`: no such entry, not a task, empty text…). Errors in the kanban app become a status bar message,
+  never a crash. `expect` is only used for things that cannot fail (writing to a `String`, calendar arithmetic),
+  and the message says why.
+
+## Dependencies
+
+The crates use the **Rust 2024 edition**. Shared versions and lints are in the workspace `Cargo.toml`.
+
+| crate | version | used for |
+| --- | --- | --- |
+| [`gpui`](https://www.gpui.rs) | Zed 1.23.2 (git) | `gui`: the kanban app's window, layout, input and drag and drop. From Zed's repository, pinned to a tag: the crates.io release (0.2.2) can't draw on NVIDIA with Wayland, and newer GPUI isn't published. The workspace `Cargo.toml` carries the `[patch]` entries Zed builds it with |
+| [`chrono`](https://docs.rs/chrono) | 0.4 | dates, times, time zones |
+| [`dirs`](https://docs.rs/dirs) | 7 | platform data folder |
+| [`anyhow`](https://docs.rs/anyhow) | 1 | error handling |
+| [`serde`](https://serde.rs), [`serde_json`](https://docs.rs/serde_json) | 1 | `--json` output; merging Claude Code's settings (`preserve_order` keeps their keys' order) |
+| [`rustix`](https://docs.rs/rustix) | 1 | Unix only: the effective user id for the root check, without `unsafe` |
+| [`pulldown-cmark`](https://docs.rs/pulldown-cmark) | 0.13 | `gui`: parsing descriptions and comments to draw them as markdown; the version Zed uses |
+| [`tempfile`](https://docs.rs/tempfile) | 3 | tests only: temporary data folders |
+
+The minimum supported Rust version of the core and the command line is **1.88** (`rust-version` in `core/Cargo.toml` and
+`cli/Cargo.toml`): the code uses let chains (`if a && let Some(b) = c`), which edition 2024 allows from Rust 1.88. Cargo
+picks dependency versions that still support it. CI checks it with Rust 1.88, and it's fine to develop on any newer
+Rust.
+The kanban app follows GPUI, which needs a recent stable Rust.
+Keep `Cargo.lock` committed: kanbrain is an application, and the lockfile makes builds reproducible.
+
+To update dependencies: `cargo update` for compatible releases; for new major versions, change the version in
+`Cargo.toml`, then run `cargo build` and the full check (`cargo fmt --all --check`,
+`cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`) and try both programs.
+To move GPUI to a newer Zed release, change the tag in `gui/Cargo.toml` and copy that release's `[patch.crates-io]`
+entries from Zed's workspace `Cargo.toml`.
+
+## Architecture
+
+```
+core/build.rs        stops a version without its release notes in tag-changelog/ from building
+core/src/            kanbrain-core: shared by both programs
+├── lib.rs
+├── brain/           the domain service: every entry in the data folder and the operations on them
+│   ├── mod.rs       Brain: loading (and fixing several running sessions or doing tasks), queries, columns, backlinks, related, tags
+│   ├── actions.rs   status changes with tracking (one task in doing), create, update, delete, links, descriptions, comments, report export
+│   ├── report.rs    time per task or tag for a period, breakdown columns, timeline (ReportView, Group)
+│   └── calendar.rs  each day's interactions over a period: sessions, moves, comments, new entries (CalendarView, Show)
+├── cli/             the command line
+│   ├── mod.rs       Program (the binary's name), Command parsing, `--project`, `list`, `status`, `report`, `path`, usage
+│   ├── claude.rs    the Claude Code hooks `init` merges into .claude/settings.local.json (and `deinit` takes out)
+│   ├── hook.rs      `kb hook prompt|stop`: the hooks' checks that hold an agent to describing the project first
+│   ├── entries.rs   agent commands by id: `add`, `show`, `search`, status changes, `comment`, `ask`, `propose`, `accept`/`reject`, `describe`, `link`, `context`
+│   ├── completions.rs `completions bash|zsh|fish`: the scripts, and `complete`, the ids, projects and tags they offer
+│   ├── update.rs    `update`: the installer run again for the apps beside this one, into the same folder
+│   └── init.rs      `init`: the repository's .brain/ and card, its registration, the "Project memory" section in CLAUDE.md / AGENTS.md; `init --all` refreshes every registered repository's; `deinit` undoes it
+├── api/             operations by id for the CLI, with typed refusals (ApiError)
+│   ├── mod.rs       add, change_status, comment, describe, link, full-text search
+│   ├── json.rs      entries as JSON, one line without empty fields (Entry, Summary)
+│   ├── text.rs      entries as compact text for agents: `show`, one-line answers, capped `search`
+│   └── context.rs   the markdown summary agents read first: the project's card, capped sections, latest comments
+├── model/           the domain
+│   ├── mod.rs       Task (any entry), Kind, Status, StatusChange, Session, Comment
+│   ├── markdown.rs  the task file format: writing and parsing
+│   ├── text.rs      tags, slugs, heading rules for user text
+│   └── time.rs      timestamps, ages (`5m`, `3h`, `2d`) and durations (`1h 05m`, `00:42:17`)
+├── period.rs        report periods: hour, day, ISO week, month
+├── export.rs        reports as markdown tables
+├── enums.rs         `named_enum!` / `ordered_enum!`: enums whose variants are listed in one place
+├── platform.rs      OS specifics: the per-user (not root) check
+├── projects.rs      projects of one or more repositories: the central brain's projects.md, the shared cards (projects/NAME.md), each repository's project.md
+├── store.rs         the data folder: entry files, tags.md, last-id, reports/; finding a project's .brain/; recording the files a change writes, for undo
+└── tags.rs          tag colors: palette, no-repeat assignment, tags.md format
+
+cli/README.md        the `kanbrain` crate's page on crates.io: `kb` only (core/README.md: kanbrain-core's)
+cli/src/main.rs      kb (the crate `kanbrain` on crates.io): runs `cli::Program`
+cli/tests/kb.rs      the binary run from outside: arguments, stdin, output, exit codes
+e2e/install.sh       install.sh end to end, from a local copy of a release (CI; install.ps1 for Windows)
+e2e/agent.sh         a real agent working with kanbrain, scenario by scenario (run by hand)
+xtask/               `cargo xtask notices kb|kanbrain` (the alias is in .cargo/config.toml): THIRD-PARTY-LICENSES.txt,
+                     from cargo-about (about.toml) and licenses/ for what's compiled in but isn't a crate
+
+gui/                 the crate `kanbrain-app`, the `kanbrain` program; not on crates.io (GPUI from git)
+gui/build.rs         embeds the icon into kanbrain.exe when building for Windows
+gui/icons/           the app's icons, made from docs/images/logo.svg by make.sh: .ico (Windows), .icns (macOS), 128 px PNG (X11)
+gui/src/             kanbrain: the kanban app, and `cli::Program` when given arguments
+├── main.rs          entry point: --help / --version, the root check, opening the window
+├── watch.rs         polls the data folders (names, sizes, times) every second, naming those other programs changed
+├── state/           what's on screen and every action, without GPUI (tested without a window)
+│   ├── mod.rs       Board: the brains, the scope, the tab and the board's layout (Layout: kanban or list), the selected entry (by Key), the details, search, report view, status message, what the window must do (Request: $EDITOR, the folder dialog); columns and lists
+│   ├── mode.rs      the dialogs and fields that take the keys (Mode): search, form, quick add, editor, confirm, links, project and tag dropdowns, which project a quick-added task goes in or an entry moves to, what's next, project info, command palette, adding a project (AddProject, ProjectOption)
+│   ├── actions.rs   status changes and drops, new / edit / quick add (asking which brain when the scope shows several), moving an entry to another brain, the editor's save, deletes, links, undo (recording what each change writes), reload, park & quit, export
+│   ├── input.rs     keys → actions per tab and dialog; the shortcut lists; typing, select all, cut, paste, the mouse in text
+│   ├── menu.rs      the right-click menu: an entry's actions, each one of its keys (MenuItem, MenuPicker)
+│   ├── palette.rs   the command palette (`?`): each tab's actions with their keys, searchable; choosing one presses its key (Command)
+│   ├── nav.rs       moving the selection between cards, columns and list rows
+│   └── sources.rs   the central brain and every project repository (Source), entries by Key { src, id }, the Scope filter, merged reports and calendars, adding a project from a picked folder (`cli::init`)
+├── text/            text editing with a selection
+│   ├── editor.rs    multi-line TextEditor (descriptions, comments), one-line LineInput (fields)
+│   └── event.rs     KeyCode / KeyEvent / KeyModifiers: what GPUI keystrokes become
+└── ui/              the window: draws the Board with GPUI and turns clicks, drags and keys into its calls
+    ├── mod.rs       BrainView (the root view), the window and its app id, ticking, watching, the status bar, `action` buttons, keystrokes → keys, clipboard, the system's folder dialog
+    ├── topbar.rs    the logo, tabs, the project filter and + Add project, the shown project's description, search, New / Reload / Commands; the running tasks with Park and Park & quit
+    ├── board.rs     the columns, cards (dragged as DraggedCard), quick add, "Show N older"
+    ├── list.rs      the board's list layout: a section per status, a row per task, dragged like cards
+    ├── drawer.rs    the details beside the board or list
+    ├── entries.rs   the notes and decisions lists
+    ├── report.rs    the report tab
+    ├── calendar.rs  the calendar tab: day, week and month
+    ├── dialogs/     dialogs over the window; a delete's confirmation in mod.rs
+    │   ├── form.rs     the new / edit form: project, title, tags, related entries, column
+    │   ├── editor.rs   the text editor for descriptions, comments and project text
+    │   ├── pickers.rs  the link picker, which project, what's next, the command palette
+    │   ├── project.rs  project info: description, repositories, the week's time
+    │   └── add_project.rs  adding a project: the folder picked, and the project it joins or starts, from a searchable list
+    ├── markdown.rs  descriptions, comments and project text drawn as markdown: parsed into Blocks, then drawn
+    ├── menu.rs      the right-click menu, drawn at the click (`on_right_click` on cards and list rows)
+    ├── dropdown.rs  dropdowns with a search box (the project filter and the tag filters), and the list and row every dropdown and picker is built from
+    ├── widgets.rs   buttons, segmented controls, text fields, tag chips, cards, tooltips
+    ├── pointer.rs   the mouse in text fields and the editor: place the cursor, drag to select, double/triple-click, middle-click paste
+    ├── caret.rs     the text cursor: a thin line drawn over the text, blinking (`Blink`, restarted on every input)
+    └── theme.rs     colors, fonts, status colors, styled text
+
+core/tests/, gui/tests/   each crate's tests, laid out like its src/ (see Tests)
+```
+
+### Data flow
+
+```
+key press ───────────▶ Board::on_key (input.rs) ──▶ Board action (actions.rs) ──▶ Brain action (core)
+button ──▶ BrainView::press ──┘                                                        │
+card dropped on a column ──▶ Board::drop_card ─────────────────────────────────────────┤
+CLI command ──▶ api ──▶ Brain action ──────────────────────────────────────────────────┤
+                                                                                       ├─▶ Task::set_status (history line, sessions)
+                                                                                       └─▶ Store::save ──▶ NNNN-slug.md (atomic write)
+
+every 500 ms / after each input ──▶ ui draws &Board   (ages and clocks are computed from `now`)
+every second / before each input ──▶ Watcher::changed ──▶ Board::reload_changed    (changes made by other programs)
+```
+
+- **The files are the source of truth.** Every change is written immediately; there's no in-memory state that could be lost.
+  `Brain::reload` rebuilds a brain from disk. When the watcher sees a change, every second and before each input (so
+  the board never saves a whole entry over one an agent just changed), `Board::reload_changed` re-reads only the
+  brains whose folders changed, and everything when the list of projects or their cards may have. After `$EDITOR`
+  returns, and on `R`, everything is re-read. After its own input it marks the folders as seen (`Watcher::sync`), so
+  its own saves don't trigger a reload.
+- **Selection by key.** The board selects entries by `Key { src, id }` (which brain, and the id there, since every
+  brain numbers from 1), never by position, so reloads and moves never jump to another card.
+- **Status changes** go through `Brain::set_status`, which parks the brain's running task when another starts, opens and closes
+  sessions, and appends a `StatusChange` to the history only when the status really changes. The `- status:` line in
+  the file is the truth; the history is the record of how the task got there.
+- **Modes** (`state::Mode`): `Normal`, `Search`, `Form`, `QuickAdd`, `Edit` (text editor with a `Target`: description,
+  new comment or existing comment), `Confirm`, `Links`, `Scopes` and `Tags` (the dropdowns), `Where` (which brain a quick-added task goes in, or an entry moves to), `Menu` (the right-click menu), `Next` ("what's next?"),
+  `ProjectInfo` and `Palette` (the command palette). `on_key` takes the current mode out, handles the
+  key, and each handler puts back the mode to continue in.
+- **A button is its key.** `ui::action(id, label, kind, code, cx)` makes a button that presses its key through
+  `BrainView::press`, with the key in its tooltip. So a button can never do something its key wouldn't, and the state
+  tests, which drive the board with keys, cover the buttons too. Clicks that aren't keys (select, open, drop, focus a
+  field) call a `Board` method through `BrainView::act`.
+- **Drag and drop:** a card is `on_drag(DraggedCard { key, title })` with a small preview view; each column has
+  `drag_over` (highlight) and `on_drop`, which calls `Board::drop_card`.
+- **Clipboard:** `BrainView::clipboard` catches `ctrl+a/c/x/v` (`cmd` on macOS) before `Board::on_key` and calls
+  `Board::select_all`, `selected_text`, `cut` and `paste` with the system clipboard. `shift` with a movement key extends
+  the selection, and typing or pasting replaces it.
+- **Mouse in text:** `ui::pointer` keeps each drawn line's GPUI `TextLayout` (`Hit`) to map the mouse to a
+  character, and calls `Board::point` with an `editor::Pointer` (place, extend, word, line). Drags use window-wide
+  listeners, so they keep selecting outside the field; `BrainView::drag` names the field. On Linux,
+  `BrainView::share_selection` copies the selection to the primary selection after each input.
+
+### Adding an action
+
+1. Put the change to entries in `core/src/brain/actions.rs` if the command line or agents need it too, and call it
+   from a `Board` method in `gui/src/state/actions.rs`.
+2. Give it a key in `gui/src/state/input.rs`, and a line in `BOARD`, `REPORT`, `CALENDAR` or `EVERYWHERE` in
+   `gui/src/state/palette.rs` so the command palette lists and runs it.
+3. Add a button where it belongs with `ui::action`.
+4. Document it in [`keybindings.md`](keybindings.md) and the relevant page.
+
+### Changing the file format
+
+`model/markdown.rs` documents the format at the top and holds both the writer and the parser; change them together and
+extend the `round_trip` test. Unknown `- key:` lines, `- links:` words and `##` sections are kept in `Task::unknown` and written back, so a version
+that doesn't know a new field doesn't drop it when it saves the entry.
+kanbrain has been released, so the format stays backward compatible: data folders written by any released
+version must keep loading.
+
+## Tests
+
+Five layers: unit tests of `core` and `gui` (below), the kanban app in a real test window (`ui`), the `kb` binary run
+from outside ([below](#the-command-line-from-outside)), the installers end to end
+([below](#installers-end-to-end)), and a real agent end to end ([below](#agents-end-to-end), by hand).
+
+Unit tests live in each crate's `tests/` folder, one file per module, laid out like `src/`: `gui/src/text/editor.rs` is
+tested by `gui/tests/editor.rs`, `core/src/model/mod.rs` by `core/tests/model.rs`. They have access to private items:
+the module includes its test file with a hook at its end, and the file starts with `use super::*`:
+
+```rust
+#[cfg(test)]
+#[path = "../../tests/editor.rs"]
+mod tests;
+```
+
+The path is relative to the module's folder. `autotests = false` in each crate stops Cargo from also building these
+files as integration tests. Keep them inside the crate: rust-analyzer doesn't follow `#[path]` out of it.
+
+| module | covers |
+| --- | --- |
+| `brain` | status history, columns, one task in doing (starting parks the running one, loading fixes several), sessions, comments, links, renames and deletes, ids never given twice, moving to another brain, reports, the calendar's days and filters, the decision template |
+| `api`, `cli` | agent operations and their refusals, links to other repositories, compact text and JSON, `context`'s caps, command parsing, `--project`, `list` output, usage, completion scripts and candidates, which apps `update` installs |
+| `cli::init` | the agent section written, updated in place and left alone when unclosed; `init --all` updating every registered repository that has it, and no other; registering repositories and joining them into a project; `deinit` taking it all back but `.brain/`; the Claude Code hooks added once beside other settings (one from before `kb` replaced), and removed leaving them as they were; `kb hook` asking with every prompt and holding the turn once while the project or this repository's role isn't described, and silent once they are |
+| `projects` | the registry and its labels, cards, moving a repository between projects, refusing two repositories with one name |
+| `model` | file round trip, what a newer version wrote kept, hand-typed history, missing id, status changes recorded once, search matching, tags, slugs, heading rules, timestamps, ages |
+| `store` | renaming on title change, unreadable files become warnings, `tags.md` isn't a task, whole-file writes |
+| `tags` | no color repeats until the palette is used up, `tags.md` round trip, custom colors |
+| `period`, `export` | period bounds and stepping, report tables |
+| `enums` | generated `ALL` / `position` / `next`, `parse` as the inverse of `as_str` |
+| `state` (gui) | the board driven by keys over a temporary folder: moving between cards and columns, moving cards, drops, quick add, the form and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, what's next and its search, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one) |
+| `editor` (gui) | line editing (split/join), unicode, wrapping; one-line cursor editing; selecting, copying and replacing; mouse selection by character, word and line |
+| `markdown` (gui) | inline styles and link ranges, kept line breaks, heading levels, numbered and task lists, nesting, code, quotes, tables, rules |
+| `watch` (gui) | new, changed, renamed and deleted files are noticed once, naming the folder; temporary files aren't; own writes are taken as seen |
+| `xtask` | the notices list each license with the crates under it and leave this workspace's out; each program carries Rust's standard library and what else it embeds (musl, GPUI's fonts) |
+| `ui` (gui) | in a real (test) window: GPUI keystrokes to keys, shortcut names, clicks and double-clicks on cards (in every brain), a right click's menu acting on its card, dragging a card onto a column, reloading after another program's change, acting right after one without undoing it, opening an entry from the calendar, buttons pressed while typing, dropdowns that scroll to the highlighted row and how many rows each shows, clipboard shortcuts, + Add project through the folder dialog |
+
+### The command line, from outside
+
+`cli/tests/kb.rs` runs the built `kb` the way agents and scripts do, over temporary folders: an agent's session
+from `init` to `context`, text read from stdin with `-`, one-line JSON, errors on stderr with a failing exit code
+and the usage, `--project` from another folder, completion candidates, and the hooks asking until the project is
+described. They're Cargo integration tests (`CARGO_BIN_EXE_kb`), so they see only what the binary prints.
+
+### Installers, end to end
+
+`e2e/install.sh` (Linux, macOS) and `e2e/install.ps1` (Windows) package this build of `kb` as a release asset, serve
+it over HTTP on `127.0.0.1` and install it with `install.sh` / `install.ps1` into a throwaway home, as a user would
+(`KANBRAIN_BASE_URL` points the installer at it). They check that the download's checksum is verified and a wrong
+one refused, that the installed `kb` is this build, that `init --all` brought a registered project's agent section up
+to date, and that uninstalling takes it out. `e2e/install.sh` also installs the kanban app (`kb` standing in for it,
+so GPUI isn't built) and checks its launcher with the logo: the menu entry and icon on Linux, the app bundle on macOS.
+CI runs them on all three systems, after `shellcheck` on the shell
+scripts; locally they need cargo and Python.
+
+### Agents, end to end
+
+`e2e/agent.sh` checks that a real coding agent works with kanbrain the way `init` tells it to. It runs Claude
+Code headless on small throwaway projects, one per scenario, and judges what landed in `.brain/` and in the code:
+
+| scenario | the agent… |
+| --- | --- |
+| `implement` | in an undescribed project, describes it first; then the change gets a task, started, commented on and finished |
+| `plan` | asked for a plan, adds a task per item in To do, and starts none |
+| `question` | asked a question, answers it and adds nothing |
+| `decision` | choosing between approaches, records a decision with Context, Decision and Consequences |
+| `ask` | told the choice is the user's, who is away, asks it on the task (parked, waiting) instead of guessing |
+| `propose` | facing a storage choice nobody made, proposes a decision and leaves its task waiting on it |
+| `wait` | with the user at the board, asks, waits with `kb wait` in the background, and finishes with the answer in the same session |
+| `answered` | in a new session, picks up the task whose question was answered, and applies the answer |
+| `repos` | with two repositories, leaves the other one's work there as a task, linked to the task here |
+| `resume` | in a new session, picks up the task that was running, from its last comment |
+
+It calls the model, so it costs money (`E2E_BUDGET` dollars per scenario at most, 1 by default) and takes minutes,
+and an agent's choices vary between runs: run it by hand before a release that changes what agents are told (the
+section, `context`, the hooks), not in CI. `e2e/agent.sh plan decision` runs only those; `E2E_MODEL` picks the model.
+
+The kanban app's look is checked by running it (`KANBRAIN_DIR=/tmp/t cargo run -p kanbrain-app`) and looking at it.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request:
+
+- `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings`
+- `cargo deny check`: dependency licenses, sources and security advisories, as `deny.toml` allows them; and the
+  third-party notices still generate (`cargo xtask notices`, through cargo-about), with every license accepted
+- the installers end to end on Linux, macOS and Windows (`e2e/install.sh`, `e2e/install.ps1`), after `shellcheck`
+- `cargo test --workspace` on Linux, macOS and Windows
+- `cargo test` (core and command line) with the minimum supported Rust version (1.88)
+
+## Releases and installers
+
+### Publishing a release
+
+1. Write the version's release notes in `tag-changelog/vX.Y.Z.md` (terse bullets anchored in the code) and its section
+   in `CHANGELOG.md`, and commit them. `core/build.rs` stops a version without them from compiling in the repository.
+2. Update `version` under `[workspace.package]` in `Cargo.toml`, and `kanbrain-core`'s `version` under
+   `[workspace.dependencies]` to the same, run `cargo build` so `Cargo.lock` follows, and commit it on its own. All
+   three crates share it.
+3. Create a signed, annotated tag and push it:
+
+   ```sh
+   git tag -s vX.Y.Z -m "vX.Y.Z: <summary>"
+   git push origin main vX.Y.Z
+   ```
+
+`.github/workflows/release.yml` then checks that the tag matches `Cargo.toml`, builds both programs for every platform
+(Linux x86_64 and ARM64, macOS universal, Windows x64), and creates the GitHub release with
+`tag-changelog/vX.Y.Z.md` as its notes and the assets below, their `.sha256` files, and `install.sh` / `install.ps1`. From then on the one-line installers work.
+Before that it records a signed build provenance attestation for every archive, which
+`gh attestation verify <file> -R singudotdev/kanbrain` checks.
+Once the release is out, publish the command line to crates.io, the core first since it depends on it:
+`cargo publish -p kanbrain-core && cargo publish -p kanbrain`. The kanban app isn't published there: GPUI comes from
+Zed's repository, and crates.io takes no git dependencies.
+
+Each program and platform is a separate job (`kb · linux x86_64`, `kanbrain · macos universal`, …), so one failing build
+doesn't stop the others, and their files can still be downloaded from the run. The release is only published when all
+of them succeed, so the installers never find a file missing.
+
+The installers (`install.sh`, `install.ps1`) download files from the project's **releases**. A release must contain
+these assets, each with a matching `<file>.sha256` (the output of `sha256sum <file>`):
+
+| asset | contents | build target |
+| --- | --- | --- |
+| `kb-x86_64-unknown-linux-musl.tar.gz` | `kb` | `x86_64-unknown-linux-musl` |
+| `kb-aarch64-unknown-linux-musl.tar.gz` | `kb` | `aarch64-unknown-linux-musl` |
+| `kb-universal-apple-darwin.tar.gz` | `kb` (universal: `lipo` of x86_64 + aarch64) | `x86_64-apple-darwin`, `aarch64-apple-darwin` |
+| `kb-x86_64-pc-windows-msvc.zip` | `kb.exe` | `x86_64-pc-windows-msvc` |
+| `kanbrain-x86_64-unknown-linux-gnu.tar.gz` | `kanbrain` | `x86_64-unknown-linux-gnu`, built on Ubuntu 22.04 (glibc 2.35) |
+| `kanbrain-aarch64-unknown-linux-gnu.tar.gz` | `kanbrain` | `aarch64-unknown-linux-gnu`, built on Ubuntu 22.04 |
+| `kanbrain-universal-apple-darwin.tar.gz` | `kanbrain` (universal) | `x86_64-apple-darwin`, `aarch64-apple-darwin` |
+| `kanbrain-x86_64-pc-windows-msvc.zip` | `kanbrain.exe` | `x86_64-pc-windows-msvc` |
+
+The command line is static on Linux (musl), so it runs anywhere. The kanban app can't be: it loads the system's graphics
+libraries (Vulkan, Wayland/X11, xkbcommon, fontconfig), so it's built against glibc on the oldest supported Ubuntu.
+
+Archives contain the binary, `LICENSE`, `NOTICE` and `THIRD-PARTY-LICENSES.txt` (the licenses of everything
+compiled in, which the permissive ones require with every copy: `cargo xtask notices`) at the root, not in a subfolder, plus `kanbrain.icns` in the macOS kanban
+app's, for the app bundle `install.sh` makes. macOS builds need a macOS machine or runner (Apple SDK).
+Linux and Windows can be cross-compiled from Linux, e.g. for a quick local check. Linux (static, needs `musl-tools`):
+
+```sh
+rustup target add x86_64-unknown-linux-musl
+cargo build --release -p kanbrain --target x86_64-unknown-linux-musl
+```
+
+Windows (needs `mingw-w64`):
+
+```sh
+rustup target add x86_64-pc-windows-gnu
+cargo build --release -p kanbrain --target x86_64-pc-windows-gnu
+```
+
+### Pointing the installers at your repository
+
+They are set to this repository (`singudotdev/kanbrain` on GitHub). For a fork, edit the two lines near the top of **both** scripts:
+
+```sh
+REPO="${KANBRAIN_REPO:-singudotdev/kanbrain}"     # install.sh
+HOST="${KANBRAIN_HOST:-github}"           # github | gitlab
+```
+
+```powershell
+$repo = ... 'singudotdev/kanbrain'              # install.ps1
+$hostKind = ... 'github'
+```
+
+| host | "latest" download URL used |
+| --- | --- |
+| GitHub | `https://github.com/<repo>/releases/latest/download/<asset>` |
+| GitLab | `https://gitlab.com/<repo>/-/releases/permalink/latest/downloads/<asset>` (asset links must use `filepath: /<asset>`) |
+
+Self-hosted GitLab: set `KANBRAIN_GITLAB_URL`. Any other server: set `KANBRAIN_BASE_URL` to the folder containing the assets.
+The same variables are handy for testing against a local folder:
+
+```sh
+cd dist && python3 -m http.server 8000 &
+KANBRAIN_BASE_URL=http://127.0.0.1:8000 sh install.sh --app both --dir ~/kb-test
+```
+
+Lint the shell installer with `shellcheck install.sh` (it's kept clean).
+
+The purge logic in both scripts must stay in sync with what the app writes in the central brain: entry files named
+`NNNN-slug.md` (`store::Store::save`), `tags.md`, `projects.md` and `projects/*.md` (`projects`), `reports/*.md`
+(`Brain::write_report`), older versions' `config.md`, and `.NNNN-slug.md.tmp` temp files. Both find the central brain
+with `kb --project central path`, never plain `path`, which inside a project names its `.brain/`. If you add
+a new kind of file to the data folder, add it to `owned_files` in `install.sh` and to the matching filter in
+`install.ps1`.
+
+## Contributing
+
+1. Open an issue describing the problem or idea.
+2. Keep pull requests focused. Run `cargo fmt --all`, `cargo clippy --workspace --all-targets` (no warnings) and
+   `cargo test --workspace`.
+3. Update the docs in `docs/` when you change behavior or keys. A new action in the kanban app needs a key and a
+   button; see [Adding an action](#adding-an-action).
+4. Don't break existing data folders. See [Changing the file format](#changing-the-file-format).

@@ -1,0 +1,27 @@
+kanbrain
+Copyright (C) 2026 singudotdev <contact@singu.dev>
+https://github.com/singudotdev/kanbrain
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General
+Public License version 3 (AGPL-3.0-only, in LICENSE), together with the additional terms below, which section 7 of
+that license permits. This program is distributed WITHOUT ANY WARRANTY; see LICENSE for details.
+
+Additional terms, under section 7 of the GNU Affero General Public License version 3:
+
+1. Attribution (section 7(b)). Every work based on this program must preserve the notice
+
+       Based on kanbrain by singudotdev (https://github.com/singudotdev/kanbrain)
+
+   in its documentation, in the output of its `--help` option, and in the Appropriate Legal Notices displayed by its
+   user interfaces.
+
+2. Origin and modified versions (section 7(c)). Nobody may misrepresent the origin of this program: neither it nor
+   a work based on it may be presented as anyone's own original work, as the original program, or as made or
+   endorsed by its author. A modified version must be marked, in reasonable ways, as different from the original
+   program.
+
+3. Trademarks (section 7(e)). This license grants no right to use the name "kanbrain", its logo, or any other trade
+   name, trademark or service mark of the author, except as needed to give the attribution required by term 1. A
+   modified version that is conveyed, or offered to users over a network, must use a different name and logo.
+
+These terms must be kept with every copy of the program, of its source and of works based on it.
