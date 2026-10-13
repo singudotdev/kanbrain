@@ -5,7 +5,7 @@ use super::theme::{self, BORDER, DIM_STYLE, Line, Span};
 use super::widgets::{
     self, Kind, card, dim, dim_small, entry_pill, section, segment, segmented, small, state_pill, tag_chips,
 };
-use super::{BrainView, action, markdown, when};
+use super::{BrainView, action, entry_action, markdown, when};
 use crate::state::{Board, COLUMNS, Confirm, Key, Mode, Target};
 use crate::text::event::KeyCode;
 use gpui::{ClickEvent, Context, Div, ElementId, FontWeight, ScrollHandle, Stateful, div, prelude::*, px, rgb};
@@ -64,7 +64,7 @@ pub fn draw(board: &Board, key: Key, task: &Task, scroll: &ScrollHandle, cx: &mu
 
 /// A button for what `key` does to the selected entry, named as the right-click menu names it, from the same table.
 fn named(board: &Board, id: &'static str, key: char, kind: Kind, cx: &mut Context<BrainView>) -> Stateful<Div> {
-    action(id, board.label_of(KeyCode::Char(key)), kind, KeyCode::Char(key), cx)
+    entry_action(id, board.label_of(KeyCode::Char(key)), kind, KeyCode::Char(key), cx)
 }
 
 /// Kind or status, the project it's in, id, a close button; the title, when it was created, and the tags.
@@ -192,7 +192,7 @@ fn time_block(task: &Task) -> Div {
 
 /// The whole description, and a button to edit it.
 fn description_block(task: &Task, cx: &mut Context<BrainView>) -> Div {
-    let edit = small(action("edit-description", "Edit", Kind::Secondary, KeyCode::Char('m'), cx));
+    let edit = small(entry_action("edit-description", "Edit", Kind::Secondary, KeyCode::Char('m'), cx));
     let body = if task.description.is_empty() {
         dim("No description yet.")
     } else {
@@ -205,7 +205,7 @@ fn description_block(task: &Task, cx: &mut Context<BrainView>) -> Div {
 /// its brain, then those of the project's other repositories, named by their repository.
 fn related_block(board: &Board, key: Key, cx: &mut Context<BrainView>) -> Div {
     let related: Vec<_> = board.related_keys(key).into_iter().filter_map(|k| Some((k, board.task(k)?))).collect();
-    let link = small(action("link", "Link…", Kind::Secondary, KeyCode::Char('r'), cx));
+    let link = small(entry_action("link", "Link…", Kind::Secondary, KeyCode::Char('r'), cx));
     let rows: Vec<_> = related
         .iter()
         .map(|&(other_key, other)| {
@@ -242,7 +242,7 @@ fn related_block(board: &Board, key: Key, cx: &mut Context<BrainView>) -> Div {
 
 /// Every comment, oldest first, each with Edit and Delete; and a button to add one.
 fn comments_block(key: Key, task: &Task, cx: &mut Context<BrainView>) -> Div {
-    let add = small(action("add-comment", "Add", Kind::Secondary, KeyCode::Char('c'), cx));
+    let add = small(entry_action("add-comment", "Add", Kind::Secondary, KeyCode::Char('c'), cx));
     let comments: Vec<_> = task
         .comments
         .iter()

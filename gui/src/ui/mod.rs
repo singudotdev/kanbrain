@@ -546,6 +546,24 @@ fn status_bar(board: &Board, updating: bool, cx: &mut Context<BrainView>) -> Div
         )
 }
 
+/// A button of an entry's details that runs what the key `code` does to it, whichever tab shows the details (see
+/// [`Board::run_on_entry`]); its tooltip names the shortcut.
+fn entry_action(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    kind: Kind,
+    code: KeyCode,
+    cx: &mut Context<BrainView>,
+) -> Stateful<Div> {
+    let key = KeyEvent::new(code, KeyModifiers::NONE);
+    widgets::button(id, label, kind).tooltip(widgets::tooltip(format!("Shortcut: {}", key_name(key)))).on_click(
+        cx.listener(move |this, _: &ClickEvent, _window, cx| {
+            this.follow = true;
+            this.act(cx, |b| b.run_on_entry(key));
+        }),
+    )
+}
+
 /// A button that runs the key `code`; its tooltip names the shortcut.
 fn action(
     id: impl Into<ElementId>,

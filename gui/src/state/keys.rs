@@ -441,6 +441,17 @@ impl Board {
         }
     }
 
+    /// Runs what `key` does to the selected entry, for a button of its details, on any tab: the calendar's own keys
+    /// take some of those letters (`d`, `m`, `t`), and the details' buttons act on the entry all the same.
+    pub fn run_on_entry(&mut self, key: KeyEvent) {
+        if matches!(self.mode, Mode::Search | Mode::QuickAdd(_)) {
+            self.mode = Mode::Normal;
+        }
+        if let Some(action) = ACTIONS.iter().find(|a| a.tabs == Tabs::Entries && a.matches(key)) {
+            (action.run)(self);
+        }
+    }
+
     /// The palette's rows for its search: what can be done now on the tab shown, those about the selected entry
     /// first, then the tab's own, then those of every tab.
     pub fn commands(&self, picker: &Picker) -> Vec<&'static Action> {

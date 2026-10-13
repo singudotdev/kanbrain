@@ -21,6 +21,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- On the calendar, the buttons of an entry's details (**Edit**, **Link…**, **Add**, **Accept**, **Delete…**…) act on
+  the entry: they pressed keys the calendar takes for itself, so the description's **Edit** showed a month instead.
 - Closing the kanban app's answer editor without writing anything no longer looks like answering: until something's
   typed its button is **Close**, then **Answer** (**Add comment**, **Reject**, **Save** elsewhere), and the status bar
   says "nothing answered: the question still waits". A blank comment, answer or reason for rejecting isn't saved.

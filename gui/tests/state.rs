@@ -1229,3 +1229,24 @@ fn a_task_waiting_on_a_decision_is_answered_by_deciding_with_or_without_a_commen
     assert_eq!(f.on_disk(loki).decision, DecisionState::Rejected);
     assert_eq!(last(&f, 3), format!("Rejected decision #{loki}, Use Loki: too heavy"));
 }
+
+#[test]
+fn the_details_buttons_act_on_the_entry_from_the_calendar_too() {
+    let mut f = Fixture::new(&["a task"]);
+    f.board.switch_tab(Tab::Calendar);
+    f.board.select(k(1));
+    f.board.drawer = true;
+    let period = f.board.calendar.period;
+    f.board.run_on_entry(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE));
+    assert!(matches!(f.board.mode, Mode::Edit(_)), "the description's Edit, not a month: {:?}", f.board.mode);
+    assert_eq!(f.board.calendar.period, period);
+    f.press(KeyCode::Esc);
+    f.board.run_on_entry(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE));
+    assert!(matches!(f.board.mode, Mode::Form(_)), "Edit title and tags");
+    f.press(KeyCode::Esc);
+    f.board.set_status(k(1), Status::Doing);
+    f.board.press(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE));
+    assert_eq!(f.status(1), Status::Doing, "the calendar's Now button is still its own, with the details open");
+    f.press(KeyCode::Char('m'));
+    assert_eq!(f.board.calendar.period.unit, Unit::Month, "and so are its keys");
+}
