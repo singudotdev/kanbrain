@@ -141,8 +141,8 @@ mkdir -p "$cache/locks" "$cache/backups/0123456789abcdef/20261013T120000-format-
 : >"$KANBRAIN_DIR/notes-of-mine.txt"
 sh "$repo/install.sh" --purge --yes >/dev/null || fail "purging failed"
 [ ! -e "$cache" ] || fail "purge left kanbrain's cache"
-[ -e "$KANBRAIN_DIR/notes-of-mine.txt" ] && [ ! -e "$KANBRAIN_DIR/projects.md" ] ||
-    fail "purge deleted a file it didn't create, or kept one it did"
+[ -e "$KANBRAIN_DIR/notes-of-mine.txt" ] || fail "purge deleted a file it didn't create"
+[ ! -e "$KANBRAIN_DIR/projects.md" ] || fail "purge kept the project registry"
 grep -q "## Project memory: kanbrain" "$claude" || fail "purge touched the project"
 
 echo "PASS install.sh"
