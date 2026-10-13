@@ -31,10 +31,12 @@ pub fn parse_ts(s: &str) -> Option<DateTime<Local>> {
         .and_then(|naive| Local.from_local_datetime(&naive).earliest())
 }
 
-/// How long ago, rounded down: `0m`, `5m`, `3h`, `2d`, `6w`.
+/// How long ago, rounded down: `<1m`, `5m`, `3h`, `2d`, `6w`.
 pub fn fmt_age(d: Duration) -> String {
     let minutes = d.num_minutes().max(0);
     match minutes {
+        // As `fmt_dur` says it.
+        0 if d > Duration::zero() => "<1m".to_string(),
         ..60 => format!("{minutes}m"),
         60..1440 => format!("{}h", minutes / 60),
         1440..20160 => format!("{}d", minutes / 1440),

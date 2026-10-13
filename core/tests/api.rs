@@ -85,8 +85,9 @@ fn context_shows_where_work_stopped_and_stays_short() {
         brain.set_status(id, Status::Done).unwrap();
     }
     let context = brain.context_markdown();
-    let excerpt = format!("  last comment (0m ago): {}…\n", "x".repeat(120));
-    assert!(context.contains(&excerpt), "{context}");
+    // `0m`, or `<1m` once a second has passed since.
+    let excerpt = format!(" ago): {}…\n", "x".repeat(120));
+    assert!(context.contains("  last comment (") && context.contains(&excerpt), "{context}");
     assert!(context.contains("- … 10 more: `kb search` finds them"), "notes are capped");
     let done: Vec<_> = context.lines().filter(|l| l.contains("finished")).collect();
     assert_eq!(done.len(), 5, "only the latest done");
@@ -209,7 +210,9 @@ fn show_is_compact_text() {
     brain.add(NewEntry { links: vec![task], ..new(Kind::Decision, "Rotate tokens") }).unwrap();
     let text = brain.entry_text(task).unwrap();
     assert!(text.starts_with(&format!("# #{task} Fix login (doing)\n")), "{text}");
-    assert!(text.contains("tracked 0m in 5 sessions, running for 0m"), "{text}");
+    let tracked =
+        ["0m", "<1m"].iter().flat_map(|t| ["0m", "<1m"].map(|r| format!("tracked {t} in 5 sessions, running for {r}")));
+    assert!(tracked.into_iter().any(|line| text.contains(&line)), "{text}");
     assert!(text.contains("## History (latest 5 of 9)"), "{text}");
     assert!(text.contains("## Related\n\n- #2 Rotate tokens (decision)"), "{text}");
     assert!(!text.contains("## Description") && !text.contains("## Comments"), "empty sections are left out");
