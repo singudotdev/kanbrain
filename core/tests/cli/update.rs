@@ -66,4 +66,8 @@ fn an_update_waits_for_the_agents_tasks_in_doing_only() {
     let err = check_no_agent_working(central.path()).unwrap_err().to_string();
     assert!(err.contains(&format!("#{working} rate-limit the login")), "{err}");
     assert!(!err.contains("my own work"), "{err}");
+
+    std::fs::remove_dir_all(repo.path()).unwrap();
+    assert!(check_no_agent_working(central.path()).is_ok(), "a deleted repository has no agent at work");
+    assert!(!repo.path().exists(), "nor is it made again");
 }

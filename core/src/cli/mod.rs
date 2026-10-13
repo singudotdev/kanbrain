@@ -301,7 +301,7 @@ impl Command {
             Command::Deinit(purge) => {
                 platform::ensure_not_root()?;
                 let central = projects::central_dir()?;
-                // Not through `Store::open_named`, which would create the folder of a deleted repository.
+                // Not through `Store::open_named`, which refuses a deleted repository: this is how it's taken out.
                 let dir = match project {
                     Some(projects::CENTRAL) => bail!("the central brain isn't a project: there's nothing to deinit"),
                     Some(label) => projects::find(&central, label)?.dir,

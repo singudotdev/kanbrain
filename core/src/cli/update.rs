@@ -79,7 +79,8 @@ pub fn agents_working(central: &Path) -> Result<Vec<String>> {
     let brains = std::iter::once((String::new(), central.to_path_buf()))
         .chain(repos.iter().map(|repo| (repo.label(&repos), repo.dir.clone())));
     let mut working = Vec::new();
-    for (label, dir) in brains {
+    // A deleted repository's folder isn't there to read, and opening its store would make it again.
+    for (label, dir) in brains.filter(|(_, dir)| dir.is_dir()) {
         let Ok((tasks, _)) = Store::at(dir).and_then(|store| store.load()) else { continue };
         working.extend(
             tasks

@@ -100,7 +100,13 @@ impl Store {
         match name {
             None => Self::open(),
             Some(projects::CENTRAL) => Self::at(projects::central_dir()?),
-            Some(label) => Self::at(projects::find(&projects::central_dir()?, label)?.dir),
+            Some(label) => {
+                let repo = projects::find(&projects::central_dir()?, label)?;
+                if !repo.dir.is_dir() {
+                    bail!("{} is gone: `kb --project {label} deinit` takes it out", repo.dir.display());
+                }
+                Self::at(repo.dir)
+            }
         }
     }
 

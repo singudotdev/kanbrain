@@ -69,6 +69,11 @@ fn project_reaches_a_registered_brain_from_any_folder() {
     assert_eq!(ok(&kb(elsewhere.path(), central.path(), &["list"], "")), "", "outside it, the central brain");
     let ids = ok(&kb(elsewhere.path(), central.path(), &["complete", "ids", "--project", "demo"], ""));
     assert_eq!(ids, "1\tIn the repo\n", "completion reads it too");
+
+    std::fs::remove_dir_all(repo.path().join(".brain")).unwrap();
+    let gone = kb(elsewhere.path(), central.path(), &["list", "--project", "demo"], "");
+    assert!(!gone.status.success() && String::from_utf8_lossy(&gone.stderr).contains("deinit"));
+    assert!(!repo.path().join(".brain").exists(), "a deleted brain isn't made again");
 }
 
 #[test]
