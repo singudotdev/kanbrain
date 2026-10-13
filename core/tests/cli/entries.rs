@@ -142,10 +142,10 @@ fn wait_ends_on_a_persons_answer_or_verdict() {
     assert_eq!(settled_on(&brain, task), None);
     let timed_out = wait(&brain, task, Some(Duration::ZERO)).unwrap_err().to_string();
     assert!(timed_out.starts_with(&format!("no answer on #{task} yet")), "{timed_out}");
-    brain.comment(task, "Checking the logs meanwhile.").unwrap();
+    brain.add_comment(task, "Checking the logs meanwhile.").unwrap();
     assert_eq!(settled_on(&brain, task), None, "an agent's comment isn't an answer");
     brain.author = crate::model::Author::Human;
-    brain.comment(task, "Per account").unwrap();
+    brain.add_comment(task, "Per account").unwrap();
     assert_eq!(settled_on(&brain, task).unwrap(), format!("{head}: answered\n\nPer account"));
 
     brain.author = crate::model::Author::Agent;

@@ -22,7 +22,7 @@ fn ids_come_open_tasks_first_and_projects_by_every_name() {
     let new = |title: &str| crate::brain::NewEntry { title: title.into(), ..Default::default() };
     brain.add(new("old")).unwrap();
     let done = brain.add(new("finished")).unwrap();
-    brain.change_status(done, Status::Done).unwrap();
+    brain.set_status(done, Status::Done).unwrap();
     brain.add(new("newest")).unwrap();
     let ids = candidates(Candidates::Ids, Store::at(central.path()).unwrap(), central.path()).unwrap();
     assert_eq!(ids, ["3\tnewest", "1\told", "2\tfinished"]);

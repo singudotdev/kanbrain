@@ -21,8 +21,8 @@ fn agents_add_link_comment_and_finish_tasks() {
     let note =
         brain.add(NewEntry { links: vec![task], description: Some("nginx timeout".into()), ..new(Kind::Note, "SSO") });
     let note = note.unwrap();
-    brain.comment(task, "root cause found").unwrap();
-    brain.change_status(task, Status::Done).unwrap();
+    brain.add_comment(task, "root cause found").unwrap();
+    brain.set_status(task, Status::Done).unwrap();
 
     let reloaded = Brain::open(Store::at(brain.store.dir()).unwrap()).unwrap();
     let task = reloaded.entry(task).unwrap();
@@ -30,16 +30,20 @@ fn agents_add_link_comment_and_finish_tasks() {
     assert_eq!(reloaded.backlinks(task.id).iter().map(|t| t.id).collect::<Vec<_>>(), [note]);
 }
 
+/// The API error `r` failed with.
+fn error<T: std::fmt::Debug>(r: anyhow::Result<T>) -> ApiError {
+    r.unwrap_err().downcast::<ApiError>().unwrap()
+}
+
 #[test]
 fn errors_say_what_is_wrong() {
     let (mut brain, _dir) = brain();
     let note = brain.add(new(Kind::Note, "a note")).unwrap();
-    let error = |r: anyhow::Result<()>| r.unwrap_err().downcast::<ApiError>().unwrap();
-    assert_eq!(error(brain.change_status(note, Status::Doing).map(drop)), ApiError::NotATask(note, Kind::Note));
-    assert_eq!(error(brain.comment(99, "x")), ApiError::NotFound(99));
-    assert_eq!(error(brain.comment(note, "  ")), ApiError::Empty("comment"));
+    assert_eq!(error(brain.set_status(note, Status::Doing)), ApiError::NotATask(note, Kind::Note));
+    assert_eq!(error(brain.add_comment(99, "x")), ApiError::NotFound(99));
+    assert_eq!(error(brain.add_comment(note, "  ")), ApiError::Empty("comment"));
     assert_eq!(error(brain.link(note, &[note], &[])), ApiError::SelfLink(note));
-    assert_eq!(error(brain.add(new(Kind::Task, " ")).map(drop)), ApiError::Empty("title"));
+    assert_eq!(error(brain.add(new(Kind::Task, " "))), ApiError::Empty("title"));
 }
 
 #[test]
@@ -48,7 +52,7 @@ fn search_reads_descriptions_and_comments() {
     let note = brain.add(NewEntry { description: Some("Tokens expire after 5 min".into()), ..new(Kind::Note, "SSO") });
     let note = note.unwrap();
     let task = brain.add(NewEntry { tags: vec!["prod".into()], ..new(Kind::Task, "Fix login") }).unwrap();
-    brain.comment(task, "token refresh was the culprit").unwrap();
+    brain.add_comment(task, "token refresh was the culprit").unwrap();
     let ids = |query: &str| brain.search(query).iter().map(|t| t.id).collect::<Vec<_>>();
     assert_eq!(ids("token"), [task, note], "newest first");
     assert_eq!(ids("#pro"), [task]);
@@ -61,7 +65,7 @@ fn context_lists_active_tasks_decisions_and_notes() {
     let task = brain.add(NewEntry { start: true, ..new(Kind::Task, "Fix login") }).unwrap();
     brain.add(new(Kind::Decision, "Use markdown files")).unwrap();
     let done = brain.add(new(Kind::Task, "Old thing")).unwrap();
-    brain.change_status(done, Status::Done).unwrap();
+    brain.set_status(done, Status::Done).unwrap();
     let context = brain.context_markdown();
     assert!(context.contains(&format!("## Tasks: doing\n\n- #{task} Fix login")));
     assert!(context.contains("## Decisions") && context.contains("Use markdown files"));
@@ -72,13 +76,13 @@ fn context_lists_active_tasks_decisions_and_notes() {
 fn context_shows_where_work_stopped_and_stays_short() {
     let (mut brain, _dir) = brain();
     let task = brain.add(NewEntry { start: true, ..new(Kind::Task, "Fix login") }).unwrap();
-    brain.comment(task, &format!("{}\nsecond line", "x".repeat(200))).unwrap();
+    brain.add_comment(task, &format!("{}\nsecond line", "x".repeat(200))).unwrap();
     for i in 0..30 {
         brain.add(new(Kind::Note, &format!("note {i}"))).unwrap();
     }
     for i in 0..8 {
         let id = brain.add(new(Kind::Task, &format!("finished {i}"))).unwrap();
-        brain.change_status(id, Status::Done).unwrap();
+        brain.set_status(id, Status::Done).unwrap();
     }
     let context = brain.context_markdown();
     let excerpt = format!("  last comment (0m ago): {}…\n", "x".repeat(120));
@@ -185,13 +189,13 @@ fn a_person_starting_a_second_task_is_told_which_one_runs() {
     let (mut brain, _dir) = brain();
     let first = brain.add(NewEntry { start: true, ..new(Kind::Task, "first") }).unwrap();
     let second = brain.add(new(Kind::Task, "second")).unwrap();
-    let refused = brain.change_status(second, Status::Doing).unwrap_err().to_string();
+    let refused = brain.set_status(second, Status::Doing).unwrap_err().to_string();
     assert_eq!(
         refused,
         format!("#{first} is in doing, and a person works on one task at a time: park or finish it first")
     );
     brain.author = Author::Agent;
-    brain.change_status(second, Status::Doing).unwrap();
+    brain.set_status(second, Status::Doing).unwrap();
 }
 
 #[test]
@@ -199,8 +203,8 @@ fn show_is_compact_text() {
     let (mut brain, _dir) = brain();
     let task = brain.add(NewEntry { start: true, ..new(Kind::Task, "Fix login") }).unwrap();
     for _ in 0..4 {
-        brain.change_status(task, Status::Parked).unwrap();
-        brain.change_status(task, Status::Doing).unwrap();
+        brain.set_status(task, Status::Parked).unwrap();
+        brain.set_status(task, Status::Doing).unwrap();
     }
     brain.add(NewEntry { links: vec![task], ..new(Kind::Decision, "Rotate tokens") }).unwrap();
     let text = brain.entry_text(task).unwrap();

@@ -255,11 +255,11 @@ impl EntryArgs {
             }
             EntryCommand::Search(query) => return print_search(&brain, &query, json),
             EntryCommand::SetStatus(id, status) => {
-                brain.change_status(id, status)?;
+                brain.set_status(id, status)?;
                 id
             }
             EntryCommand::Comment(id, text) => {
-                brain.comment(id, &text.read()?)?;
+                brain.add_comment(id, &text.read()?)?;
                 id
             }
             EntryCommand::Ask(id, text) => {
@@ -282,7 +282,7 @@ impl EntryArgs {
                 id
             }
             EntryCommand::Describe(id, text) => {
-                brain.describe(id, &text.read()?)?;
+                brain.set_description(id, &text.read()?)?;
                 id
             }
             EntryCommand::Link(id, others, repo_links) => {

@@ -79,21 +79,6 @@ impl Brain {
         self.create(new)
     }
 
-    /// Moves a task to `status`; `doing` starts its clock (refused for a person who already runs a task).
-    pub fn change_status(&mut self, id: u32, status: Status) -> Result<()> {
-        self.set_status(id, status).map(drop)
-    }
-
-    /// Adds a timestamped comment, e.g. progress notes from an agent.
-    pub fn comment(&mut self, id: u32, text: &str) -> Result<()> {
-        self.add_comment(id, text).map(drop)
-    }
-
-    /// Replaces the description.
-    pub fn describe(&mut self, id: u32, text: &str) -> Result<()> {
-        self.set_description(id, text).map(drop)
-    }
-
     /// Adds links from `id` to each of `others` and of `repo_links` (entries of the project's other
     /// repositories), skipping ones it already has.
     pub fn link(&mut self, id: u32, others: &[u32], repo_links: &[RepoLink]) -> Result<()> {
