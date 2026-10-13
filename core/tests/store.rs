@@ -61,3 +61,17 @@ fn the_hash_is_fnv1a_on_every_build() {
     assert_eq!(fnv1a(b""), 0xcbf2_9ce4_8422_2325);
     assert_eq!(fnv1a(b"a"), 0xaf63_dc4c_8601_ec8c);
 }
+
+#[test]
+fn a_temporary_brains_cache_goes_once_it_does() {
+    let (gone, kept) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let lock = |dir: &Path| drop(Store::at(dir).unwrap().lock().unwrap());
+    lock(gone.path());
+    let [gone_lock, _] = cache_of(gone.path()).unwrap();
+    let brain = fs::read_to_string(&gone_lock).unwrap();
+    assert_eq!(brain, format!("{}\n", gone.path().canonicalize().unwrap().display()), "it names its brain");
+    drop(gone);
+    lock(kept.path());
+    assert!(!gone_lock.exists(), "tidied as another brain there is locked");
+    assert!(cache_of(kept.path()).unwrap()[0].exists());
+}

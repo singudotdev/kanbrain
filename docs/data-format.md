@@ -185,8 +185,8 @@ file; a brain without one is format 1. A kanbrain version that changes the forma
   `kb update` (through `kb init --all`), under the brain's write lock;
 - before it, the whole brain is copied to your cache folder, `<cache>/kanbrain/backups/<key>/<time>-format-<from>-to-<to>/`
   (`~/.cache` on Linux, `~/Library/Caches` on macOS, `%LOCALAPPDATA%` on Windows; for a brain in the system's
-  temporary folder, `<tmp>/kanbrain-cache/`, beside its write lock), so a migration can be undone by copying it
-  back. Deleting a brain with `--purge` deletes its backups and lock there too;
+  temporary folder, `<tmp>/kanbrain-cache/`, beside its write lock, both deleted once the brain is gone), so a
+  migration can be undone by copying it back. Deleting a brain with `--purge` deletes its backups and lock there too;
 - each step writes the new format when it's done, so an interrupted migration resumes where it stopped.
 
 A brain in a format **newer** than your kanbrain knows (a teammate's `.brain/` from git, written by a newer version)

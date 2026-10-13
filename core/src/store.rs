@@ -149,7 +149,7 @@ impl Store {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
         }
-        let file = fs::OpenOptions::new()
+        let mut file = fs::OpenOptions::new()
             .create(true)
             .truncate(false)
             .write(true)
@@ -157,6 +157,13 @@ impl Store {
             .with_context(|| format!("opening {}", path.display()))?;
         fs4::FileExt::lock(&file).with_context(|| format!("locking {}", path.display()))?;
         HELD.with(|held| held.borrow_mut().push(path.clone()));
+        // Which brain it's for, in one write ending in a newline, so the cache can be tidied once the brain is gone.
+        if file.metadata().is_ok_and(|m| m.len() == 0) {
+            let brain = self.dir.canonicalize().with_context(|| format!("reading {}", self.dir.display()))?;
+            file.write_all(format!("{}\n", brain.display()).as_bytes())
+                .with_context(|| format!("writing {}", path.display()))?;
+        }
+        forget_gone_temp_brains(&path);
         Ok(BrainLock { file: Some(file), path })
     }
 
@@ -312,7 +319,8 @@ fn lock_path(dir: &Path) -> Result<PathBuf> {
 /// backups) out of `.brain/`, which is often committed. The key is [`fnv1a`] of the folder's canonical path, which
 /// two `kb` builds must agree on. A brain in
 /// the system's temporary folder (a test's, a try-out) keeps it in `<tmp>/kanbrain-cache/<kind>/<key>` instead, so
-/// a throwaway brain leaves nothing in the user's cache; under `/tmp`, in `/tmp/kanbrain-cache`.
+/// a throwaway brain leaves nothing in the user's cache, and what it leaves there goes once it's gone (see
+/// [`forget_gone_temp_brains`]); under `/tmp`, in `/tmp/kanbrain-cache`.
 pub(crate) fn cache_dir_of(dir: &Path, kind: &str) -> Result<PathBuf> {
     let dir = dir.canonicalize().with_context(|| format!("reading {}", dir.display()))?;
     let hash = fnv1a(dir.as_os_str().as_encoded_bytes());
@@ -325,14 +333,39 @@ pub(crate) fn cache_dir_of(dir: &Path, kind: &str) -> Result<PathBuf> {
         .flatten()
         .filter_map(|root| root.canonicalize().ok())
         .find(|root| dir.starts_with(root))
-        .map_or_else(|| dirs::cache_dir().unwrap_or(tmp).join("kanbrain"), |root| root.join("kanbrain-cache"));
+        .map_or_else(|| dirs::cache_dir().unwrap_or(tmp).join("kanbrain"), |root| root.join(TEMP_CACHE));
     Ok(cache.join(kind).join(format!("{hash:016x}")))
 }
+
+/// The folder of the system's temporary folder where brains there keep what the user's cache would.
+const TEMP_CACHE: &str = "kanbrain-cache";
 
 /// The 64-bit FNV-1a hash of `bytes`: for what must come out the same from every build, which std's hasher doesn't
 /// promise across Rust versions.
 pub(crate) fn fnv1a(bytes: &[u8]) -> u64 {
     bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3))
+}
+
+/// Deletes what brains in the system's temporary folder left in its cache once each is gone, as a test's or a
+/// try-out's is: nothing can ask for it after. Run as one of them is locked (`lock`, its lock file), so that cache
+/// tidies itself as throwaway brains come and go; the user's own is left alone. A lock file names its brain on its
+/// first line; one that doesn't yet (being written, or from an older version) is kept.
+fn forget_gone_temp_brains(lock: &Path) {
+    let Some(locks) = lock.parent().filter(|locks| locks.parent().is_some_and(|c| c.ends_with(TEMP_CACHE))) else {
+        return;
+    };
+    let Ok(entries) = fs::read_dir(locks) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let named = fs::read_to_string(&path).ok().and_then(|text| Some(PathBuf::from(text.strip_suffix('\n')?)));
+        if named.is_some_and(|brain| !brain.exists()) {
+            // Another `kb` may be tidying too: whichever gets there first deletes them.
+            let _ = fs::remove_file(&path);
+            if let (Some(cache), Some(key)) = (locks.parent(), path.file_stem()) {
+                let _ = fs::remove_dir_all(cache.join("backups").join(key));
+            }
+        }
+    }
 }
 
 /// What the cache keeps about the brain in `dir`, its lock file and its backups, to delete once the brain is: nothing
