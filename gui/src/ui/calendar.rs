@@ -58,7 +58,7 @@ pub fn draw(board: &Board, scroll: &ScrollHandle, cx: &mut Context<BrainView>) -
         .child(dim(format!("tracked · {}", counted(calendar.events(), "interaction", "interactions"))));
     let now = now();
     let days = match view.period.unit {
-        Unit::Month => month(&calendar.days, now, cx),
+        Unit::Month => month(board, &calendar.days, now, cx),
         Unit::Week => week(board, &calendar.days, now, cx),
         Unit::Hour | Unit::Day => day(board, &calendar.days, cx),
     };
@@ -69,8 +69,9 @@ pub fn draw(board: &Board, scroll: &ScrollHandle, cx: &mut Context<BrainView>) -
     div().flex_1().min_h_0().flex().flex_col().child(bar).child(body)
 }
 
-/// Weeks of seven days, each with its time and first interactions; clicking a day shows it whole.
-fn month(days: &[Day], now: DateTime<Local>, cx: &mut Context<BrainView>) -> Div {
+/// Weeks of seven days, each with its time and first interactions (`shop/api #3` when several brains are shown, as
+/// a week's and a day's name them); clicking a day shows it whole.
+fn month(board: &Board, days: &[Day], now: DateTime<Local>, cx: &mut Context<BrainView>) -> Div {
     let names = days.iter().take(7).map(|d| {
         div().flex_1().min_w_0().px_2().text_size(px(12.)).text_color(rgb(DIM)).child(d.date.format("%a").to_string())
     });
@@ -101,11 +102,12 @@ fn month(days: &[Day], now: DateTime<Local>, cx: &mut Context<BrainView>) -> Div
                 })
                 .child(day_heading(d, "%d"))
                 .children(d.events.iter().take(MONTH_EVENTS).map(|e| {
-                    div()
-                        .flex()
-                        .gap_1()
-                        .child(marker(e, true))
-                        .child(div().min_w_0().truncate().text_color(rgb(TEXT)).child(format!("#{}", e.id)))
+                    div().flex().gap_1().child(marker(e, true)).child(
+                        div().min_w_0().truncate().text_color(rgb(TEXT)).child(match board.source_label(e.source) {
+                            Some(label) => format!("{label} #{}", e.id),
+                            None => format!("#{}", e.id),
+                        }),
+                    )
                 }))
                 .children((more > 0).then(|| dim(format!("+{more} more"))))
         }))
