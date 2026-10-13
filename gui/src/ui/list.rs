@@ -2,14 +2,12 @@
 //! To do · Doing · Parked · Done. A row is one line, so long titles fit and more tasks show at once.
 //! Rows are dragged onto a section to change their status, as cards are onto a column.
 
-use super::board::{clock, draggable, drop_target, empty_hint, meta, quick_add, show_all_done};
-use super::theme::{self, BORDER, DIM, TEXT};
-use super::widgets::{self, Kind, card, dim, dim_small, small, tag_chips};
+use super::board::{clock, draggable, drop_target, empty_hint, meta, quick_add, show_all_done, status_header};
+use super::theme::{self, DIM, TEXT};
+use super::widgets::{self, card, dim, dim_small, tag_chips};
 use super::{BrainView, menu};
 use crate::state::{Board, COLUMNS, Key};
-use gpui::{
-    AnyElement, ClickEvent, Context, Div, ElementId, FontWeight, ScrollHandle, Stateful, div, prelude::*, px, rgb,
-};
+use gpui::{AnyElement, ClickEvent, Context, Div, ElementId, ScrollHandle, Stateful, div, prelude::*, px, rgb};
 use kanbrain_core::model::{Status, Task, fmt_age, now};
 
 /// Every section, one under the other, scrolling together.
@@ -55,32 +53,9 @@ pub fn draw(board: &Board, scroll: &ScrollHandle, follow: bool, cx: &mut Context
 /// A section's header: the status, its count, and `+` to add a task there. Dropping a row on it moves
 /// the task to that status.
 fn header(board: &Board, status: Status, shown: usize, cx: &mut Context<BrainView>) -> Div {
-    let total = board.column_total(status);
-    let count = if shown == total { total.to_string() } else { format!("{shown} of {total}") };
-    let header = div()
+    let header = status_header(board, status, shown, cx)
         .debug_selector(move || format!("section {}", status.as_str()))
-        .flex()
-        .items_center()
-        .gap_2()
-        .px_3()
-        .py_2()
-        .border_b_1()
-        .border_color(rgb(BORDER))
-        .bg(rgb(theme::SURFACE))
-        .child(div().size(px(8.)).rounded_full().bg(rgb(theme::status_color(status))))
-        .child(div().font_weight(FontWeight::SEMIBOLD).child(theme::status_label(status)))
-        .child(dim_small(count))
-        // Beside the count, not at the header's end: closing the details widens the board and brought the last
-        // column's + under the pointer, which clicked it as the details closed.
-        .child(
-            small(widgets::button(("list-add", status as usize), "+", Kind::Ghost))
-                .tooltip(widgets::tooltip(if status == Status::Todo {
-                    "New task here · Shortcut: n"
-                } else {
-                    "New task here"
-                }))
-                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.new_entry(status)))),
-        );
+        .bg(rgb(theme::SURFACE));
     drop_target(header, status, cx)
 }
 

@@ -53,19 +53,11 @@ pub fn draw(board: &Board, scrolls: &[ScrollHandle; 4], follow: bool, cx: &mut C
     div().flex_1().min_h_0().flex().gap_3().children(columns)
 }
 
-/// A column: its name and count, the quick-add field while adding there, and its cards.
-fn column(board: &Board, status: Status, scroll: &ScrollHandle, follow: bool, cx: &mut Context<BrainView>) -> Div {
-    let cards = board.column(status);
+/// A column's or a list section's header: the status, how many of its tasks are shown, and `+` to add one there.
+pub(super) fn status_header(board: &Board, status: Status, shown: usize, cx: &mut Context<BrainView>) -> Div {
     let total = board.column_total(status);
-    let adding = quick_add(board, status, cx);
-    // The field is the first child, above the cards: in view while typing, with each new task landing
-    // right under it, since the newest move comes first.
-    let row = if adding.is_some() { Some(0) } else { cards.iter().position(|(key, _)| Some(*key) == board.selected) };
-    if follow && let Some(row) = row {
-        scroll.scroll_to_item(row);
-    }
-    let count = if cards.len() == total { total.to_string() } else { format!("{} of {total}", cards.len()) };
-    let header = div()
+    let count = if shown == total { total.to_string() } else { format!("{shown} of {total}") };
+    div()
         .flex()
         .items_center()
         .gap_2()
@@ -87,7 +79,20 @@ fn column(board: &Board, status: Status, scroll: &ScrollHandle, follow: bool, cx
                     "New task here"
                 }))
                 .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.new_entry(status)))),
-        );
+        )
+}
+
+/// A column: its name and count, the quick-add field while adding there, and its cards.
+fn column(board: &Board, status: Status, scroll: &ScrollHandle, follow: bool, cx: &mut Context<BrainView>) -> Div {
+    let cards = board.column(status);
+    let adding = quick_add(board, status, cx);
+    // The field is the first child, above the cards: in view while typing, with each new task landing
+    // right under it, since the newest move comes first.
+    let row = if adding.is_some() { Some(0) } else { cards.iter().position(|(key, _)| Some(*key) == board.selected) };
+    if follow && let Some(row) = row {
+        scroll.scroll_to_item(row);
+    }
+    let header = status_header(board, status, cards.len(), cx);
     let now = now();
     let rows: Vec<_> = cards
         .iter()

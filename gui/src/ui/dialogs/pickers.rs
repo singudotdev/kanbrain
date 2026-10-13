@@ -50,8 +50,8 @@ pub(super) fn links(
         })
         .collect();
     let empty = candidates.is_empty();
-    let list =
-        list("links", rows, picker.rows.sel, MAX_ROWS, scroll, follow).when(empty, |d| d.child(dim("Nothing matches.")));
+    let list = list("links", rows, picker.rows.sel, MAX_ROWS, scroll, follow)
+        .when(empty, |d| d.child(dim("Nothing matches.")));
     let content = div()
         .flex()
         .flex_col()
