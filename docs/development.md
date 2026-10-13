@@ -217,8 +217,10 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
 │   ├── editor.rs    multi-line TextEditor (descriptions, comments), one-line LineInput (fields)
 │   └── event.rs     KeyCode / KeyEvent / KeyModifiers: what GPUI keystrokes become
 └── ui/              the window: draws the Board with GPUI and turns clicks, drags and keys into its calls
-    ├── mod.rs       BrainView (the root view), the window and its app id, ticking, watching, the status bar, `action` buttons, keystrokes → keys, clipboard, the system's folder dialog
-    ├── topbar.rs    the logo, tabs, the project filter and + Add project, the shown project's description, search, New / Reload / Commands; the running tasks with Park and Park & quit
+    ├── mod.rs       BrainView (the root view), the window and its app id, ticking, watching, the status bar, `action` buttons, clipboard, the system's folder dialog, $EDITOR
+    ├── keys.rs      GPUI keystrokes → the board's keys, and keys as people write them (`Ctrl+C`)
+    ├── text.rs      text cut to a width, dates, a field's text with its selection highlighted
+    ├── topbar.rs    the logo, tabs, the project filter and + Add project, the shown project's description, search and the tag filter, New / Reload / Commands; the running tasks with Park and Park & quit
     ├── board.rs     the columns, cards (dragged as DraggedCard), quick add, "Show N older"
     ├── list.rs      the board's list layout: a section per status, a row per task, dragged like cards
     ├── drawer.rs    the details beside the board or list

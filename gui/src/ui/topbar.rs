@@ -5,7 +5,7 @@ use super::dropdown::{Dropdown, Row};
 use super::pointer::TextBox;
 use super::theme::{self, BORDER, YELLOW};
 use super::widgets::{self, Kind, dim, dim_small, segment, segmented, small, tag_chips};
-use super::{BrainView, Scrolls, action, tag_filter};
+use super::{BrainView, Scrolls, action};
 use crate::state::{Board, Key, Layout, Mode, Picker, Scope, Tab, Target, When};
 use crate::text::event::KeyCode;
 use gpui::{
@@ -294,4 +294,64 @@ fn running_item(
                 cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.set_status(key, Status::Parked))),
             ),
         )
+}
+
+/// Width of the tag filters' dropdown.
+const TAG_DROPDOWN_WIDTH: f32 = 260.;
+
+/// The tag dropdown of every tab (`#`): "Tags", with the chips of the `#tags` in the search box in
+/// the color they have on the board. Picking a tag adds it to the search box (or takes it out), which
+/// holds every filter.
+fn tag_filter(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<BrainView>) -> Div {
+    let chosen = board.search_tags();
+    let button = action("filter", "Tags", Kind::Secondary, KeyCode::Char('#'), cx)
+        .debug_selector(|| "tag-filter".into())
+        .gap_1p5()
+        .children(chosen.iter().map(|tag| widgets::labeled_chip(board.tag_brain(tag), tag, format!("#{tag}"))))
+        .child("▾");
+    let open = match &board.mode {
+        Mode::Tags(picker) => Some(picker),
+        _ => None,
+    };
+    div().flex().flex_col().child(button).children(open.map(|picker| {
+        let rows = board
+            .tag_candidates(picker)
+            .into_iter()
+            .map(|candidate| Row {
+                checked: candidate.as_ref().map_or(chosen.is_empty(), |t| chosen.contains(t)),
+                nested: false,
+                content: match &candidate {
+                    Some(t) => div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(widgets::labeled_chip(board.tag_brain(t), t, format!("#{t}")))
+                        .child(widgets::dim_small(uses(board.tag_uses(t))))
+                        .into_any_element(),
+                    None => div().child("All tags").into_any_element(),
+                },
+            })
+            .collect();
+        Dropdown {
+            name: "tag",
+            picker,
+            search: TextBox::TagSearch,
+            rows,
+            choose: Board::choose_tag,
+            width: TAG_DROPDOWN_WIDTH,
+        }
+        .draw(&scroll.dropdown, follow, cx)
+    }))
+}
+
+/// Where a tag is used: `2 tasks · 1 note`, so one that isn't on any card can be found.
+fn uses(counts: [usize; 3]) -> String {
+    let names = [("task", "tasks"), ("note", "notes"), ("decision", "decisions")];
+    counts
+        .iter()
+        .zip(names)
+        .filter(|(n, _)| **n > 0)
+        .map(|(n, (one, many))| format!("{n} {}", if *n == 1 { one } else { many }))
+        .collect::<Vec<_>>()
+        .join(" · ")
 }

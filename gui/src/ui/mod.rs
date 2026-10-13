@@ -18,6 +18,8 @@
 //! - [`caret`]: the blinking text cursor.
 //! - [`mod@pointer`]: the mouse in text fields and the text editor.
 //! - [`theme`]: colors, fonts and styled text.
+//! - [`keys`]: GPUI's keystrokes as the board's keys, and keys as people write them.
+//! - [`text`]: text cut to a width, dates, and a field's text with its selection.
 
 mod board;
 mod calendar;
@@ -26,11 +28,13 @@ mod dialogs;
 mod drawer;
 mod dropdown;
 mod entries;
+mod keys;
 mod list;
 mod markdown;
 mod menu;
 mod pointer;
 mod report;
+mod text;
 mod theme;
 mod topbar;
 mod widgets;
@@ -40,16 +44,16 @@ use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::update;
 use crate::watch::{self, Watcher};
 use anyhow::{Context as _, Result, bail};
-use chrono::{DateTime, Local};
 use gpui::{
     App as GpuiApp, Bounds, ClickEvent, ClipboardItem, Context, Div, ElementId, FocusHandle, KeyDownEvent, Keystroke,
     PathPromptOptions, ScrollHandle, SharedString, Stateful, Window, WindowBounds, WindowOptions, div, prelude::*, px,
     rgb, size,
 };
+use keys::{key_events, key_name};
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
-use theme::{Line, Span, Style};
+use text::{byte_at, edited, truncate, when};
 use widgets::Kind;
 
 /// The window's application id on Linux: the name of the installer's `kanbrain.desktop` and of its icon, so
@@ -66,9 +70,6 @@ fn window_icon() -> Option<std::sync::Arc<image::RgbaImage>> {
 
 /// How often the window redraws without input, so clocks tick and messages expire.
 const TICK: Duration = Duration::from_millis(500);
-
-/// Width of the tag filters' dropdown.
-const TAG_DROPDOWN_WIDTH: f32 = 260.;
 
 /// Width of the details drawer.
 const DRAWER_WIDTH: f32 = 420.;
@@ -585,130 +586,6 @@ fn action(
         .on_click(cx.listener(move |this, _: &ClickEvent, _window, cx| this.press(key, cx)))
 }
 
-/// The tag dropdown of every tab (`#`): "Tags", with the chips of the `#tags` in the search box in
-/// the color they have on the board. Picking a tag adds it to the search box (or takes it out), which
-/// holds every filter.
-fn tag_filter(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<BrainView>) -> Div {
-    let chosen = board.search_tags();
-    let button = action("filter", "Tags", Kind::Secondary, KeyCode::Char('#'), cx)
-        .debug_selector(|| "tag-filter".into())
-        .gap_1p5()
-        .children(chosen.iter().map(|tag| widgets::labeled_chip(board.tag_brain(tag), tag, format!("#{tag}"))))
-        .child("▾");
-    let open = match &board.mode {
-        Mode::Tags(picker) => Some(picker),
-        _ => None,
-    };
-    div().flex().flex_col().child(button).children(open.map(|picker| {
-        let rows = board
-            .tag_candidates(picker)
-            .into_iter()
-            .map(|candidate| dropdown::Row {
-                checked: candidate.as_ref().map_or(chosen.is_empty(), |t| chosen.contains(t)),
-                nested: false,
-                content: match &candidate {
-                    Some(t) => div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(widgets::labeled_chip(board.tag_brain(t), t, format!("#{t}")))
-                        .child(widgets::dim_small(uses(board.tag_uses(t))))
-                        .into_any_element(),
-                    None => div().child("All tags").into_any_element(),
-                },
-            })
-            .collect();
-        dropdown::Dropdown {
-            name: "tag",
-            picker,
-            search: pointer::TextBox::TagSearch,
-            rows,
-            choose: Board::choose_tag,
-            width: TAG_DROPDOWN_WIDTH,
-        }
-        .draw(&scroll.dropdown, follow, cx)
-    }))
-}
-
-/// Where a tag is used: `2 tasks · 1 note`, so one that isn't on any card can be found.
-fn uses(counts: [usize; 3]) -> String {
-    let names = [("task", "tasks"), ("note", "notes"), ("decision", "decisions")];
-    counts
-        .iter()
-        .zip(names)
-        .filter(|(n, _)| **n > 0)
-        .map(|(n, (one, many))| format!("{n} {}", if *n == 1 { one } else { many }))
-        .collect::<Vec<_>>()
-        .join(" · ")
-}
-
-/// A key as people write it: `s`, `Esc`, `Ctrl+C`.
-fn key_name(key: KeyEvent) -> String {
-    let name = match key.code {
-        KeyCode::Char(' ') => "Space".into(),
-        KeyCode::Char(c) => c.to_string(),
-        KeyCode::Enter => "Enter".into(),
-        KeyCode::Esc => "Esc".into(),
-        KeyCode::Tab => "Tab".into(),
-        KeyCode::Backspace => "Backspace".into(),
-        KeyCode::Delete => "Delete".into(),
-        KeyCode::Left => "←".into(),
-        KeyCode::Right => "→".into(),
-        KeyCode::Up => "↑".into(),
-        KeyCode::Down => "↓".into(),
-        KeyCode::Home => "Home".into(),
-        KeyCode::End => "End".into(),
-    };
-    if key.modifiers.contains(KeyModifiers::CONTROL) { format!("Ctrl+{}", name.to_uppercase()) } else { name }
-}
-
-/// The board's key events for a GPUI keystroke. Usually one; typed text that composes several
-/// characters gives one per character.
-fn key_events(keystroke: &Keystroke) -> Vec<KeyEvent> {
-    let modifiers = &keystroke.modifiers;
-    let named = match keystroke.key.as_str() {
-        "enter" => Some(KeyCode::Enter),
-        "escape" => Some(KeyCode::Esc),
-        "tab" if modifiers.shift => return Vec::new(),
-        "tab" => Some(KeyCode::Tab),
-        "backspace" => Some(KeyCode::Backspace),
-        "delete" => Some(KeyCode::Delete),
-        "left" => Some(KeyCode::Left),
-        "right" => Some(KeyCode::Right),
-        "up" => Some(KeyCode::Up),
-        "down" => Some(KeyCode::Down),
-        "home" => Some(KeyCode::Home),
-        "end" => Some(KeyCode::End),
-        _ => None,
-    };
-    let ctrl = if modifiers.control { KeyModifiers::CONTROL } else { KeyModifiers::NONE };
-    if let Some(code) = named {
-        // Shift with a movement key selects text, or moves a card on the board.
-        let shift = if modifiers.shift { KeyModifiers::SHIFT } else { KeyModifiers::NONE };
-        return vec![KeyEvent::new(code, ctrl | shift)];
-    }
-    // Shortcuts with the super/command key are the desktop's, not the board's.
-    if modifiers.platform {
-        return Vec::new();
-    }
-    if modifiers.control {
-        let mut chars = keystroke.key.chars();
-        return match (chars.next(), chars.next()) {
-            (Some(c), None) => vec![KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)],
-            _ => Vec::new(),
-        };
-    }
-    // Typed text, after shift, dead keys and compose. Simulated keystrokes (tests) have none: use the key name.
-    let text = match &keystroke.key_char {
-        Some(text) => text.clone(),
-        None if keystroke.key == "space" => " ".to_string(),
-        None if keystroke.key.chars().count() == 1 && modifiers.shift => keystroke.key.to_uppercase(),
-        None if keystroke.key.chars().count() == 1 => keystroke.key.clone(),
-        None => return Vec::new(),
-    };
-    text.chars().filter(|c| !c.is_control()).map(|c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)).collect()
-}
-
 /// Opens `path` in `$VISUAL` / `$EDITOR` (which may include arguments, e.g. `code -w`) and waits. One set but empty
 /// counts as unset, as shells treat it.
 fn open_editor(path: &Path) -> Result<()> {
@@ -722,38 +599,6 @@ fn open_editor(path: &Path) -> Result<()> {
         bail!("{program} exited with {status}");
     }
     Ok(())
-}
-
-/// Cuts `s` to `width` characters, ending with `…` when shortened.
-fn truncate(s: &str, width: usize) -> String {
-    if s.chars().count() <= width {
-        s.to_string()
-    } else {
-        let mut out: String = s.chars().take(width.saturating_sub(1)).collect();
-        out.push('…');
-        out
-    }
-}
-
-/// "Thu 24 Sep 2026 10:15" in local time.
-fn when(dt: DateTime<Local>) -> String {
-    dt.format("%a %d %b %Y %H:%M").to_string()
-}
-
-/// Text being typed into, the characters from `start` to `end` of `selection` highlighted.
-fn edited(text: &str, selection: Option<(usize, usize)>) -> Line {
-    let Some((start, end)) = selection else { return Line::raw(text) };
-    let (a, b) = (byte_at(text, start), byte_at(text, end));
-    Line::from(vec![
-        Span::raw(&text[..a]),
-        Span::styled(&text[a..b], Style::new().bg(theme::SELECTION)),
-        Span::raw(&text[b..]),
-    ])
-}
-
-/// Byte offset of character `at` in `text`; past the last character means the end.
-fn byte_at(text: &str, at: usize) -> usize {
-    text.char_indices().nth(at).map_or(text.len(), |(i, _)| i)
 }
 
 #[cfg(test)]
