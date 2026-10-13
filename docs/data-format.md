@@ -12,13 +12,16 @@ per project repository. You can read them, edit them, grep them and version them
 ├── format                         ← the data format's version (only once a migration ran)
 ├── projects.md                    ← the registered repositories, by project
 ├── projects/
-│   └── shop.md                    ← project shop's card, shared by its repositories
+│   └── shop.md                    ← project shop's card, shared by its repositories (named after the project's
+│                                    name as a slug: `acme-corp.md` for Acme Corp)
 └── reports/                       ← markdown report exports (never read back)
 
 ~/code/shop-api/.brain/            ← a repository of project shop, made by `kb init shop`
 ├── 0001-rate-limit-login.md       ← its own entries, numbered from 1
 ├── tags.md
-└── project.md                     ← which project it belongs to, and this repository's role in it
+├── project.md                     ← which project it belongs to, and this repository's role in it
+└── reports/                       ← `kb report --save` run in the repository (committed with `.brain/` unless
+                                     ignored)
 ```
 
 ## Projects

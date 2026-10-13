@@ -104,7 +104,8 @@ notes and decisions lists) opens a menu with all of these actions, each naming i
 
 `a` opens a field at the top of To do; with several brains shown, the app asks which project first (see
 [Projects](#projects)). Type a title and press `enter`: the task is created in To do, and the field stays open for
-the next one. `esc` closes it.
+the next one. `esc` closes it. A `#word` typed in the title stays part of it, not a tag: tags go in the new task
+form (`n`), or with `e` afterwards.
 
 ### Moving to another project
 

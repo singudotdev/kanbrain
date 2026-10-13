@@ -143,9 +143,9 @@ The output is kept small so it doesn't waste the agent's context, and the CLI co
 | `kb project rename\|repo\|move\|remove` | rename the project or this repository, move it to another project, or remove the project |
 | `kb show ID` | one entry in full: status, time, description, comments, links, history |
 | `kb search WORDS…` | find entries by words; `#tag` matches tags only |
-| `kb list [doing\|todo\|parked\|done\|all] [notes] [decisions] [--tag T]` | print tasks as markdown |
+| `kb list [doing\|todo\|parked\|done\|all] [notes] [decisions] [--tag T] [--json]` | print tasks as markdown |
 | `kb status` | the running tasks and their clocks, for status bars |
-| `kb report [hour\|day\|week\|month] [--group task\|tag] [--save]` | tracked time as markdown |
+| `kb report [hour\|day\|week\|month] [--group task\|tag] [--tag T] [--save]` | tracked time as markdown |
 | `kb update` | install the latest release over this one |
 | `kb completions bash\|zsh\|fish` | tab completion of commands, ids, projects and tags |
 | `kanbrain` | open the kanban board (`?` opens the command palette, with every key; `u` undoes) |

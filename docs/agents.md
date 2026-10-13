@@ -167,7 +167,7 @@ This is its `shop-web` repository.
 
 The store: UI only; every piece of data comes from shop-api, nothing is kept but the local cart.
 
-Its other repositories. Work one of them needs, or a problem found in it, is a task there, not a note here: `kb --project shop/NAME add TITLE`.
+Its other repositories. Work one of them needs, or a problem found in it, is a task there, not a note here: `kb --project shop/NAME add TITLE`, then `kb link ID NAME#ID` relates it to the task here. `kb --project shop/NAME search WORDS` finds its decisions and notes.
 
 - shop-api: /home/you/code/shop-api
 ```

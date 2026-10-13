@@ -59,10 +59,10 @@ Makes the current folder a repository of project `NAME` (default: the folder's n
   several repositories, holds this one's role among them (`project notes`);
 - registers it in the central brain's `projects.md`. Another repository already in project `NAME` makes it a
   multi-repository project: each keeps its own tasks, labelled `NAME/REPO` (`shop/shop-web`);
-- creates the project's card in the central brain, `projects/NAME.md`, if it's new: the application's shared context
-  (what it is, its services and how they connect, conventions they share), written with `project describe`.
-  `context` starts with it, then this repository's role and where the other repositories are, so an agent knows the
-  project without exploring it;
+- creates the project's card in the central brain, `projects/NAME.md` (the name as a slug: `acme-corp.md`), if it's
+  new: the application's shared context (what it is, its services and how they connect, conventions they share),
+  written with `project describe`. `context` starts with it, then this repository's role and where the other
+  repositories are, so an agent knows the project without exploring it;
 - writes the "Project memory" section into `CLAUDE.md` / `AGENTS.md` and, with `CLAUDE.md`, Claude Code hooks into
   `.claude/settings.local.json`: the context at the start of each session, and `kb hook prompt|stop`, which hold an
   agent to describing an undescribed project first and to commenting on the tasks it started (see
