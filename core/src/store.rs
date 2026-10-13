@@ -111,7 +111,7 @@ impl Store {
     /// The project's name: the one on its card (`project.md`), else the folder holding `.brain/`;
     /// `None` for the central brain.
     pub fn project(&self) -> Option<String> {
-        if let Some((name, _)) = projects::read_repo_card(&self.dir) {
+        if let Some(projects::RepoCard { project: name, .. }) = projects::read_repo_card(&self.dir) {
             return Some(name);
         }
         if self.dir.file_name()? != PROJECT_DIR {

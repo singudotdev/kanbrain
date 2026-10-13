@@ -11,10 +11,14 @@ fn commands() {
     assert!(parse(&["--track"]).is_err());
     assert_eq!(parse(&["path"]).unwrap(), Command::Path);
     assert_eq!(parse(&["status"]).unwrap(), Command::Status);
-    assert_eq!(parse(&["init"]).unwrap(), Command::Init(None));
-    assert_eq!(parse(&["init", "api"]).unwrap(), Command::Init(Some("api".into())));
+    assert_eq!(parse(&["init"]).unwrap(), Command::Init(None, None));
+    assert_eq!(parse(&["init", "api"]).unwrap(), Command::Init(Some("api".into()), None));
     assert_eq!(parse(&["init", "--all"]).unwrap(), Command::InitAll);
     assert_eq!(parse(&["deinit"]).unwrap(), Command::Deinit);
+    assert_eq!(
+        parse(&["init", "--repo", "web", "shop"]).unwrap(),
+        Command::Init(Some("shop".into()), Some("web".into()))
+    );
     assert_eq!(parse(&["hook", "stop"]).unwrap(), Command::Hook(hook::HookEvent::Stop));
     assert!(parse(&["hook", "nope"]).is_err());
     let (project, rest) = take_project(["list", "--project", "api", "done"].map(String::from).to_vec()).unwrap();

@@ -97,10 +97,18 @@ fn context_starts_with_what_the_project_is_about() {
     for dir in [&api, &web] {
         std::fs::create_dir_all(dir).unwrap();
         projects::register(central.path(), "shop", dir).unwrap();
-        projects::write_repo_card(dir, "shop", "").unwrap();
+        projects::write_repo_card(
+            dir,
+            &projects::RepoCard { project: "shop".into(), repo: None, notes: String::new() },
+        )
+        .unwrap();
     }
     projects::write_description(central.path(), "shop", "An online shop.").unwrap();
-    projects::write_repo_card(&web, "shop", "The React front end.").unwrap();
+    projects::write_repo_card(
+        &web,
+        &projects::RepoCard { project: "shop".into(), repo: None, notes: "The React front end.".into() },
+    )
+    .unwrap();
     let brain = Brain::open_in(Store::at(&web).unwrap(), central.path()).unwrap();
     let context = brain.context_markdown();
     let expected = format!(
@@ -130,7 +138,11 @@ fn entries_link_to_other_repositories_of_the_project_and_show_both_ways() {
     for dir in [&api, &web] {
         std::fs::create_dir_all(dir).unwrap();
         projects::register(central.path(), "shop", dir).unwrap();
-        projects::write_repo_card(dir, "shop", "").unwrap();
+        projects::write_repo_card(
+            dir,
+            &projects::RepoCard { project: "shop".into(), repo: None, notes: String::new() },
+        )
+        .unwrap();
     }
     let open = |dir: &std::path::Path| Brain::open_in(Store::at(dir).unwrap(), central.path()).unwrap();
     let total = open(&api).add(new(Kind::Task, "expose the cart total")).unwrap();

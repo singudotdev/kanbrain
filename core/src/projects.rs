@@ -61,8 +61,13 @@ pub struct Repo {
 }
 
 impl Repo {
-    /// The repository's name: the folder holding its `.brain/`.
+    /// The repository's name in its project: the one its card gives, else the folder holding its `.brain/`.
     pub fn name(&self) -> String {
+        read_repo_card(&self.dir).and_then(|card| card.repo).unwrap_or_else(|| self.folder())
+    }
+
+    /// The name of the folder holding its `.brain/`, the repository's name unless its card gives another.
+    pub fn folder(&self) -> String {
         self.dir
             .parent()
             .and_then(Path::file_name)
@@ -167,9 +172,37 @@ pub fn unregister(central: &Path, dir: &Path) -> Result<Option<Repo>> {
     Ok(Some(repo))
 }
 
+/// The name the repository whose `.brain/` is `dir` takes in `project`: `wanted` if given, refused when another
+/// of the project's repositories has it; else the one its card gives if it stays in that project, else its
+/// folder's. When another repository has that one (two folders named `app` in different places), the folder
+/// above goes before it (`backend-app`), then a number: two repositories of a project can't share a name, as
+/// `--project` and links (`app#3`) tell them apart by it.
+pub fn repo_name(central: &Path, project: &str, dir: &Path, wanted: Option<&str>) -> Result<String> {
+    let taken: Vec<String> = load(central)?
+        .into_iter()
+        .filter(|r| r.project == project && !same_dir(&r.dir, dir) && r.dir.is_dir())
+        .map(|r| r.name())
+        .collect();
+    if let Some(wanted) = wanted {
+        check_repo_name(wanted)?;
+        if taken.iter().any(|t| t == wanted) {
+            bail!("project `{project}` already has a repository named `{wanted}`; pick another");
+        }
+        return Ok(wanted.to_string());
+    }
+    let here = Repo { project: project.to_string(), dir: dir.to_path_buf() };
+    let card = read_repo_card(dir).filter(|card| card.project == project).and_then(|card| card.repo);
+    let own = card.unwrap_or_else(|| here.folder());
+    let above = dir.parent().and_then(Path::parent).and_then(Path::file_name).map(|n| n.to_string_lossy());
+    let candidates = std::iter::once(own.clone())
+        .chain(above.map(|above| format!("{above}-{own}")))
+        .chain((2..).map(|n| format!("{own}-{n}")));
+    Ok(candidates.into_iter().find(|name| !taken.contains(name)).expect("the numbered names never run out"))
+}
+
 /// Names are written as `- name: path` lines and typed after `--project`, where `/` separates the
 /// repository, so they're one line without `:` or `/`, and not the central brain's name.
-fn check_name(name: &str) -> Result<()> {
+pub fn check_name(name: &str) -> Result<()> {
     if name.trim().is_empty() || name.contains([':', '/', '\n']) || name.trim() != name {
         bail!("`{name}` can't be a project name: it needs to be one line, without `:`, `/` or surrounding spaces");
     }
@@ -192,19 +225,59 @@ fn save(central: &Path, repos: &[Repo]) -> Result<()> {
     store::write_file(&central.join(REGISTRY_FILE), &text)
 }
 
-/// The project a `.brain/` folder says it belongs to, and its notes about itself.
-pub fn read_repo_card(dir: &Path) -> Option<(String, String)> {
-    let text = fs::read_to_string(dir.join(PROJECT_FILE)).ok()?;
-    let mut lines = text.lines();
-    let name = lines.by_ref().find_map(|l| l.strip_prefix("# "))?.trim().to_string();
-    Some((name, lines.collect::<Vec<_>>().join("\n").trim().to_string()))
+/// What a repository's `.brain/project.md` says about it, travelling with its code (and its git):
+///
+/// ```markdown
+/// # shop
+/// - repo: web
+///
+/// The store: UI only.
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepoCard {
+    /// The project it belongs to: the `#` title.
+    pub project: String,
+    /// Its name in the project, when it isn't its folder's: the `- repo:` line right under the title. In the
+    /// card rather than the central registry, so links to it (`web#3`) read the same on every machine.
+    pub repo: Option<String>,
+    /// Its role among the project's repositories (markdown).
+    pub notes: String,
 }
 
-/// Writes a `.brain/` folder's card: the project it belongs to, and its notes.
-pub fn write_repo_card(dir: &Path, project: &str, notes: &str) -> Result<()> {
-    let notes = notes.trim();
-    let text = if notes.is_empty() { format!("# {project}\n") } else { format!("# {project}\n\n{notes}\n") };
+/// A `.brain/` folder's card; `None` if it has none (not a project's repository).
+pub fn read_repo_card(dir: &Path) -> Option<RepoCard> {
+    let text = fs::read_to_string(dir.join(PROJECT_FILE)).ok()?;
+    let mut lines = text.lines();
+    let project = lines.by_ref().find_map(|l| l.strip_prefix("# "))?.trim().to_string();
+    let rest: Vec<&str> = lines.collect();
+    // Only right under the title: notes start after a blank line, so a note's own `- repo:` stays a note.
+    let (repo, notes) = match rest.first().and_then(|l| l.strip_prefix("- repo:")) {
+        Some(name) => (Some(name.trim().to_string()).filter(|n| !n.is_empty()), &rest[1..]),
+        None => (None, &rest[..]),
+    };
+    Some(RepoCard { project, repo, notes: notes.join("\n").trim().to_string() })
+}
+
+/// Writes a `.brain/` folder's card.
+pub fn write_repo_card(dir: &Path, card: &RepoCard) -> Result<()> {
+    let mut text = format!("# {}\n", card.project);
+    if let Some(repo) = &card.repo {
+        writeln!(text, "- repo: {repo}").expect("writing to a String cannot fail");
+    }
+    let notes = card.notes.trim();
+    if !notes.is_empty() {
+        write!(text, "\n{notes}\n").expect("writing to a String cannot fail");
+    }
     store::write_file(&dir.join(PROJECT_FILE), &text)
+}
+
+/// Repository names are typed after `--project NAME/` and written in links as `REPO#ID`, which a space, `,` or `#`
+/// would split, so they're one word without those or `:` and `/`.
+pub fn check_repo_name(name: &str) -> Result<()> {
+    if name.is_empty() || name.contains(|c: char| c.is_whitespace() || matches!(c, ',' | '#' | ':' | '/')) {
+        bail!("`{name}` can't be a repository name: it needs to be one word, without `,`, `#`, `:` or `/`");
+    }
+    Ok(())
 }
 
 /// Where a project's shared card is in the central brain.
@@ -250,7 +323,7 @@ pub fn remove_description(central: &Path, project: &str) -> Result<bool> {
 /// What the repository in `dir` knows of its project: `None` outside a project. Without `central`,
 /// only what its own card says.
 pub fn info(dir: &Path, central: Option<&Path>) -> Option<ProjectInfo> {
-    let (name, notes) = read_repo_card(dir)?;
+    let RepoCard { project: name, notes, .. } = read_repo_card(dir)?;
     let repo = Repo { project: name.clone(), dir: dir.to_path_buf() }.name();
     let (description, siblings) = match central {
         Some(central) => {

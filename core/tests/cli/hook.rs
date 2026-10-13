@@ -8,7 +8,8 @@ fn project() -> (tempfile::TempDir, tempfile::TempDir, PathBuf) {
     let dir = code.path().join("api/.brain");
     std::fs::create_dir_all(&dir).unwrap();
     projects::register(central.path(), "shop", &dir).unwrap();
-    projects::write_repo_card(&dir, "shop", "").unwrap();
+    projects::write_repo_card(&dir, &projects::RepoCard { project: "shop".into(), repo: None, notes: String::new() })
+        .unwrap();
     projects::ensure_description(central.path(), "shop").unwrap();
     let root = code.path().join("api");
     (central, code, root)
@@ -58,7 +59,11 @@ fn with_several_repositories_this_ones_role_counts_too() {
     projects::write_description(central.path(), "shop", "An online shop.").unwrap();
     let prompt = respond(HookEvent::Prompt, &input(&root, false), central.path()).expect("the role is missing");
     assert!(prompt.contains("`kb project notes -`") && !prompt.contains("describe -"), "{prompt}");
-    projects::write_repo_card(&root.join(".brain"), "shop", "The API.").unwrap();
+    projects::write_repo_card(
+        &root.join(".brain"),
+        &projects::RepoCard { project: "shop".into(), repo: None, notes: "The API.".into() },
+    )
+    .unwrap();
     assert_eq!(respond(HookEvent::Prompt, &input(&root, false), central.path()), None);
 }
 

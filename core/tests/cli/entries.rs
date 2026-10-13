@@ -58,7 +58,11 @@ fn project_writes_the_shared_card_and_the_repository_notes() {
     let dir = code.path().join("api/.brain");
     std::fs::create_dir_all(&dir).unwrap();
     crate::projects::register(central.path(), "shop", &dir).unwrap();
-    crate::projects::write_repo_card(&dir, "shop", "").unwrap();
+    crate::projects::write_repo_card(
+        &dir,
+        &crate::projects::RepoCard { project: "shop".into(), repo: None, notes: String::new() },
+    )
+    .unwrap();
     let open = || Brain::open_in(crate::store::Store::at(&dir).unwrap(), central.path()).unwrap();
     let mut brain = open();
     run_project(&mut brain, Some((ProjectPart::Description, Text::Given("An online shop.".into())))).unwrap();

@@ -3,7 +3,7 @@
 ```
 kb list [doing|todo|parked|done|all] [notes] [decisions] [--tag TAG] [--json]
                  print tasks as markdown, one section per status
-kb init [NAME]
+kb init [NAME] [--repo REPO]
                  make this folder a project: its own .brain/, registered as NAME (default: the
                  folder's name) with a card for the application, and a section telling its agents
                  about it in CLAUDE.md / AGENTS.md (run again to update them)
@@ -69,7 +69,11 @@ Makes the current folder a repository of project `NAME` (default: the folder's n
 
 Running it again is safe: it updates the agent section and the hooks, and `init NAME` moves the repository to project
 `NAME`.
-Two repositories with the same folder name can't be in one project, since they'd have the same label.
+
+Within a project, each repository has a name of its own: its folder's, unless that's taken by another of the project's
+repositories (two folders named `app` in different places), when the folder above goes before it (`backend-app`), or
+a number. `--repo REPO` names it yourself. A name other than the folder's is kept in its `.brain/project.md`, so links
+to it (`REPO#3`) read the same on every machine.
 
 ### `kb init --all`
 

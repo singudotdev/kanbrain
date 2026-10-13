@@ -71,11 +71,11 @@ The user follows them live on a kanban board: keep it showing what you're doing 
 );
 
 /// Makes `root` a repository of project `name` (else the one its card names, else one named after
-/// the folder): creates its `.brain/` and card, registers it in `central` (joining the project's
-/// other repositories if it has some), creates the project's shared card if it's new, and writes or
-/// refreshes the section in each agent file of `root` (creating `CLAUDE.md` if there's none).
-/// Returns what it did, one line each.
-pub fn init(root: &Path, name: Option<&str>, central: &Path) -> Result<Vec<String>> {
+/// the folder), named `repo` in it (else as [`projects::repo_name`] picks): creates its `.brain/` and card,
+/// registers it in `central` (joining the project's other repositories if it has some), creates the project's
+/// shared card if it's new, and writes or refreshes the section in each agent file of `root` (creating
+/// `CLAUDE.md` if there's none). Returns what it did, one line each.
+pub fn init(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path) -> Result<Vec<String>> {
     let mut done = Vec::new();
     let dir = root.join(PROJECT_DIR);
     if dir.is_dir() {
@@ -91,16 +91,22 @@ pub fn init(root: &Path, name: Option<&str>, central: &Path) -> Result<Vec<Strin
     let card = projects::read_repo_card(&dir);
     let project = match (name, &card, folder) {
         (Some(name), _, _) => name.to_string(),
-        (None, Some((card, _)), _) => card.clone(),
+        (None, Some(card), _) => card.project.clone(),
         (None, None, Some(folder)) => folder,
         (None, None, None) => bail!("this folder has no name to give the project: `kb init NAME`"),
     };
-    projects::register(central, &project, &dir)?;
-    match &card {
-        Some((name, _)) if *name == project => {}
-        Some((_, notes)) => projects::write_repo_card(&dir, &project, notes)?,
-        None => projects::write_repo_card(&dir, &project, "")?,
+    projects::check_name(&project)?;
+    let named = projects::repo_name(central, &project, &dir, repo)?;
+    // The name goes on the card before registering, which tells repositories apart by it; only when it isn't
+    // the folder's, so a card stays as it was for the usual case.
+    let folder_name = projects::Repo { project: project.clone(), dir: dir.clone() }.folder();
+    let notes = card.as_ref().map(|card| card.notes.clone()).unwrap_or_default();
+    let new_card =
+        projects::RepoCard { project: project.clone(), repo: (named != folder_name).then_some(named), notes };
+    if card.as_ref() != Some(&new_card) {
+        projects::write_repo_card(&dir, &new_card)?;
     }
+    projects::register(central, &project, &dir)?;
     if projects::ensure_description(central, &project)? {
         done.push(format!(
             "created project `{project}`'s card in the central brain: describe the project with `kb project \

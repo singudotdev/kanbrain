@@ -306,7 +306,11 @@ fn project_info_draws_every_repository(cx: &mut gpui::TestAppContext) {
         let dir = code.path().join(repo).join(".brain");
         Store::at(&dir).unwrap().save(&mut Task::new(1, format!("{repo} task"), now())).unwrap();
         kanbrain_core::projects::register(central.path(), "shop", &dir).unwrap();
-        kanbrain_core::projects::write_repo_card(&dir, "shop", "notes").unwrap();
+        kanbrain_core::projects::write_repo_card(
+            &dir,
+            &kanbrain_core::projects::RepoCard { project: "shop".into(), repo: None, notes: "notes".into() },
+        )
+        .unwrap();
     }
     let mut board = Board::open(central.path(), None).unwrap();
     board.set_scope(crate::state::Scope::Project("shop".into()));
@@ -412,7 +416,11 @@ fn every_dropdown_with_a_search_scrolls_past_its_most_rows(cx: &mut gpui::TestAp
         let dir = code.path().join(format!("repo{i}")).join(".brain");
         Store::at(&dir).unwrap();
         projects::register(central.path(), &format!("p{i}"), &dir).unwrap();
-        projects::write_repo_card(&dir, &format!("p{i}"), "").unwrap();
+        projects::write_repo_card(
+            &dir,
+            &projects::RepoCard { project: format!("p{i}"), repo: None, notes: String::new() },
+        )
+        .unwrap();
     }
     let board = Board::open(central.path(), None).unwrap();
     let (_view, cx) = cx.add_window_view(|window, cx| BrainView::new(board, window, cx));

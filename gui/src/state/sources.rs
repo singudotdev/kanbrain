@@ -75,7 +75,7 @@ pub(super) fn load(central: &Path, also: Option<&Path>) -> Result<Vec<Source>> {
 fn repos(central: &Path, also: Option<&Path>) -> Result<Vec<Repo>> {
     let mut repos = projects::load(central)?;
     if let Some(dir) = also.filter(|d| !repos.iter().any(|r| projects::same_dir(&r.dir, d))) {
-        let project = projects::read_repo_card(dir).map_or_else(|| folder_name(dir), |(name, _)| name);
+        let project = projects::read_repo_card(dir).map_or_else(|| folder_name(dir), |card| card.project);
         repos.push(Repo { project, dir: dir.to_path_buf() });
     }
     Ok(repos)
@@ -182,7 +182,7 @@ impl Board {
     /// one its `.brain/` card gives if it has one (it was a repository before), else the folder's, selected so that
     /// typing replaces it.
     pub fn name_project(&mut self, dir: PathBuf) {
-        let card = projects::read_repo_card(&dir.join(PROJECT_DIR)).map(|(name, _)| name);
+        let card = projects::read_repo_card(&dir.join(PROJECT_DIR)).map(|card| card.project);
         let name = card.or_else(|| Some(dir.file_name()?.to_string_lossy().into_owned())).unwrap_or_default();
         let mut search = LineInput::new(&name);
         search.select_all();
@@ -229,7 +229,7 @@ impl Board {
         };
         let name = option.name().to_string();
         let dir = add.dir.clone();
-        if let Err(e) = cli::init(&dir, Some(&name), &self.central) {
+        if let Err(e) = cli::init(&dir, Some(&name), None, &self.central) {
             self.notify(format!("{e:#}"));
             return;
         }

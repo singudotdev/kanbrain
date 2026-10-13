@@ -88,7 +88,9 @@ impl Brain {
     pub fn set_repo_notes(&mut self, text: &str) -> Result<()> {
         let Some(project) = &mut self.project else { anyhow::bail!("the central brain isn't a project's repository") };
         project.notes = text.trim().to_string();
-        projects::write_repo_card(self.store.dir(), &project.name, &project.notes)
+        let repo = projects::read_repo_card(self.store.dir()).and_then(|card| card.repo);
+        let card = projects::RepoCard { project: project.name.clone(), repo, notes: project.notes.clone() };
+        projects::write_repo_card(self.store.dir(), &card)
     }
 
     /// Refuses with [`ApiError::DoingFull`] a person starting a task while `doing` holds one a person

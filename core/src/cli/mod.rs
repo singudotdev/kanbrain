@@ -71,10 +71,11 @@ usage:
   {pad}           print tasks as markdown, one section per status, then notes and decisions
   {pad}           (default: {default}; several can be given; notes or decisions alone
   {pad}           list only those)
-  {name} init [NAME]
+  {name} init [NAME] [--repo REPO]
   {pad}           make this folder a project: its own .brain/, registered as NAME (default: the
   {pad}           folder's name) with a card for the application, and a section telling its agents
-  {pad}           about it in CLAUDE.md / AGENTS.md (run again to update them)
+  {pad}           about it in CLAUDE.md / AGENTS.md (run again to update them); in a project with
+  {pad}           several, the repository is named REPO (default: the folder's, made unique)
   {name} init --all
   {pad}           update the agents' section and hooks in every registered project to this version's
   {pad}           (the installer and update run it)
@@ -134,8 +135,9 @@ const DEFAULT_REPORT_UNIT: Unit = Unit::Week;
 pub enum Command {
     /// `list`: print tasks as markdown.
     List(ListArgs),
-    /// `init [NAME]`: make the current directory a project, named `NAME` or after the folder.
-    Init(Option<String>),
+    /// `init [NAME] [--repo REPO]`: make the current directory a project, named `NAME` or after the folder,
+    /// and the repository `REPO` in it.
+    Init(Option<String>, Option<String>),
     /// `init --all`: bring every registered repository's agent instructions up to this version's.
     InitAll,
     /// `deinit`: undo `init` for the current directory's project, or the one `--project` names.
@@ -195,10 +197,13 @@ impl Command {
         let mut args = args.into_iter();
         let command = match args.next().as_deref() {
             Some("list") => Command::List(ListArgs::parse(args.by_ref())?),
-            Some("init") => match args.next() {
-                Some(all) if all == "--all" => Command::InitAll,
-                name => Command::Init(name),
-            },
+            Some("init") => {
+                let words: Vec<String> = args.by_ref().collect();
+                match words.as_slice() {
+                    [all] if all == "--all" => Command::InitAll,
+                    _ => init_args(words)?,
+                }
+            }
             Some("deinit") => Command::Deinit,
             Some("hook") => {
                 let name = args.next().context("hook needs prompt or stop")?;
@@ -257,13 +262,13 @@ impl Command {
                 platform::ensure_not_root()?;
                 return update::update();
             }
-            Command::Init(name) => {
+            Command::Init(name, repo) => {
                 platform::ensure_not_root()?;
                 if project.is_some() {
                     bail!("init works on the current directory; leave out --project");
                 }
                 let root = std::env::current_dir().context("reading the current directory")?;
-                init::init(&root, name.as_deref(), &projects::central_dir()?)?
+                init::init(&root, name.as_deref(), repo.as_deref(), &projects::central_dir()?)?
                     .iter()
                     .for_each(|line| println!("{line}"));
                 return Ok(());
@@ -337,7 +342,7 @@ impl Command {
             | Command::Help
             | Command::Completions(_)
             | Command::Update
-            | Command::Init(_)
+            | Command::Init(..)
             | Command::InitAll
             | Command::Deinit
             | Command::Hook(_) => Ok(()),
@@ -413,6 +418,21 @@ impl ReportArgs {
 /// person at a terminal: the generic `AGENT` and `AI_AGENT`, then Claude Code's, Codex's and Gemini CLI's.
 const AGENT_VARIABLES: &[&str] =
     &["AGENT", "AI_AGENT", "CLAUDECODE", "CODEX_SANDBOX", "CODEX_CI", "CODEX_THREAD_ID", "GEMINI_CLI"];
+
+/// `init`'s arguments: an optional project name, and `--repo REPO` anywhere.
+fn init_args(words: Vec<String>) -> Result<Command> {
+    let mut words = words.into_iter();
+    let (mut name, mut repo) = (None, None);
+    while let Some(word) = words.next() {
+        match word.as_str() {
+            "--repo" => repo = Some(words.next().context("--repo needs the repository's name")?),
+            other if other.starts_with("--") => bail!("unknown init option `{other}`"),
+            _ if name.is_none() => name = Some(word),
+            _ => bail!("unexpected argument `{word}`"),
+        }
+    }
+    Ok(Command::Init(name, repo))
+}
 
 /// Who this command runs for, recorded on the comments and status changes it makes: `KANBRAIN_AUTHOR`
 /// (`human` or `agent`) if set, else an agent if one of [`AGENT_VARIABLES`] is set, else a person.

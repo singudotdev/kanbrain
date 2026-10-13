@@ -477,7 +477,11 @@ fn projects() -> (TempDir, TempDir) {
         let dir = code.path().join(repo).join(".brain");
         task(&dir, title);
         projects::register(central.path(), project, &dir).unwrap();
-        projects::write_repo_card(&dir, project, "").unwrap();
+        projects::write_repo_card(
+            &dir,
+            &projects::RepoCard { project: project.into(), repo: None, notes: String::new() },
+        )
+        .unwrap();
     }
     projects::write_description(central.path(), "shop", "An online shop.").unwrap();
     (central, code)

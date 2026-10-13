@@ -44,10 +44,13 @@ Online shop: catalog, cart and Stripe payments. shop-api (Rust, axum + Postgres)
 ```
 
 A repository's `.brain/project.md` names its project as its title and, in a project of several repositories, says
-what this one's role is among them (how to build or run it belongs in its `CLAUDE.md`):
+what this one's role is among them (how to build or run it belongs in its `CLAUDE.md`). Right under the title, a
+`- repo:` line gives the repository's name in the project when it isn't its folder's (see
+[`kb init`](cli.md#kb-init)):
 
 ```markdown
 # shop
+- repo: web
 
 The store: UI only; every piece of data comes from shop-api, nothing is kept but the local cart.
 ```
