@@ -45,3 +45,11 @@ fn code_quotes_tables_and_rules() {
     assert_eq!((rows.len(), *head, rows[1].len()), (2, 1, 2));
     assert_eq!(line(&rows[1][1][0]).0, "2");
 }
+
+#[test]
+fn a_preview_line_drops_the_markdown() {
+    assert_eq!(
+        plain("**Context** Sessions live in `PostgreSQL`, see [docs](https://x.y)."),
+        "Context Sessions live in PostgreSQL, see docs."
+    );
+}

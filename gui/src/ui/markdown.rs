@@ -350,6 +350,16 @@ fn draw_block(block: Block, links: &mut Links) -> AnyElement {
     .into_any_element()
 }
 
+/// `line`'s text without its markdown, for a one-line preview: `**Context** Sessions…` as `Context Sessions…`.
+pub fn plain(line: &str) -> String {
+    Parser::new(line).fold(String::new(), |mut plain, event| {
+        if let Event::Text(text) | Event::Code(text) = event {
+            plain.push_str(&text);
+        }
+        plain
+    })
+}
+
 #[cfg(test)]
 #[path = "../../tests/markdown.rs"]
 mod tests;

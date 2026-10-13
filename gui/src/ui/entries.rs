@@ -2,10 +2,16 @@
 
 use super::theme::{self, BORDER, DIM};
 use super::widgets::{Kind, card, dim, dim_small, state_pill, tag_chips};
-use super::{BrainView, action, menu};
+use super::{BrainView, action, markdown, menu};
 use crate::state::Board;
 use crate::text::event::KeyCode;
 use gpui::{ClickEvent, Context, Div, FontWeight, ScrollHandle, div, prelude::*, px, rgb};
+use kanbrain_core::model::counted;
+
+/// Width of the column of a row's brain, when several are shown.
+const LABEL_WIDTH: f32 = 110.;
+/// Width of the column of a row's id.
+const ID_WIDTH: f32 = 40.;
 
 /// The list of the current tab's entries, or what to do when there are none.
 pub fn draw(board: &Board, scroll: &ScrollHandle, follow: bool, cx: &mut Context<BrainView>) -> Div {
@@ -20,7 +26,7 @@ pub fn draw(board: &Board, scroll: &ScrollHandle, follow: bool, cx: &mut Context
         .border_b_1()
         .border_color(rgb(BORDER))
         .child(div().font_weight(FontWeight::SEMIBOLD).child(board.tab.label()))
-        .child(dim_small(format!("{} {kind}", entries.len())));
+        .child(dim_small(counted(entries.len(), kind.trim_end_matches('s'), &kind)));
     if entries.is_empty() {
         let (title, hint) = if board.search.is_empty() {
             (format!("No {kind} yet"), "Agents and you add them as you learn and decide things.")
@@ -49,6 +55,17 @@ pub fn draw(board: &Board, scroll: &ScrollHandle, follow: bool, cx: &mut Context
             let id = entry.id;
             let selected = board.selected == Some(key);
             let first_line = entry.description.lines().find(|l| !l.trim().is_empty() && !l.starts_with('#'));
+            // With several brains, each row names its own in a column of one width, so the titles line up.
+            let label = board.source_label(key.src).map(|l| {
+                div()
+                    .w(px(LABEL_WIDTH))
+                    .flex_none()
+                    .truncate()
+                    .text_size(px(12.))
+                    .text_color(rgb(theme::ACCENT))
+                    .child(l.to_string())
+            });
+            let indent = ID_WIDTH + 8. + if label.is_some() { LABEL_WIDTH + 8. } else { 0. };
             let row_element = div()
                 .id(("entry", row))
                 .debug_selector(move || format!("entry {}/{id}", key.src))
@@ -70,16 +87,14 @@ pub fn draw(board: &Board, scroll: &ScrollHandle, follow: bool, cx: &mut Context
                         .flex()
                         .items_center()
                         .gap_2()
-                        .children(board.source_label(key.src).map(|l| {
-                            div().flex_none().text_size(px(12.)).text_color(rgb(theme::ACCENT)).child(l.to_string())
-                        }))
-                        .child(dim_small(format!("#{id}")).w(px(40.)).flex_none())
+                        .children(label)
+                        .child(dim_small(format!("#{id}")).w(px(ID_WIDTH)).flex_none())
                         .child(div().min_w_0().truncate().font_weight(FontWeight::MEDIUM).child(entry.title.clone()))
                         .children(state_pill(entry))
                         .child(tag_chips(board, &entry.tags).flex_nowrap().flex_none()),
                 )
                 .children(first_line.map(|line| {
-                    div().pl(px(48.)).text_size(px(12.)).text_color(rgb(DIM)).truncate().child(line.to_string())
+                    div().pl(px(indent)).text_size(px(12.)).text_color(rgb(DIM)).truncate().child(markdown::plain(line))
                 }));
             menu::on_right_click(row_element, key, cx)
         })
