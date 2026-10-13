@@ -34,6 +34,7 @@ fn ids_text_and_stdin() {
     assert!(parse(&["show", "four"]).is_err());
     assert!(parse(&["show", "4", "5"]).is_err());
     assert!(parse(&["comment", "4"]).is_err());
+    assert!(parse(&["search", " "]).is_err(), "everything would match");
 }
 
 #[test]

@@ -190,7 +190,13 @@ impl EntryArgs {
             (_, Some(status)) => EntryCommand::SetStatus(first_id(&mut rest)?, status),
             ("add", None) => EntryCommand::Add(AddArgs::parse(rest.drain(..), "add needs a title")?),
             ("show", None) => EntryCommand::Show(first_id(&mut rest)?),
-            ("search", None) => EntryCommand::Search(std::mem::take(&mut rest).join(" ")),
+            ("search", None) => match std::mem::take(&mut rest).join(" ") {
+                // Every entry would match: `list` is for that.
+                words if words.trim().is_empty() => {
+                    bail!("search needs words to look for, or a #tag; `kb list` lists them all")
+                }
+                words => EntryCommand::Search(words),
+            },
             ("comment", None) => {
                 let (id, text) = id_and_text(&mut rest, "comment needs its text")?;
                 EntryCommand::Comment(id, text)
