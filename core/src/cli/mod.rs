@@ -330,24 +330,8 @@ impl Command {
                 Ok(())
             }
             Command::Status => print_status(&central),
-            Command::Entries(mut args) => {
-                let author = author()?;
-                // Before the lock: `-` waits for stdin, maybe for someone typing, and every other `kb` and the
-                // app would wait meanwhile.
-                args.read_stdin()?;
-                // Held from reading the files to writing them, so parallel commands each see the others'
-                // changes; opening may write too, as it repairs. `wait` lets go once open, not to hold it while
-                // it waits.
-                let lock = store.lock()?;
-                let brain = Brain { author, ..Brain::open_in(store, &central)? };
-                let _lock = (!matches!(args.command, EntryCommand::Wait(..))).then_some(lock);
-                args.run(brain)
-            }
-            Command::Report(args) => {
-                // Opening may repair files, and `--save` writes one.
-                let _lock = store.lock()?;
-                print_report(store, &args)
-            }
+            Command::Entries(args) => run_entries(store, &central, args),
+            Command::Report(args) => print_report(store, &args),
             Command::Path => {
                 println!("{}", store.dir().display());
                 Ok(())
@@ -494,8 +478,24 @@ fn print_status(central: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Runs one of the entry commands on the brain in `store`.
+fn run_entries(store: Store, central: &Path, mut args: EntryArgs) -> Result<()> {
+    let author = author()?;
+    // Before the lock: `-` waits for stdin, maybe for someone typing, and every other `kb` and the app would wait
+    // meanwhile.
+    args.read_stdin()?;
+    // Held from reading the files to writing them, so parallel commands each see the others' changes; opening may
+    // write too, as it repairs. `wait` lets go once open, not to hold it while it waits.
+    let lock = store.lock()?;
+    let brain = Brain { author, ..Brain::open_in(store, central)? };
+    let _lock = (!matches!(args.command, EntryCommand::Wait(..))).then_some(lock);
+    args.run(brain)
+}
+
 /// Prints the current period's report as markdown, and saves it with `--save`.
 fn print_report(store: Store, args: &ReportArgs) -> Result<()> {
+    // Opening may repair files, and `--save` writes one.
+    let _lock = store.lock()?;
     let brain = Brain::open(store)?;
     let view = ReportView { group: args.group, tag: args.tag.clone(), ..ReportView::new(Period::current(args.unit)) };
     print!("{}", export::to_markdown(&brain.report(&view), &view, now()));
