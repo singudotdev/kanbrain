@@ -23,6 +23,8 @@ pub enum Mode {
     Confirm(Confirm),
     /// Choosing the entries related to one, by searching for them.
     Links(LinkPicker),
+    /// Choosing one of an entry's comments to edit or delete.
+    Comments(CommentPicker),
     /// Choosing which project to show, from a list filtered by a search.
     Scopes(Picker),
     /// Choosing which brain a quick-added task goes in, when the scope shows several, or which an entry
@@ -76,6 +78,7 @@ impl Mode {
                 Confirm::Update => Confirm::Update,
             }),
             Self::Links(links) => Self::Links(LinkPicker { key: key(links.key)?, ..links }),
+            Self::Comments(comments) => Self::Comments(CommentPicker { key: key(comments.key)?, ..comments }),
             Self::Where(WherePicker { picker, then: WhereFor::Move(k) }) => {
                 Self::Where(WherePicker { picker, then: WhereFor::Move(key(k)?) })
             }
@@ -404,6 +407,16 @@ pub enum Confirm {
     DeleteComment(Key, usize),
     /// Installing the newer release, which closes the app and opens the new one.
     Update,
+}
+
+/// An entry's comments, oldest first as the details show them, one of them highlighted (`sel`): `enter` edits it,
+/// `x` deletes it.
+#[derive(Debug)]
+pub struct CommentPicker {
+    /// The entry.
+    pub key: Key,
+    /// The highlighted comment's index.
+    pub sel: usize,
 }
 
 /// The link picker: every other entry, filtered by a search, to relate to the entry or unrelate.

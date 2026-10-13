@@ -36,6 +36,7 @@ pub fn draw(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<Brai
         Mode::Edit(edit) => editor::draw(board, edit, &scroll.editor, follow, cx),
         Mode::Confirm(confirm) => draw_confirm(board, *confirm, cx)?,
         Mode::Links(picker) => pickers::links(board, picker, &scroll.links, follow, cx)?,
+        Mode::Comments(picker) => pickers::comments(board, picker, &scroll.links, follow, cx)?,
         Mode::Where(asked) => pickers::place(board, asked, &scroll.place, follow, cx),
         Mode::ManageProject(src) => project::draw(board, *src, cx)?,
         Mode::Palette(picker) => pickers::palette(board, picker, &scroll.palette, follow, cx),

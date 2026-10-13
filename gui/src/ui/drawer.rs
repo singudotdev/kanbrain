@@ -243,14 +243,16 @@ fn comments_block(key: Key, task: &Task, cx: &mut Context<BrainView>) -> Div {
             let edited = comment.edited.map(|at| format!(" · edited {}", when(at))).unwrap_or_default();
             let what = if comment.question { "question" } else { "comment" };
             let by = if comment.author == Author::Agent { format!("Agent {what} · ") } else { String::new() };
-            let edit = small(widgets::button(("edit-comment", index), "Edit", Kind::Ghost)).on_click(cx.listener(
-                move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.open_editor(Target::Comment(key, index))),
-            ));
-            let delete = small(widgets::button(("delete-comment", index), "Delete", Kind::Ghost)).on_click(
-                cx.listener(move |this, _: &ClickEvent, _, cx| {
+            let edit = small(widgets::button(("edit-comment", index), "Edit", Kind::Ghost))
+                .tooltip(widgets::tooltip("Shortcut: C, then enter on it"))
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                    this.act(cx, |b| b.open_editor(Target::Comment(key, index)));
+                }));
+            let delete = small(widgets::button(("delete-comment", index), "Delete", Kind::Ghost))
+                .tooltip(widgets::tooltip("Shortcut: C, then x on it"))
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
                     this.act(cx, |b| b.mode = Mode::Confirm(Confirm::DeleteComment(key, index)));
-                }),
-            );
+                }));
             div()
                 .flex()
                 .flex_col()

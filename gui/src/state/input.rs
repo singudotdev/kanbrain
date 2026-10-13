@@ -3,7 +3,9 @@
 //! Also typing into whichever field has the keys, for the mouse and the clipboard.
 
 use super::nav::Step;
-use super::{Board, COLUMNS, Field, Form, Manage, Mode, Picker, PickerKey, Tab, WherePicker};
+use super::{
+    Board, COLUMNS, CommentPicker, Confirm, Field, Form, Manage, Mode, Picker, PickerKey, Tab, Target, WherePicker,
+};
 use crate::text::editor::{LineInput, Outcome, Pointer, TextEditor};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
 use kanbrain_core::model::Kind;
@@ -65,6 +67,7 @@ impl Board {
                     self.toggle_link(sel);
                 }
             }
+            Mode::Comments(picker) => self.key_comments(picker, key),
             Mode::Scopes(picker) => {
                 let count = self.scope_candidates(&picker).len();
                 self.pick(picker, key, count, |p| p, Mode::Scopes, Self::choose_scope);
@@ -79,6 +82,26 @@ impl Board {
             Mode::Palette(picker) => self.key_palette(picker, key),
             Mode::AddProject(add) => self.key_add_project(add, key),
             Mode::Manage(manage) => self.key_manage(manage, key),
+        }
+    }
+
+    /// The comment picker: arrows move, `enter` edits the highlighted comment, `x` asks to delete it, `esc` closes.
+    fn key_comments(&mut self, mut picker: CommentPicker, key: KeyEvent) {
+        let count = self.task(picker.key).map_or(0, |t| t.comments.len());
+        match key.code {
+            KeyCode::Esc => {}
+            KeyCode::Enter if picker.sel < count => self.open_editor(Target::Comment(picker.key, picker.sel)),
+            KeyCode::Char('x') if picker.sel < count => {
+                self.mode = Mode::Confirm(Confirm::DeleteComment(picker.key, picker.sel));
+            }
+            code => {
+                match code {
+                    KeyCode::Up => picker.sel = picker.sel.saturating_sub(1),
+                    KeyCode::Down => picker.sel = (picker.sel + 1).min(count.saturating_sub(1)),
+                    _ => {}
+                }
+                self.mode = Mode::Comments(picker);
+            }
         }
     }
 
@@ -304,7 +327,7 @@ impl Board {
             Mode::AddProject(add) => Some(Typing::Line(&mut add.picker.search)),
             Mode::Manage(manage) => manage.picker_mut().map(|picker| Typing::Line(&mut picker.search)),
             Mode::Edit(edit) => Some(Typing::Text(&mut edit.editor)),
-            Mode::Normal | Mode::Confirm(_) | Mode::ManageProject(_) | Mode::Menu(_) => None,
+            Mode::Normal | Mode::Confirm(_) | Mode::ManageProject(_) | Mode::Menu(_) | Mode::Comments(_) => None,
         }
     }
 
@@ -346,7 +369,7 @@ impl Board {
                 Manage::Remove { .. } => None,
             },
             Mode::Edit(edit) => edit.editor.selected_text(),
-            Mode::Normal | Mode::Confirm(_) | Mode::ManageProject(_) | Mode::Menu(_) => None,
+            Mode::Normal | Mode::Confirm(_) | Mode::ManageProject(_) | Mode::Menu(_) | Mode::Comments(_) => None,
         }
     }
 

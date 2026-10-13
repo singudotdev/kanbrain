@@ -315,6 +315,29 @@ fn comments_and_descriptions_are_written_from_the_editor() {
 }
 
 #[test]
+fn capital_c_picks_a_comment_to_edit_or_delete() {
+    let mut f = Fixture::new(&["feature"]);
+    f.press(KeyCode::Char('C'));
+    assert!(matches!(f.board.mode, Mode::Normal), "no comments: nothing to pick");
+    for text in ["first", "second"] {
+        f.press(KeyCode::Char('c'));
+        f.type_text(text);
+        f.press(KeyCode::Esc);
+    }
+    f.press(KeyCode::Char('C'));
+    assert!(matches!(f.board.mode, Mode::Comments(CommentPicker { sel: 1, .. })), "the latest highlighted");
+    f.press(KeyCode::Up);
+    f.press(KeyCode::Enter);
+    assert!(matches!(&f.board.mode, Mode::Edit(edit) if edit.target == Target::Comment(k(1), 0)));
+    f.press(KeyCode::Esc);
+    f.press(KeyCode::Char('C'));
+    f.press(KeyCode::Char('x'));
+    f.press(KeyCode::Char('y'));
+    let comments: Vec<String> = f.on_disk(1).comments.into_iter().map(|c| c.body).collect();
+    assert_eq!(comments, ["first"]);
+}
+
+#[test]
 fn deleting_asks_first() {
     let mut f = Fixture::new(&["feature", "bug"]);
     f.board.select(k(1));

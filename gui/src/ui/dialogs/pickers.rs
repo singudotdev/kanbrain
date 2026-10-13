@@ -2,15 +2,15 @@
 //! command palette.
 
 use super::{WIDE_WIDTH, check, dialog};
-use crate::state::{Action, Board, LinkPicker, Picker, Tab, WhereFor, WherePicker};
+use crate::state::{Action, Board, CommentPicker, LinkPicker, Picker, Tab, Target, WhereFor, WherePicker};
 use crate::text::event::KeyCode;
 use crate::ui::dropdown::{MAX_ROWS, list, row};
 use crate::ui::pointer::TextBox;
 use crate::ui::theme::{self, BORDER};
 use crate::ui::widgets::{Kind, dim, dim_small, entry_pill, tag_chips, text_field};
-use crate::ui::{BrainView, action, truncate};
+use crate::ui::{BrainView, action, truncate, when};
 use gpui::{ClickEvent, Context, Div, FontWeight, ScrollHandle, div, prelude::*, px, rgb};
-use kanbrain_core::model::Kind as EntryKind;
+use kanbrain_core::model::{Author, Kind as EntryKind};
 
 /// Rows the command palette shows before it scrolls: more than other lists, since it's the list of
 /// every shortcut too.
@@ -61,6 +61,42 @@ pub(super) fn links(
         .child(list);
     let buttons = vec![action("links-done", "Done", Kind::Primary, KeyCode::Esc, cx)];
     let title = format!("Related to #{} {}", task.id, truncate(&task.title, 40));
+    Some(dialog(title, content, buttons).w(px(WIDE_WIDTH)))
+}
+
+/// An entry's comments, to edit one (`enter`, or a click) or delete it (`x`).
+pub(super) fn comments(
+    board: &Board,
+    picker: &CommentPicker,
+    scroll: &ScrollHandle,
+    follow: bool,
+    cx: &mut Context<BrainView>,
+) -> Option<Div> {
+    let task = board.task(picker.key)?;
+    let key = picker.key;
+    let rows: Vec<_> = task
+        .comments
+        .iter()
+        .enumerate()
+        .map(|(index, comment)| {
+            let first = comment.body.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or_default();
+            let by = if comment.author == Author::Agent { " · agent" } else { "" };
+            row(("comment", index), format!("comment {index}"), index == picker.sel, true)
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                    this.act(cx, |b| b.open_editor(Target::Comment(key, index)));
+                }))
+                .child(dim_small(format!("{}{by}", when(comment.created))).flex_none())
+                .child(div().flex_1().min_w_0().truncate().child(first.to_string()))
+        })
+        .collect();
+    let content = div()
+        .flex()
+        .flex_col()
+        .gap_3()
+        .child(dim_small("Enter (or a click) edits the highlighted comment; x deletes it, after asking."))
+        .child(list("comments", rows, picker.sel, MAX_ROWS, scroll, follow));
+    let buttons = vec![action("comments-done", "Close", Kind::Primary, KeyCode::Esc, cx)];
+    let title = format!("Comments on #{} {}", task.id, truncate(&task.title, 40));
     Some(dialog(title, content, buttons).w(px(WIDE_WIDTH)))
 }
 

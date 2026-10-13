@@ -22,6 +22,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | `e` | **edit** title and tags |
 | `m` | edit the description |
 | `c` | add a **comment**; on a task waiting for your answer, **answer** the agent's question (one waiting on a proposed decision is answered with `y`, `Y` or `j`) |
+| `C` | edit or delete one of its **comments**: a list of them, the latest highlighted; `enter` edits, `x` deletes (asks first) |
 | `D` | open the **decision** an agent proposed, which the selected task waits on |
 | `r` | **relate** to other entries: search and pick |
 | `o` | **open** the file in `$EDITOR`; the board reloads when it closes |
@@ -84,6 +85,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | new / edit form | `tab` moves between project (new entries), title, tags, related and, for a new task, its column; `enter` saves; `esc` cancels. In **Project**: type to search, `↑` `↓` move, `enter` picks it. In **Related**: type to search, `↑` `↓` move, `enter` checks or unchecks; the Save button saves. On **Column**: `←` `→` pick it |
 | text editor (descriptions, comments, answers, a decision's reason, a project's description and notes) | `enter` new line; `esc` or `ctrl+enter` **save** (the button says what: **Answer**, **Add comment**, **Accept**, **Reject**, **Save**); **Discard changes** (`ctrl+d`) throws the edit away; with nothing typed, `esc` or **Close** closes it |
 | link picker | type to search; `↑` `↓` move; `enter` links or unlinks; `esc` closes |
+| comments (`C`) | `↑` `↓` move; `enter` edits the highlighted comment; `x` deletes it, after asking; `esc` closes |
 | "which project?" (quick add, or move) | type to filter; `↑` `↓` move; `enter` opens the quick-add field there, or moves the entry; `esc` closes it |
 | Manage project (`I`) | `↑` `↓` highlight a repository; `r` renames it, `M` moves it to another project, `x` removes it, `N` edits its role; `R` renames the project, `E` edits its description, `A` adds a repository, `X` removes the project; `esc`, `enter`, `I` or `q` close it |
 | rename and move (from Manage project) | type the name, or to search projects; `↑` `↓` move; `enter` applies; `esc` goes back |

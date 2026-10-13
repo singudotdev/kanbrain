@@ -1,7 +1,8 @@
 //! Changes to entries, through the brain: each one says in the status bar what it did, or why not.
 
 use super::{
-    Board, Confirm, Edit, Form, Key, LinkPicker, Mode, Picker, QuickAdd, Request, Tab, Target, WhereFor, WherePicker,
+    Board, CommentPicker, Confirm, Edit, Form, Key, LinkPicker, Mode, Picker, QuickAdd, Request, Tab, Target, WhereFor,
+    WherePicker,
 };
 use crate::text::editor::{LineInput, TextEditor};
 use anyhow::Result;
@@ -204,6 +205,14 @@ impl Board {
     pub fn edit_project_description(&mut self) {
         if let Some(src) = self.project_to_act_on() {
             self.open_editor(Target::Project(src));
+        }
+    }
+
+    /// Lists the selected entry's comments to edit or delete one, the latest highlighted.
+    pub fn open_comments(&mut self) {
+        let Some(key) = self.selected else { return };
+        if let Some(last) = self.task(key).and_then(|t| t.comments.len().checked_sub(1)) {
+            self.mode = Mode::Comments(CommentPicker { key, sel: last });
         }
     }
 

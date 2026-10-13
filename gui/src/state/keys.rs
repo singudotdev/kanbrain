@@ -85,6 +85,8 @@ pub enum When {
     OtherBrain,
     /// With an entry selected that doesn't wait for your answer.
     NotWaiting,
+    /// With an entry selected that has comments.
+    Commented,
     /// With a task selected that waits for your answer to an agent's question.
     Asks,
     /// With a task selected that waits on a decision an agent proposed.
@@ -119,6 +121,7 @@ impl When {
             }
             Self::OtherBrain => entry.is_some() && board.sources.len() > 1,
             Self::NotWaiting => entry.is_some_and(|t| !matches!(t.asked(), Some(Asked::Waiting(_)))),
+            Self::Commented => entry.is_some_and(|t| !t.comments.is_empty()),
             // A task waiting on a proposed decision is answered by deciding (`y`, `Y`, `j`).
             Self::Asks => {
                 entry.is_some_and(|t| matches!(t.asked(), Some(Asked::Waiting(_))))
@@ -145,6 +148,7 @@ impl When {
                 | Self::DecisionNot(_)
                 | Self::OtherBrain
                 | Self::NotWaiting
+                | Self::Commented
                 | Self::Asks
                 | Self::Proposed
         )
@@ -282,6 +286,8 @@ pub const ACTIONS: &[Action] = &[
     .menu("Edit description"),
     letter("c", Tabs::Entries, When::Asks, "Answer the agent's question", comment).menu("Answer…"),
     letter("c", Tabs::Entries, When::NotWaiting, "Add a comment", comment).menu("Add comment"),
+    letter("C", Tabs::Entries, When::Commented, "Edit or delete one of its comments", Board::open_comments)
+        .menu("Edit or delete a comment…"),
     letter("D", Tabs::Entries, When::Proposed, "Open the decision it waits on", Board::open_proposed)
         .menu("Open proposed decision"),
     letter("r", Tabs::Entries, When::Entry, "Relate to other entries", |b| selected(b, |b, _| b.open_links()))
