@@ -13,29 +13,21 @@
 //! Once the project is described and the tasks the agent started commented on, they print nothing, so they cost
 //! nothing.
 
+use crate::enums::named_enum;
 use crate::model::{Author, Status, Task};
 use crate::projects::{self, ProjectInfo};
 use crate::store::{self, Store};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
-/// Which hook is asking.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HookEvent {
-    /// `UserPromptSubmit`: a prompt is about to reach the agent.
-    Prompt,
-    /// `Stop`: the agent is about to end its turn.
-    Stop,
-}
-
-impl HookEvent {
-    /// The event `kb hook NAME` names.
-    pub fn parse(name: &str) -> Option<Self> {
-        match name {
-            "prompt" => Some(Self::Prompt),
-            "stop" => Some(Self::Stop),
-            _ => None,
-        }
+named_enum! {
+    /// Which hook is asking, as `kb hook NAME` names it.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum HookEvent {
+        /// `UserPromptSubmit`: a prompt is about to reach the agent.
+        Prompt => "prompt",
+        /// `Stop`: the agent is about to end its turn.
+        Stop => "stop",
     }
 }
 

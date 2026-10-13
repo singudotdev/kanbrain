@@ -216,9 +216,11 @@ impl Command {
                 Some(other) => bail!("unexpected argument `{other}`"),
             }),
             Some("hook") => {
-                let name = args.next().context("hook needs prompt or stop")?;
+                let name =
+                    args.next().with_context(|| format!("hook needs one of {}", hook::HookEvent::names(", ")))?;
                 Command::Hook(
-                    hook::HookEvent::parse(&name).with_context(|| format!("unknown hook `{name}`: prompt or stop"))?,
+                    hook::HookEvent::parse(&name)
+                        .with_context(|| format!("unknown hook `{name}`: {}", hook::HookEvent::names(", ")))?,
                 )
             }
             Some("status") => Command::Status,
@@ -226,16 +228,21 @@ impl Command {
             Some("path") => Command::Path,
             Some("update") => Command::Update,
             Some("completions") => {
-                let name = args.next().context("completions needs bash, zsh or fish")?;
+                let name = args
+                    .next()
+                    .with_context(|| format!("completions needs one of {}", completions::Shell::names(", ")))?;
                 Command::Completions(
                     completions::Shell::parse(&name)
-                        .with_context(|| format!("unknown shell `{name}`: bash, zsh or fish"))?,
+                        .with_context(|| format!("unknown shell `{name}`: {}", completions::Shell::names(", ")))?,
                 )
             }
             Some("complete") => {
-                let name = args.next().context("complete needs ids, projects or tags")?;
-                let what = completions::Candidates::parse(&name)
-                    .with_context(|| format!("unknown candidates `{name}`: ids, projects or tags"))?;
+                let name = args
+                    .next()
+                    .with_context(|| format!("complete needs one of {}", completions::Candidates::names(", ")))?;
+                let what = completions::Candidates::parse(&name).with_context(|| {
+                    format!("unknown candidates `{name}`: {}", completions::Candidates::names(", "))
+                })?;
                 args.by_ref().for_each(drop);
                 Command::Complete(what)
             }

@@ -2,6 +2,7 @@
 //! and options from the lists here, and ids, projects and tags by asking `complete` for them as it goes.
 
 use crate::brain::{Brain, Group};
+use crate::enums::named_enum;
 use crate::model::Status;
 use crate::period::Unit;
 use crate::projects;
@@ -41,49 +42,29 @@ const COMMANDS: &[&str] = &[
 /// The commands whose first argument is an entry's id; `link` takes more after it.
 const BY_ID: &str = "show start park done todo comment ask wait propose accept reject describe link";
 
-/// A shell `completions` writes a script for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Shell {
-    /// Bash, through `complete -F`.
-    Bash,
-    /// Zsh, through its bash compatibility.
-    Zsh,
-    /// Fish, with each id's title shown beside it.
-    Fish,
-}
-
-impl Shell {
-    /// The shell named `name`.
-    pub fn parse(name: &str) -> Option<Self> {
-        match name {
-            "bash" => Some(Self::Bash),
-            "zsh" => Some(Self::Zsh),
-            "fish" => Some(Self::Fish),
-            _ => None,
-        }
+named_enum! {
+    /// A shell `completions` writes a script for.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum Shell {
+        /// Bash, through `complete -F`.
+        Bash => "bash",
+        /// Zsh, through its bash compatibility.
+        Zsh => "zsh",
+        /// Fish, with each id's title shown beside it.
+        Fish => "fish",
     }
 }
 
-/// What `complete` lists, one per line.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Candidates {
-    /// Every entry of the brain, newest first, as `ID<tab>title`.
-    Ids,
-    /// Every name `--project` takes: `central`, each project, and each repository of a project with several.
-    Projects,
-    /// Every tag in use in the brain.
-    Tags,
-}
-
-impl Candidates {
-    /// The candidates named `name`.
-    pub fn parse(name: &str) -> Option<Self> {
-        match name {
-            "ids" => Some(Self::Ids),
-            "projects" => Some(Self::Projects),
-            "tags" => Some(Self::Tags),
-            _ => None,
-        }
+named_enum! {
+    /// What `complete` lists, one per line.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum Candidates {
+        /// Every entry of the brain, newest first, as `ID<tab>title`.
+        Ids => "ids",
+        /// Every name `--project` takes: `central`, each project, and each repository of a project with several.
+        Projects => "projects",
+        /// Every tag in use in the brain.
+        Tags => "tags",
     }
 }
 
@@ -115,7 +96,8 @@ pub fn candidates(what: Candidates, store: Store, central: &Path) -> Result<Vec<
 /// The script for `shell`, completing `program`.
 pub fn script(shell: Shell, program: &str) -> String {
     let commands = COMMANDS.join(" ");
-    let (statuses, units, groups) = (Status::names(" "), Unit::names(" "), Group::names(" "));
+    let (statuses, units, groups, shells) =
+        (Status::names(" "), Unit::names(" "), Group::names(" "), Shell::names(" "));
     let function = format!("_{}", program.replace('-', "_"));
     let bash = format!(
         r#"{function}() {{
@@ -143,7 +125,7 @@ pub fn script(shell: Shell, program: &str) -> String {
                 report) reply="{units} --group --tag --save" ;;
                 project) reply="describe notes" ;;
                 init) reply="--all" ;;
-                completions) reply="bash zsh fish" ;;
+                completions) reply="{shells}" ;;
             esac
             ;;
     esac
@@ -170,7 +152,7 @@ complete -c {program} -n '__fish_seen_subcommand_from report' -a '{units}' -l sa
 complete -c {program} -n '__fish_seen_subcommand_from report' -l group -x -a '{groups}'
 complete -c {program} -n '__fish_seen_subcommand_from project' -a 'describe notes'
 complete -c {program} -n '__fish_seen_subcommand_from init' -l all -d 'in every registered project'
-complete -c {program} -n '__fish_seen_subcommand_from completions' -a 'bash zsh fish'
+complete -c {program} -n '__fish_seen_subcommand_from completions' -a '{shells}'
 "
         ),
     }
