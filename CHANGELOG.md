@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-10-13
+
 ### Added
 
 - Deciding on an agent's proposal from the task that waits on it: **Accept** (`y`), **Accept with a comment…** (`Y`,
