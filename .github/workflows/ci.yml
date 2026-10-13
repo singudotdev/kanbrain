@@ -42,6 +42,8 @@ jobs:
       - run: cargo doc --workspace --no-deps --document-private-items --locked
         env:
           RUSTDOCFLAGS: -D warnings
+      # The crates published to crates.io package and build as published, before a tag makes them a release.
+      - run: cargo publish --dry-run --locked -p kanbrain-core -p kanbrain
 
   deny:
     name: licenses + advisories
@@ -54,6 +56,8 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
       # The third-party notices the release archives carry: they must keep generating, with every license accepted.
       - uses: dtolnay/rust-toolchain@stable
+      # cargo-about resolves the whole dependency graph, GPUI's git repository included.
+      - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-about@0.9.2
@@ -94,9 +98,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # Static checks first: shellcheck is on Ubuntu's runners.
       - if: runner.os == 'Linux'
-        run: shellcheck install.sh e2e/install.sh e2e/agent.sh
+        run: shellcheck install.sh e2e/install.sh e2e/agent.sh gui/icons/make.sh
+      # PowerShell's own analyzer, failing on what it rates an error.
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          Invoke-ScriptAnalyzer -Path install.ps1, e2e/install.ps1 -Severity Error -EnableExit
       # This build installed by the installer users run, from a local copy of a release: checksum, a refused bad
-      # one, `init --all` updating a registered project, and uninstalling (see the scripts' headers).
+      # one, `init --all` updating a registered project, the app's launcher, uninstalling and purging (see the
+      # scripts' headers).
       - if: runner.os != 'Windows'
         run: e2e/install.sh
       - if: runner.os == 'Windows'

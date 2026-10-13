@@ -375,10 +375,11 @@ it over HTTP on `127.0.0.1` and install it with `install.sh` / `install.ps1` int
 (`KANBRAIN_BASE_URL` points the installer at it). They check that the download's checksum is verified and a wrong
 one refused, that the installed `kb` is this build, that `init --all` brought a registered project's agent section up
 to date, that uninstalling takes it out, and that `--purge` deletes the central brain's files and kanbrain's locks
-and backups in the cache, leftover temporary files included, and keeps a file kanbrain didn't create. `e2e/install.sh` also installs the kanban app (`kb` standing in for it,
-so GPUI isn't built) and checks its launcher with the logo: the menu entry and icon on Linux, the app bundle on macOS.
-CI runs them on all three systems, after `shellcheck` on the shell
-scripts; locally they need cargo and Python.
+and backups in the cache, leftover temporary files included, and keeps a file kanbrain didn't create. Both also
+install the kanban app (`kb` standing in for it, so GPUI isn't built) and check its launcher: the menu entry and
+icon on Linux, the app bundle on macOS, the Start Menu shortcut on Windows, where both apps install at once. CI runs
+them on all three systems, after `shellcheck` on the shell scripts and PSScriptAnalyzer on the PowerShell ones;
+locally they need cargo and Python.
 
 ### Agents, end to end
 
@@ -411,12 +412,17 @@ The kanban app's look is checked by running it (`KANBRAIN_DIR=/tmp/t cargo run -
 `.github/workflows/ci.yml` runs on every push to `main` and every pull request:
 
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and the docs with
-  `cargo doc --workspace --no-deps --document-private-items` failing on warnings
+  `cargo doc --workspace --no-deps --document-private-items` failing on warnings; and the published crates
+  packaged as they'd be published (`cargo publish --dry-run -p kanbrain-core -p kanbrain`)
 - `cargo deny check`: dependency licenses, sources and security advisories, as `deny.toml` allows them; and the
   third-party notices still generate (`cargo xtask notices`, through cargo-about), with every license accepted
 - the installers end to end on Linux, macOS and Windows (`e2e/install.sh`, `e2e/install.ps1`), after `shellcheck`
+  and PSScriptAnalyzer
 - `cargo test --workspace` on Linux, macOS and Windows
 - `cargo test` (core and command line) with the minimum supported Rust version (1.88)
+
+`.github/workflows/release.yml` refuses a tag that doesn't match the version in `Cargo.toml`, or whose commit has no
+passing CI run.
 
 ## Releases and installers
 

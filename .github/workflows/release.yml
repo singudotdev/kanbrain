@@ -20,11 +20,16 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # As in ci.yml: what the kanban app (GPUI) needs to build on Linux.
+  GUI_LINUX_DEPS: libfontconfig-dev libwayland-dev libx11-xcb-dev libxkbcommon-x11-dev libvulkan1
 
 jobs:
   check-version:
-    name: tag matches Cargo.toml
+    name: tag matches Cargo.toml, CI passed
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v7
       - name: Compare
@@ -32,6 +37,17 @@ jobs:
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
           if [ "v$version" != "$GITHUB_REF_NAME" ]; then
             echo "::error::tag $GITHUB_REF_NAME doesn't match Cargo.toml version $version"
+            exit 1
+          fi
+      # A tag is a release: only of a commit CI passed on every platform (push main, wait, then tag).
+      - name: CI passed on the commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          passed=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$GITHUB_SHA" \
+            --json conclusion --jq '[.[] | select(.conclusion == "success")] | length')
+          if [ "$passed" = 0 ]; then
+            echo "::error::no passing CI run on $GITHUB_SHA: push main, wait for CI, then tag"
             exit 1
           fi
 
@@ -97,8 +113,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y musl-tools
       - if: endsWith(matrix.target, 'linux-gnu')
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libfontconfig-dev libwayland-dev libx11-xcb-dev libxkbcommon-x11-dev libvulkan1
+          # shellcheck disable=SC2086 # one package per word
+          sudo apt-get update && sudo apt-get install -y $GUI_LINUX_DEPS
 
       - name: Build
         if: runner.os != 'macOS'
