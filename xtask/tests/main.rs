@@ -36,3 +36,21 @@ fn each_program_carries_the_licenses_of_what_isnt_a_crate() {
     assert!(app.contains("IBM Plex Sans") && app.contains("The Lilex Project Authors"), "the fonts GPUI embeds");
     assert!(!app.contains("musl"));
 }
+
+#[test]
+fn the_notices_accept_the_licenses_cargo_deny_allows() {
+    // The quoted names in the list that `key = [` starts in `file`, one per line as both files write them.
+    let list = |file: &str, key: &str| -> std::collections::BTreeSet<String> {
+        let text = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(file)).unwrap();
+        let start = text.find(&format!("\n{key} = [")).unwrap_or_else(|| panic!("{file} has no {key}"));
+        let list = &text[start..start + text[start..].find(']').unwrap()];
+        list.lines().filter_map(|l| Some(l.trim().strip_prefix('"')?.strip_suffix("\",")?.to_string())).collect()
+    };
+    let mut allowed = list("../deny.toml", "allow");
+    allowed.insert("AGPL-3.0-only".into());
+    assert_eq!(
+        list("about.toml", "accepted"),
+        allowed,
+        "about.toml accepts deny.toml's licenses and the program's own"
+    );
+}
