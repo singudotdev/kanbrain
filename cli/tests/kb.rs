@@ -88,6 +88,31 @@ fn the_hooks_hold_an_agent_to_describing_the_project() {
 }
 
 #[test]
+fn a_command_waiting_for_its_stdin_holds_up_no_other() {
+    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    ok(&kb(repo.path(), central.path(), &["init", "demo"], ""));
+    ok(&kb(repo.path(), central.path(), &["add", "Shared"], ""));
+    let mut typing = Command::new(env!("CARGO_BIN_EXE_kb"))
+        .args(["comment", "1", "-"])
+        .current_dir(repo.path())
+        .env("KANBRAIN_DIR", central.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let (done, finished) = std::sync::mpsc::channel();
+    let (repo_dir, central_dir) = (repo.path().to_path_buf(), central.path().to_path_buf());
+    std::thread::spawn(move || done.send(kb(&repo_dir, &central_dir, &["add", "Meanwhile"], "")).unwrap());
+    let added = finished.recv_timeout(std::time::Duration::from_secs(20)).expect("add waited for the comment's stdin");
+    ok(&added);
+    typing.stdin.take().unwrap().write_all(b"typed at last").unwrap();
+    ok(&typing.wait_with_output().unwrap());
+    assert!(ok(&kb(repo.path(), central.path(), &["show", "1"], "")).contains("typed at last"));
+}
+
+#[test]
 fn commands_run_in_parallel_lose_nothing() {
     let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     ok(&kb(repo.path(), central.path(), &["init", "demo"], ""));

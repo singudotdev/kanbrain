@@ -330,8 +330,11 @@ impl Command {
                 Ok(())
             }
             Command::Status => print_status(&central),
-            Command::Entries(args) => {
+            Command::Entries(mut args) => {
                 let author = author()?;
+                // Before the lock: `-` waits for stdin, maybe for someone typing, and every other `kb` and the
+                // app would wait meanwhile.
+                args.read_stdin()?;
                 // Held from reading the files to writing them, so parallel commands each see the others'
                 // changes; not by `wait`, which would hold it while it waits.
                 let _lock = (!matches!(args.command, EntryCommand::Wait(..))).then(|| store.lock()).transpose()?;

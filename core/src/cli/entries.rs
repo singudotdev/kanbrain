@@ -147,6 +147,26 @@ pub struct AddArgs {
 }
 
 impl EntryArgs {
+    /// Reads the text given as `-` from stdin, if any.
+    pub fn read_stdin(&mut self) -> Result<()> {
+        let text = match &mut self.command {
+            EntryCommand::Add(args) | EntryCommand::Propose(_, args) => args.body.as_mut(),
+            EntryCommand::Comment(_, text)
+            | EntryCommand::Ask(_, text)
+            | EntryCommand::Describe(_, text)
+            | EntryCommand::Project(Some(ProjectChange::Text(_, text))) => Some(text),
+            EntryCommand::Resolve(_, _, reason) => reason.as_mut(),
+            EntryCommand::Show(_)
+            | EntryCommand::Search(_)
+            | EntryCommand::SetStatus(..)
+            | EntryCommand::Wait(..)
+            | EntryCommand::Link(..)
+            | EntryCommand::Context
+            | EntryCommand::Project(_) => None,
+        };
+        text.map_or(Ok(()), Text::read_stdin)
+    }
+
     /// Parses `name` and the arguments after it, if `name` is one of these commands.
     pub fn parse(name: &str, args: impl Iterator<Item = String>) -> Result<Option<Self>> {
         // `--json` may go anywhere.
@@ -331,6 +351,16 @@ impl AddArgs {
 }
 
 impl Text {
+    /// Reads stdin to the end for `-`, so the text is given from then on.
+    fn read_stdin(&mut self) -> Result<()> {
+        if *self == Text::Stdin {
+            let mut text = String::new();
+            std::io::stdin().read_to_string(&mut text).context("reading stdin")?;
+            *self = Text::Given(text);
+        }
+        Ok(())
+    }
+
     /// The text, reading stdin to the end for `-`.
     fn read(self) -> Result<String> {
         match self {
