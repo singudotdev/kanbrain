@@ -11,6 +11,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   migrates older brains when they're opened to be changed and on `kb update`, after copying them to the cache
   folder; a brain written by a newer version is refused, read or written, rather than misread.
 
+### Changed
+
+- `kb update` waits until no agent has a task in doing, so its instructions and data don't change
+  mid-session.
+
 ## [0.3.1] - 2026-10-13
 
 ### Fixed

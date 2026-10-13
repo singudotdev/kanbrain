@@ -232,7 +232,8 @@ Handy for scripts: `cd "$(kb path)"` (in PowerShell, `cd (kb path)`).
 
 ## `kb update`
 
-Runs the installer for the latest release, into the folder `kb` is in. It checks the download's checksum and
+Refused while an agent has a task in doing, in any project: updating rewrites the agents' instructions, and may
+migrate their data, under them. Once they're done or parked (park a stale one yourself), it runs the installer for the latest release, into the folder `kb` is in. It checks the download's checksum and
 replaces `kb`, and `kanbrain` too when it's installed beside it, then updates every project (`kb init --all`):
 its agent instructions, and its data, migrated to the new version's format when it changed, after a backup (see
 [Format versions and migrations](data-format.md#format-versions-and-migrations)). On Windows, where a

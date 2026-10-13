@@ -2,6 +2,9 @@
 //! which downloads it, checks its checksum and replaces the binaries, then runs the new version's `init --all`,
 //! so none of that is repeated here.
 
+use crate::model::{Author, Status};
+use crate::projects;
+use crate::store::Store;
 use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -31,10 +34,45 @@ fn installed_by_cargo(dir: &Path, cargo_home: Option<PathBuf>) -> bool {
     canonical(dir) == canonical(&home.join("bin"))
 }
 
-/// Runs the installer for the apps installed where this program is, into the same folder. On Windows it
+/// The tasks agents are working on, in doing, in every registered repository and the central brain, as
+/// `REPO#ID title`: an update waits for them. A brain that can't be read, such as one a newer kanbrain wrote, has
+/// none to wait for.
+pub fn agents_working(central: &Path) -> Result<Vec<String>> {
+    let repos = projects::load(central)?;
+    let brains = std::iter::once((String::new(), central.to_path_buf()))
+        .chain(repos.iter().map(|repo| (repo.label(&repos), repo.dir.clone())));
+    let mut working = Vec::new();
+    for (label, dir) in brains {
+        let Ok((tasks, _)) = Store::at(dir).and_then(|store| store.load()) else { continue };
+        working.extend(
+            tasks
+                .iter()
+                .filter(|t| t.is_task() && t.status == Status::Doing && t.started_by() == Author::Agent)
+                .map(|t| format!("{label}#{} {}", t.id, t.title)),
+        );
+    }
+    Ok(working)
+}
+
+/// Refuses while [`agents_working`] finds any, naming them.
+pub fn check_no_agent_working(central: &Path) -> Result<()> {
+    let working = agents_working(central)?;
+    if !working.is_empty() {
+        bail!(
+            "agents are working on {}: update once they're done or parked, so their instructions and data don't \
+             change under them",
+            working.join(", ")
+        );
+    }
+    Ok(())
+}
+
+/// Runs the installer for the apps installed where this program is, into the same folder, unless an agent is
+/// working. On Windows it
 /// prints the PowerShell command instead, since a running program's file can't be replaced there. Installed with
 /// `cargo install`, it says to update the same way instead: the installer would replace the file behind cargo's back.
-pub fn update() -> Result<()> {
+pub fn update(central: &Path) -> Result<()> {
+    check_no_agent_working(central)?;
     let exe = std::env::current_exe().context("finding this program's file")?;
     let dir = exe.parent().context("finding this program's folder")?;
     if installed_by_cargo(dir, std::env::var_os("CARGO_HOME").map(PathBuf::from)) {

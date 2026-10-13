@@ -6,7 +6,7 @@
 //! - [`hook`]: `kb hook prompt|stop`, which hold an agent to describing an undescribed project first, and
 //!   to commenting on the tasks it started.
 //! - [`completions`]: `kb completions SHELL`, tab completion, and the ids, projects and tags it offers.
-//! - [`update`]: `kb update`, the latest release over this one, through the installer.
+//! - [`update`]: `kb update`, the latest release over this one, through the installer, once no agent is working.
 
 mod claude;
 mod completions;
@@ -268,7 +268,7 @@ impl Command {
             }
             Command::Update => {
                 platform::ensure_not_root()?;
-                return update::update();
+                return update::update(&projects::central_dir()?);
             }
             Command::Init(name, repo) => {
                 platform::ensure_not_root()?;
