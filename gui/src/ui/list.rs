@@ -33,7 +33,7 @@ pub fn draw(board: &Board, scroll: &ScrollHandle, follow: bool, cx: &mut Context
             items.push(menu::on_right_click(row(board, key, task, now, cx), key, cx).into_any_element());
         }
         if empty {
-            items.push(dim_small(empty_hint(status)).px_3().py_2().into_any_element());
+            items.push(dim_small(empty_hint(board, status)).px_3().py_2().into_any_element());
         }
         if status == Status::Done
             && let Some(more) = show_all_done(board, cx)

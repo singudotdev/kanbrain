@@ -10,7 +10,7 @@ use gpui::{
     ClickEvent, Context, Div, ElementId, FontWeight, ScrollHandle, SharedString, Stateful, Window, div, prelude::*, px,
     rgb,
 };
-use kanbrain_core::model::{Asked, Status, Task, fmt_age, fmt_clock, fmt_dur, now};
+use kanbrain_core::model::{Asked, Status, Task, counted, fmt_age, fmt_clock, fmt_dur, now};
 
 /// Narrowest a column gets before the board scrolls sideways.
 const COLUMN_MIN_WIDTH: f32 = 220.;
@@ -109,7 +109,7 @@ fn column(board: &Board, status: Status, scroll: &ScrollHandle, follow: bool, cx
         .iter()
         .map(|&(key, task)| menu::on_right_click(draw_card(board, key, task, now, cx), key, cx).into_any_element())
         .collect();
-    let empty = (cards.is_empty() && adding.is_none()).then(|| dim_small(empty_hint(status)).p_2());
+    let empty = (cards.is_empty() && adding.is_none()).then(|| dim_small(empty_hint(board, status)).p_2());
     let body = div()
         .id(("column", status as usize))
         .debug_selector(move || format!("column {}", status.as_str()))
@@ -142,14 +142,19 @@ pub(super) fn draggable(element: Stateful<Div>, key: Key, task: &Task) -> Statef
     })
 }
 
-/// What an empty column is for.
-pub(super) fn empty_hint(status: Status) -> &'static str {
+/// What an empty column is for; or, when the search hides every task it has, that it does.
+pub(super) fn empty_hint(board: &Board, status: Status) -> String {
+    let hidden = board.column_total(status);
+    if hidden > 0 {
+        return format!("{} here, none matching the search.", counted(hidden, "task", "tasks"));
+    }
     match status {
         Status::Todo => "Nothing to do yet. Press + to add a task.",
         Status::Doing => "Nothing running. Drop a card here to start its clock.",
         Status::Parked => "Started tasks set aside land here.",
         Status::Done => "Finished tasks land here.",
     }
+    .to_string()
 }
 
 /// A card: id (and brain, when several are shown), age in its column, title, tags, and what it
