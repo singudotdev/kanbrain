@@ -49,6 +49,13 @@ fn the_docs_show_the_section_as_written() {
 }
 
 #[test]
+fn the_section_asks_for_the_description_the_hook_and_context_ask_for() {
+    // The section wraps it to the width of its lines; the hook and `context` print it on one.
+    let words = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(words(SECTION).contains(crate::projects::description_scope!()));
+}
+
+#[test]
 fn registers_the_project_and_joins_repositories_of_the_same_one() {
     let (code, central) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let (api, web) = (code.path().join("api"), code.path().join("web"));

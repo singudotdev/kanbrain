@@ -27,8 +27,7 @@ const END: &str = "<!-- kanbrain:end -->";
 /// The section. Read at the start of every session, so it's short, yet the whole CLI an agent needs is
 /// here. It has to win over the agent's own habits: Claude Code, for one, has a built-in to-do list,
 /// and works through a plan without a word to the board unless told the board is watched live.
-const SECTION: &str = concat!(
-    "\
+const SECTION: &str = "\
 ## Project memory: kanbrain
 
 This project's tasks, to-dos, decisions and notes live in `.brain/`, managed only with `kb`, kanbrain's CLI.
@@ -57,18 +56,19 @@ The user follows them live on a kanban board: keep it showing what you're doing 
   the chat instead, `start` the task (that ends the wait). `accept`/`reject` a decision only when the user tells
   you to.
 - Choosing between approaches within your task: `search` for earlier decisions (only accepted ones are in force),
-  then `add --decision --link ID --body - TITLE` with Context / Decision / Consequences on stdin. Non-obvious findings: `add --note --link ID --body - TITLE`;
-  a problem someone has to fix is a task instead, in the repository that has to change.
+  then `add --decision --link ID --body - TITLE` with Context / Decision / Consequences on stdin. Non-obvious
+  findings: `add --note --link ID --body - TITLE`; a problem someone has to fix is a task instead, in the
+  repository that has to change.
 - `## Project` in `context` is the application's shared context. If it isn't described, or you're asked to set up
-  or load the brain, describe it first, from the README and manifests: `project describe -` (",
-    crate::projects::description_scope!(),
-    "). Rewrite it when the big picture changes (a service added, another storage), not after every change. With
-  several repositories, this one's role too: `project notes -`. How to build, test and run this repository, and its
-  code style, go in this file, outside this section: add them as you learn them.
+  or load the brain, describe it first, from the README and manifests: `project describe -` (what the app is, its
+  services and how they connect, conventions they share: the big picture, in at most five lines, without tables,
+  columns, function signatures, files or dependencies, which the code already says). Rewrite it when the big
+  picture changes (a service added, another storage), not after every change. With several repositories, this
+  one's role too: `project notes -`. How to build, test and run this repository, and its code style, go in this
+  file, outside this section: add them as you learn them.
 - Also: `show ID` (one entry in full), `describe ID TEXT`, `link ID OTHER…` (an id here, or `REPO#ID` in another
   repository of the project); `-` reads text from stdin. Never edit the files in `.brain/` by hand: `kb` keeps
-  them consistent.",
-);
+  them consistent.";
 
 /// Makes `root` a repository of project `name` (else the one its card names, else one named after
 /// the folder), named `repo` in it (else as [`projects::repo_name`] picks): creates its `.brain/` and card,
