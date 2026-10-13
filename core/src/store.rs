@@ -6,8 +6,9 @@ use crate::tags::TagColors;
 use anyhow::{Context, Result, bail};
 use std::cell::RefCell;
 use std::fs;
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 /// Tag color assignments; lives next to the task files but isn't a task.
 const TAGS_FILE: &str = "tags.md";
@@ -339,15 +340,26 @@ pub(crate) fn cache_of(dir: &Path) -> Result<[PathBuf; 2]> {
 }
 
 /// Writes `text` to `path`, creating its folder if missing. It goes to a hidden temporary file beside it
-/// first, then takes the file's place in one rename: a crash or a full disk can never leave a file half
-/// written, be it an entry, `tags.md` or a repository's `CLAUDE.md`. The watcher ignores hidden files.
+/// first, flushed to disk, then takes the file's place in one rename: a crash or a full disk can never leave a
+/// file half written, be it an entry, `tags.md` or a repository's `CLAUDE.md`. The temporary file's name is this
+/// write's own, so two programs writing the same file can't swap halves of each other's. The watcher ignores
+/// hidden files.
 pub(crate) fn write_file(path: &Path, text: &str) -> Result<()> {
+    static WRITES: AtomicU32 = AtomicU32::new(0);
     let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
     fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
     let name = path.file_name().with_context(|| format!("{} isn't a file", path.display()))?;
-    let tmp = dir.join(format!(".{}.tmp", name.to_string_lossy()));
-    fs::write(&tmp, text).with_context(|| format!("writing {}", tmp.display()))?;
-    fs::rename(&tmp, path).with_context(|| format!("writing {}", path.display()))
+    let write = WRITES.fetch_add(1, Ordering::Relaxed);
+    let tmp = dir.join(format!(".{}.{}-{write}.tmp", name.to_string_lossy(), std::process::id()));
+    let written = fs::File::create(&tmp).and_then(|mut file| {
+        file.write_all(text.as_bytes())?;
+        file.sync_all()
+    });
+    if let Err(e) = written.and_then(|()| fs::rename(&tmp, path)) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e).with_context(|| format!("writing {}", path.display()));
+    }
+    Ok(())
 }
 
 /// The nearest `.brain/` folder in `start` or one of its parents.

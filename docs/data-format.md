@@ -213,5 +213,5 @@ New tags are added automatically. See [tag colors](tasks-and-tags.md#tag-colors)
 
 ## Writes are atomic
 
-Task files are written to a temporary file (`.NNNN-slug.md.tmp`) and then renamed into place,
-so a crash or power loss never leaves a half-written task file.
+Task files are written to a temporary file (`.NNNN-slug.md.PID-N.tmp`), flushed to disk, and then renamed into
+place, so a crash or power loss never leaves a half-written task file.

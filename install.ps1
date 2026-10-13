@@ -120,8 +120,8 @@ function Install-Kanbrain {
                 # Only files kanbrain creates: NNNN-slug.md entries, tags.md, last-id, format, the project registry (projects.md)
                 # and cards (projects\*.md), exported reports, leftover temp files.
                 $owned = @(Get-ChildItem $data -File -Force | Where-Object {
-                    $_.Name -match '^\d{4,}-.*\.md$' -or $_.Name -in 'tags.md', 'projects.md', 'last-id', 'format', '.last-id.tmp', '.format.tmp' -or
-                    $_.Name -match '^\..*\.md\.tmp$' })
+                    $_.Name -match '^\d{4,}-.*\.md$' -or $_.Name -in 'tags.md', 'projects.md', 'last-id', 'format' -or
+                    $_.Name -match '^\.(.*\.md|last-id|format)(\.\d+-\d+)?\.tmp$' })
                 $entries = @($owned | Where-Object { $_.Name -match '^\d{4,}-.*\.md$' }).Count
                 foreach ($sub in 'projects', 'reports') {
                     $dir = Join-Path $data $sub
