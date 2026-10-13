@@ -3,7 +3,11 @@
 #
 # - the download is checked against its checksum, and refused when that doesn't match;
 # - the installed `kb` runs, and `init --all` has brought a registered project's agent section up to date;
-# - uninstalling takes it out again, and out of the user PATH.
+# - uninstalling takes it out again, and out of the user PATH;
+# - both apps install together (KANBRAIN_APP=both), the kanban app with its Start Menu shortcut, and uninstall
+#   together; `kb` stands in for the app, which takes the same commands, so GPUI needn't be built;
+# - purging deletes the central brain's files and kanbrain's locks and backups in the cache, keeping a file it
+#   didn't create.
 #
 # CI runs it on every push (the `installers` job), as an administrator: hence KANBRAIN_ALLOW_ADMIN. It needs
 # cargo and python.
@@ -29,8 +33,16 @@ try {
     $hash = (Get-FileHash (Join-Path $dist $asset) -Algorithm SHA256).Hash.ToLower()
     $sum = Join-Path $dist "$asset.sha256"
     Set-Content -NoNewline -Path $sum -Value "$hash  $asset`n"
+    $appAsset = 'kanbrain-x86_64-pc-windows-msvc.zip'
+    New-Item -ItemType Directory -Force -Path (Join-Path $work 'app') | Out-Null
+    Copy-Item $built (Join-Path $work 'app/kanbrain.exe')
+    Copy-Item (Join-Path $repo 'LICENSE') (Join-Path $work 'app')
+    Compress-Archive -Path (Join-Path $work 'app/kanbrain.exe'), (Join-Path $work 'app/LICENSE') -DestinationPath (Join-Path $dist $appAsset)
+    $appHash = (Get-FileHash (Join-Path $dist $appAsset) -Algorithm SHA256).Hash.ToLower()
+    Set-Content -NoNewline -Path (Join-Path $dist "$appAsset.sha256") -Value "$appHash  $appAsset`n"
 
-    $port = 8765
+    # A free port, as another program may hold any fixed one.
+    $port = python -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])'
     $server = Start-Process python -ArgumentList '-m', 'http.server', "$port", '--bind', '127.0.0.1', '--directory', $dist `
         -PassThru -WindowStyle Hidden
     $up = $false
@@ -78,6 +90,19 @@ try {
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     if ($userPath -and ($userPath -split ';') -contains $env:KANBRAIN_INSTALL_DIR) { Fail 'uninstall left the PATH entry' }
     if ((Get-Content $claude -Raw) -notmatch '## Project memory: kanbrain') { Fail 'uninstall touched the project' }
+
+    # Both apps at once: each downloads the release asked for, and the kanban app gets its Start Menu shortcut.
+    Remove-Item Env:KANBRAIN_UNINSTALL
+    $env:KANBRAIN_APP = 'both'
+    $out = & (Join-Path $repo 'install.ps1') *>&1 | Out-String
+    $app = Join-Path $env:KANBRAIN_INSTALL_DIR 'kanbrain.exe'
+    $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'kanbrain.lnk'
+    if (-not ((Test-Path $installed) -and (Test-Path $app))) { Fail "both apps weren't installed: $out" }
+    if ($out -notmatch "downloading $([regex]::Escape($appAsset)) \(latest\)") { Fail "the app's download named another release: $out" }
+    if (-not (Test-Path $shortcut)) { Fail 'the kanban app got no Start Menu shortcut' }
+    $env:KANBRAIN_UNINSTALL = '1'
+    & (Join-Path $repo 'install.ps1') *>&1 | Out-Null
+    if ((Test-Path $installed) -or (Test-Path $app) -or (Test-Path $shortcut)) { Fail 'uninstall left an app or the shortcut' }
 
     # Purging deletes the central brain's data and kanbrain's locks and backups in the cache, nothing else of either.
     $env:LOCALAPPDATA = Join-Path $work 'localappdata'
