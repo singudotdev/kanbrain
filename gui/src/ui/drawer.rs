@@ -6,12 +6,11 @@ use super::widgets::{
     self, Kind, card, dim, dim_small, entry_pill, section, segment, segmented, small, state_pill, tag_chips,
 };
 use super::{BrainView, action, entry_action, markdown, when};
-use crate::state::{Board, COLUMNS, Confirm, Key, Mode, Target};
+use crate::state::{Board, COLUMNS, Confirm, Key, Mode, Target, When};
 use crate::text::event::KeyCode;
 use gpui::{ClickEvent, Context, Div, ElementId, FontWeight, ScrollHandle, Stateful, div, prelude::*, px, rgb};
 use kanbrain_core::model::{
-    Asked, Author, Comment, DecisionState, Kind as EntryKind, Status, StatusChange, Task, fmt_age, fmt_clock, fmt_dur,
-    now,
+    Asked, Author, Comment, DecisionState, Kind as EntryKind, StatusChange, Task, fmt_age, fmt_clock, fmt_dur, now,
 };
 use kanbrain_core::period::{Period, Unit};
 
@@ -29,7 +28,7 @@ pub fn draw(board: &Board, key: Key, task: &Task, scroll: &ScrollHandle, cx: &mu
         .p_4()
         .child(heading(board, key, task, cx))
         .children(asked_block(board, key, task, cx))
-        .children(task.is_task().then(|| status_block(key, task, cx)))
+        .children(task.is_task().then(|| status_block(board, key, task, cx)))
         .children(task.is_task().then(|| time_block(task)))
         .child(
             div()
@@ -146,11 +145,13 @@ fn who(comment: &Comment) -> &'static str {
 }
 
 /// The status buttons, the current one selected, and how long the task has had it.
-fn status_block(key: Key, task: &Task, cx: &mut Context<BrainView>) -> Div {
+fn status_block(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView>) -> Div {
     let segments = COLUMNS.map(|status| {
         segment(("status", status as usize), theme::status_label(status), task.status == status)
             .debug_selector(move || format!("drawer status {}", status.as_str()))
-            .tooltip(widgets::tooltip(format!("Shortcut: {}", status_key(status))))
+            .when_some(board.shortcut(When::MoveTo(status)), |segment, key| {
+                segment.tooltip(widgets::tooltip(format!("Shortcut: {key}")))
+            })
             .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.set_status(key, status))))
     });
     let since = task.status_since();
@@ -158,16 +159,6 @@ fn status_block(key: Key, task: &Task, cx: &mut Context<BrainView>) -> Div {
         dim(format!("{} for {}, since {}", theme::status_label(task.status), fmt_age(now() - since), when(since)))
             .text_size(px(12.)),
     )
-}
-
-/// The key that moves the selected task to `status`.
-fn status_key(status: Status) -> char {
-    match status {
-        Status::Todo => 't',
-        Status::Doing => 's',
-        Status::Parked => 'p',
-        Status::Done => 'd',
-    }
 }
 
 /// Time tracked on the task: the running clock, today, this week and in total.

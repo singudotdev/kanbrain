@@ -6,7 +6,7 @@ use super::pointer::TextBox;
 use super::theme::{self, BORDER, YELLOW};
 use super::widgets::{self, Kind, dim, dim_small, segment, segmented, small, tag_chips};
 use super::{BrainView, Scrolls, action, tag_filter};
-use crate::state::{Board, Key, Layout, Mode, Picker, Scope, Tab, Target};
+use crate::state::{Board, Key, Layout, Mode, Picker, Scope, Tab, Target, When};
 use crate::text::event::KeyCode;
 use gpui::{
     ClickEvent, Context, Div, ElementId, FontWeight, Image, ImageFormat, ScrollHandle, Stateful, div, img, prelude::*,
@@ -204,8 +204,12 @@ fn waiting_button(board: &Board, cx: &mut Context<BrainView>) -> Option<Stateful
     let waiting = board.waiting().len();
     let label = if waiting == 1 { "1 waiting for you".to_string() } else { format!("{waiting} waiting for you") };
     (waiting > 0).then(|| {
+        let tip = match board.shortcut(When::Waiting) {
+            Some(key) => format!("Tasks an agent asked you about · Shortcut: {key}"),
+            None => "Tasks an agent asked you about".to_string(),
+        };
         widgets::button("waiting", label, Kind::Secondary)
-            .tooltip(widgets::tooltip("Tasks an agent asked you about · Shortcut: w"))
+            .tooltip(widgets::tooltip(tip))
             .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.act(cx, Board::next_waiting)))
     })
 }

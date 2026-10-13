@@ -474,6 +474,12 @@ impl Board {
             .map_or("", |a| a.label)
     }
 
+    /// The key that does what's offered `when`, as the palette writes it, if one does on the tab shown: for the
+    /// tooltip of a button that does the same.
+    pub fn shortcut(&self, when: When) -> Option<&'static str> {
+        ACTIONS.iter().find(|a| a.when == when && a.tabs.has(self.tab)).map(|a| a.shown)
+    }
+
     /// What the right-click menu offers on the entry `key`.
     pub fn menu_items(&self, key: Key) -> Vec<&'static Action> {
         ACTIONS

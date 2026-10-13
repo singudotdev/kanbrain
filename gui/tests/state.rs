@@ -1268,3 +1268,15 @@ fn the_details_buttons_act_on_the_entry_from_the_calendar_too() {
     f.press(KeyCode::Char('m'));
     assert_eq!(f.board.calendar.period.unit, Unit::Month, "and so are its keys");
 }
+
+#[test]
+fn a_buttons_shortcut_is_named_only_on_the_tabs_its_key_does_the_same() {
+    let mut f = Fixture::new(&[]);
+    assert_eq!(f.board.shortcut(When::Waiting), Some("w"));
+    assert_eq!(f.board.shortcut(When::MoveTo(Status::Done)), Some("d"));
+    for tab in [Tab::Report, Tab::Calendar] {
+        f.board.switch_tab(tab);
+        assert_eq!(f.board.shortcut(When::Waiting), None, "w picks a week there");
+        assert_eq!(f.board.shortcut(When::MoveTo(Status::Done)), None, "d picks a day there");
+    }
+}

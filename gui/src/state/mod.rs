@@ -24,7 +24,7 @@ mod sources;
 #[path = "../../tests/state.rs"]
 mod tests;
 
-pub use keys::Action;
+pub use keys::{Action, When};
 pub use menu::MenuPicker;
 pub use mode::{
     AddProject, Confirm, Edit, Field, Form, FormTarget, LinkPicker, Manage, Mode, Picker, PickerKey, ProjectOption,
