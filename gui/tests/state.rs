@@ -353,6 +353,24 @@ fn capital_c_picks_a_comment_to_edit_or_delete() {
 }
 
 #[test]
+fn running_tasks_keep_their_order_the_longest_running_first() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let t0 = now() - chrono::Duration::hours(1);
+    // Saved newest first, so the files' order isn't the one asked for.
+    for (id, minutes) in [(1, 30), (2, 10), (3, 20)] {
+        let mut task = Task::new(id, format!("task {id}"), t0);
+        let at = t0 + chrono::Duration::minutes(minutes);
+        task.set_status(Status::Doing, at, Author::Agent);
+        task.start_session(at);
+        store.save(&mut task).unwrap();
+    }
+    let board = Board::open(dir.path(), None).unwrap();
+    let ids: Vec<u32> = board.running().iter().map(|(key, _)| key.id).collect();
+    assert_eq!(ids, [2, 3, 1]);
+}
+
+#[test]
 fn deleting_asks_first() {
     let mut f = Fixture::new(&["feature", "bug"]);
     f.board.select(k(1));
