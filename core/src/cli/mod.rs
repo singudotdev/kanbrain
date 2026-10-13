@@ -495,6 +495,12 @@ fn run_entries(store: Store, central: &Path, mut args: EntryArgs) -> Result<()> 
     // Before the lock: `-` waits for stdin, maybe for someone typing, and every other `kb` and the app would wait
     // meanwhile.
     args.read_stdin()?;
+    // A project change writes the central brain's registry or cards too, under its lock: taken first, in the order
+    // the app takes them, or this and the app could each hold one lock and wait forever for the other's.
+    let _central = match args.command {
+        EntryCommand::Project(Some(_)) => Some(Store::at(central)?.lock()?),
+        _ => None,
+    };
     // Held from reading the files to writing them, so parallel commands each see the others' changes; opening may
     // write too, as it repairs. `wait` lets go once open, not to hold it while it waits.
     let lock = store.lock()?;

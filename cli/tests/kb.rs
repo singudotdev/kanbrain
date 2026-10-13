@@ -138,6 +138,33 @@ fn repositories_registered_at_once_are_all_kept() {
 }
 
 #[test]
+fn a_project_change_waits_for_the_central_brain_before_locking_its_own() {
+    use kanbrain_core::store::Store;
+    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    ok(&kb(repo.path(), central.path(), &["init", "demo"], ""));
+    // As the app does: the central brain first, then the repositories.
+    let central_lock = Store::at(central.path()).unwrap().lock().unwrap();
+    let rename = Command::new(env!("CARGO_BIN_EXE_kb"))
+        .args(["project", "rename", "renamed"])
+        .current_dir(repo.path())
+        .env("KANBRAIN_DIR", central.path())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let brain = repo.path().join(".brain");
+    // Another thread: this one's lock on the central brain would let it take any lock again.
+    std::thread::spawn(move || sender.send(Store::at(&brain).unwrap().lock().is_ok()).unwrap());
+    let free = receiver.recv_timeout(std::time::Duration::from_secs(5));
+    drop(central_lock);
+    assert_eq!(free, Ok(true), "kb held its repository's lock while waiting for the central brain's: a deadlock");
+    assert!(ok(&rename.wait_with_output().unwrap()).contains("renamed project `demo` to `renamed`"));
+}
+
+#[test]
 fn commands_run_in_parallel_lose_nothing() {
     let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     ok(&kb(repo.path(), central.path(), &["init", "demo"], ""));
