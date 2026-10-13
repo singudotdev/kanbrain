@@ -11,7 +11,9 @@ fn changes_to_markdown_files_are_noticed_once() {
     let mut watcher = Watcher::new(vec![dir.path().to_path_buf()]);
     assert_eq!(changed(&mut watcher), 0);
     fs::write(dir.path().join("0001-a.md"), "# a").unwrap();
+    assert!(watcher.dirty() && watcher.dirty(), "seen, and left to take");
     assert_eq!(changed(&mut watcher), 1, "a new file");
+    assert!(!watcher.dirty());
     assert_eq!(changed(&mut watcher), 0, "only once");
     fs::write(dir.path().join("0001-a.md"), "# a, longer").unwrap();
     assert_eq!(changed(&mut watcher), 1, "an edit");

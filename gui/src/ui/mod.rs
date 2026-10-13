@@ -352,9 +352,12 @@ impl BrainView {
     }
 
     /// Re-reads the files when another program, such as an agent using the command line, changed them.
-    /// The selection stays on the same entry and whatever is being typed is kept.
+    /// The selection stays on the same entry and whatever is being typed is kept. Under the locks, as input
+    /// is, once there's something to read: a write landing between the reload and taking the files as seen
+    /// would otherwise never be read.
     fn follow_disk(&mut self, cx: &mut Context<Self>) {
-        if self.catch_up() {
+        if self.watcher.dirty() {
+            self.locked(|_| ());
             cx.notify();
         }
     }
@@ -383,7 +386,6 @@ impl BrainView {
             cx.quit();
             return;
         }
-        self.watcher.sync(self.board.watched_dirs());
         self.share_selection(cx);
         self.restart_blink(cx);
         match self.board.request.take() {

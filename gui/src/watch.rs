@@ -28,6 +28,11 @@ impl Watcher {
         Self { dirs, last }
     }
 
+    /// Whether any folder changed since it was last looked at, leaving that for [`Self::changed`] to take.
+    pub fn dirty(&self) -> bool {
+        self.dirs.iter().zip(&self.last).any(|(dir, last)| snapshot(dir) != *last)
+    }
+
     /// The folders that changed since they were last looked at; either way, takes their state as seen.
     pub fn changed(&mut self) -> Vec<PathBuf> {
         let mut changed = Vec::new();
