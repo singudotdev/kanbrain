@@ -188,15 +188,15 @@ impl EntryArgs {
         };
         let command = match (name, status) {
             (_, Some(status)) => EntryCommand::SetStatus(first_id(&mut rest)?, status),
-            ("add", None) => EntryCommand::Add(AddArgs::parse(rest.drain(..))?),
+            ("add", None) => EntryCommand::Add(AddArgs::parse(rest.drain(..), "add needs a title")?),
             ("show", None) => EntryCommand::Show(first_id(&mut rest)?),
             ("search", None) => EntryCommand::Search(std::mem::take(&mut rest).join(" ")),
             ("comment", None) => {
-                let (id, text) = id_and_text(&mut rest)?;
+                let (id, text) = id_and_text(&mut rest, "comment needs its text")?;
                 EntryCommand::Comment(id, text)
             }
             ("ask", None) => {
-                let (id, text) = id_and_text(&mut rest)?;
+                let (id, text) = id_and_text(&mut rest, "ask needs the question")?;
                 EntryCommand::Ask(id, text)
             }
             ("wait", None) => {
@@ -205,7 +205,7 @@ impl EntryArgs {
             }
             ("propose", None) => {
                 let id = first_id(&mut rest)?;
-                let decision = AddArgs::parse(rest.drain(..))?;
+                let decision = AddArgs::parse(rest.drain(..), "propose needs the decision's title")?;
                 if decision.kind != Kind::Task || decision.start {
                     bail!("propose makes a decision: leave out --note, --decision and --start");
                 }
@@ -213,16 +213,17 @@ impl EntryArgs {
             }
             ("accept", None) => {
                 let id = first_id(&mut rest)?;
-                let reason = if rest.is_empty() { None } else { Some(rest_as_text(&mut rest)?) };
+                let reason =
+                    if rest.is_empty() { None } else { Some(rest_as_text(&mut rest, "accept needs its comment")?) };
                 EntryCommand::Resolve(id, DecisionState::Accepted, reason)
             }
             ("reject", None) => {
                 let id = first_id(&mut rest)?;
-                let reason = rest_as_text(&mut rest).context("reject needs why: TEXT, or - to read it from stdin")?;
+                let reason = rest_as_text(&mut rest, "reject needs why")?;
                 EntryCommand::Resolve(id, DecisionState::Rejected, Some(reason))
             }
             ("describe", None) => {
-                let (id, text) = id_and_text(&mut rest)?;
+                let (id, text) = id_and_text(&mut rest, "describe needs the description")?;
                 EntryCommand::Describe(id, text)
             }
             ("link", None) => {
@@ -303,8 +304,8 @@ impl EntryArgs {
 }
 
 impl AddArgs {
-    /// Parses the options and title words after `add`.
-    fn parse(mut args: impl Iterator<Item = String>) -> Result<Self> {
+    /// Parses the options and title words after `add` or `propose ID`; `no_title` is the error without a title.
+    fn parse(mut args: impl Iterator<Item = String>, no_title: &str) -> Result<Self> {
         let mut add = Self::default();
         let mut title = Vec::new();
         while let Some(arg) = args.next() {
@@ -328,7 +329,7 @@ impl AddArgs {
         }
         add.title = title.join(" ");
         if add.title.trim().is_empty() {
-            bail!("add needs a title");
+            bail!("{no_title}");
         }
         if add.start && add.kind != Kind::Task {
             bail!("only tasks can be started");
@@ -383,17 +384,17 @@ fn first_id(args: &mut Vec<String>) -> Result<u32> {
     arg.trim_start_matches('#').parse().with_context(|| format!("`{arg}` isn't an entry id"))
 }
 
-/// An id, then the text: the remaining words, or `-` alone for stdin.
-fn id_and_text(args: &mut Vec<String>) -> Result<(u32, Text)> {
+/// An id, then the text: the remaining words, or `-` alone for stdin; `needs` says what's missing without it.
+fn id_and_text(args: &mut Vec<String>, needs: &str) -> Result<(u32, Text)> {
     let id = first_id(args)?;
-    Ok((id, rest_as_text(args)?))
+    Ok((id, rest_as_text(args, needs)?))
 }
 
-/// The remaining words as one text, or `-` alone for stdin.
-fn rest_as_text(args: &mut Vec<String>) -> Result<Text> {
+/// The remaining words as one text, or `-` alone for stdin; `needs` says what's missing without them.
+fn rest_as_text(args: &mut Vec<String>, needs: &str) -> Result<Text> {
     let words = std::mem::take(args);
     match words.as_slice() {
-        [] => bail!("text is needed, or - to read it from stdin"),
+        [] => bail!("{needs}: TEXT, or - to read it from stdin"),
         [dash] if dash == "-" => Ok(Text::Stdin),
         _ => Ok(Text::Given(words.join(" "))),
     }
@@ -411,8 +412,10 @@ fn project_args(args: &mut Vec<String>) -> Result<Option<ProjectChange>> {
         name => Ok(name),
     };
     Ok(Some(match command.as_str() {
-        "describe" => ProjectChange::Text(ProjectPart::Description, rest_as_text(args)?),
-        "notes" => ProjectChange::Text(ProjectPart::Notes, rest_as_text(args)?),
+        "describe" => {
+            ProjectChange::Text(ProjectPart::Description, rest_as_text(args, "project describe needs the description")?)
+        }
+        "notes" => ProjectChange::Text(ProjectPart::Notes, rest_as_text(args, "project notes needs the notes")?),
         "rename" => ProjectChange::Rename(words(args, "the new name")?),
         "repo" => ProjectChange::Repo(words(args, "the repository's new name")?),
         "move" => ProjectChange::Move(words(args, "the project to move to")?),

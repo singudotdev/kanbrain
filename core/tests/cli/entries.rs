@@ -34,6 +34,15 @@ fn ids_text_and_stdin() {
     assert!(parse(&["show", "four"]).is_err());
     assert!(parse(&["show", "4", "5"]).is_err());
     assert!(parse(&["comment", "4"]).is_err());
+}
+
+#[test]
+fn a_missing_text_or_title_is_named_once_for_its_command() {
+    let error = |args: &[&str]| parse(args).unwrap_err().to_string();
+    assert_eq!(error(&["reject", "6"]), "reject needs why: TEXT, or - to read it from stdin");
+    assert_eq!(error(&["ask", "6"]), "ask needs the question: TEXT, or - to read it from stdin");
+    assert_eq!(error(&["propose", "1"]), "propose needs the decision's title");
+    assert_eq!(error(&["add", "--tag", "x"]), "add needs a title");
     assert!(EntryArgs::parse("nope", std::iter::empty()).unwrap().is_none());
 }
 
