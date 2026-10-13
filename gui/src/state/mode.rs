@@ -217,6 +217,14 @@ impl Form {
         self.field = field;
     }
 
+    /// Goes to `field` from the keyboard, its text selected, so typing replaces it rather than adding to it.
+    pub fn tab_to(&mut self, field: Field) {
+        self.go_to(field);
+        if let Some(input) = self.active_mut() {
+            input.select_all();
+        }
+    }
+
     /// The fields `tab` goes through, in order: the project, if there's one to pick, the title, tags,
     /// related, then the column, if there's one to pick.
     fn fields(&self) -> impl Iterator<Item = Field> {

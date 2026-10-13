@@ -357,6 +357,10 @@ pub const ACTIONS: &[Action] = &[
         let next = Tab::ALL.iter().position(|&t| t == b.tab).map_or(0, |i| (i + 1) % Tab::ALL.len());
         b.switch_tab(Tab::ALL[next]);
     }),
+    named(KeyCode::BackTab, "shift+tab", Tabs::Every, When::Always, "Go to the previous tab", |b| {
+        let at = Tab::ALL.iter().position(|&t| t == b.tab).unwrap_or(0);
+        b.switch_tab(Tab::ALL[(at + Tab::ALL.len() - 1) % Tab::ALL.len()]);
+    }),
     letter("u", Tabs::Every, When::Always, "Undo the last change; again, redo it", Board::undo),
     letter("R", Tabs::Every, When::Always, "Reload the files", Board::reload_from_disk),
     letter(

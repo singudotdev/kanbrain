@@ -11,6 +11,7 @@ pub(super) fn key_name(key: KeyEvent) -> String {
         KeyCode::Enter => "Enter".into(),
         KeyCode::Esc => "Esc".into(),
         KeyCode::Tab => "Tab".into(),
+        KeyCode::BackTab => "Shift+Tab".into(),
         KeyCode::Backspace => "Backspace".into(),
         KeyCode::Delete => "Delete".into(),
         KeyCode::Left => "←".into(),
@@ -30,7 +31,8 @@ pub(super) fn key_events(keystroke: &Keystroke) -> Vec<KeyEvent> {
     let named = match keystroke.key.as_str() {
         "enter" => Some(KeyCode::Enter),
         "escape" => Some(KeyCode::Esc),
-        "tab" if modifiers.shift => return Vec::new(),
+        // Its own key, which shift is part of, so `shift+tab` matches it alone.
+        "tab" if modifiers.shift => return vec![KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE)],
         "tab" => Some(KeyCode::Tab),
         "backspace" => Some(KeyCode::Backspace),
         "delete" => Some(KeyCode::Delete),

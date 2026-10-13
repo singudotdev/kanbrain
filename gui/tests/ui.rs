@@ -30,7 +30,7 @@ fn keystrokes_become_board_keys() {
     assert_eq!(key("escape"), [KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)]);
     assert_eq!(key("ctrl-c"), [KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)]);
     assert_eq!(key("shift-right"), [KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT)]);
-    assert_eq!(key("shift-tab"), Vec::new());
+    assert_eq!(key("shift-tab"), [KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE)]);
     assert_eq!(key("cmd-q"), Vec::new());
 }
 

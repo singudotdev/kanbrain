@@ -294,6 +294,16 @@ fn the_form_creates_a_tagged_task_and_edits_it() {
     f.type_text("SSO");
     f.press(KeyCode::Enter);
     assert_eq!(f.on_disk(1).title, "Fix SSO");
+
+    // Tab into a field selects its text, so typing replaces it; shift+tab goes back.
+    f.press(KeyCode::Char('e'));
+    f.press(KeyCode::Tab);
+    f.type_text("ops");
+    f.press(KeyCode::BackTab);
+    f.type_text("Fix SAML");
+    f.press(KeyCode::Enter);
+    let task = f.on_disk(1);
+    assert_eq!((task.title.as_str(), task.tags.as_slice()), ("Fix SAML", &["ops".to_string()][..]));
 }
 
 #[test]

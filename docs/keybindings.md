@@ -36,7 +36,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | `#` | **filter by tags**, on every tab: a dropdown of the tags of what the tab shows, with a search box; each pick adds or takes out `#tag` in the search box, and it stays open for several (`esc` closes) |
 | `esc` | close the details; with them closed, clear the search (words and tags) |
 | `f` | show every done task, or only the latest 20 |
-| `1` `2` `3` `4` `5` / `tab` | Board, Notes, Decisions, Report, Calendar |
+| `1` `2` `3` `4` `5` / `tab` / `shift+tab` | Board, Notes, Decisions, Report, Calendar; `tab` the next, `shift+tab` the previous |
 | `I` | **manage the project** shown, or with **All** of the selected card's project: description, repositories with their roles, tasks per status, what's running, this week's time; with buttons to rename, move and remove them and add a repository |
 | `E` | **edit the description** of the project shown, or with **All** of the selected card's project, shared by its repositories |
 | `N` | edit **the role** of the selected card's repository in its project, or of the repository shown (what it owns, exposes and consumes) |
@@ -51,7 +51,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 
 ## Report tab
 
-`1` `2` `3` `4` `5`, `tab`, `n`, `/`, `esc`, `P`, `I`, `E`, `N`, `A`, `u`, `R`, `U`, `Q`, `?` and `q` work as above.
+`1` `2` `3` `4` `5`, `tab`, `shift+tab`, `n`, `/`, `esc`, `P`, `I`, `E`, `N`, `A`, `u`, `R`, `U`, `Q`, `?` and `q` work as above.
 
 | key | action |
 | --- | --- |
@@ -64,7 +64,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 
 ## Calendar tab
 
-`1` `2` `3` `4` `5`, `tab`, `n`, `/`, `esc`, `P`, `I`, `E`, `N`, `A`, `u`, `R`, `U`, `Q`, `?` and `q` work as above.
+`1` `2` `3` `4` `5`, `tab`, `shift+tab`, `n`, `/`, `esc`, `P`, `I`, `E`, `N`, `A`, `u`, `R`, `U`, `Q`, `?` and `q` work as above.
 
 | key | action |
 | --- | --- |
@@ -82,7 +82,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | --- | --- |
 | search box | type to filter; `enter` or `esc` stop typing and keep the filter |
 | quick add | `enter` adds the task and keeps the field open for the next; `esc` closes it |
-| new / edit form | `tab` moves between project (new entries), title, tags, related and, for a new task, its column; `enter` saves; `esc` cancels. In **Project**: type to search, `↑` `↓` move, `enter` picks it. In **Related**: type to search, `↑` `↓` move, `enter` checks or unchecks; the Save button saves. On **Column**: `←` `→` pick it |
+| new / edit form | `tab` (`shift+tab` back) moves between project (new entries), title, tags, related and, for a new task, its column, selecting the field's text so typing replaces it; `enter` saves; `esc` cancels. In **Project**: type to search, `↑` `↓` move, `enter` picks it and goes on to the title. In **Related**: type to search, `↑` `↓` move, `enter` checks or unchecks; the Save button saves. On **Column**: `←` `→` pick it |
 | text editor (descriptions, comments, answers, a decision's reason, a project's description and notes) | `enter` new line; `esc` or `ctrl+enter` **save** (the button says what: **Answer**, **Add comment**, **Accept**, **Reject**, **Save**); **Discard changes** (`ctrl+d`) throws the edit away; with nothing typed, `esc` or **Close** closes it |
 | link picker | type to search; `↑` `↓` move; `enter` links or unlinks; `esc` closes |
 | comments (`C`) | `↑` `↓` move; `enter` edits the highlighted comment; `x` deletes it, after asking; `esc` closes |

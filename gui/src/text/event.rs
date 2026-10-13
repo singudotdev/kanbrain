@@ -14,6 +14,8 @@ pub enum KeyCode {
     Esc,
     /// `tab`.
     Tab,
+    /// `shift+tab`.
+    BackTab,
     /// `backspace`.
     Backspace,
     /// `delete`.
