@@ -93,6 +93,8 @@ pub enum When {
     Waiting,
     /// With a project shown, or an entry of one selected.
     Project,
+    /// With a project's repository shown, or an entry of one selected.
+    Repo,
     /// With a newer release found.
     Update,
     /// With the details shown.
@@ -125,6 +127,7 @@ impl When {
             Self::Proposed => key.is_some_and(|k| !board.proposed_for(k).is_empty()),
             Self::Waiting => !board.waiting().is_empty(),
             Self::Project => board.project_here().is_some(),
+            Self::Repo => board.repo_here().is_some(),
             Self::Update => board.available.is_some(),
             Self::Drawer => board.drawer,
             Self::Searched => !board.drawer && !board.search.is_empty(),
@@ -335,6 +338,7 @@ pub const ACTIONS: &[Action] = &[
         Board::open_manage_project,
     ),
     letter("E", Tabs::Every, When::Project, "Edit the project's description", Board::edit_project_description),
+    letter("N", Tabs::Every, When::Repo, "Edit the repository's role in its project", Board::edit_repo_notes),
     letter("A", Tabs::Every, When::Always, "Add a project: pick a code folder, as `kb init` there", |b| {
         b.request = Some(Request::Folder(None));
     }),

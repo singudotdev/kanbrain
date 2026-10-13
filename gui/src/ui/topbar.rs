@@ -6,7 +6,7 @@ use super::pointer::TextBox;
 use super::theme::{self, BORDER, YELLOW};
 use super::widgets::{self, Kind, dim, dim_small, segment, segmented, small, tag_chips};
 use super::{BrainView, Scrolls, action};
-use crate::state::{Board, Key, Layout, Mode, Picker, Scope, Tab, Target, When};
+use crate::state::{Board, Key, Layout, Mode, Picker, Scope, Tab, When};
 use crate::text::event::KeyCode;
 use gpui::{
     ClickEvent, Context, Div, ElementId, FontWeight, Image, ImageFormat, ScrollHandle, Stateful, div, img, prelude::*,
@@ -122,12 +122,10 @@ fn project_card(board: &Board, cx: &mut Context<BrainView>) -> Option<Div> {
         &project.description,
         action("edit-project", "Edit", Kind::Ghost, KeyCode::Char('E'), cx),
     ));
-    let notes = |cx: &mut Context<BrainView>| {
-        widgets::button("edit-repo-notes", "Edit", Kind::Ghost).on_click(
-            cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.open_editor(Target::RepoNotes(src)))),
-        )
-    };
-    let repo = matches!(board.scope, Scope::Repo(_)).then(|| line(project.repo.clone(), &project.notes, notes(cx)));
+    let repo = matches!(board.scope, Scope::Repo(_)).then(|| {
+        let edit = action("edit-repo-notes", "Edit", Kind::Ghost, KeyCode::Char('N'), cx);
+        line(project.repo.clone(), &project.notes, edit)
+    });
     Some(card.children(repo))
 }
 

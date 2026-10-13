@@ -495,6 +495,18 @@ fn only_the_brains_that_changed_are_read_again() {
 }
 
 #[test]
+fn n_edits_the_role_of_the_selected_cards_repository() {
+    let (central, _code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    board.set_scope(Scope::Central);
+    press(&mut board, KeyCode::Char('N'));
+    assert!(matches!(board.mode, Mode::Normal), "the central brain has no role");
+    board.set_scope(Scope::Repo(2));
+    press(&mut board, KeyCode::Char('N'));
+    assert!(matches!(&board.mode, Mode::Edit(edit) if edit.target == Target::RepoNotes(2)), "web's");
+}
+
+#[test]
 fn a_tag_has_one_color_whichever_brain_or_scope_shows_it() {
     let (central, code) = projects();
     let colors = |dir: &std::path::Path, text: &str| std::fs::write(dir.join("tags.md"), text).unwrap();

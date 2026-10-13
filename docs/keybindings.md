@@ -38,6 +38,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | `1` `2` `3` `4` `5` / `tab` | Board, Notes, Decisions, Report, Calendar |
 | `I` | **manage the project** shown, or with **All** of the selected card's project: description, repositories with their roles, tasks per status, what's running, this week's time; with buttons to rename, move and remove them and add a repository |
 | `E` | **edit the description** of the project shown, or with **All** of the selected card's project, shared by its repositories |
+| `N` | edit **the role** of the selected card's repository in its project, or of the repository shown (what it owns, exposes and consumes) |
 | `A` | **add a project**: pick its code folder, then a project from the list or a new name; see [Projects](tasks-and-tags.md#projects) |
 | `P` | choose the project shown: a dropdown of All, Central, each project and each repository of a project with several; type to filter, `↑` `↓` and `enter` to show one, `esc` to close |
 | `u` | **undo** the last change the board made (a delete, a move, an edit…); pressed again, redo it. Refused if another program changed those files since |
@@ -49,7 +50,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 
 ## Report tab
 
-`1` `2` `3` `4` `5`, `tab`, `n`, `/`, `esc`, `P`, `I`, `E`, `A`, `u`, `R`, `U`, `Q`, `?` and `q` work as above.
+`1` `2` `3` `4` `5`, `tab`, `n`, `/`, `esc`, `P`, `I`, `E`, `N`, `A`, `u`, `R`, `U`, `Q`, `?` and `q` work as above.
 
 | key | action |
 | --- | --- |
@@ -62,7 +63,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 
 ## Calendar tab
 
-`1` `2` `3` `4` `5`, `tab`, `n`, `/`, `esc`, `P`, `I`, `E`, `A`, `u`, `R`, `U`, `Q`, `?` and `q` work as above.
+`1` `2` `3` `4` `5`, `tab`, `n`, `/`, `esc`, `P`, `I`, `E`, `N`, `A`, `u`, `R`, `U`, `Q`, `?` and `q` work as above.
 
 | key | action |
 | --- | --- |

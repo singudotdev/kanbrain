@@ -207,6 +207,14 @@ impl Board {
         }
     }
 
+    /// Opens the editor on the role of [`Board::repo_here`], or says how to get one.
+    pub fn edit_repo_notes(&mut self) {
+        match self.repo_here() {
+            Some(src) => self.open_editor(Target::RepoNotes(src)),
+            None => self.notify("no repository of a project here: select one of its cards, or show it with P"),
+        }
+    }
+
     /// Asks to install the newer release, unless there's none or an agent is working on a task: an update
     /// rewrites agents' instructions and may migrate their data, which mustn't change mid-session.
     pub fn ask_update(&mut self) {

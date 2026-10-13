@@ -266,6 +266,15 @@ impl Board {
         self.project_src().or(selected)
     }
 
+    /// The project's repository whose role `N` edits: the selected entry's, else the one shown alone.
+    pub fn repo_here(&self) -> Option<usize> {
+        let shown = match self.scope {
+            Scope::Repo(src) => Some(src),
+            _ => None,
+        };
+        self.selected.map(|key| key.src).or(shown).filter(|&src| self.sources[src].project.is_some())
+    }
+
     /// [`Self::project_here`] for a key that acts on it: with no project, says how to get one rather than doing
     /// nothing, since a key that does nothing reads as broken.
     pub(super) fn project_to_act_on(&mut self) -> Option<usize> {
