@@ -12,6 +12,11 @@ fn k(id: u32) -> Key {
     Key::new(0, id)
 }
 
+/// Presses `code` on the board, with no modifier.
+fn press(board: &mut Board, code: KeyCode) {
+    board.on_key(KeyEvent::new(code, KeyModifiers::NONE));
+}
+
 /// A board over a fresh folder holding tasks with these titles (ids from 1); the folder lives as long
 /// as the fixture.
 struct Fixture {
@@ -31,7 +36,7 @@ impl Fixture {
     }
 
     fn press(&mut self, code: KeyCode) {
-        self.board.on_key(KeyEvent::new(code, KeyModifiers::NONE));
+        press(&mut self.board, code);
     }
 
     fn shift(&mut self, code: KeyCode) {
@@ -502,15 +507,14 @@ fn every_project_shows_and_the_scope_filters_them() {
     board.set_scope(Scope::Project("shop".into()));
     assert_eq!(titles(&board), ["checkout", "rate limit"]);
     // The dropdown: P opens it on the scope shown, typing filters, Enter shows the highlighted one.
-    let key = |board: &mut Board, code| board.on_key(KeyEvent::new(code, KeyModifiers::NONE));
-    key(&mut board, KeyCode::Char('P'));
+    press(&mut board, KeyCode::Char('P'));
     let Mode::Scopes(picker) = &board.mode else { panic!("P opens the project dropdown") };
     assert_eq!(board.scope_candidates(picker)[picker.sel].1, "shop");
-    "api".chars().for_each(|c| key(&mut board, KeyCode::Char(c)));
+    "api".chars().for_each(|c| press(&mut board, KeyCode::Char(c)));
     let Mode::Scopes(picker) = &board.mode else { panic!("typing keeps it open") };
     let names: Vec<String> = board.scope_candidates(picker).into_iter().map(|(_, n)| n).collect();
     assert_eq!(names, ["shop/api"]);
-    key(&mut board, KeyCode::Enter);
+    press(&mut board, KeyCode::Enter);
     assert!(matches!(board.mode, Mode::Normal), "Enter closes it");
     assert_eq!((board.scope.clone(), titles(&board)), (Scope::Repo(1), vec!["rate limit".to_string()]));
     assert_eq!(board.source_label(1), None, "one brain shown: no labels");
@@ -526,9 +530,9 @@ fn new_entries_go_to_the_repository_shown_and_ids_are_per_brain() {
     let web = code.path().join("web/../web/.brain");
     let mut board = Board::open(central.path(), Some(web)).unwrap();
     assert_eq!(board.scope, Scope::Repo(2), "opened in a repository of a project with several");
-    board.on_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+    press(&mut board, KeyCode::Char('n'));
     "cart".chars().for_each(|c| board.on_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)));
-    board.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    press(&mut board, KeyCode::Enter);
     assert_eq!(board.selected, Some(Key::new(2, 2)), "#2 in web, though api has a #1 too");
     assert_eq!(board.brain(2).task(2).unwrap().title, "cart");
 }
@@ -537,32 +541,31 @@ fn new_entries_go_to_the_repository_shown_and_ids_are_per_brain() {
 fn a_new_entry_goes_where_the_filter_points_and_its_form_picks_another_project() {
     let (central, _code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
-    let key = |board: &mut Board, code| board.on_key(KeyEvent::new(code, KeyModifiers::NONE));
     let form = |board: &Board| {
         let Mode::Form(form) = &board.mode else { panic!("the form is open: {:?}", board.mode) };
         (form.src(), form.field, board.form_projects(form).into_iter().map(|(_, n)| n).collect::<Vec<_>>())
     };
     board.selected = Some(Key::new(3, 1));
-    key(&mut board, KeyCode::Char('n'));
+    press(&mut board, KeyCode::Char('n'));
     assert_eq!(form(&board).0, 3, "All: the selected card's brain, with no question first");
-    key(&mut board, KeyCode::Up);
+    press(&mut board, KeyCode::Up);
     let (_, field, names) = form(&board);
     assert_eq!(field, Field::Project, "the project field comes before the title");
     assert_eq!(names, ["Central", "shop/api", "shop/web", "blog"], "every brain");
     let Mode::Form(open) = &board.mode else { unreachable!() };
     assert_eq!(open.project.as_ref().unwrap().sel, 3, "highlighting the form's own");
-    "web".chars().for_each(|c| key(&mut board, KeyCode::Char(c)));
+    "web".chars().for_each(|c| press(&mut board, KeyCode::Char(c)));
     assert_eq!(form(&board).2, ["shop/web"]);
-    key(&mut board, KeyCode::Enter);
+    press(&mut board, KeyCode::Enter);
     assert_eq!(form(&board).0, 2, "enter picks it");
     assert_eq!(form(&board).1, Field::Title, "and goes back to the title");
-    "cart".chars().for_each(|c| key(&mut board, KeyCode::Char(c)));
-    key(&mut board, KeyCode::Enter);
+    "cart".chars().for_each(|c| press(&mut board, KeyCode::Char(c)));
+    press(&mut board, KeyCode::Enter);
     assert_eq!(board.brain(2).task(2).unwrap().title, "cart");
 
     board.set_scope(Scope::Project("blog".into()));
     board.selected = None;
-    key(&mut board, KeyCode::Char('n'));
+    press(&mut board, KeyCode::Char('n'));
     assert_eq!(form(&board).0, 3, "a one-repository project: its brain");
     let Mode::Form(open) = &mut board.mode else { unreachable!() };
     open.links.push(Key::new(3, 1));
@@ -570,17 +573,17 @@ fn a_new_entry_goes_where_the_filter_points_and_its_form_picks_another_project()
     let Mode::Form(open) = &board.mode else { unreachable!() };
     assert_eq!(open.src(), 0, "anywhere, whatever the scope");
     assert!(open.links.is_empty(), "they're picked among its brain's and project's, so they're dropped");
-    key(&mut board, KeyCode::Esc);
+    press(&mut board, KeyCode::Esc);
 
     board.set_scope(Scope::Project("shop".into()));
-    key(&mut board, KeyCode::Char('a'));
+    press(&mut board, KeyCode::Char('a'));
     let Mode::Where(asked) = &board.mode else { panic!("a asks where: {:?}", board.mode) };
     let names: Vec<String> = board.where_candidates(&asked.picker, asked.then).into_iter().map(|(_, n)| n).collect();
     assert_eq!(names, ["shop/api", "shop/web"], "quick add, with no form, asks among the repositories");
-    key(&mut board, KeyCode::Esc);
+    press(&mut board, KeyCode::Esc);
     assert!(matches!(board.mode, Mode::Normal), "Esc creates nothing");
     board.set_scope(Scope::Central);
-    key(&mut board, KeyCode::Char('a'));
+    press(&mut board, KeyCode::Char('a'));
     assert!(matches!(board.mode, Mode::QuickAdd(QuickAdd { src: 0, .. })), "one brain shown: no question");
 }
 
@@ -614,8 +617,8 @@ fn entries_related_across_a_projects_repositories_show_on_both() {
     board.save_form();
     assert_eq!(board.brain(2).task(1).unwrap().repo_links, to_api, "saved on web's side");
     board.selected = Some(api);
-    board.on_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
-    board.on_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+    press(&mut board, KeyCode::Char('x'));
+    press(&mut board, KeyCode::Char('y'));
     assert!(board.brain(1).task(1).is_none());
     assert!(board.brain(2).task(1).unwrap().repo_links.is_empty(), "web's link to it went with it");
     let file = std::fs::read_to_string(board.brain(2).task(1).unwrap().path.as_ref().unwrap()).unwrap();
@@ -626,22 +629,21 @@ fn entries_related_across_a_projects_repositories_show_on_both() {
 fn an_entry_moves_to_another_project_and_is_renumbered_there() {
     let (central, _code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
-    let key = |board: &mut Board, code| board.on_key(KeyEvent::new(code, KeyModifiers::NONE));
     board.set_scope(Scope::Project("shop".into()));
     board.selected = Some(Key::new(1, 1));
-    key(&mut board, KeyCode::Char('M'));
+    press(&mut board, KeyCode::Char('M'));
     let Mode::Where(asked) = &board.mode else { panic!("M asks where: {:?}", board.mode) };
     let names: Vec<String> = board.where_candidates(&asked.picker, asked.then).into_iter().map(|(_, n)| n).collect();
     assert_eq!(names, ["Central", "shop/web", "blog"], "every other brain, whatever the scope");
-    "web".chars().for_each(|c| key(&mut board, KeyCode::Char(c)));
-    key(&mut board, KeyCode::Enter);
+    "web".chars().for_each(|c| press(&mut board, KeyCode::Char(c)));
+    press(&mut board, KeyCode::Enter);
     assert!(board.brain(1).task(1).is_none(), "gone from api");
     assert_eq!(board.brain(2).task(2).unwrap().title, "rate limit", "web's next id");
     assert_eq!(board.selected, Some(Key::new(2, 2)), "still shown in shop: it stays selected");
 
-    key(&mut board, KeyCode::Char('M'));
-    "blog".chars().for_each(|c| key(&mut board, KeyCode::Char(c)));
-    key(&mut board, KeyCode::Enter);
+    press(&mut board, KeyCode::Char('M'));
+    "blog".chars().for_each(|c| press(&mut board, KeyCode::Char(c)));
+    press(&mut board, KeyCode::Enter);
     assert_eq!(board.brain(3).task(2).unwrap().title, "rate limit");
     assert_eq!(board.scope, Scope::Project("shop".into()), "the filter stays as it was");
     assert!(board.message().unwrap().contains("moved #2 to blog as #2"), "{:?}", board.message());
@@ -671,8 +673,8 @@ fn the_project_description_is_shared_by_its_repositories() {
     let mut board = Board::open(central.path(), None).unwrap();
     assert_eq!(board.brain(2).project.as_ref().unwrap().description, "An online shop.");
     board.open_editor(Target::Project(1));
-    board.on_key(KeyEvent::new(KeyCode::Char('!'), KeyModifiers::NONE));
-    board.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    press(&mut board, KeyCode::Char('!'));
+    press(&mut board, KeyCode::Esc);
     assert_eq!(board.brain(2).project.as_ref().unwrap().description, "An online shop.!", "web sees api's edit");
 }
 
@@ -680,20 +682,19 @@ fn the_project_description_is_shared_by_its_repositories() {
 fn manage_project_opens_for_a_shown_project() {
     let (central, _code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
-    let key = |board: &mut Board, code| board.on_key(KeyEvent::new(code, KeyModifiers::NONE));
     board.selected = Some(Key { src: 0, id: 1 });
-    key(&mut board, KeyCode::Char('I'));
+    press(&mut board, KeyCode::Char('I'));
     assert!(matches!(board.mode, Mode::Normal), "All shows no single project, and the central brain isn't one");
     assert!(board.message().is_some_and(|m| m.contains("select one of its cards")));
     board.selected = Some(Key { src: 2, id: 1 });
-    key(&mut board, KeyCode::Char('I'));
+    press(&mut board, KeyCode::Char('I'));
     assert!(matches!(board.mode, Mode::ManageProject(2)), "the selected card's project");
-    key(&mut board, KeyCode::Esc);
+    press(&mut board, KeyCode::Esc);
     board.set_scope(Scope::Repo(2));
-    key(&mut board, KeyCode::Char('I'));
+    press(&mut board, KeyCode::Char('I'));
     assert!(matches!(board.mode, Mode::ManageProject(2)));
     assert_eq!(board.project_repos(2), [1, 2], "it lists every repository of shop");
-    key(&mut board, KeyCode::Esc);
+    press(&mut board, KeyCode::Esc);
     assert!(matches!(board.mode, Mode::Normal));
 }
 
@@ -725,7 +726,6 @@ fn the_tag_dropdown_offers_only_the_shown_projects_tags() {
     tag(&mut board, Key::new(1, 1), "backend");
     tag(&mut board, Key::new(2, 1), "frontend");
     tag(&mut board, Key::new(3, 1), "writing");
-    let press = |board: &mut Board, code| board.on_key(KeyEvent::new(code, KeyModifiers::NONE));
     board.set_scope(Scope::Project("shop".into()));
     press(&mut board, KeyCode::Char('#'));
     let Mode::Tags(picker) = &board.mode else { panic!("# opens the tag dropdown") };
@@ -922,12 +922,11 @@ fn a_picked_folder_becomes_a_project_as_kb_init_makes_it() {
     use kanbrain_core::projects;
     let (central, code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
-    let key = |board: &mut Board, code| board.on_key(KeyEvent::new(code, KeyModifiers::NONE));
     let options = |board: &Board| {
         let Mode::AddProject(add) = &board.mode else { panic!("the dialog is open") };
         board.add_project_options(&add.picker)
     };
-    key(&mut board, KeyCode::Char('A'));
+    press(&mut board, KeyCode::Char('A'));
     assert_eq!(board.request.take(), Some(Request::Folder(None)), "A asks the window for the folder dialog");
 
     let notes = code.path().join("notes");
@@ -935,9 +934,9 @@ fn a_picked_folder_becomes_a_project_as_kb_init_makes_it() {
     board.name_project(notes.clone(), None);
     assert_eq!(options(&board), [ProjectOption::New("notes".into())], "named after the folder to begin with");
     // The name starts selected, so typing replaces it.
-    "journal".chars().for_each(|c| key(&mut board, KeyCode::Char(c)));
+    "journal".chars().for_each(|c| press(&mut board, KeyCode::Char(c)));
     assert_eq!(options(&board), [ProjectOption::New("journal".into())]);
-    key(&mut board, KeyCode::Enter);
+    press(&mut board, KeyCode::Enter);
     assert!(matches!(board.mode, Mode::Normal));
     assert_eq!(board.scope, Scope::Project("journal".into()), "the new project is shown");
     assert!(notes.join(".brain").is_dir());
@@ -952,13 +951,13 @@ fn a_picked_folder_becomes_a_project_as_kb_init_makes_it() {
     let admin = code.path().join("admin");
     std::fs::create_dir_all(&admin).unwrap();
     board.name_project(admin, None);
-    key(&mut board, KeyCode::Backspace);
+    press(&mut board, KeyCode::Backspace);
     let names: Vec<String> = options(&board).iter().map(|o| o.name().to_string()).collect();
     assert_eq!(names, ["shop", "blog", "journal"]);
-    "sh".chars().for_each(|c| key(&mut board, KeyCode::Char(c)));
+    "sh".chars().for_each(|c| press(&mut board, KeyCode::Char(c)));
     assert_eq!(options(&board), [ProjectOption::New("sh".into()), ProjectOption::Existing("shop".into())]);
-    key(&mut board, KeyCode::Down);
-    key(&mut board, KeyCode::Enter);
+    press(&mut board, KeyCode::Down);
+    press(&mut board, KeyCode::Enter);
     assert_eq!(board.project_repos(board.project_src().unwrap()).len(), 3, "api, web and admin");
     assert!(board.message().unwrap().contains("to project `shop`"));
 }
@@ -1021,39 +1020,38 @@ fn while_the_board_acts_a_kb_run_meanwhile_waits() {
 fn projects_and_repositories_are_managed_from_the_projects_info() {
     let (central, code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
-    let key = |board: &mut Board, code| board.on_key(KeyEvent::new(code, KeyModifiers::NONE));
-    let type_in = |board: &mut Board, text: &str| text.chars().for_each(|c| key(board, KeyCode::Char(c)));
+    let type_in = |board: &mut Board, text: &str| text.chars().for_each(|c| press(board, KeyCode::Char(c)));
     let labels = |board: &Board| board.sources.iter().filter_map(|s| s.label.clone()).collect::<Vec<_>>();
     let src =
         |board: &Board, label: &str| board.sources.iter().position(|s| s.label.as_deref() == Some(label)).unwrap();
 
     board.ask_rename_project(src(&board, "shop/api"));
     type_in(&mut board, "store");
-    key(&mut board, KeyCode::Enter);
+    press(&mut board, KeyCode::Enter);
     assert_eq!(labels(&board), ["store/api", "store/web", "blog"]);
     assert!(matches!(board.mode, Mode::ManageProject(_)), "back to Manage project");
 
     board.ask_rename_repo(src(&board, "store/api"));
     type_in(&mut board, "web");
-    key(&mut board, KeyCode::Enter);
+    press(&mut board, KeyCode::Enter);
     assert!(matches!(board.mode, Mode::Manage(_)), "a name the project has: the dialog stays, with why");
     assert!(board.message().unwrap().contains("already has a repository named `web`"), "{:?}", board.message());
-    key(&mut board, KeyCode::Esc);
+    press(&mut board, KeyCode::Esc);
     assert!(matches!(board.mode, Mode::ManageProject(_)), "esc goes back to Manage project");
     board.ask_rename_repo(src(&board, "store/api"));
     type_in(&mut board, "backend");
-    key(&mut board, KeyCode::Enter);
+    press(&mut board, KeyCode::Enter);
     assert_eq!(labels(&board), ["store/backend", "store/web", "blog"]);
 
     board.ask_move_repo(src(&board, "store/web"));
     type_in(&mut board, "blog");
     let Mode::Manage(Manage::MoveRepo { picker, .. }) = &board.mode else { panic!("the move dialog") };
     assert_eq!(board.move_options(src(&board, "store/web"), picker), [ProjectOption::Existing("blog".into())]);
-    key(&mut board, KeyCode::Enter);
+    press(&mut board, KeyCode::Enter);
     assert_eq!(labels(&board), ["store", "blog/blog", "blog/web"]);
 
     board.ask_remove(src(&board, "blog/web"), false);
-    key(&mut board, KeyCode::Char('y'));
+    press(&mut board, KeyCode::Char('y'));
     assert_eq!(labels(&board), ["store", "blog"]);
     assert!(code.path().join("web/.brain").is_dir(), "unlinked, its tasks kept");
 
@@ -1061,7 +1059,7 @@ fn projects_and_repositories_are_managed_from_the_projects_info() {
     assert_eq!(board.request.take(), Some(Request::Folder(Some("blog".into()))), "the folder joins this project");
 
     board.ask_remove(src(&board, "store"), true);
-    key(&mut board, KeyCode::Char('d'));
+    press(&mut board, KeyCode::Char('d'));
     assert_eq!(labels(&board), ["blog"]);
     assert!(!code.path().join("api/.brain").exists(), "its tasks deleted too");
     assert!(matches!(board.mode, Mode::Normal));
@@ -1165,13 +1163,13 @@ fn e_edits_the_description_of_the_project_here() {
     let (central, _code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
     board.selected = None;
-    board.on_key(KeyEvent::new(KeyCode::Char('E'), KeyModifiers::NONE));
+    press(&mut board, KeyCode::Char('E'));
     assert!(matches!(board.mode, Mode::Normal), "with All and nothing selected, no project is here");
     assert!(!board.commands(&Picker::default()).iter().any(|a| a.shown == "E"), "nor offered");
     let api = board.sources.iter().position(|s| s.label.as_deref() == Some("shop/api")).unwrap();
     board.select(Key::new(api, 1));
     assert!(board.commands(&Picker::default()).iter().any(|a| a.shown == "E"), "a card of shop is selected");
-    board.on_key(KeyEvent::new(KeyCode::Char('E'), KeyModifiers::NONE));
+    press(&mut board, KeyCode::Char('E'));
     let Mode::Edit(edit) = &board.mode else { panic!("E opens the editor: {:?}", board.mode) };
     assert_eq!(edit.target, Target::Project(api));
 }
