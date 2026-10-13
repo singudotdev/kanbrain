@@ -233,11 +233,12 @@ Handy for scripts: `cd "$(kb path)"` (in PowerShell, `cd (kb path)`).
 ## `kb update`
 
 Refused while an agent has a task in doing, in any project: updating rewrites the agents' instructions, and may
-migrate their data, under them. Once they're done or parked (park a stale one yourself), it runs the installer for the latest release, into the folder `kb` is in. It checks the download's checksum and
-replaces `kb`, and `kanbrain` too when it's installed beside it, then updates every project (`kb init --all`):
-its agent instructions, and its data, migrated to the new version's format when it changed, after a backup (see
-[Format versions and migrations](data-format.md#format-versions-and-migrations)). On Windows, where a
-running program can't be replaced, it prints the PowerShell command to run once the app is closed. Installed with
+migrate their data, under them. Once they're done or parked (park a stale one yourself), it runs the installer for
+the latest release, into the folder `kb` is in. It checks the download's checksum and replaces `kb`, and
+`kanbrain` too when it's installed beside it, then updates every project (`kb init --all`): its agent
+instructions, and its data, migrated to the new version's format when it changed, after a backup (see
+[Format versions and migrations](data-format.md#format-versions-and-migrations)). On Windows, where a running
+program can't be replaced, it prints the PowerShell command to run once the app is closed. Installed with
 `cargo install`, it doesn't replace anything behind cargo's back: it prints `cargo install kanbrain && kb init --all`.
 
 ## `kb completions`
