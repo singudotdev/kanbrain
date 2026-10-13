@@ -160,6 +160,8 @@ pub struct BrainView {
     updating: bool,
     /// Blinks the text cursor; replaced on every input, which starts the blink over.
     blink: gpui::Task<()>,
+    /// Whether the details were shown in the last frame.
+    drawer_shown: bool,
 }
 
 /// Scroll positions of the scrollable areas.
@@ -249,6 +251,7 @@ impl BrainView {
             shared: None,
             _tick: tick,
             blink: Self::blinking(cx),
+            drawer_shown: false,
         }
     }
 
@@ -500,8 +503,17 @@ impl BrainView {
 }
 
 impl Render for BrainView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let follow = std::mem::take(&mut self.follow);
+        // The details opening or closing changes the board's width after this frame is laid out, with the
+        // scroll to the selection worked out on the old one: it runs again once the new width is known.
+        if self.board.drawer != self.drawer_shown {
+            self.drawer_shown = self.board.drawer;
+            cx.on_next_frame(window, |view, _, cx| {
+                view.follow = true;
+                cx.notify();
+            });
+        }
         let board = &self.board;
         let content = match board.tab {
             Tab::Board => match board.layout {
