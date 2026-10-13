@@ -117,6 +117,8 @@ case "$(uname -s)" in
             fail "Info.plist names no icon"
         plutil -lint "$bundle/Info.plist" >/dev/null || fail "Info.plist isn't valid"
         "$bundle/MacOS/kanbrain" --version >/dev/null || fail "the bundle's executable doesn't run"
+        [ "$(cat "$bundle/Resources/install-dir")" = "$HOME/.local/bin" ] ||
+            fail "the bundle doesn't say where the app's update goes"
         ;;
 esac
 sh "$repo/install.sh" --uninstall --app gui >/dev/null || fail "uninstalling the app failed"

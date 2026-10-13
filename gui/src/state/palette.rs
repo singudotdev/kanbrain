@@ -123,6 +123,7 @@ const EVERYWHERE: &[Command] = &[
     run("tab", "Go to the next tab", KeyCode::Tab, Needs::Nothing),
     letter("u", 'u', "Undo the last change; again, redo it", Needs::Nothing),
     letter("R", 'R', "Reload the files", Needs::Nothing),
+    letter("U", 'U', "Update kanbrain to the newer release, once no agent is working", Needs::Nothing),
     letter("Q", 'Q', "Park your running tasks and quit (agents' keep running)", Needs::Nothing),
     letter("q", 'q', "Quit; running tasks keep their clocks running", Needs::Nothing),
 ];

@@ -339,13 +339,15 @@ impl Target {
     }
 }
 
-/// A delete waiting for confirmation.
+/// A delete, or the update, waiting for confirmation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Confirm {
     /// The entry.
     Delete(Key),
     /// The entry's comment at this index.
     DeleteComment(Key, usize),
+    /// Installing the newer release, which closes the app and opens the new one.
+    Update,
 }
 
 /// The link picker: every other entry, filtered by a search, to relate to the entry or unrelate.

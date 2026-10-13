@@ -1088,3 +1088,25 @@ fn a_repository_a_newer_kanbrain_wrote_is_left_out_and_said() {
     assert_eq!(labels, ["shop/api", "blog"], "the rest still opens");
     assert!(board.message().unwrap().contains("written by a newer kanbrain"), "{:?}", board.message());
 }
+
+#[test]
+fn an_update_is_offered_once_found_and_waits_for_the_agents() {
+    let mut f = Fixture::new(&["rate-limit the login"]);
+    f.shift(KeyCode::Char('U'));
+    assert!(f.board.message().unwrap().starts_with("no newer release"), "{:?}", f.board.message());
+    assert!(matches!(f.board.mode, Mode::Normal));
+
+    f.board.available = Some("9.0.0".into());
+    f.board.brain_mut(0).author = Author::Agent;
+    f.board.brain_mut(0).set_status(1, Status::Doing).unwrap();
+    f.shift(KeyCode::Char('U'));
+    let msg = f.board.message().unwrap();
+    assert!(msg.contains("can't update to 9.0.0 yet") && msg.contains("#1 rate-limit the login"), "{msg}");
+    assert!(matches!(f.board.mode, Mode::Normal), "not even asked");
+
+    f.board.brain_mut(0).set_status(1, Status::Parked).unwrap();
+    f.shift(KeyCode::Char('U'));
+    assert!(matches!(f.board.mode, Mode::Confirm(Confirm::Update)));
+    f.press(KeyCode::Char('y'));
+    assert_eq!(f.board.request.take(), Some(Request::Update), "the window installs it");
+}

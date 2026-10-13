@@ -118,6 +118,8 @@ pub enum Request {
     /// Open the system's folder dialog, for a project to add, and hand the folder to [`Board::name_project`],
     /// with the project it joins when it's added from that project's info.
     Folder(Option<String>),
+    /// Install the newer release and start it in place of this app; see `crate::update`.
+    Update,
 }
 
 /// Everything the window shows and remembers.
@@ -156,6 +158,8 @@ pub struct Board {
     pub quit: bool,
     /// Set when the window should do something only it can; it takes it and does it.
     pub request: Option<Request>,
+    /// A newer release's version, once the window found one out.
+    pub available: Option<String>,
     /// Status bar message and when it was set; it expires after `MESSAGE_TTL`.
     message: Option<(String, Instant)>,
     /// The files the last change wrote, as they were before and after, for `u` to put back.
@@ -185,6 +189,7 @@ impl Board {
             calendar: CalendarView::new(Period::current(Unit::Week)),
             quit: false,
             request: None,
+            available: None,
             message: None,
             last_change: Vec::new(),
         };

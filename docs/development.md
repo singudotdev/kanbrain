@@ -163,7 +163,7 @@ core/src/            kanbrain-core: shared by both programs
 │   ├── hook.rs      `kb hook prompt|stop`: the hooks' checks that hold an agent to describing the project first
 │   ├── entries.rs   agent commands by id: `add`, `show`, `search`, status changes, `comment`, `ask`, `propose`, `accept`/`reject`, `describe`, `link`, `context`
 │   ├── completions.rs `completions bash|zsh|fish`: the scripts, and `complete`, the ids, projects and tags they offer
-│   ├── update.rs    `update`: the installer run again for the apps beside this one, into the same folder
+│   ├── update.rs    `update`, and the app's: the latest release asked for, the installer run again for the apps beside this one, into the same folder (a macOS bundle's says which), once no agent has a task in doing
 │   ├── init.rs      `init`: the repository's .brain/ and card, its registration, the "Project memory" section in CLAUDE.md / AGENTS.md; `init --all` refreshes every registered repository's; `deinit` undoes it
 │   └── manage.rs    renaming a project or a repository, moving a repository to another project, removing them (`deinit --purge`, `project remove`), rewriting or dropping the links between repositories
 ├── api/             operations by id for the CLI, with typed refusals (ApiError)
@@ -198,9 +198,10 @@ gui/build.rs         embeds the icon into kanbrain.exe when building for Windows
 gui/icons/           the app's icons, made from docs/images/logo.svg by make.sh: .ico (Windows), .icns (macOS), 128 px PNG (X11)
 gui/src/             kanbrain: the kanban app, and `cli::Program` when given arguments
 ├── main.rs          entry point: --help / --version, the root check, opening the window
+├── update.rs        the app's update: a newer release asked for daily, installed in place of the app (on Windows by PowerShell once it closes), which then starts again
 ├── watch.rs         polls the data folders (names, sizes, times) every second, naming those other programs changed
 ├── state/           what's on screen and every action, without GPUI (tested without a window)
-│   ├── mod.rs       Board: the brains, the scope, the tab and the board's layout (Layout: kanban or list), the selected entry (by Key), the details, search, report view, status message, what the window must do (Request: $EDITOR, the folder dialog); columns and lists
+│   ├── mod.rs       Board: the brains, the scope, the tab and the board's layout (Layout: kanban or list), the selected entry (by Key), the details, search, report view, status message, what the window must do (Request: $EDITOR, the folder dialog, the update), a newer release found; columns and lists
 │   ├── mode.rs      the dialogs and fields that take the keys (Mode): search, form, quick add, editor, confirm, links, project and tag dropdowns, which project a quick-added task goes in or an entry moves to, what's next, project info, command palette, adding a project (AddProject, ProjectOption), renaming, moving or removing a project or repository (Manage)
 │   ├── actions.rs   status changes and drops, new / edit / quick add (asking which brain when the scope shows several), moving an entry to another brain, the editor's save, deletes, links, undo (recording what each change writes), reload, park & quit, export
 │   ├── manage.rs    renaming, moving and removing projects and repositories from the project's info
@@ -337,7 +338,7 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | module | covers |
 | --- | --- |
 | `brain` | status history, columns, one person's task in doing and agents' unlimited (a second start refused, loading parks the extra ones), sessions, comments, links, renames and deletes, ids never given twice, moving to another brain, reports, the calendar's days and filters, the decision template |
-| `api`, `cli` | agent operations and their refusals, links to other repositories, compact text and JSON, `context`'s caps, command parsing, `--project`, `list` output, usage, completion scripts and candidates, which apps `update` installs |
+| `api`, `cli` | agent operations and their refusals, links to other repositories, compact text and JSON, `context`'s caps, command parsing, `--project`, `list` output, usage, completion scripts and candidates, which apps `update` installs and where (a macOS bundle's folder), whether a release is newer, an update waiting for agents' tasks in doing and not a person's |
 | `cli::init` | the agent section written, updated in place and left alone when unclosed; `init --all` updating every registered repository that has it, and no other; registering repositories and joining them into a project; `deinit` taking it all back but `.brain/`; the Claude Code hooks added once beside other settings (one from before `kb` replaced), and removed leaving them as they were; `kb hook` asking with every prompt and holding the turn once while the project or this repository's role isn't described, and silent once they are |
 | `projects` | the registry and its labels, cards, moving a repository between projects, refusing two repositories with one name |
 | `migrate` | every format after the first having its step; an old brain backed up, then migrated step by step and only once, resuming from where it is; a brain in a newer format refused, read or written |
@@ -347,7 +348,7 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | `tags` | no color repeats until the palette is used up, `tags.md` round trip, custom colors |
 | `period`, `export` | period bounds and stepping, report tables |
 | `enums` | generated `ALL` / `position` / `next`, `parse` as the inverse of `as_str` |
-| `state` (gui) | the board driven by keys over a temporary folder: moving between cards and columns, moving cards, drops, quick add, the form and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, what's next and its search, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from the project's info |
+| `state` (gui) | the board driven by keys over a temporary folder: moving between cards and columns, moving cards, drops, quick add, the form and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, what's next and its search, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from the project's info, the update offered once a newer release is found and refused while an agent works |
 | `editor` (gui) | line editing (split/join), unicode, wrapping; one-line cursor editing; selecting, copying and replacing; mouse selection by character, word and line |
 | `markdown` (gui) | inline styles and link ranges, kept line breaks, heading levels, numbered and task lists, nesting, code, quotes, tables, rules |
 | `watch` (gui) | new, changed, renamed and deleted files are noticed once, naming the folder; temporary files aren't; own writes are taken as seen |

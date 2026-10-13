@@ -10,10 +10,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Data format versions and migrations: each brain records its format in a `format` file. A version that changes it
   migrates older brains when they're opened to be changed and on `kb update`, after copying them to the cache
   folder; a brain written by a newer version is refused, read or written, rather than misread.
+- Updating from the kanban app: it checks for a newer release when it opens and daily (`KANBRAIN_NO_UPDATE_CHECK=1`
+  turns that off) and offers it in the status bar; **Update** (`U`) installs it like `kb update` and opens it.
 
 ### Changed
 
-- `kb update` waits until no agent has a task in doing, so its instructions and data don't change
+- `kb update`, and the app's, wait until no agent has a task in doing, so their instructions and data don't change
   mid-session.
 
 ## [0.3.1] - 2026-10-13

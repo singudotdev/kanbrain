@@ -308,6 +308,8 @@ install_app() {
     if [ "$bin" = kanbrain ] && [ "$os" = Darwin ] && [ -f "$tmp/kanbrain.icns" ]; then
         mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
         cp "$tmp/kanbrain.icns" "$APP_BUNDLE/Contents/Resources/kanbrain.icns"
+        # Where the binaries are, for the app's update: it runs as the bundle's link, not from this folder.
+        printf '%s\n' "$INSTALL_DIR" >"$APP_BUNDLE/Contents/Resources/install-dir"
         rm -f "$APP_BUNDLE/Contents/MacOS/kanbrain"
         ln "$INSTALL_DIR/kanbrain" "$APP_BUNDLE/Contents/MacOS/kanbrain" 2>/dev/null ||
             cp "$INSTALL_DIR/kanbrain" "$APP_BUNDLE/Contents/MacOS/kanbrain"

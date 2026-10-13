@@ -21,6 +21,30 @@ fn a_program_cargo_installed_is_left_to_cargo() {
 }
 
 #[test]
+fn a_release_is_newer_by_its_numbers_not_its_text() {
+    assert!(newer("0.3.10", "0.3.9"));
+    assert!(newer("1.0.0", "0.9.9"));
+    assert!(!newer("0.3.1", "0.3.1"));
+    assert!(!newer("0.3.0", "0.3.1"));
+    let headers = "HTTP/2 302\r\nLocation: https://github.com/singudotdev/kanbrain/releases/tag/v0.3.2\r\n\r\n";
+    assert_eq!(redirected_version(headers).as_deref(), Some("0.3.2"));
+    assert_eq!(redirected_version("HTTP/2 404\r\n\r\n"), None);
+}
+
+#[test]
+fn the_macos_bundle_updates_the_folder_it_links_to() {
+    let home = tempfile::tempdir().unwrap();
+    let (bin, bundle) = (home.path().join("bin"), home.path().join("kanbrain.app/Contents"));
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::create_dir_all(bundle.join("MacOS")).unwrap();
+    std::fs::create_dir_all(bundle.join("Resources")).unwrap();
+    std::fs::write(bin.join(format!("kanbrain{}", std::env::consts::EXE_SUFFIX)), "").unwrap();
+    let exe = bundle.join("MacOS/kanbrain");
+    std::fs::write(bundle.join("Resources/install-dir"), format!("{}\n", bin.display())).unwrap();
+    assert_eq!(install_of(&exe).unwrap(), Install::Installer { dir: bin, app: "gui" });
+}
+
+#[test]
 fn an_update_waits_for_the_agents_tasks_in_doing_only() {
     use crate::brain::Brain;
     use crate::brain::NewEntry;

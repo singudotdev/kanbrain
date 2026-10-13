@@ -97,7 +97,7 @@ fn check(checked: bool) -> Div {
     div().w(px(16.)).flex_none().text_color(rgb(theme::GREEN)).child(if checked { "✓" } else { "" })
 }
 
-/// A delete dialog: what will be removed, with Cancel and Delete buttons.
+/// A delete dialog, what will be removed with Cancel and Delete buttons; or the update's, with Update.
 fn draw_confirm(board: &Board, confirm: Confirm, cx: &mut Context<BrainView>) -> Option<Div> {
     let (title, lines) = match confirm {
         Confirm::Delete(key) => {
@@ -114,11 +114,24 @@ fn draw_confirm(board: &Board, confirm: Confirm, cx: &mut Context<BrainView>) ->
             ];
             ("Delete comment?".to_string(), lines)
         }
+        Confirm::Update => {
+            let version = board.available.as_deref()?;
+            let lines = vec![
+                Line::raw(format!("kanbrain {version}, and kb beside it, replace {}.", env!("CARGO_PKG_VERSION"))),
+                Line::styled(
+                    "The app closes and opens again; every project's agent instructions are updated.",
+                    DIM_STYLE,
+                ),
+            ];
+            (format!("Update to {version}?"), lines)
+        }
     };
+    let (confirm_label, confirm_kind) =
+        if confirm == Confirm::Update { ("Update", Kind::Primary) } else { ("Delete", Kind::Danger) };
     let content = div().flex().flex_col().gap_1().children(lines.into_iter().map(Line::render));
     let buttons = vec![
         action("cancel", "Cancel", Kind::Secondary, KeyCode::Esc, cx),
-        action("confirm", "Delete", Kind::Danger, KeyCode::Char('y'), cx),
+        action("confirm", confirm_label, confirm_kind, KeyCode::Char('y'), cx),
     ];
     Some(dialog(title, content, buttons).w(px(DIALOG_WIDTH)))
 }

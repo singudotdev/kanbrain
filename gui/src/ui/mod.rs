@@ -32,6 +32,7 @@ mod widgets;
 
 use crate::state::{Board, Layout, Mode, Request, Scope, Tab};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
+use crate::update;
 use crate::watch::{self, Watcher};
 use anyhow::{Context as _, Result, bail};
 use chrono::{DateTime, Local};
@@ -125,6 +126,10 @@ pub struct BrainView {
     watcher: Watcher,
     /// Looks at the data folder every `watch::INTERVAL`; dropped with the view.
     _watch: gpui::Task<()>,
+    /// Asks for a newer release at start and every `update::CHECK_EVERY`; dropped with the view.
+    _check: Option<gpui::Task<()>>,
+    /// Whether the newer release is being installed, after which the app closes.
+    updating: bool,
     /// Blinks the text cursor; replaced on every input, which starts the blink over.
     blink: gpui::Task<()>,
 }
@@ -185,9 +190,15 @@ impl BrainView {
                 }
             }
         });
+        let mut board = board;
+        if let Some(failed) = update::take_failure() {
+            board.notify(failed);
+        }
         Self {
             watcher: Watcher::new(board.watched_dirs()),
             _watch: watch,
+            _check: update::checks().then(|| Self::checking(cx)),
+            updating: false,
             board,
             focus,
             scroll: Scrolls::default(),
@@ -199,6 +210,48 @@ impl BrainView {
             _tick: tick,
             blink: Self::blinking(cx),
         }
+    }
+
+    /// Asks whether a newer release is out now and every `update::CHECK_EVERY`, off the window's thread. Not being
+    /// able to ask, offline say, leaves what it last found.
+    fn checking(cx: &mut Context<Self>) -> gpui::Task<()> {
+        cx.spawn(async move |this, cx| {
+            loop {
+                let newer = cx.background_executor().spawn(async { kanbrain_core::cli::update::newer_release() });
+                if let Ok(newer) = newer.await {
+                    let found = this.update(cx, |this, cx| {
+                        this.board.available = newer;
+                        cx.notify();
+                    });
+                    if found.is_err() {
+                        break;
+                    }
+                }
+                cx.background_executor().timer(update::CHECK_EVERY).await;
+            }
+        })
+    }
+
+    /// Installs the newer release in the background and closes, for the new one the update starts; or says why
+    /// it couldn't, and stays.
+    fn install_update(&mut self, cx: &mut Context<Self>) {
+        if std::mem::replace(&mut self.updating, true) {
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            let Ok(central) = this.update(cx, |this, _| this.board.central.clone()) else { return };
+            let installed = cx.background_executor().spawn(async move { update::install(&central) }).await;
+            this.update(cx, |this, cx| match installed {
+                Ok(()) => cx.quit(),
+                Err(e) => {
+                    this.updating = false;
+                    this.board.notify(format!("{e:#}"));
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
     }
 
     /// Shows the text cursor and starts its blink over. Dropping the previous blink task stops it.
@@ -353,6 +406,7 @@ impl BrainView {
                 .detach();
             }
             Some(Request::Folder(project)) => Self::pick_project_folder(project, cx),
+            Some(Request::Update) => self.install_update(cx),
             None => {}
         }
         cx.notify();
@@ -442,14 +496,14 @@ impl Render for BrainView {
             .text_size(px(14.))
             .child(topbar::draw(board, &self.scroll, follow, cx))
             .child(body)
-            .child(status_bar(board))
+            .child(status_bar(board, self.updating, cx))
             .children(dialogs::draw(board, &self.scroll, follow, cx))
             .children(menu::draw(board, self.menu_at, cx))
     }
 }
 
-/// The bottom bar: the latest message, or a tip; and where the files are.
-fn status_bar(board: &Board) -> Div {
+/// The bottom bar: the latest message, or a tip; and where the files are, after the button to a newer release.
+fn status_bar(board: &Board, updating: bool, cx: &mut Context<BrainView>) -> Div {
     let left = match board.message() {
         Some(msg) => div().text_color(rgb(theme::YELLOW)).child(msg.to_string()),
         None if matches!(board.mode, Mode::Normal) && board.tab == Tab::Board => widgets::dim(match board.layout {
@@ -477,7 +531,21 @@ fn status_bar(board: &Board) -> Div {
         .whitespace_nowrap()
         .overflow_hidden()
         .child(left)
-        .child(widgets::dim(board.brain(board.home()).store.dir().display().to_string()))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap_3()
+                .children(board.available.as_ref().map(|version| {
+                    if updating {
+                        return div().text_color(rgb(theme::YELLOW)).child(format!("Updating to {version}…"));
+                    }
+                    let update =
+                        action("update", format!("Update to {version}"), Kind::Primary, KeyCode::Char('U'), cx);
+                    div().child(widgets::small(update).h(px(20.)))
+                }))
+                .child(widgets::dim(board.brain(board.home()).store.dir().display().to_string())),
+        )
 }
 
 /// A button that runs the key `code`; its tooltip names the shortcut.

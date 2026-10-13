@@ -175,6 +175,7 @@ impl Board {
             KeyCode::Char('q') => self.quit = true,
             KeyCode::Char('Q') => self.park_and_quit(),
             KeyCode::Char('R') => self.reload_from_disk(),
+            KeyCode::Char('U') => self.ask_update(),
             KeyCode::Char('u') => self.undo(),
             KeyCode::Char('P') => self.open_scopes(),
             KeyCode::Char('I') => self.open_project_info(),

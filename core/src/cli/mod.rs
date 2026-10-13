@@ -6,7 +6,8 @@
 //! - [`hook`]: `kb hook prompt|stop`, which hold an agent to describing an undescribed project first, and
 //!   to commenting on the tasks it started.
 //! - [`completions`]: `kb completions SHELL`, tab completion, and the ids, projects and tags it offers.
-//! - [`update`]: `kb update`, the latest release over this one, through the installer, once no agent is working.
+//! - [`update`]: `kb update` and the app's, the latest release over this one, through the installer, once no
+//!   agent is working.
 
 mod claude;
 mod completions;
@@ -14,7 +15,7 @@ mod entries;
 mod hook;
 mod init;
 mod manage;
-mod update;
+pub mod update;
 
 pub use entries::{AddArgs, EntryArgs, EntryCommand, ProjectChange, ProjectPart, Text};
 pub use init::init;

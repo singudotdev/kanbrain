@@ -112,6 +112,12 @@ It's about 1 MB, so the duplication doesn't matter.
 `.brain/` folders are kept. It never deletes files that kanbrain didn't create.
 See [Uninstalling](getting-started.md#uninstalling).
 
+### Does kanbrain connect to the internet?
+
+Only the kanban app, to see whether a newer release is out: when it opens and once a day, it asks GitHub where the
+latest release is, sending nothing else. Set `KANBRAIN_NO_UPDATE_CHECK=1` to turn it off. `kb update` and the
+app's **Update** download the installer and the release from GitHub. Nothing else does.
+
 ### How do I back up my data?
 
 Copy the data folder, or [keep it in git](integrations.md#git). It's all plain text.

@@ -121,6 +121,13 @@ folder; or run the installer yourself, with the same `--app`. It replaces the bi
 Then it brings the agent instructions of every project you ran `kb init` in up to the new version's
 ([`kb init --all`](cli.md#kb-init---all)), so you don't have to run `init` in each one.
 
+The kanban app checks for a newer release when it opens and once a day, and offers it in the status bar:
+**Update to X.Y.Z** (`U`) does the same as `kb update`, then opens the new version. On Windows it closes first,
+since a running program can't be replaced there, and the installer opens it again.
+
+Neither updates while an agent has a task in doing, in any project, since the agents' instructions, and maybe their
+data, would change mid-session: they say which tasks to wait for. A task an agent left in doing, you can park.
+
 Installed with `cargo install kanbrain`, update the same way, then refresh the projects yourself:
 `cargo install kanbrain && kb init --all`.
 

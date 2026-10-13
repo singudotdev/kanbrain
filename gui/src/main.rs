@@ -9,6 +9,7 @@
 mod state;
 mod text;
 mod ui;
+mod update;
 mod watch;
 
 use kanbrain_core::cli::Program;

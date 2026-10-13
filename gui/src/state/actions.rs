@@ -8,6 +8,7 @@ use crate::text::editor::{LineInput, TextEditor};
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveTime};
 use kanbrain_core::brain::NewEntry;
+use kanbrain_core::cli::update;
 use kanbrain_core::model::{Asked, DecisionState, Kind, Status, Task, parse_tags};
 use kanbrain_core::period::{Period, Unit};
 use kanbrain_core::store::{self, Change};
@@ -437,12 +438,30 @@ impl Board {
         }
     }
 
-    /// Runs a confirmed delete.
+    /// Asks to install the newer release, unless there's none or an agent is working on a task: an update
+    /// rewrites agents' instructions and may migrate their data, which mustn't change mid-session.
+    pub fn ask_update(&mut self) {
+        let Some(version) = &self.available else {
+            self.notify(format!("no newer release than {} found", env!("CARGO_PKG_VERSION")));
+            return;
+        };
+        let version = version.clone();
+        match update::check_no_agent_working(&self.central) {
+            Ok(()) => self.mode = Mode::Confirm(Confirm::Update),
+            Err(e) => self.notify(format!("can't update to {version} yet: {e:#}")),
+        }
+    }
+
+    /// Runs a confirmed delete, or asks the window for the update.
     pub(super) fn confirm(&mut self, confirm: Confirm) {
         let running = |board: &Self, key: Key| board.brain(key.src).running().any(|t| t.id == key.id);
         let stops = match confirm {
             Confirm::Delete(key) => running(self, key).then_some(key.src),
             Confirm::DeleteComment(..) => None,
+            Confirm::Update => {
+                self.request = Some(Request::Update);
+                return;
+            }
         };
         let result = match confirm {
             Confirm::Delete(key) => self
@@ -453,6 +472,8 @@ impl Board {
             Confirm::DeleteComment(key, index) => {
                 self.brain_mut(key.src).delete_comment(key.id, index).map(|()| "comment deleted".into())
             }
+            // Taken above.
+            Confirm::Update => return,
         };
         match result {
             Ok(msg) => self.notify(msg),
