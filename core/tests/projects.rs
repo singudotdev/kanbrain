@@ -26,6 +26,10 @@ fn a_project_can_have_several_repositories() {
         ambiguous.contains("several repositories") && ambiguous.contains("shop/api, shop/web, blog"),
         "{ambiguous}"
     );
+    assert_eq!(find(central.path(), "Shop/WEB").unwrap().dir, web, "in any case");
+    register(central.path(), "Blog", &repo_dir(code.path(), "other")).unwrap();
+    assert_eq!(find(central.path(), "Blog").unwrap().project, "Blog", "the exact one first");
+    assert!(find(central.path(), "BLOG").is_err(), "two alike: neither");
 }
 
 #[test]

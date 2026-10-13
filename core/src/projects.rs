@@ -120,11 +120,17 @@ pub fn load(central: &Path) -> Result<Vec<Repo>> {
         .collect())
 }
 
-/// The repository `label` names (`shop`, or `shop/api` when the project has several); the error
-/// lists the labels there are.
+/// The repository `label` names (`shop`, or `shop/api` when the project has several), in any case when that
+/// names only one; the error lists the labels there are.
 pub fn find(central: &Path, label: &str) -> Result<Repo> {
     let repos = load(central)?;
     if let Some(repo) = repos.iter().find(|r| r.label(&repos) == label) {
+        return Ok(repo.clone());
+    }
+    // Typed as it's said (`acme corp` for `Acme Corp`), when that names only one.
+    let lower = label.to_lowercase();
+    let mut alike = repos.iter().filter(|r| r.label(&repos).to_lowercase() == lower);
+    if let (Some(repo), None) = (alike.next(), alike.next()) {
         return Ok(repo.clone());
     }
     if repos.is_empty() {

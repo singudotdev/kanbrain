@@ -41,7 +41,7 @@ follows within a second.
 A command works on one brain, the first of:
 
 1. the project given with `--project NAME` (`central` for the central brain). A project with several repositories
-   names one as `PROJECT/REPO`, e.g. `shop/shop-web`;
+   names one as `PROJECT/REPO`, e.g. `shop/shop-web`. Case doesn't matter unless two names differ only in it;
 2. the nearest `.brain/` in the current folder or above it, like git finds `.git`;
 3. the central brain: `$KANBRAIN_DIR`, else the platform data folder (see
    [where your data lives](getting-started.md#where-your-data-lives)).
