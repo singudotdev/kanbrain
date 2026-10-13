@@ -106,7 +106,7 @@ podman run --rm -v "$PWD":/src:Z -w /src docker.io/library/rust:1 cargo test
   references with:
 
   ```sh
-  RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items   # also browsable: target/doc/kanbrain_core/, target/doc/kanbrain/, target/doc/kanbrain_gui/
+  RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items   # also browsable: target/doc/kanbrain_core/, target/doc/kb/, target/doc/kanbrain/
   ```
 - **Fixed lists of values are declared once.** Statuses, kinds, report units and groups are declared with the macros
   in `enums.rs`: one line per variant, `Variant => "name"`. The list of all variants (`ALL`), their order
@@ -202,9 +202,9 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
 ├── watch.rs         polls the data folders (names, sizes, times) every second, naming those other programs changed
 ├── state/           what's on screen and every action, without GPUI (tested without a window)
 │   ├── mod.rs       Board: the brains, the scope, the tab and the board's layout (Layout: kanban or list), the selected entry (by Key), the details, search, report view, status message, what the window must do (Request: $EDITOR, the folder dialog, the update), a newer release found; columns and lists
-│   ├── mode.rs      the dialogs and fields that take the keys (Mode): search, form, quick add, editor, confirm, links, project and tag dropdowns, which project a quick-added task goes in or an entry moves to, project info, command palette, adding a project (AddProject, ProjectOption), renaming, moving or removing a project or repository (Manage)
+│   ├── mode.rs      the dialogs and fields that take the keys (Mode): search, form, quick add, editor, confirm, links, project and tag dropdowns, which project a quick-added task goes in or an entry moves to, Manage project, command palette, adding a project (AddProject, ProjectOption), renaming, moving or removing a project or repository (Manage)
 │   ├── actions.rs   status changes and drops, new / edit / quick add (asking which brain when the scope shows several), moving an entry to another brain, the editor's save, deletes, links, undo (recording what each change writes), reload, park & quit, export
-│   ├── manage.rs    renaming, moving and removing projects and repositories from the project's info
+│   ├── manage.rs    renaming, moving and removing projects and repositories from Manage project
 │   ├── input.rs     keys in each dialog; typing, select all, cut, paste, the mouse in text
 │   ├── keys.rs      every key outside dialogs in one table (ACTIONS: key, tabs, when it's offered, palette text, menu label, what it runs), which the keys, the palette and the menu read
 │   ├── menu.rs      the right-click menu: the table's actions for that entry, each one of its keys (MenuPicker)
@@ -268,8 +268,11 @@ every second / before each input ──▶ Watcher::changed ──▶ Board::rel
   sessions, and appends a `StatusChange` to the history only when the status really changes. The `- status:` line in
   the file is the truth; the history is the record of how the task got there.
 - **Modes** (`state::Mode`): `Normal`, `Search`, `Form`, `QuickAdd`, `Edit` (text editor with a `Target`: description,
-  new comment or existing comment), `Confirm`, `Links`, `Scopes` and `Tags` (the dropdowns), `Where` (which brain a quick-added task goes in, or an entry moves to), `Menu` (the right-click menu),
-  `ProjectInfo` and `Palette` (the command palette). `on_key` takes the current mode out, handles the
+  new or existing comment, a decision's reason, a project's description or a repository's notes), `Confirm` (a
+  delete, or the update), `Links`, `Scopes` and `Tags` (the dropdowns), `Where` (which brain a quick-added task goes
+  in, or an entry moves to), `Menu` (the right-click menu), `ProjectInfo` (Manage project), `Palette` (the command
+  palette), `AddProject` (naming a picked folder's project) and `Manage` (renaming, moving or removing from Manage
+  project). A reload points an open one at its brains' new places (`Mode::remap`). `on_key` takes the current mode out, handles the
   key, and each handler puts back the mode to continue in.
 - **A button is its key.** `ui::action(id, label, kind, code, cx)` makes a button that presses its key through
   `BrainView::press`, with the key in its tooltip. So a button can never do something its key wouldn't, and the state
@@ -350,7 +353,7 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | `tags` | no color repeats until the palette is used up, `tags.md` round trip, custom colors |
 | `period`, `export` | period bounds and stepping, report tables |
 | `enums` | generated `ALL` / `position` / `next`, `parse` as the inverse of `as_str` |
-| `state` (gui) | the board driven by keys over a temporary folder: the palette offering only what works now, moving between cards and columns, moving cards, drops, quick add, the form and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, nothing asked once your task stops, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from the project's info, the update offered once a newer release is found and refused while an agent works, the details' buttons acting on the entry from the calendar too |
+| `state` (gui) | the board driven by keys over a temporary folder: the palette offering only what works now, moving between cards and columns, moving cards, drops, quick add, the form and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, nothing asked once your task stops, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from Manage project, the update offered once a newer release is found and refused while an agent works, the details' buttons acting on the entry from the calendar too |
 | `keys` (gui) | no key running two things on one tab; what the menu offers named and described; every key in `docs/keybindings.md` on its tabs |
 | `editor` (gui) | line editing (split/join), unicode, wrapping; one-line cursor editing; selecting, copying and replacing; mouse selection by character, word and line |
 | `markdown` (gui) | inline styles and link ranges, kept line breaks, heading levels, numbered and task lists, nesting, code, quotes, tables, rules |
@@ -371,7 +374,8 @@ described, and sixteen commands run at once losing no change and no id (the brai
 it over HTTP on `127.0.0.1` and install it with `install.sh` / `install.ps1` into a throwaway home, as a user would
 (`KANBRAIN_BASE_URL` points the installer at it). They check that the download's checksum is verified and a wrong
 one refused, that the installed `kb` is this build, that `init --all` brought a registered project's agent section up
-to date, and that uninstalling takes it out. `e2e/install.sh` also installs the kanban app (`kb` standing in for it,
+to date, that uninstalling takes it out, and that `--purge` deletes the central brain's files and kanbrain's locks
+and backups in the cache, leftover temporary files included, and keeps a file kanbrain didn't create. `e2e/install.sh` also installs the kanban app (`kb` standing in for it,
 so GPUI isn't built) and checks its launcher with the logo: the menu entry and icon on Linux, the app bundle on macOS.
 CI runs them on all three systems, after `shellcheck` on the shell
 scripts; locally they need cargo and Python.
@@ -406,7 +410,8 @@ The kanban app's look is checked by running it (`KANBRAIN_DIR=/tmp/t cargo run -
 
 `.github/workflows/ci.yml` runs on every push to `main` and every pull request:
 
-- `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings`
+- `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and the docs with
+  `cargo doc --workspace --no-deps --document-private-items` failing on warnings
 - `cargo deny check`: dependency licenses, sources and security advisories, as `deny.toml` allows them; and the
   third-party notices still generate (`cargo xtask notices`, through cargo-about), with every license accepted
 - the installers end to end on Linux, macOS and Windows (`e2e/install.sh`, `e2e/install.ps1`), after `shellcheck`
@@ -427,8 +432,8 @@ The kanban app's look is checked by running it (`KANBRAIN_DIR=/tmp/t cargo run -
    breaking change's migration) and its section in `CHANGELOG.md`, and commit them. `core/build.rs` stops a version
    without them from compiling in the repository.
 4. Update `version` under `[workspace.package]` in `Cargo.toml`, and `kanbrain-core`'s `version` under
-   `[workspace.dependencies]` to the same, run `cargo build` so `Cargo.lock` follows, and commit it on its own. All
-   three crates share it.
+   `[workspace.dependencies]` to the same, run `cargo build` so `Cargo.lock` follows, and commit it on its own. Every
+   crate of the workspace shares it.
 5. Create a signed, annotated tag and push it:
 
    ```sh
@@ -514,7 +519,9 @@ Lint the shell installer with `shellcheck install.sh` (it's kept clean).
 
 The purge logic in both scripts must stay in sync with what the app writes in the central brain: entry files named
 `NNNN-slug.md` (`store::Store::save`), `tags.md`, `projects.md` and `projects/*.md` (`projects`), `reports/*.md`
-(`Brain::write_report`) and `.NNNN-slug.md.PID-N.tmp` temp files (`store::write_file`). Both find the central brain
+(`Brain::write_report`), `last-id` and `format`, and the temporary files `store::write_file` leaves after a crash
+(`.NAME.PID-N.tmp`); in the cache folder, `locks/` and `backups/` (`store::cache_dir_of`, mirrored by
+`cache_dir` in `install.sh` and `$cache` in `install.ps1`). Both find the central brain
 with `kb --project central path`, never plain `path`, which inside a project names its `.brain/`. If you add
 a new kind of file to the data folder, add it to `owned_files` in `install.sh` and to the matching filter in
 `install.ps1`.
