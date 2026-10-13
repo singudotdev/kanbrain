@@ -72,6 +72,9 @@ fn window_icon() -> Option<std::sync::Arc<image::RgbaImage>> {
 /// How often the window redraws without input, so clocks tick and messages expire.
 const TICK: Duration = Duration::from_millis(500);
 
+/// Ticks between redraws with nothing running and no message: a minute, as cards give their ages.
+const IDLE_TICKS: u32 = 120;
+
 /// Width of the details drawer.
 const DRAWER_WIDTH: f32 = 420.;
 
@@ -195,14 +198,26 @@ struct Scrolls {
 }
 
 impl BrainView {
-    /// The view over `board`, focused so keys work right away, redrawing every `TICK`.
+    /// The view over `board`, focused so keys work right away, redrawing every `TICK` while something shown changes
+    /// with time.
     fn new(board: Board, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         let tick = cx.spawn(async move |this, cx| {
+            let (mut ticks, mut said) = (0_u32, false);
             loop {
                 cx.background_executor().timer(TICK).await;
-                if this.update(cx, |_, cx| cx.notify()).is_err() {
+                ticks = ticks.wrapping_add(1);
+                let ticked = this.update(cx, |view, cx| {
+                    // Redrawn when something shown changes with time: a clock's seconds, a message going, else the
+                    // ages on cards, by the minute. Idle, drawing twice a second took several percent of a core.
+                    let says = view.board.message().is_some();
+                    if says || said || !view.board.running().is_empty() || ticks.is_multiple_of(IDLE_TICKS) {
+                        cx.notify();
+                    }
+                    said = says;
+                });
+                if ticked.is_err() {
                     break;
                 }
             }
@@ -290,10 +305,13 @@ impl BrainView {
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(caret::BLINK).await;
-                let blinked = this.update(cx, |_, cx| {
-                    let shown = cx.global::<caret::Blink>().0;
-                    cx.set_global(caret::Blink(!shown));
-                    cx.notify();
+                // Redrawn only with a cursor to blink: idle, the window would otherwise draw twice a second for nothing.
+                let blinked = this.update(cx, |view, cx| {
+                    if view.board.is_typing() {
+                        let shown = cx.global::<caret::Blink>().0;
+                        cx.set_global(caret::Blink(!shown));
+                        cx.notify();
+                    }
                 });
                 if blinked.is_err() {
                     break;

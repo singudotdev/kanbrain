@@ -315,6 +315,11 @@ impl Board {
         }
     }
 
+    /// Whether a field or the editor is being typed into, and so shows a blinking cursor.
+    pub fn is_typing(&mut self) -> bool {
+        self.typing().is_some()
+    }
+
     /// Where typed text goes now, if anywhere.
     fn typing(&mut self) -> Option<Typing<'_>> {
         match &mut self.mode {
