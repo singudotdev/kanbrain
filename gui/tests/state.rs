@@ -495,6 +495,24 @@ fn only_the_brains_that_changed_are_read_again() {
 }
 
 #[test]
+fn manage_project_acts_by_key_on_the_highlighted_repository_or_the_project() {
+    let (central, _code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    board.set_scope(Scope::Project("shop".into()));
+    press(&mut board, KeyCode::Char('I'));
+    let Mode::ManageProject(first) = board.mode else { panic!("I opens it") };
+    press(&mut board, KeyCode::Down);
+    let Mode::ManageProject(second) = board.mode else { panic!("arrows keep it open") };
+    assert_ne!(first, second, "the next repository");
+    press(&mut board, KeyCode::Char('r'));
+    assert!(matches!(&board.mode, Mode::Manage(Manage::RenameRepo { src, .. }) if *src == second));
+    press(&mut board, KeyCode::Esc);
+    assert!(matches!(board.mode, Mode::ManageProject(_)), "back to it");
+    press(&mut board, KeyCode::Char('X'));
+    assert!(matches!(board.mode, Mode::Manage(Manage::Remove { whole: true, .. })), "the whole project");
+}
+
+#[test]
 fn n_edits_the_role_of_the_selected_cards_repository() {
     let (central, _code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();

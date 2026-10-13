@@ -75,11 +75,7 @@ impl Board {
                 let count = self.tag_candidates(&picker).len();
                 self.pick(picker, key, count, |p| p, Mode::Tags, Self::choose_tag);
             }
-            Mode::ManageProject(src) => {
-                if !matches!(key.code, KeyCode::Esc | KeyCode::Enter | KeyCode::Char('I' | 'q')) {
-                    self.mode = Mode::ManageProject(src);
-                }
-            }
+            Mode::ManageProject(src) => self.key_manage_project(src, key),
             Mode::Palette(picker) => self.key_palette(picker, key),
             Mode::AddProject(add) => self.key_add_project(add, key),
             Mode::Manage(manage) => self.key_manage(manage, key),

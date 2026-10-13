@@ -85,6 +85,9 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | text editor (descriptions, comments, answers, a decision's reason, a project's description and notes) | `enter` new line; `esc` or `ctrl+enter` **save** (the button says what: **Answer**, **Add comment**, **Accept**, **Reject**, **Save**); **Discard changes** (`ctrl+d`) throws the edit away; with nothing typed, `esc` or **Close** closes it |
 | link picker | type to search; `↑` `↓` move; `enter` links or unlinks; `esc` closes |
 | "which project?" (quick add, or move) | type to filter; `↑` `↓` move; `enter` opens the quick-add field there, or moves the entry; `esc` closes it |
+| Manage project (`I`) | `↑` `↓` highlight a repository; `r` renames it, `M` moves it to another project, `x` removes it, `N` edits its role; `R` renames the project, `E` edits its description, `A` adds a repository, `X` removes the project; `esc`, `enter`, `I` or `q` close it |
+| rename and move (from Manage project) | type the name, or to search projects; `↑` `↓` move; `enter` applies; `esc` goes back |
+| remove (from Manage project) | `y` or `enter` unlinks, keeping the tasks; `d` unlinks and deletes them; `n` or `esc` goes back |
 | confirmation (delete, update) | `y` or `enter` goes ahead; `n` or `esc` cancels |
 | right-click menu | `↑` `↓` move; `enter` or an item's own key chooses it; `esc` or a click outside closes it |
 | command palette | type to filter by what it does or its key; `↑` `↓` move; `enter` runs it; `esc` closes |

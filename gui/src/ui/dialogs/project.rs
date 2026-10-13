@@ -6,7 +6,7 @@ use crate::state::{Board, COLUMNS, Target};
 use crate::text::event::KeyCode;
 use crate::ui::markdown;
 use crate::ui::theme::{self};
-use crate::ui::widgets::{Kind, button, dim, dim_small, section, small};
+use crate::ui::widgets::{Kind, button, dim, dim_small, section, small, tooltip};
 use crate::ui::{BrainView, action};
 use gpui::Stateful;
 use gpui::{ClickEvent, Context, Div, ElementId, div, prelude::*, px, rgb};
@@ -17,13 +17,18 @@ use kanbrain_core::period::{Period, Unit};
 /// it is, its role, its tasks per status and what's running; and the time tracked this week.
 pub(super) fn draw(board: &Board, src: usize, cx: &mut Context<BrainView>) -> Option<Div> {
     let project = board.brain(src).project.as_ref()?;
-    let edit = |id: String, target: Target, cx: &mut Context<BrainView>| {
-        small(button(ElementId::Name(id.into()), "Edit", Kind::Ghost))
-            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.open_editor(target))))
-    };
-    // Rename, Move and Remove on each repository (`at`), and on the project.
-    let manage = |id: &str, at: usize, label: &'static str, act: fn(&mut Board, usize), cx: &mut Context<BrainView>| {
+    // Rename, Move, Remove and Edit on each repository (`at`), and on the project. Their keys act on the highlighted
+    // repository, `src`.
+    let manage = |id: &str,
+                  at: usize,
+                  label: &'static str,
+                  key: char,
+                  act: fn(&mut Board, usize),
+                  cx: &mut Context<BrainView>| {
+        let tip =
+            if at == src { format!("Shortcut: {key}") } else { format!("Shortcut: {key}, once ↑ ↓ highlight it") };
         small(button(ElementId::Name(format!("{id} {at}").into()), label, Kind::Ghost))
+            .tooltip(tooltip(tip))
             .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| act(b, at))))
     };
     let text = |id: String, text: &str, empty: &'static str| {
@@ -59,14 +64,14 @@ pub(super) fn draw(board: &Board, src: usize, cx: &mut Context<BrainView>) -> Op
                 .p_2()
                 .rounded_md()
                 .border_1()
-                .border_color(rgb(theme::BORDER))
+                .border_color(rgb(if repo == src && repos.len() > 1 { theme::ACCENT } else { theme::BORDER }))
                 .child(section(
                     info.map_or_else(String::new, |i| i.repo.clone()),
                     [
-                        manage("rename-repo", repo, "Rename…", Board::ask_rename_repo, cx),
-                        manage("move-repo", repo, "Move…", Board::ask_move_repo, cx),
-                        manage("remove-repo", repo, "Remove…", |b, at| b.ask_remove(at, false), cx),
-                        edit(format!("edit-notes {repo}"), Target::RepoNotes(repo), cx),
+                        manage("rename-repo", repo, "Rename…", 'r', Board::ask_rename_repo, cx),
+                        manage("move-repo", repo, "Move…", 'M', Board::ask_move_repo, cx),
+                        manage("remove-repo", repo, "Remove…", 'x', |b, at| b.ask_remove(at, false), cx),
+                        manage("edit-notes", repo, "Edit", 'N', |b, at| b.open_editor(Target::RepoNotes(at)), cx),
                     ],
                 ))
                 .child(dim_small(root))
@@ -89,8 +94,8 @@ pub(super) fn draw(board: &Board, src: usize, cx: &mut Context<BrainView>) -> Op
         .child(section(
             "About",
             [
-                manage("rename-project", src, "Rename…", Board::ask_rename_project, cx),
-                edit("edit-project".into(), Target::Project(src), cx),
+                manage("rename-project", src, "Rename…", 'R', Board::ask_rename_project, cx),
+                manage("edit-project", src, "Edit", 'E', |b, at| b.open_editor(Target::Project(at)), cx),
             ],
         ))
         .child(text(
@@ -101,11 +106,24 @@ pub(super) fn draw(board: &Board, src: usize, cx: &mut Context<BrainView>) -> Op
         .child(dim_small(format!("{} tracked this week across its repositories", fmt_dur(week))))
         .child(section(
             format!("Repositories ({})", repos.len()),
-            [manage("add-repo", src, "+ Add repository", Board::add_repo_to, cx)],
+            [manage("add-repo", src, "+ Add repository", 'A', Board::add_repo_to, cx)],
         ))
-        .children(repo_blocks);
+        .children(repo_blocks)
+        .child(keys_hint(repos.len() > 1));
     let remove: Stateful<Div> = button("remove-project", "Remove project…", Kind::Danger)
+        .tooltip(tooltip("Shortcut: X"))
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.ask_remove(src, true))));
     let buttons = vec![remove, action("close-manage-project", "Close", Kind::Primary, KeyCode::Esc, cx)];
     Some(dialog(format!("Manage project {}", project.name), content, buttons).w(px(WIDE_WIDTH)))
+}
+
+/// The dialog's keys, under its repositories: with `several`, the arrows choose which one they act on.
+fn keys_hint(several: bool) -> Div {
+    dim_small(if several {
+        "↑ ↓ highlight a repository for r rename, M move, x remove and N its role; R renames the project, E describes \
+         it, A adds a repository and X removes it."
+    } else {
+        "r renames the repository, M moves it, x removes it and N edits its role; R renames the project, E describes \
+         it, A adds a repository and X removes it."
+    })
 }
