@@ -54,7 +54,12 @@ fn errors_go_to_stderr_with_a_failing_exit_code() {
     assert!(String::from_utf8_lossy(&missing.stderr).contains("no entry #9"));
     let unknown = run(&["frobnicate"]);
     let stderr = String::from_utf8_lossy(&unknown.stderr);
-    assert!(!unknown.status.success() && stderr.contains("unknown command `frobnicate`") && stderr.contains("usage:"));
+    assert!(
+        !unknown.status.success() && stderr.contains("unknown command `frobnicate`") && stderr.contains("kb --help")
+    );
+    let misused = String::from_utf8(run(&["wait", "6", "--timeout", "x"]).stderr).unwrap();
+    assert!(misused.contains("usage:\n  kb wait ID [--timeout MINUTES]\n"), "{misused}");
+    assert!(!misused.contains("kb add") && misused.lines().count() < 12, "only the command's usage: {misused}");
     assert!(ok(&run(&["--version"])).starts_with("kb "));
     assert_eq!(ok(&run(&["list"])), "nothing to list\n", "said, not left blank");
 }
@@ -67,7 +72,11 @@ fn project_reaches_a_registered_brain_from_any_folder() {
     ok(&kb(repo.path(), central.path(), &["add", "In", "the", "repo"], ""));
     let from_elsewhere = ok(&kb(elsewhere.path(), central.path(), &["list", "--project", "demo"], ""));
     assert!(from_elsewhere.contains("- #1 In the repo"), "{from_elsewhere}");
-    assert_eq!(ok(&kb(elsewhere.path(), central.path(), &["list"], "")), "nothing to list\n", "outside it, the central brain");
+    assert_eq!(
+        ok(&kb(elsewhere.path(), central.path(), &["list"], "")),
+        "nothing to list\n",
+        "outside it, the central brain"
+    );
     let ids = ok(&kb(elsewhere.path(), central.path(), &["complete", "ids", "--project", "demo"], ""));
     assert_eq!(ids, "1\tIn the repo\n", "completion reads it too");
 

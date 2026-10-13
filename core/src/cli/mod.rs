@@ -42,12 +42,42 @@ pub struct Program {
 
 impl Program {
     /// Parses the arguments after the program name and runs the command.
-    /// A command-line error comes with the usage text.
+    /// A command-line error comes with the usage of the command it's about.
     pub fn main(self, args: impl IntoIterator<Item = String>) -> Result<()> {
-        let parsed =
-            take_project(args.into_iter().collect()).and_then(|(project, args)| Ok((project, Command::parse(args)?)));
-        let (project, command) = parsed.map_err(|e| anyhow!("{e:#}\n\n{}", usage(self)))?;
+        let (project, args) = take_project(args.into_iter().collect()).map_err(|e| self.misused(&e, None))?;
+        let name = args.first().cloned();
+        let command = Command::parse(args).map_err(|e| self.misused(&e, name.as_deref()))?;
         command.run(self, project.as_deref())
+    }
+
+    /// `error`, then the usage lines of `command` (when it's one), and where the rest is: the whole usage would bury
+    /// the one line that matters.
+    fn misused(self, error: &anyhow::Error, command: Option<&str>) -> anyhow::Error {
+        let usage = usage(self);
+        let header = format!("  {} ", self.name);
+        let mut lines = Vec::new();
+        let (mut inside, mut bare) = (false, false);
+        for line in usage.lines() {
+            if let Some(rest) = line.strip_prefix(&header) {
+                let names = rest.split_whitespace().next().unwrap_or_default();
+                // `accept` shares the description under `reject`'s line: a matched line with none yet takes the next.
+                inside = command.is_some_and(|c| names.split('|').any(|n| n == c)) || bare;
+                bare = inside && !bare;
+            } else if !(inside && line.starts_with("   ")) {
+                inside = false;
+            } else {
+                bare = false;
+            }
+            if inside {
+                lines.push(line);
+            }
+        }
+        let help = format!("`{} --help` lists every command", self.name);
+        if lines.is_empty() {
+            anyhow!("{error:#}\n\n{help}")
+        } else {
+            anyhow!("{error:#}\n\nusage:\n{}\n\n{help}", lines.join("\n"))
+        }
     }
 }
 
