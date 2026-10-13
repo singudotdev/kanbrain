@@ -248,7 +248,7 @@ impl BrainView {
                 Ok(()) => cx.quit(),
                 Err(e) => {
                     this.updating = false;
-                    this.board.notify(format!("{e:#}"));
+                    this.board.notify_error(&e);
                     cx.notify();
                 }
             })
@@ -377,7 +377,7 @@ impl BrainView {
             return false;
         }
         if let Err(e) = self.board.reload_changed(&changed) {
-            self.board.notify(format!("{e:#}"));
+            self.board.notify_error(&e);
         }
         // Loading may have written files itself, when it fixed several tasks left running, and may
         // have found projects added or gone.
@@ -402,7 +402,7 @@ impl BrainView {
                     let edited = edit.await;
                     this.update(cx, |this, cx| {
                         if let Err(e) = edited.and_then(|()| this.board.reload()) {
-                            this.board.notify(format!("{e:#}"));
+                            this.board.notify_error(&e);
                         }
                         cx.notify();
                     })
@@ -435,7 +435,7 @@ impl BrainView {
                             this.board.name_project(dir, project);
                         }
                     }
-                    Ok(Err(e)) => this.board.notify(format!("{e:#}")),
+                    Ok(Err(e)) => this.board.notify_error(&e),
                     // Cancelled, or the window closed meanwhile.
                     Ok(Ok(None)) | Err(_) => {}
                 }

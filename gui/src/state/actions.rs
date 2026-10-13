@@ -17,7 +17,7 @@ impl Board {
     /// Shows `result`'s error in the status bar, if it failed.
     pub(super) fn report_error(&mut self, result: Result<()>) {
         if let Err(e) = result {
-            self.notify(format!("{e:#}"));
+            self.notify_error(&e);
         }
     }
 
@@ -30,7 +30,7 @@ impl Board {
                 self.notify(format!("#{} {title} → {}", key.id, status.as_str()));
             }
             Ok(false) => self.notify(format!("#{} is already {}", key.id, status.as_str())),
-            Err(e) => self.notify(format!("{e:#}")),
+            Err(e) => self.notify_error(&e),
         }
         self.keep_selection();
     }
@@ -124,7 +124,7 @@ impl Board {
         };
         let id = match moved {
             Ok(id) => id,
-            Err(e) => return self.notify(format!("{e:#}")),
+            Err(e) => return self.notify_error(&e),
         };
         let result = self.drop_links_from_other_repos(key);
         self.report_error(result);
@@ -261,7 +261,7 @@ impl Board {
         let new = NewEntry { kind, title, tags, links, repo_links, ..NewEntry::default() };
         let id = match self.brain_mut(src).add(new) {
             Ok(id) => id,
-            Err(e) => return self.notify(format!("{e:#}")),
+            Err(e) => return self.notify_error(&e),
         };
         let key = Key::new(src, id);
         if kind == Kind::Task && status != Status::Todo {
@@ -351,7 +351,7 @@ impl Board {
         match saved {
             Ok((true, what)) => self.notify(format!("{what} (headings were made smaller)")),
             Ok((false, what)) => self.notify(what),
-            Err(e) => self.notify(format!("{e:#}")),
+            Err(e) => self.notify_error(&e),
         }
     }
 
@@ -386,7 +386,7 @@ impl Board {
         match self.brain_mut(key.src).resolve(key.id, DecisionState::Accepted, "") {
             Ok(true) => self.notify(format!("#{} accepted", key.id)),
             Ok(false) => self.notify(format!("#{} is already accepted", key.id)),
-            Err(e) => self.notify(format!("{e:#}")),
+            Err(e) => self.notify_error(&e),
         }
     }
 
@@ -495,7 +495,7 @@ impl Board {
         };
         match result {
             Ok(msg) => self.notify(msg),
-            Err(e) => self.notify(format!("{e:#}")),
+            Err(e) => self.notify_error(&e),
         }
         self.keep_selection();
     }
@@ -519,7 +519,7 @@ impl Board {
         match self.toggle_link_between(key, other) {
             Ok(true) => self.notify(format!("linked {name}")),
             Ok(false) => self.notify(format!("unlinked {name}")),
-            Err(e) => self.notify(format!("{e:#}")),
+            Err(e) => self.notify_error(&e),
         }
     }
 
@@ -577,7 +577,7 @@ impl Board {
                     changes.into_iter().map(|c| Change { before: c.after, after: c.before, ..c }).collect();
             }
             Err(e) => {
-                self.notify(format!("{e:#}"));
+                self.notify_error(&e);
                 self.last_change = changes;
             }
         }
@@ -608,7 +608,7 @@ impl Board {
     pub fn export_report(&mut self) {
         match self.write_report() {
             Ok(path) => self.notify(format!("saved {}", path.display())),
-            Err(e) => self.notify(format!("{e:#}")),
+            Err(e) => self.notify_error(&e),
         }
     }
 }

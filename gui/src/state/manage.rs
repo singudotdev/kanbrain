@@ -139,7 +139,7 @@ impl Board {
                 true
             }
             Err(e) => {
-                self.notify(format!("{e:#}"));
+                self.notify_error(&e);
                 false
             }
         }

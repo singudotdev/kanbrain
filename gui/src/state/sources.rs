@@ -235,7 +235,7 @@ impl Board {
         let name = option.name().to_string();
         let dir = add.dir.clone();
         if let Err(e) = cli::init(&dir, Some(&name), None, &self.central) {
-            self.notify(format!("{e:#}"));
+            self.notify_error(&e);
             return;
         }
         self.mode = Mode::Normal;
@@ -481,7 +481,7 @@ impl Board {
         for src in 0..self.sources.len() {
             match self.sources[src].brain.store.lock() {
                 Ok(lock) => locks.push(lock),
-                Err(e) => self.notify(format!("{e:#}")),
+                Err(e) => self.notify_error(&e),
             }
         }
         locks

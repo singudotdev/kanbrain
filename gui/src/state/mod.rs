@@ -215,6 +215,11 @@ impl Board {
         self.message = Some((msg.into(), Instant::now()));
     }
 
+    /// Shows what went wrong in the status bar, with its causes.
+    pub fn notify_error(&mut self, e: &anyhow::Error) {
+        self.notify(format!("{e:#}"));
+    }
+
     /// The status bar message, while it hasn't expired.
     pub fn message(&self) -> Option<&str> {
         self.message.as_ref().filter(|(_, at)| at.elapsed() < MESSAGE_TTL).map(|(msg, _)| msg.as_str())
