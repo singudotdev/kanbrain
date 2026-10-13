@@ -181,6 +181,7 @@ core/src/            kanbrain-core: shared by both programs
 ├── enums.rs         `named_enum!` / `ordered_enum!`: enums whose variants are listed in one place
 ├── platform.rs      OS specifics: the per-user (not root) check
 ├── projects.rs      projects of one or more repositories: the central brain's projects.md, the shared cards (projects/NAME.md), each repository's project.md
+├── migrate.rs       data format versions (FORMAT, the `format` file) and the migrations between them, with a backup first
 ├── store.rs         the data folder: entry files, tags.md, last-id, reports/; its write lock (in the user's cache folder); finding a project's .brain/; recording the files a change writes, for undo
 └── tags.rs          tag colors: palette, no-repeat assignment, tags.md format
 
@@ -297,7 +298,16 @@ every second / before each input ──▶ Watcher::changed ──▶ Board::rel
 extend the `round_trip` test. Unknown `- key:` lines, `- links:` words and `##` sections are kept in `Task::unknown` and written back, so a version
 that doesn't know a new field doesn't drop it when it saves the entry.
 kanbrain has been released, so the format stays backward compatible: data folders written by any released
-version must keep loading.
+version must keep loading. A change an older version would misread (a field whose absence means something else, a
+file moved or renamed, a meaning changed) is a new data format:
+
+1. add the step to `MIGRATIONS` in `core/src/migrate.rs`, a function that brings a brain from the previous format,
+   and bump `FORMAT` (a test checks every format after the first has its step);
+2. add a test with a brain in the old format, migrated to what the new one expects;
+3. say it in the version's release notes.
+
+Brains migrate when opened to be changed and on `kb update`; one in a newer format than the running version is
+refused, so an older `kb` never rewrites what it doesn't know.
 
 ## Tests
 
@@ -324,6 +334,7 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | `api`, `cli` | agent operations and their refusals, links to other repositories, compact text and JSON, `context`'s caps, command parsing, `--project`, `list` output, usage, completion scripts and candidates, which apps `update` installs |
 | `cli::init` | the agent section written, updated in place and left alone when unclosed; `init --all` updating every registered repository that has it, and no other; registering repositories and joining them into a project; `deinit` taking it all back but `.brain/`; the Claude Code hooks added once beside other settings (one from before `kb` replaced), and removed leaving them as they were; `kb hook` asking with every prompt and holding the turn once while the project or this repository's role isn't described, and silent once they are |
 | `projects` | the registry and its labels, cards, moving a repository between projects, refusing two repositories with one name |
+| `migrate` | every format after the first having its step; an old brain backed up, then migrated step by step and only once, resuming from where it is; a brain in a newer format refused, read or written |
 | `cli::manage` | two folders named alike getting distinct repository names (`--repo` refused when taken); renaming a repository rewriting its siblings' links; renaming a project with its card and repositories; moving a repository dropping its links to the old project; removing keeping or deleting the tasks, and a whole project |
 | `model` | file round trip, what a newer version wrote kept, hand-typed history, missing id, status changes recorded once, search matching, tags, slugs, heading rules, timestamps, ages, overlapping time counted once |
 | `store` | renaming on title change, unreadable files become warnings, `tags.md` isn't a task, whole-file writes |

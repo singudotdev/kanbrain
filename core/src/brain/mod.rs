@@ -55,8 +55,10 @@ impl Brain {
         Self::open_with(store, None)
     }
 
-    /// Loads every entry and the settings, knowing the central brain if `central` is given.
+    /// Loads every entry and the settings, knowing the central brain if `central` is given. A brain in an older
+    /// data format is migrated first, as it's opened to be changed (see [`crate::migrate`]).
     fn open_with(store: Store, central: Option<PathBuf>) -> Result<Self> {
+        crate::migrate::migrate(&store)?;
         let mut brain = Self {
             store,
             tasks: Vec::new(),

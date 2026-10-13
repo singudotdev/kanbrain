@@ -9,6 +9,7 @@ use crate::text::event::KeyEvent;
 use anyhow::Result;
 use kanbrain_core::brain::{Brain, Calendar, CalendarView, Report, ReportView};
 use kanbrain_core::cli;
+use kanbrain_core::migrate::TooNew;
 use kanbrain_core::model::{RepoLink, Task};
 use kanbrain_core::projects::{self, Repo};
 use kanbrain_core::store::{BrainLock, PROJECT_DIR, Store};
@@ -55,16 +56,19 @@ pub enum Scope {
     Repo(usize),
 }
 
-/// The central brain, then every repository [`repos`] lists.
+/// The central brain, then every repository [`repos`] lists. A repository a newer kanbrain wrote is left out, said
+/// among the central brain's warnings: the rest of the board still opens.
 pub(super) fn load(central: &Path, also: Option<&Path>) -> Result<Vec<Source>> {
     let repos = repos(central, also)?;
     let mut sources = vec![Source { brain: Brain::open_in(Store::at(central)?, central)?, label: None, project: None }];
     for repo in repos.iter().filter(|r| r.dir.is_dir()) {
-        sources.push(Source {
-            brain: Brain::open_in(Store::at(&repo.dir)?, central)?,
-            label: Some(repo.label(&repos)),
-            project: Some(repo.project.clone()),
-        });
+        match Brain::open_in(Store::at(&repo.dir)?, central) {
+            Ok(brain) => {
+                sources.push(Source { brain, label: Some(repo.label(&repos)), project: Some(repo.project.clone()) });
+            }
+            Err(e) if e.downcast_ref::<TooNew>().is_some() => sources[0].brain.warnings.push(format!("{e:#}")),
+            Err(e) => return Err(e),
+        }
     }
     Ok(sources)
 }

@@ -1076,3 +1076,15 @@ fn projects_and_repositories_are_managed_from_the_projects_info() {
     assert!(!code.path().join("api/.brain").exists(), "its tasks deleted too");
     assert!(matches!(board.mode, Mode::Normal));
 }
+
+#[test]
+fn a_repository_a_newer_kanbrain_wrote_is_left_out_and_said() {
+    let (central, code) = projects();
+    let newer = kanbrain_core::migrate::FORMAT + 1;
+    std::fs::write(code.path().join("web/.brain").join(kanbrain_core::migrate::FORMAT_FILE), format!("{newer}\n"))
+        .unwrap();
+    let board = Board::open(central.path(), None).unwrap();
+    let labels: Vec<_> = board.sources.iter().filter_map(|s| s.label.clone()).collect();
+    assert_eq!(labels, ["shop/api", "blog"], "the rest still opens");
+    assert!(board.message().unwrap().contains("written by a newer kanbrain"), "{:?}", board.message());
+}

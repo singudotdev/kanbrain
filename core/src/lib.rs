@@ -13,6 +13,7 @@ pub mod brain;
 pub mod cli;
 mod enums;
 pub mod export;
+pub mod migrate;
 pub mod model;
 pub mod period;
 pub mod platform;

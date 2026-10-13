@@ -131,11 +131,12 @@ data_dir() {
     fi
 }
 
-# Files kanbrain creates in the central brain: NNNN-slug.md entries, tags.md, last-id, the project registry
+# Files kanbrain creates in the central brain: NNNN-slug.md entries, tags.md, last-id, format, the project registry
 # (projects.md) and cards (projects/*.md), exported reports, older versions' config.md, leftover temp files.
 owned_files() {
     find "$1" -maxdepth 1 -type f \( -name '[0-9][0-9][0-9][0-9]*-*.md' -o -name 'tags.md' -o -name 'projects.md' \
-        -o -name 'last-id' -o -name 'config.md' -o -name '.*.md.tmp' -o -name '.last-id.tmp' \)
+        -o -name 'last-id' -o -name 'format' -o -name 'config.md' -o -name '.*.md.tmp' -o -name '.last-id.tmp' \
+        -o -name '.format.tmp' \)
     for sub in projects reports; do
         if [ -d "$1/$sub" ]; then find "$1/$sub" -maxdepth 1 -type f -name '*.md'; fi
     done

@@ -3,6 +3,14 @@
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Data format versions and migrations: each brain records its format in a `format` file. A version that changes it
+  migrates older brains when they're opened to be changed and on `kb update`, after copying them to the cache
+  folder; a brain written by a newer version is refused, read or written, rather than misread.
+
 ## [0.3.1] - 2026-10-13
 
 ### Fixed

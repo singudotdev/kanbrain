@@ -116,10 +116,10 @@ function Install-Kanbrain {
             $unsafe = @([IO.Path]::GetPathRoot($full).TrimEnd('\', '/'), "$env:USERPROFILE".TrimEnd('\'), "$HOME".TrimEnd('\', '/'))
             if (-not $full -or $unsafe -contains $full) { throw "kanbrain: refusing to delete data in '$data'" }
             if (Test-Path $data -PathType Container) {
-                # Only files kanbrain creates: NNNN-slug.md entries, tags.md, last-id, the project registry (projects.md)
+                # Only files kanbrain creates: NNNN-slug.md entries, tags.md, last-id, format, the project registry (projects.md)
                 # and cards (projects\*.md), exported reports, older versions' config.md, leftover temp files.
                 $owned = @(Get-ChildItem $data -File -Force | Where-Object {
-                    $_.Name -match '^\d{4,}-.*\.md$' -or $_.Name -in 'tags.md', 'projects.md', 'last-id', 'config.md', '.last-id.tmp' -or
+                    $_.Name -match '^\d{4,}-.*\.md$' -or $_.Name -in 'tags.md', 'projects.md', 'last-id', 'format', 'config.md', '.last-id.tmp', '.format.tmp' -or
                     $_.Name -match '^\..*\.md\.tmp$' })
                 $entries = @($owned | Where-Object { $_.Name -match '^\d{4,}-.*\.md$' }).Count
                 foreach ($sub in 'projects', 'reports') {

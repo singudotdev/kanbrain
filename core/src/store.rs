@@ -193,6 +193,8 @@ impl Store {
 
     /// Returns the parsed tasks plus a warning for every file that could not be read.
     pub fn load(&self) -> Result<(Vec<Task>, Vec<String>)> {
+        // Every read goes through here: a brain a newer kanbrain wrote is refused before anything misreads it.
+        crate::migrate::check(&self.dir)?;
         let mut tasks = Vec::new();
         let mut warnings = Vec::new();
         let entries = fs::read_dir(&self.dir).with_context(|| format!("reading {}", self.dir.display()))?;
@@ -298,10 +300,15 @@ impl Drop for BrainLock {
     }
 }
 
-/// Where the lock of the brain in `dir` is: `<cache>/kanbrain/locks/<hash>.lock`, the hash of the folder's
-/// canonical path. FNV-1a rather than std's hasher, whose output may change between Rust versions: two `kb`
-/// builds must agree on the file to exclude each other.
+/// Where the lock of the brain in `dir` is: `<cache>/kanbrain/locks/<key>.lock` (see [`cache_dir_of`]).
 fn lock_path(dir: &Path) -> Result<PathBuf> {
+    Ok(cache_dir_of(dir, "locks")?.with_extension("lock"))
+}
+
+/// `<cache>/kanbrain/<kind>/<key>`, where the user's cache keeps something about the brain in `dir` (its lock, its
+/// backups) out of `.brain/`, which is often committed. The key is FNV-1a of the folder's canonical path rather
+/// than std's hasher, whose output may change between Rust versions: two `kb` builds must agree on it.
+pub(crate) fn cache_dir_of(dir: &Path, kind: &str) -> Result<PathBuf> {
     let dir = dir.canonicalize().with_context(|| format!("reading {}", dir.display()))?;
     let hash = dir
         .as_os_str()
@@ -309,7 +316,7 @@ fn lock_path(dir: &Path) -> Result<PathBuf> {
         .iter()
         .fold(0xcbf2_9ce4_8422_2325_u64, |hash, &byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3));
     let cache = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
-    Ok(cache.join("kanbrain").join("locks").join(format!("{hash:016x}.lock")))
+    Ok(cache.join("kanbrain").join(kind).join(format!("{hash:016x}")))
 }
 
 /// Writes `text` to `path`, creating its folder if missing. It goes to a hidden temporary file beside it

@@ -9,6 +9,7 @@ per project repository. You can read them, edit them, grep them and version them
 ├── 0002-fix-login-500.md
 ├── tags.md                        ← tag colors
 ├── last-id                        ← the highest id given so far
+├── format                         ← the data format's version (only once a migration ran)
 ├── projects.md                    ← the registered repositories, by project
 ├── projects/
 │   └── shop.md                    ← project shop's card, shared by its repositories
@@ -174,6 +175,26 @@ Other `.md` files in the folder that aren't tasks (such as a README) are reporte
 `last-id` holds the highest id given so far, so ids aren't reused; without it (a folder from an older version),
 the highest id among the entries is used.
 `config.md`, which older versions wrote to switch time tracking on or off, is ignored: tracking is always on.
+
+## Format versions and migrations
+
+Every brain (the central one, each repository's `.brain/`) is in a numbered data format, written in its `format`
+file; a brain without one is format 1. A kanbrain version that changes the format brings older brains to it with a
+**migration**:
+
+- it runs when a brain is opened to be changed (a `kb` command, the kanban app), and for every registered brain on
+  `kb update` (through `kb init --all`), under the brain's write lock;
+- before it, the whole brain is copied to your cache folder, `<cache>/kanbrain/backups/<key>/<time>-format-<from>-to-<to>/`
+  (`~/.cache` on Linux, `~/Library/Caches` on macOS, `%LOCALAPPDATA%` on Windows), so a migration can be undone by
+  copying it back;
+- each step writes the new format when it's done, so an interrupted migration resumes where it stopped.
+
+A brain in a format **newer** than your kanbrain knows (a teammate's `.brain/` from git, written by a newer version)
+is refused entirely, neither read nor written, since an older version would misread what it doesn't know and
+rewriting it would lose it: commands on it fail and the kanban app leaves it out, both saying to update with
+`kb update`.
+
+The release notes say when a version changes the format.
 
 ## `tags.md`
 

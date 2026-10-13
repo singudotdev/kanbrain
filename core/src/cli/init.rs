@@ -144,13 +144,14 @@ pub fn init(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path)
     Ok(done)
 }
 
-/// Brings every registered repository's agent instructions up to this version's: the section in each of its
-/// agent files that has one, and Claude Code's hooks where `CLAUDE.md` has it. A repository whose files have no
-/// section (taken out by hand) is left alone, and so is one whose folder is gone. Returns what changed, one
-/// line each, naming the repository.
+/// Brings every registered repository up to this version: its data format, migrated with the central brain's
+/// (see [`crate::migrate`]), and its agent instructions, the section in each of its agent files that has one
+/// and Claude Code's hooks where `CLAUDE.md` has it. A repository whose files have no section (taken out by
+/// hand) keeps them as they are, and one whose folder is gone is left alone. Returns what changed, one line
+/// each, naming the repository.
 pub fn init_all(central: &Path) -> Result<Vec<String>> {
     let repos = projects::load(central)?;
-    let mut done = Vec::new();
+    let mut done = migrate_all(central, &repos)?;
     let mut current = 0;
     for repo in repos.iter().filter(|r| r.dir.is_dir()) {
         let Some(root) = repo.dir.parent() else { continue };
@@ -174,6 +175,22 @@ pub fn init_all(central: &Path) -> Result<Vec<String>> {
     }
     if current > 0 {
         done.push(format!("{current} more already had this version's instructions"));
+    }
+    Ok(done)
+}
+
+/// Brings the central brain and every registered repository's to this version's data format (see
+/// [`crate::migrate`]), as `kb update` runs it. A repository a newer kanbrain wrote is said and left alone.
+fn migrate_all(central: &Path, repos: &[projects::Repo]) -> Result<Vec<String>> {
+    let mut done = crate::migrate::migrate(&Store::at(central)?)?;
+    for repo in repos.iter().filter(|r| r.dir.is_dir()) {
+        match crate::migrate::migrate(&Store::at(&repo.dir)?) {
+            Ok(lines) => done.extend(lines),
+            Err(e) if e.downcast_ref::<crate::migrate::TooNew>().is_some() => {
+                done.push(format!("{}: left alone: {e}", repo.label(repos)));
+            }
+            Err(e) => return Err(e),
+        }
     }
     Ok(done)
 }

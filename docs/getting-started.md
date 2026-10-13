@@ -181,7 +181,7 @@ What purge does:
   `KANBRAIN_DIR` is respected, wherever you run it from.
 - **It shows what will be deleted and asks `[y/N]`.** Anything but `y` cancels, and nothing is removed.
   Without a terminal to ask on (e.g. in CI), it refuses unless you pass `--yes` / `KANBRAIN_YES`.
-- **It deletes only what kanbrain created:** entry files (`NNNN-*.md`), `tags.md`, `last-id`, the project registry
+- **It deletes only what kanbrain created:** entry files (`NNNN-*.md`), `tags.md`, `last-id`, `format`, the project registry
   (`projects.md`) and cards (`projects/*.md`), exported reports (`reports/*.md`) and leftover temp files.
   **Projects' own `.brain/` folders are kept**: they belong to their repositories, so delete them there if you want.
   If the folder has anything else in it (for example your `KANBRAIN_DIR` is inside a notes vault or a git repository), those files and the folder are **kept**.

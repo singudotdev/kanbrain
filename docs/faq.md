@@ -19,10 +19,13 @@ Run `kb path`. The default is `~/.local/share/kanbrain` on Linux, `~/Library/App
 and `%APPDATA%\kanbrain` on Windows. `KANBRAIN_DIR` overrides it. Inside a project, its `.brain/` is used
 instead; `kb path` prints the folder in use where you run it.
 
-### The status bar says "skipped N file(s)"
+### The status bar says "skipped: …"
 
 Some `.md` files in the data folder couldn't be read as tasks. The message names each file and the reason (usually a missing `- id:` line).
 kanbrain doesn't modify those files. Fix them or move them out of the folder; the board reloads by itself.
+
+It also names a repository written by a newer kanbrain (`… was written by a newer kanbrain`), which the board leaves
+out: update with `kb update` (see [Format versions and migrations](data-format.md#format-versions-and-migrations)).
 
 ### An agent changed a task, but the board doesn't show it
 

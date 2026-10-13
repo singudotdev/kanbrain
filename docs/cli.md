@@ -233,8 +233,9 @@ Handy for scripts: `cd "$(kb path)"` (in PowerShell, `cd (kb path)`).
 ## `kb update`
 
 Runs the installer for the latest release, into the folder `kb` is in. It checks the download's checksum and
-replaces `kb`, and `kanbrain` too when it's installed beside it, then updates every project's agent
-instructions (`kb init --all`). Your data isn't touched. On Windows, where a
+replaces `kb`, and `kanbrain` too when it's installed beside it, then updates every project (`kb init --all`):
+its agent instructions, and its data, migrated to the new version's format when it changed, after a backup (see
+[Format versions and migrations](data-format.md#format-versions-and-migrations)). On Windows, where a
 running program can't be replaced, it prints the PowerShell command to run once the app is closed. Installed with
 `cargo install`, it doesn't replace anything behind cargo's back: it prints `cargo install kanbrain && kb init --all`.
 

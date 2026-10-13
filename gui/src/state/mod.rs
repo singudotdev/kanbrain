@@ -256,7 +256,7 @@ impl Board {
         let warnings: Vec<&String> = self.sources.iter().flat_map(|s| &s.brain.warnings).collect();
         if !warnings.is_empty() {
             let list = warnings.iter().map(|w| w.as_str()).collect::<Vec<_>>().join("; ");
-            self.notify(format!("skipped {} file(s): {list}", warnings.len()));
+            self.notify(format!("skipped: {list}"));
         }
         self.keep_selection();
     }
