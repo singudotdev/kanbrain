@@ -89,8 +89,8 @@ pub fn remove_repo(central: &Path, dir: &Path, purge: bool) -> Result<Vec<String
     }
     if !purge {
         done.push(format!(
-            "kept {}: commands run here still use it; `deinit --purge` would have deleted its tasks, notes and \
-             decisions",
+            "kept {} with its tasks, notes and decisions: commands run here still use it (`--purge`, or the app's \
+             Unlink and delete tasks, deletes them)",
             repo.dir.display()
         ));
         return Ok(done);
