@@ -25,7 +25,7 @@ The kanban app also gets its launcher, with its icon: an entry in your applicati
 ### Linux and macOS
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.sh | sh
+curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh
 ```
 
 No curl? Use `wget -qO- … | sh`. Only a POSIX `sh` is required (bash, dash, busybox and zsh all work).
@@ -33,25 +33,25 @@ No curl? Use `wget -qO- … | sh`. Only a POSIX `sh` is required (bash, dash, bu
 Options go after `sh -s --`. The kanban app instead of the command line:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.sh | sh -s -- --app gui
+curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh -s -- --app gui
 ```
 
 Both:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.sh | sh -s -- --app both
+curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh -s -- --app both
 ```
 
 A specific release:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.sh | sh -s -- --version v0.3.5
+curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh -s -- --version v0.3.5
 ```
 
 Another folder in your home (the default is `~/.local/bin`):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.sh | sh -s -- --dir ~/bin
+curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh -s -- --dir ~/bin
 ```
 
 Uninstalling uses the same script, see [Uninstalling](#uninstalling).
@@ -63,7 +63,7 @@ If the install folder isn't on your `PATH`, the installer prints the exact line 
 In PowerShell (Windows PowerShell 5.1 or PowerShell 7):
 
 ```powershell
-irm https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.ps1 | iex
+irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
 ```
 
 It installs to `%LOCALAPPDATA%\Programs\kanbrain\kb.exe` (and `kanbrain.exe` for the kanban app) and adds that
@@ -71,25 +71,25 @@ folder to your **user** `PATH`, so open a new terminal afterwards.
 Options are environment variables. The kanban app instead of the command line:
 
 ```powershell
-$env:KANBRAIN_APP = "gui"; irm https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.ps1 | iex
+$env:KANBRAIN_APP = "gui"; irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
 ```
 
 Both:
 
 ```powershell
-$env:KANBRAIN_APP = "both"; irm https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.ps1 | iex
+$env:KANBRAIN_APP = "both"; irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
 ```
 
 A specific release:
 
 ```powershell
-$env:KANBRAIN_VERSION = "v0.3.5"; irm https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.ps1 | iex
+$env:KANBRAIN_VERSION = "v0.3.5"; irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
 ```
 
 Another folder in your profile:
 
 ```powershell
-$env:KANBRAIN_INSTALL_DIR = "$HOME\tools"; irm https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.ps1 | iex
+$env:KANBRAIN_INSTALL_DIR = "$HOME\tools"; irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
 ```
 
 Windows on ARM uses the x64 build through Windows' built-in emulation.
@@ -147,19 +147,19 @@ Both levels remove both programs; add `--app cli` or `--app gui` (`$env:KANBRAIN
 Uninstall, the program only:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.sh | sh -s -- --uninstall
+curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh -s -- --uninstall
 ```
 
 Purge, the program and the data (asks first):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.sh | sh -s -- --purge
+curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh -s -- --purge
 ```
 
 Purge without the question, for scripts:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.sh | sh -s -- --purge --yes
+curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh -s -- --purge --yes
 ```
 
 **Windows**
@@ -167,19 +167,19 @@ curl -fsSL https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.s
 Uninstall, the program only (it also takes it out of `PATH`):
 
 ```powershell
-$env:KANBRAIN_UNINSTALL = "1"; irm https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.ps1 | iex
+$env:KANBRAIN_UNINSTALL = "1"; irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
 ```
 
 Purge, the program and the data (asks first):
 
 ```powershell
-$env:KANBRAIN_PURGE = "1"; irm https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.ps1 | iex
+$env:KANBRAIN_PURGE = "1"; irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
 ```
 
 Purge without the question, for scripts:
 
 ```powershell
-$env:KANBRAIN_PURGE = "1"; $env:KANBRAIN_YES = "1"; irm https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.ps1 | iex
+$env:KANBRAIN_PURGE = "1"; $env:KANBRAIN_YES = "1"; irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
 ```
 
 What purge does:

@@ -40,25 +40,25 @@ with git.
 **Linux / macOS**, the command line (`kb`):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.sh | sh
+curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh
 ```
 
 The command line and the kanban board (`kb` and `kanbrain`):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.sh | sh -s -- --app both
+curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh -s -- --app both
 ```
 
 **Windows (PowerShell)**, the command line (`kb`):
 
 ```powershell
-irm https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.ps1 | iex
+irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
 ```
 
 The command line and the kanban board (`kb` and `kanbrain`):
 
 ```powershell
-$env:KANBRAIN_APP = "both"; irm https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.ps1 | iex
+$env:KANBRAIN_APP = "both"; irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
 ```
 
 With Rust, the command line also installs from crates.io: `cargo install kanbrain`.
