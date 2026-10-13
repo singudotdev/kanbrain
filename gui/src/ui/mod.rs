@@ -709,13 +709,14 @@ fn key_events(keystroke: &Keystroke) -> Vec<KeyEvent> {
     text.chars().filter(|c| !c.is_control()).map(|c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)).collect()
 }
 
-/// Opens `path` in `$VISUAL` / `$EDITOR` (which may include arguments, e.g. `code -w`) and waits.
+/// Opens `path` in `$VISUAL` / `$EDITOR` (which may include arguments, e.g. `code -w`) and waits. One set but empty
+/// counts as unset, as shells treat it.
 fn open_editor(path: &Path) -> Result<()> {
-    let editor = std::env::var("VISUAL")
-        .or_else(|_| std::env::var("EDITOR"))
-        .unwrap_or_else(|_| if cfg!(windows) { "notepad" } else { "vi" }.to_string());
+    let set = |name| std::env::var(name).ok().filter(|v: &String| !v.trim().is_empty());
+    let editor = set("VISUAL").or_else(|| set("EDITOR"));
+    let editor = editor.unwrap_or_else(|| if cfg!(windows) { "notepad" } else { "vi" }.to_string());
     let mut parts = editor.split_whitespace();
-    let program = parts.next().context("$EDITOR is empty")?;
+    let program = parts.next().context("no editor to run")?;
     let status = Command::new(program).args(parts).arg(path).status().with_context(|| format!("running {program}"))?;
     if !status.success() {
         bail!("{program} exited with {status}");
