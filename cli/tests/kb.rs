@@ -56,6 +56,7 @@ fn errors_go_to_stderr_with_a_failing_exit_code() {
     let stderr = String::from_utf8_lossy(&unknown.stderr);
     assert!(!unknown.status.success() && stderr.contains("unknown command `frobnicate`") && stderr.contains("usage:"));
     assert!(ok(&run(&["--version"])).starts_with("kb "));
+    assert_eq!(ok(&run(&["list"])), "nothing to list\n", "said, not left blank");
 }
 
 #[test]
@@ -66,7 +67,7 @@ fn project_reaches_a_registered_brain_from_any_folder() {
     ok(&kb(repo.path(), central.path(), &["add", "In", "the", "repo"], ""));
     let from_elsewhere = ok(&kb(elsewhere.path(), central.path(), &["list", "--project", "demo"], ""));
     assert!(from_elsewhere.contains("- #1 In the repo"), "{from_elsewhere}");
-    assert_eq!(ok(&kb(elsewhere.path(), central.path(), &["list"], "")), "", "outside it, the central brain");
+    assert_eq!(ok(&kb(elsewhere.path(), central.path(), &["list"], "")), "nothing to list\n", "outside it, the central brain");
     let ids = ok(&kb(elsewhere.path(), central.path(), &["complete", "ids", "--project", "demo"], ""));
     assert_eq!(ids, "1\tIn the repo\n", "completion reads it too");
 

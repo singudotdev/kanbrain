@@ -334,7 +334,11 @@ impl Command {
                 if args.json {
                     println!("{}", list_json(&tasks, &args)?);
                 } else {
-                    print!("{}", list_markdown(&tasks, &args));
+                    match list_markdown(&tasks, &args) {
+                        // As `search` says it, rather than nothing a reader could take for a failure.
+                        empty if empty.is_empty() => println!("nothing to list"),
+                        listed => print!("{listed}"),
+                    }
                 }
                 Ok(())
             }
