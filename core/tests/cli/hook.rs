@@ -47,7 +47,11 @@ fn a_described_project_costs_nothing_and_outside_one_too() {
     }
     let elsewhere = tempfile::tempdir().unwrap();
     assert_eq!(respond(HookEvent::Stop, &input(elsewhere.path(), false), central.path()), None, "not a project");
-    assert_eq!(respond(HookEvent::Stop, "not json", central.path()), None, "bad input never breaks a session");
+    // Bad input falls back to the working directory, which is a project when this repository has a brain of its own.
+    let bad = respond(HookEvent::Stop, "not json", central.path());
+    if store::find_project(&std::env::current_dir().unwrap()).is_none() {
+        assert_eq!(bad, None, "bad input never breaks a session");
+    }
 }
 
 #[test]
