@@ -31,7 +31,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Local};
 use std::fmt::Write;
 use std::io::{IsTerminal, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// The binary running the command line, named in the usage text and `--version`.
 #[derive(Debug, Clone, Copy)]
@@ -342,17 +342,7 @@ impl Command {
             Command::Deinit(purge) => {
                 platform::ensure_not_root()?;
                 let central = projects::central_dir()?;
-                // Not through `Store::open_named`, which refuses a deleted repository: this is how it's taken out.
-                let dir = match project {
-                    Some(projects::CENTRAL) => bail!("the central brain isn't a project: there's nothing to deinit"),
-                    Some(label) => projects::find(&central, label)?.dir,
-                    None => {
-                        let here = std::env::current_dir().context("reading the current directory")?;
-                        store::find_project(&here).context(
-                            "no .brain/ here or above: run deinit inside a project, or name one with --project",
-                        )?
-                    }
-                };
+                let dir = deinit_dir(&central, project)?;
                 manage::remove_repo(&central, &dir, purge)?.iter().for_each(|line| println!("{line}"));
                 return Ok(());
             }
@@ -523,6 +513,25 @@ fn status_line(central: &Path, now: DateTime<Local>) -> Result<String> {
         running.push(format!("{waiting} waiting"));
     }
     Ok(running.join(" · "))
+}
+
+/// The `.brain/` `deinit` takes out: `project`'s, else the one here. Not through `Store::open_named`, which refuses a
+/// deleted repository: this is how it's taken out.
+fn deinit_dir(central: &Path, project: Option<&str>) -> Result<PathBuf> {
+    let central_refused = || anyhow!("the central brain isn't a project: there's nothing to deinit");
+    match project {
+        Some(projects::CENTRAL) => Err(central_refused()),
+        Some(label) => match projects::find(central, label) {
+            Ok(repo) => Ok(repo.dir),
+            Err(_) if label.eq_ignore_ascii_case(projects::CENTRAL) => Err(central_refused()),
+            Err(e) => Err(e),
+        },
+        None => {
+            let here = std::env::current_dir().context("reading the current directory")?;
+            store::find_project(&here)
+                .context("no .brain/ here or above: run deinit inside a project, or name one with --project")
+        }
+    }
 }
 
 /// Runs one of the entry commands on the brain in `store`.

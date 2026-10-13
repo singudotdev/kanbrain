@@ -91,6 +91,8 @@ fn project_reaches_a_registered_brain_from_any_folder() {
         "nothing to list\n",
         "outside it, the central brain"
     );
+    let path = ok(&kb(elsewhere.path(), central.path(), &["--project", "CENTRAL", "path"], ""));
+    assert_eq!(path.trim(), central.path().display().to_string(), "`central` in any case");
     let ids = ok(&kb(elsewhere.path(), central.path(), &["complete", "ids", "--project", "demo"], ""));
     assert_eq!(ids, "1\tIn the repo\n", "completion reads it too");
 

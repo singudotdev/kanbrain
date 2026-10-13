@@ -103,7 +103,13 @@ impl Store {
             None => Self::open(),
             Some(projects::CENTRAL) => Self::at(projects::central_dir()?),
             Some(label) => {
-                let repo = projects::find(&projects::central_dir()?, label)?;
+                let central = projects::central_dir()?;
+                let repo = match projects::find(&central, label) {
+                    Ok(repo) => repo,
+                    // In any case, as projects' names are, unless a project has it.
+                    Err(_) if label.eq_ignore_ascii_case(projects::CENTRAL) => return Self::at(central),
+                    Err(e) => return Err(e),
+                };
                 if !repo.dir.is_dir() {
                     bail!("{} is gone: `kb --project {label} deinit` takes it out", repo.dir.display());
                 }
