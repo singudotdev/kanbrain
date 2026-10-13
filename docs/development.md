@@ -205,9 +205,10 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
 │   ├── mode.rs      the dialogs and fields that take the keys (Mode): search, form, quick add, editor, confirm, links, project and tag dropdowns, which project a quick-added task goes in or an entry moves to, project info, command palette, adding a project (AddProject, ProjectOption), renaming, moving or removing a project or repository (Manage)
 │   ├── actions.rs   status changes and drops, new / edit / quick add (asking which brain when the scope shows several), moving an entry to another brain, the editor's save, deletes, links, undo (recording what each change writes), reload, park & quit, export
 │   ├── manage.rs    renaming, moving and removing projects and repositories from the project's info
-│   ├── input.rs     keys → actions per tab and dialog; the shortcut lists; typing, select all, cut, paste, the mouse in text
-│   ├── menu.rs      the right-click menu: an entry's actions, each one of its keys (MenuItem, MenuPicker)
-│   ├── palette.rs   the command palette (`?`): each tab's actions with their keys, searchable; choosing one presses its key (Command)
+│   ├── input.rs     keys in each dialog; typing, select all, cut, paste, the mouse in text
+│   ├── keys.rs      every key outside dialogs in one table (ACTIONS: key, tabs, when it's offered, palette text, menu label, what it runs), which the keys, the palette and the menu read
+│   ├── menu.rs      the right-click menu: the table's actions for that entry, each one of its keys (MenuPicker)
+│   ├── palette.rs   the command palette (`?`): the table's actions that work now, in sections (the selected entry, the tab, everywhere), searchable; choosing one presses its key
 │   ├── nav.rs       moving the selection between cards, columns and list rows
 │   └── sources.rs   the central brain and every project repository (Source), entries by Key { src, id }, the Scope filter, merged reports and calendars, adding a project from a picked folder (`cli::init`)
 ├── text/            text editing with a selection
@@ -243,7 +244,7 @@ core/tests/, gui/tests/   each crate's tests, laid out like its src/ (see Tests)
 ### Data flow
 
 ```
-key press ───────────▶ Board::on_key (input.rs) ──▶ Board action (actions.rs) ──▶ Brain action (core)
+key press ───────────▶ Board::on_key (keys.rs, input.rs) ──▶ Board action (actions.rs) ──▶ Brain action (core)
 button ──▶ BrainView::press ──┘                                                        │
 card dropped on a column ──▶ Board::drop_card ─────────────────────────────────────────┤
 CLI command ──▶ api ──▶ Brain action ──────────────────────────────────────────────────┤
@@ -288,8 +289,9 @@ every second / before each input ──▶ Watcher::changed ──▶ Board::rel
 
 1. Put the change to entries in `core/src/brain/actions.rs` if the command line or agents need it too, and call it
    from a `Board` method in `gui/src/state/actions.rs`.
-2. Give it a key in `gui/src/state/input.rs`, and a line in `BOARD`, `REPORT`, `CALENDAR` or `EVERYWHERE` in
-   `gui/src/state/palette.rs` so the command palette lists and runs it.
+2. Give it a row in `ACTIONS` in `gui/src/state/keys.rs`: its key, the tabs it works on, when it's worth offering,
+   what the palette says, and a menu label if the right-click menu offers it. The key, the palette and the menu
+   then all have it; a test refuses a key that runs two things on one tab.
 3. Add a button where it belongs with `ui::action`.
 4. Document it in [`keybindings.md`](keybindings.md) and the relevant page.
 
@@ -348,7 +350,8 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | `tags` | no color repeats until the palette is used up, `tags.md` round trip, custom colors |
 | `period`, `export` | period bounds and stepping, report tables |
 | `enums` | generated `ALL` / `position` / `next`, `parse` as the inverse of `as_str` |
-| `state` (gui) | the board driven by keys over a temporary folder: moving between cards and columns, moving cards, drops, quick add, the form and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, nothing asked once your task stops, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from the project's info, the update offered once a newer release is found and refused while an agent works |
+| `state` (gui) | the board driven by keys over a temporary folder: the palette offering only what works now, moving between cards and columns, moving cards, drops, quick add, the form and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, nothing asked once your task stops, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from the project's info, the update offered once a newer release is found and refused while an agent works |
+| `keys` (gui) | no key running two things on one tab; what the menu offers named and described |
 | `editor` (gui) | line editing (split/join), unicode, wrapping; one-line cursor editing; selecting, copying and replacing; mouse selection by character, word and line |
 | `markdown` (gui) | inline styles and link ranges, kept line breaks, heading levels, numbered and task lists, nesting, code, quotes, tables, rules |
 | `watch` (gui) | new, changed, renamed and deleted files are noticed once, naming the folder; temporary files aren't; own writes are taken as seen |

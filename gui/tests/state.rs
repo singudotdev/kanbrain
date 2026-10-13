@@ -874,14 +874,14 @@ fn the_palette_lists_what_can_be_done_with_its_key_and_runs_it() {
     f.board.selected = None;
     f.press(KeyCode::Char('?'));
     let Mode::Palette(picker) = &f.board.mode else { panic!("? opens the palette: {:?}", f.board.mode) };
-    let keys: Vec<&str> = f.board.commands(picker).iter().map(|c| c.key).collect();
+    let keys: Vec<&str> = f.board.commands(picker).iter().map(|c| c.shown).collect();
     assert!(keys.contains(&"n") && !keys.contains(&"s"), "with no card selected, a card's commands are left out");
     f.press(KeyCode::Esc);
     f.board.select(k(1));
     f.press(KeyCode::Char('?'));
     f.type_text("start");
     let Mode::Palette(picker) = &f.board.mode else { panic!("typing filters") };
-    let keys: Vec<&str> = f.board.commands(picker).iter().map(|c| c.key).collect();
+    let keys: Vec<&str> = f.board.commands(picker).iter().map(|c| c.shown).collect();
     assert_eq!(keys, ["s"], "searching by what it does");
     f.press(KeyCode::Enter);
     assert_eq!(f.status(1), Status::Doing, "enter presses its key");
@@ -895,7 +895,7 @@ fn the_palette_lists_what_can_be_done_with_its_key_and_runs_it() {
     f.press(KeyCode::Char('?'));
     f.type_text("export");
     let Mode::Palette(picker) = &f.board.mode else { panic!("the report has one too") };
-    assert_eq!(f.board.commands(picker).first().map(|c| c.key), Some("e"), "with the report's own commands");
+    assert_eq!(f.board.commands(picker).first().map(|c| c.shown), Some("e"), "with the report's own commands");
 }
 
 #[test]
@@ -1080,4 +1080,34 @@ fn an_update_is_offered_once_found_and_waits_for_the_agents() {
     assert!(matches!(f.board.mode, Mode::Confirm(Confirm::Update)));
     f.press(KeyCode::Char('y'));
     assert_eq!(f.board.request.take(), Some(Request::Update), "the window installs it");
+}
+
+#[test]
+fn the_palette_offers_only_what_works_now() {
+    let mut f = Fixture::new(&["a task"]);
+    let shown = |board: &Board| -> Vec<&str> { board.commands(&Picker::default()).iter().map(|c| c.does).collect() };
+    f.board.select(k(1));
+    let rows = shown(&f.board);
+    assert!(rows.contains(&"Start: move to Doing and run its clock"), "{rows:?}");
+    for absent in ["Accept the decision", "Reject the decision", "Move to another project", "Manage project", "Update"]
+    {
+        assert!(!rows.iter().any(|r| r.starts_with(absent)), "{absent}: a task, one brain, no project, no release");
+    }
+    assert!(!rows.contains(&"Close the details") && !rows.contains(&"Clear the search"), "nothing for esc to do");
+    assert_eq!(f.board.commands(&Picker::default())[0].section(), keys::Section::Entry, "the selection's first");
+
+    f.board.available = Some("9.0.0".into());
+    f.board.drawer = true;
+    let rows = shown(&f.board);
+    assert!(rows.iter().any(|r| r.starts_with("Update")) && rows.contains(&"Close the details"), "{rows:?}");
+    assert!(rows.contains(&"Hide the details") && !rows.contains(&"Show the details"));
+    f.board.drawer = false;
+    f.board.search = LineInput::new("task");
+    assert!(shown(&f.board).contains(&"Clear the search"));
+
+    f.board.set_status(k(1), Status::Doing);
+    assert!(!shown(&f.board).contains(&"Start: move to Doing and run its clock"), "it's started already");
+    f.board.switch_tab(Tab::Notes);
+    let rows = shown(&f.board);
+    assert!(rows.contains(&"Move up and down the list") && !rows.contains(&"Move between cards and columns"));
 }

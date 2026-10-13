@@ -3,12 +3,10 @@
 //! Also typing into whichever field has the keys, for the mouse and the clipboard.
 
 use super::nav::Step;
-use super::{Board, COLUMNS, Confirm, Field, Form, Manage, Mode, Picker, PickerKey, Request, Tab, Target, WherePicker};
+use super::{Board, COLUMNS, Field, Form, Manage, Mode, Picker, PickerKey, Tab, WherePicker};
 use crate::text::editor::{LineInput, Outcome, Pointer, TextEditor};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
-use kanbrain_core::brain::Group;
-use kanbrain_core::model::{Kind, Status};
-use kanbrain_core::period::{Period, Unit};
+use kanbrain_core::model::Kind;
 
 /// Where typed text goes: a one-line field or the text editor.
 enum Typing<'a> {
@@ -131,82 +129,6 @@ impl Board {
         }
     }
 
-    /// The board, lists and report: keys that work on every tab, then the tab's own.
-    fn key_normal(&mut self, key: KeyEvent) {
-        let shift = key.modifiers.contains(KeyModifiers::SHIFT);
-        match key.code {
-            KeyCode::Char(c @ '1'..='5') => self.switch_tab(Tab::ALL[c as usize - '1' as usize]),
-            KeyCode::Tab => {
-                let next = Tab::ALL.iter().position(|&t| t == self.tab).map_or(0, |i| (i + 1) % Tab::ALL.len());
-                self.switch_tab(Tab::ALL[next]);
-            }
-            KeyCode::Char('/') => self.mode = Mode::Search,
-            KeyCode::Char('#') => self.open_tags(),
-            KeyCode::Char('?') => self.open_palette(),
-            KeyCode::Char('q') => self.quit = true,
-            KeyCode::Char('Q') => self.park_and_quit(),
-            KeyCode::Char('R') => self.reload_from_disk(),
-            KeyCode::Char('U') => self.ask_update(),
-            KeyCode::Char('u') => self.undo(),
-            KeyCode::Char('P') => self.open_scopes(),
-            KeyCode::Char('I') => self.open_project_info(),
-            KeyCode::Char('A') => self.request = Some(Request::Folder(None)),
-            KeyCode::Esc if self.drawer => self.drawer = false,
-            KeyCode::Esc => {
-                self.search.clear();
-                self.keep_selection();
-            }
-            // Before the report's and calendar's own keys, so that their "+ New task" button works too.
-            KeyCode::Char('n') => self.new_entry(Status::Todo),
-            _ if self.tab == Tab::Report => self.key_report(key),
-            _ if self.tab == Tab::Calendar => self.key_calendar(key),
-            KeyCode::Left if !shift => self.step(Step::Left),
-            KeyCode::Right if !shift => self.step(Step::Right),
-            KeyCode::Up => self.step(Step::Up),
-            KeyCode::Down => self.step(Step::Down),
-            KeyCode::Left => self.move_card(Step::Left),
-            KeyCode::Right => self.move_card(Step::Right),
-            KeyCode::Char('v') if self.tab == Tab::Board => self.toggle_layout(),
-            // Always To do from the keyboard: the `+` on a column or section is how to add somewhere else.
-            KeyCode::Char('a') if self.tab == Tab::Board => self.quick_add(Status::Todo),
-            KeyCode::Char('f') => {
-                self.all_done = !self.all_done;
-                self.keep_selection();
-            }
-            KeyCode::Char('w') => self.next_waiting(),
-            _ => self.key_on_selected(key),
-        }
-    }
-
-    /// Keys that act on the selected entry.
-    fn key_on_selected(&mut self, key: KeyEvent) {
-        let Some(id) = self.selected else { return };
-        let status = match key.code {
-            KeyCode::Char('s') => Some(Status::Doing),
-            KeyCode::Char('p') => Some(Status::Parked),
-            KeyCode::Char('d') => Some(Status::Done),
-            KeyCode::Char('t') => Some(Status::Todo),
-            _ => None,
-        };
-        if let Some(status) = status {
-            self.set_status(id, status);
-            return;
-        }
-        match key.code {
-            KeyCode::Enter | KeyCode::Char(' ') => self.drawer = !self.drawer,
-            KeyCode::Char('e') => self.edit_selected(),
-            KeyCode::Char('m') => self.open_editor(Target::Description(id)),
-            KeyCode::Char('c') => self.open_editor(Target::NewComment(id)),
-            KeyCode::Char('r') => self.open_links(),
-            KeyCode::Char('o') => self.open_file(),
-            KeyCode::Char('x') => self.mode = Mode::Confirm(Confirm::Delete(id)),
-            KeyCode::Char('M') => self.ask_move(),
-            KeyCode::Char('y') => self.accept_selected(),
-            KeyCode::Char('j') => self.reject_selected(),
-            _ => {}
-        }
-    }
-
     /// Moves the selected card to the next column in the direction of `step`.
     pub fn move_card(&mut self, step: Step) {
         if self.tab != Tab::Board {
@@ -215,44 +137,6 @@ impl Board {
         if let (Some(id), Some(status)) = (self.selected, self.neighbour_status(step)) {
             self.set_status(id, status);
         }
-    }
-
-    /// The report tab: which period, and how it's grouped and filtered.
-    fn key_report(&mut self, key: KeyEvent) {
-        let period = self.report.period;
-        match key.code {
-            KeyCode::Left => self.report.period = period.prev(),
-            KeyCode::Right => self.report.period = period.next(),
-            KeyCode::Char('h') => self.report.period = period.with_unit(Unit::Hour),
-            KeyCode::Char('d') => self.report.period = period.with_unit(Unit::Day),
-            KeyCode::Char('w') => self.report.period = period.with_unit(Unit::Week),
-            KeyCode::Char('m') => self.report.period = period.with_unit(Unit::Month),
-            KeyCode::Char('t') => self.report.period = Period::current(period.unit),
-            KeyCode::Char('g') => {
-                self.report.group = if self.report.group == Group::Task { Group::Tag } else { Group::Task };
-            }
-            KeyCode::Char('e') => self.export_report(),
-            _ => {}
-        }
-    }
-
-    /// The calendar tab: which period and which interactions, and selecting the entries shown.
-    fn key_calendar(&mut self, key: KeyEvent) {
-        let period = self.calendar.period;
-        match key.code {
-            KeyCode::Left => self.calendar.period = period.prev(),
-            KeyCode::Right => self.calendar.period = period.next(),
-            KeyCode::Char('d') => self.calendar.period = period.with_unit(Unit::Day),
-            KeyCode::Char('w') => self.calendar.period = period.with_unit(Unit::Week),
-            KeyCode::Char('m') => self.calendar.period = period.with_unit(Unit::Month),
-            KeyCode::Char('t') => self.calendar.period = Period::current(period.unit),
-            KeyCode::Char('i') => self.calendar.show = self.calendar.show.next(),
-            KeyCode::Up => self.step(Step::Up),
-            KeyCode::Down => self.step(Step::Down),
-            KeyCode::Enter | KeyCode::Char(' ') if self.selected.is_some() => self.drawer = !self.drawer,
-            _ => {}
-        }
-        self.keep_selection();
     }
 
     /// The tags the dropdown offers: "all tags" first (`None`), then the tags of what the tab shows

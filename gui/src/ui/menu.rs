@@ -4,7 +4,6 @@
 use super::theme::{self, BORDER, DIM, RED, TEXT};
 use super::{BrainView, key_name};
 use crate::state::{Board, MenuPicker, Mode};
-use crate::text::event::{KeyEvent, KeyModifiers};
 use gpui::{
     ClickEvent, Context, MouseButton, MouseDownEvent, Pixels, Point, Stateful, deferred, div, prelude::*, px, rgb,
 };
@@ -35,12 +34,7 @@ pub fn draw(board: &Board, at: Option<Point<Pixels>>, cx: &mut Context<BrainView
             .when(index != sel, |d| d.hover(|s| s.bg(rgb(theme::HOVER))))
             .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.choose_menu(index))))
             .child(item.label)
-            .child(
-                div()
-                    .text_size(px(11.))
-                    .text_color(rgb(DIM))
-                    .child(key_name(KeyEvent::new(item.code, KeyModifiers::NONE))),
-            )
+            .child(div().text_size(px(11.)).text_color(rgb(DIM)).child(key_name(item.key)))
     });
     let panel = div()
         .occlude()

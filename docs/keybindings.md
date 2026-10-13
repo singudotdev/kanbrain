@@ -1,8 +1,8 @@
 # Keybindings
 
 The kanban app has a button for every action, and a key for every button: hover a button and its tooltip names the
-key, or press `?` for the command palette: every action of the tab with its key, filtered as you type; `enter` runs
-the highlighted one. Keys act on the selected card, or on the selected entry in the notes and decisions
+key, or press `?` for the command palette: what can be done now with its key, on the selected entry first, then on
+the tab, then everywhere, filtered as you type; `enter` runs the highlighted one. Keys act on the selected card, or on the selected entry in the notes and decisions
 tabs. While you type in a field, keys are just letters; `esc` or `enter` leave the field.
 
 ## Board, notes and decisions
@@ -41,7 +41,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | `R` | reload the files (the board also reloads by itself when they change) |
 | `U` | **update** to the newer release the status bar offers (it asks first); not while an agent has a task in doing |
 | `Q` | **park** your running tasks and **quit**; agents' keep running |
-| `?` | the **command palette**: every action with its key; type to filter, `↑` `↓` move, `enter` runs it, `esc` closes |
+| `?` | the **command palette**: what can be done now, with its key; type to filter, `↑` `↓` move, `enter` runs it, `esc` closes |
 | `q` | quit; running tasks keep their clocks running |
 
 ## Report tab

@@ -282,7 +282,7 @@ kanbrain
 4. When it's finished, drag it to **Done** or press `d`.
 5. At the end of the day, **Park & quit** (`Q`) stops your clock and closes the window. Everything is already saved.
 
-Press `?` at any time for the command palette: every action with its key. Type to find one, `enter` runs it. Every
+Press `?` at any time for the command palette: what can be done now, with its key. Type to find one, `enter` runs it. Every
 button's tooltip names its key, too.
 
 From a terminal, or for an agent, the same steps are:

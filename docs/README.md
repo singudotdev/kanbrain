@@ -29,7 +29,7 @@ remember when they moved, and track the time spent on them.
 - **One thing at a time, for you.** Doing holds one task of yours per brain (each project repository, and the
   central one), and its clock runs while it's there; to switch, you park it, so the board always shows what you
   were doing before. Agents can run several, one per subagent.
-- **Mouse or keyboard.** Every action has a button, and every button has a key, named in its tooltip; `?` opens a command palette that lists them all, searchable, and runs one.
+- **Mouse or keyboard.** Every action has a button, and every button has a key, named in its tooltip; `?` opens a command palette that lists what can be done now, searchable, and runs one.
 - **Zero config.** The only settings are optional environment variables.
 
 ## Concepts in 30 seconds

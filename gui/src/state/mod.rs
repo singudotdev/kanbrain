@@ -4,7 +4,8 @@
 //!
 //! - [`mode`]: the dialogs and fields that take the keys.
 //! - [`actions`]: changes to entries, through the brain, with a message for the status bar.
-//! - [`input`]: what each key does on each tab and dialog, and typing into fields.
+//! - [`input`]: what each key does in each dialog, and typing into fields.
+//! - [`keys`]: the keys outside dialogs, which the palette and the right-click menu offer too.
 //! - [`manage`]: renaming, moving and removing projects and repositories.
 //! - [`nav`]: moving the selection around the board.
 //! - [`palette`]: the command palette, every action with its key.
@@ -12,6 +13,7 @@
 
 mod actions;
 mod input;
+pub(crate) mod keys;
 mod manage;
 mod menu;
 pub mod mode;
@@ -22,12 +24,12 @@ mod sources;
 #[path = "../../tests/state.rs"]
 mod tests;
 
+pub use keys::Action;
 pub use menu::MenuPicker;
 pub use mode::{
     AddProject, Confirm, Edit, Field, Form, FormTarget, LinkPicker, Manage, Mode, Picker, PickerKey, ProjectOption,
     QuickAdd, Target, WhereFor, WherePicker,
 };
-pub use palette::Command;
 pub use sources::{Key, Scope, Source};
 
 use crate::text::editor::LineInput;

@@ -2,7 +2,7 @@
 //! command palette.
 
 use super::{WIDE_WIDTH, check, dialog};
-use crate::state::{Board, Command, LinkPicker, Picker, Tab, WhereFor, WherePicker};
+use crate::state::{Action, Board, LinkPicker, Picker, Tab, WhereFor, WherePicker};
 use crate::text::event::KeyCode;
 use crate::ui::dropdown::{MAX_ROWS, list, row};
 use crate::ui::pointer::TextBox;
@@ -126,24 +126,23 @@ pub(super) fn palette(
     let commands = board.commands(picker);
     let empty = commands.is_empty();
     let rows: Vec<_> = commands
-        .into_iter()
+        .iter()
         .enumerate()
-        .map(|(index, Command { key, does, press, .. })| {
-            row(("command", index), format!("command {index}"), index == picker.sel, press.is_some())
+        .map(|(index, &&Action { shown, does, runs, .. })| {
+            // The first row of each section names it, with a line above it but on the first: a heading row would
+            // break the list's even rows, which its scrolling counts on.
+            let section = commands[index].section();
+            let starts = index == 0 || commands[index - 1].section() != section;
+            row(("command", index), format!("command {index}"), index == picker.sel, runs)
                 .gap_3()
-                .when(press.is_some(), |d| {
+                .when(starts && index > 0, |d| d.border_t_1().border_color(rgb(BORDER)))
+                .when(runs, |d| {
                     d.on_click(
                         cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.choose_command(index))),
                     )
                 })
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .truncate()
-                        .when(press.is_none(), |d| d.text_color(rgb(theme::DIM)))
-                        .child(does),
-                )
+                .child(div().flex_1().min_w_0().truncate().when(!runs, |d| d.text_color(rgb(theme::DIM))).child(does))
+                .children(starts.then(|| dim_small(section.title()).flex_none()))
                 .child(
                     div()
                         .flex_none()
@@ -154,7 +153,7 @@ pub(super) fn palette(
                         .bg(rgb(theme::INPUT))
                         .text_size(px(12.))
                         .font_family(theme::EDITOR_FONT)
-                        .child(key),
+                        .child(shown),
                 )
         })
         .collect();
