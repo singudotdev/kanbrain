@@ -6,7 +6,7 @@ use super::nav::Step;
 use super::{Board, Confirm, Key, Mode, Picker, Request, Tab, Target};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
 use kanbrain_core::brain::Group;
-use kanbrain_core::model::{Asked, DecisionState, Kind, Status};
+use kanbrain_core::model::{Asked, DecisionState, Status};
 use kanbrain_core::period::{Period, Unit};
 
 /// One thing a key does.
@@ -79,7 +79,7 @@ pub enum When {
     MoveTo(Status),
     /// With a card selected on the board tab, which can move between columns.
     Card,
-    /// With a decision selected that isn't in this state.
+    /// With a decision selected that isn't in this state, or a task that waits on one.
     DecisionNot(DecisionState),
     /// With an entry selected and another brain to move it to.
     OtherBrain,
@@ -112,10 +112,16 @@ impl When {
             Self::Details(shown) => entry.is_some() && board.drawer == shown,
             Self::MoveTo(status) => entry.is_some_and(|t| t.is_task() && t.status != status),
             Self::Card => board.tab == Tab::Board && entry.is_some(),
-            Self::DecisionNot(state) => entry.is_some_and(|t| t.kind == Kind::Decision && t.decision != state),
+            Self::DecisionNot(state) => {
+                key.and_then(|k| board.decision_for(k)).and_then(|d| board.task(d)).is_some_and(|d| d.decision != state)
+            }
             Self::OtherBrain => entry.is_some() && board.sources.len() > 1,
             Self::NotWaiting => entry.is_some_and(|t| !matches!(t.asked(), Some(Asked::Waiting(_)))),
-            Self::Asks => entry.is_some_and(|t| matches!(t.asked(), Some(Asked::Waiting(_)))),
+            // A task waiting on a proposed decision is answered by deciding (`y`, `Y`, `j`).
+            Self::Asks => {
+                entry.is_some_and(|t| matches!(t.asked(), Some(Asked::Waiting(_))))
+                    && key.is_some_and(|k| board.proposed_for(k).is_empty())
+            }
             Self::Proposed => key.is_some_and(|k| !board.proposed_for(k).is_empty()),
             Self::Waiting => !board.waiting().is_empty(),
             Self::Project => board.project_here().is_some(),
@@ -281,15 +287,25 @@ pub const ACTIONS: &[Action] = &[
         "y",
         Tabs::Entries,
         When::DecisionNot(DecisionState::Accepted),
-        "Accept the decision, answering the tasks waiting on it",
+        "Accept the decision (or the one the task waits on), answering the tasks waiting on it",
         |b| {
             selected(b, |b, _| b.accept_selected());
         },
     )
     .menu("Accept"),
-    letter("j", Tabs::Entries, When::DecisionNot(DecisionState::Rejected), "Reject the decision, saying why", |b| {
-        selected(b, |b, _| b.reject_selected());
+    letter("Y", Tabs::Entries, When::DecisionNot(DecisionState::Accepted), "Accept the decision with a comment", |b| {
+        selected(b, |b, _| b.accept_with_comment());
     })
+    .menu("Accept with a comment…"),
+    letter(
+        "j",
+        Tabs::Entries,
+        When::DecisionNot(DecisionState::Rejected),
+        "Reject the decision (or the one the task waits on), saying why",
+        |b| {
+            selected(b, |b, _| b.reject_selected());
+        },
+    )
     .menu("Reject…"),
     letter("M", Tabs::Entries, When::OtherBrain, "Move to another project (renumbered there, links dropped)", |b| {
         selected(b, |b, _| b.ask_move());

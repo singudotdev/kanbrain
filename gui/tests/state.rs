@@ -1182,3 +1182,50 @@ fn closing_an_answer_never_written_says_nothing_was_answered() {
     f.press(KeyCode::Esc);
     assert!(!waits(&f), "something said answers it");
 }
+
+#[test]
+fn a_task_waiting_on_a_decision_is_answered_by_deciding_with_or_without_a_comment() {
+    let mut f = Fixture::new(&["cache", "queue", "logs"]);
+    let mut agent = kanbrain_core::brain::Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    agent.author = Author::Agent;
+    let propose = |agent: &mut kanbrain_core::brain::Brain, id, title: &str| {
+        agent.propose(id, kanbrain_core::brain::NewEntry { title: title.into(), ..Default::default() }).unwrap()
+    };
+    let redis = propose(&mut agent, 1, "Use Redis");
+    let kafka = propose(&mut agent, 2, "Use Kafka");
+    let loki = propose(&mut agent, 3, "Use Loki");
+    f.press(KeyCode::Char('R'));
+    let labels = |board: &Board, id| board.menu_items(k(id)).iter().map(|a| a.label).collect::<Vec<_>>();
+    let last = |f: &Fixture, id| f.on_disk(id).comments.last().unwrap().body.clone();
+
+    f.board.select(k(1));
+    let menu = labels(&f.board, 1);
+    for offered in ["Accept", "Accept with a comment…", "Reject…", "Open proposed decision"] {
+        assert!(menu.contains(&offered), "{offered}: {menu:?}");
+    }
+    assert!(!menu.contains(&"Answer…"), "it's answered by deciding");
+    f.press(KeyCode::Char('Y'));
+    f.press(KeyCode::Esc);
+    assert_eq!(f.on_disk(redis).decision, DecisionState::Proposed, "a comment never written accepts nothing");
+    f.press(KeyCode::Char('Y'));
+    f.type_text("fine for now");
+    f.press(KeyCode::Esc);
+    assert_eq!(f.on_disk(redis).decision, DecisionState::Accepted);
+    assert_eq!(last(&f, 1), format!("Accepted decision #{redis}, Use Redis: fine for now"), "the task gets it");
+
+    f.board.select(k(2));
+    f.press(KeyCode::Char('y'));
+    assert_eq!(f.on_disk(kafka).decision, DecisionState::Accepted, "or without one");
+    assert_eq!(last(&f, 2), format!("Accepted decision #{kafka}, Use Kafka."));
+
+    f.board.select(k(3));
+    f.press(KeyCode::Char('j'));
+    f.press(KeyCode::Esc);
+    assert_eq!(f.on_disk(loki).decision, DecisionState::Proposed, "rejecting always says why");
+    assert_eq!(f.board.message(), Some("not rejected: say why it's rejected"));
+    f.press(KeyCode::Char('j'));
+    f.type_text("too heavy");
+    f.press(KeyCode::Esc);
+    assert_eq!(f.on_disk(loki).decision, DecisionState::Rejected);
+    assert_eq!(last(&f, 3), format!("Rejected decision #{loki}, Use Loki: too heavy"));
+}

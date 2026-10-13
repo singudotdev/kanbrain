@@ -156,9 +156,12 @@ They show, top to bottom:
 When an agent needs your answer (`kb ask`) or proposes a decision (`kb propose`), its task goes to Parked with a
 **Waiting for you** badge and the question on the card, and the top bar counts them: **2 waiting for you** (`w`)
 opens each in turn. Answer with a comment (`c`, or **Answer** in the details); the card then says **Answered**
-until the agent starts it again. An agent that waits for it (`kb wait`) picks the answer up as soon as you save it. For a proposal, open the decision and **Accept** it (`y`), or **Reject…** it (`j`)
-saying why: the waiting tasks get the verdict as your answer. Proposed and rejected decisions carry a badge in the
-decisions list too.
+until the agent starts it again. An agent that waits for it (`kb wait`) picks the answer up as soon as you save it.
+
+A proposal is answered by deciding, from the waiting task or from the decision itself (**Open proposed decision**,
+`D`): **Accept** it (`y`), **Accept with a comment…** (`Y`), or **Reject…** it (`j`), which always says why. The
+waiting tasks get the verdict, with your comment, as your answer. Proposed and rejected decisions carry a badge in
+the decisions list too.
 
 Descriptions and comments are written in the text editor: `esc` or **Save** saves (`ctrl+enter` too),
 **Discard changes** throws the edit away; until something's typed, the button is **Close**. An empty comment or

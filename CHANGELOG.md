@@ -7,6 +7,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Deciding on an agent's proposal from the task that waits on it: **Accept** (`y`), **Accept with a comment…** (`Y`,
+  new, also on the decision) or **Reject…** (`j`, which always asks why), in its details, the palette and the
+  right-click menu; such a task no longer offers a plain **Answer**.
 - Keys in the kanban app for what only the mouse did: `E` edits the description of the project shown (the bar's
   **Edit**), `D` opens the decision an agent proposed that the selected task waits on. On a task waiting for your
   answer, the palette and the right-click menu offer **Answer** (`c`) instead of a comment.

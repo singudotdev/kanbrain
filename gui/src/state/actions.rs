@@ -294,7 +294,7 @@ impl Board {
     pub fn open_editor(&mut self, target: Target) {
         let text = match target {
             Target::Description(key) => self.task(key).map(|t| t.description.as_str()),
-            Target::NewComment(key) | Target::Reject(key) => self.task(key).map(|_| ""),
+            Target::NewComment(key) | Target::Reject(key) | Target::Accept(key) => self.task(key).map(|_| ""),
             Target::Comment(key, index) => {
                 self.task(key).map(|t| t.comments.get(index).map_or("", |c| c.body.as_str()))
             }
@@ -311,9 +311,12 @@ impl Board {
         let text = edit.editor.text();
         // A comment or a reason is something said: closing with none says so, rather than closing as if it was
         // sent, since an answer that was never written leaves the agent waiting.
-        if matches!(edit.target, Target::NewComment(_) | Target::Reject(_)) && text.trim().is_empty() {
+        if matches!(edit.target, Target::NewComment(_) | Target::Reject(_) | Target::Accept(_))
+            && text.trim().is_empty()
+        {
             return match edit.target {
                 Target::Reject(_) => self.notify("not rejected: say why it's rejected"),
+                Target::Accept(_) => self.notify("not accepted: write the comment, or accept without one (y)"),
                 _ if answers => self.notify("nothing answered: the question still waits"),
                 _ if edit.editor.modified => self.notify("nothing added: the comment was empty"),
                 _ => {}
@@ -334,6 +337,10 @@ impl Board {
                 .brain_mut(key.src)
                 .resolve(key.id, DecisionState::Rejected, &text)
                 .map(|_| (false, "decision rejected")),
+            Target::Accept(key) => self
+                .brain_mut(key.src)
+                .resolve(key.id, DecisionState::Accepted, &text)
+                .map(|_| (false, "decision accepted")),
             Target::Project(src) => {
                 self.save_project_description(src, &text).map(|()| (false, "project description saved"))
             }
@@ -354,10 +361,28 @@ impl Board {
         self.task(key).is_some_and(|t| matches!(t.asked(), Some(Asked::Waiting(_))))
     }
 
-    /// Accepts the selected decision, which answers the tasks waiting on it; rejecting asks why first,
-    /// in the editor ([`Target::Reject`]).
+    /// The decision `y`, `Y` and `j` act on for the entry `key`: itself if it's a decision, else the first one an
+    /// agent proposed about it, which it waits on.
+    pub fn decision_for(&self, key: Key) -> Option<Key> {
+        match self.task(key)?.kind {
+            Kind::Decision => Some(key),
+            _ => self.proposed_for(key).first().copied(),
+        }
+    }
+
+    /// The selected entry's decision (see [`Self::decision_for`]), or why there's none.
+    fn selected_decision(&mut self) -> Option<Key> {
+        let decision = self.selected.and_then(|key| self.decision_for(key));
+        if decision.is_none() && self.selected.is_some() {
+            self.notify("only decisions are accepted or rejected");
+        }
+        decision
+    }
+
+    /// Accepts the selected decision, or the one the selected task waits on, which answers the tasks waiting on
+    /// it; accepting with a comment and rejecting ask for the text first, in the editor.
     pub fn accept_selected(&mut self) {
-        let Some(key) = self.selected else { return };
+        let Some(key) = self.selected_decision() else { return };
         match self.brain_mut(key.src).resolve(key.id, DecisionState::Accepted, "") {
             Ok(true) => self.notify(format!("#{} accepted", key.id)),
             Ok(false) => self.notify(format!("#{} is already accepted", key.id)),
@@ -365,13 +390,22 @@ impl Board {
         }
     }
 
-    /// Opens the editor for why the selected decision is rejected.
+    /// Opens the editor for a comment on accepting the selected decision, or the one the selected task waits on.
+    pub fn accept_with_comment(&mut self) {
+        let Some(key) = self.selected_decision() else { return };
+        match self.task(key).map(|t| t.decision) {
+            Some(DecisionState::Accepted) => self.notify(format!("#{} is already accepted", key.id)),
+            Some(_) => self.open_editor(Target::Accept(key)),
+            None => {}
+        }
+    }
+
+    /// Opens the editor for why the selected decision, or the one the selected task waits on, is rejected.
     pub fn reject_selected(&mut self) {
-        let Some(key) = self.selected else { return };
-        match self.task(key).map(|t| (t.kind, t.decision)) {
-            Some((Kind::Decision, DecisionState::Rejected)) => self.notify(format!("#{} is already rejected", key.id)),
-            Some((Kind::Decision, _)) => self.open_editor(Target::Reject(key)),
-            Some(_) => self.notify("only decisions are accepted or rejected"),
+        let Some(key) = self.selected_decision() else { return };
+        match self.task(key).map(|t| t.decision) {
+            Some(DecisionState::Rejected) => self.notify(format!("#{} is already rejected", key.id)),
+            Some(_) => self.open_editor(Target::Reject(key)),
             None => {}
         }
     }

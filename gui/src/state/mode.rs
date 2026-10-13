@@ -321,6 +321,8 @@ pub enum Target {
     Comment(Key, usize),
     /// Why the decision is rejected: saving it rejects the decision.
     Reject(Key),
+    /// A comment on accepting the decision: saving it accepts the decision with it.
+    Accept(Key),
     /// The description of the project the brain at this index belongs to, shared by its repositories.
     Project(usize),
     /// The notes about itself of the repository whose brain is at this index.
@@ -331,7 +333,11 @@ impl Target {
     /// The entry the text belongs to; `None` for a project's card.
     pub fn key(self) -> Option<Key> {
         match self {
-            Self::Description(key) | Self::NewComment(key) | Self::Comment(key, _) | Self::Reject(key) => Some(key),
+            Self::Description(key)
+            | Self::NewComment(key)
+            | Self::Comment(key, _)
+            | Self::Reject(key)
+            | Self::Accept(key) => Some(key),
             Self::Project(_) | Self::RepoNotes(_) => None,
         }
     }

@@ -21,13 +21,14 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | `a` | **add** tasks at the top of To do, one after another (see [Quick add](tasks-and-tags.md#quick-add)) |
 | `e` | **edit** title and tags |
 | `m` | edit the description |
-| `c` | add a **comment**; on a task waiting for your answer, **answer** the agent's question |
+| `c` | add a **comment**; on a task waiting for your answer, **answer** the agent's question (one waiting on a proposed decision is answered with `y`, `Y` or `j`) |
 | `D` | open the **decision** an agent proposed, which the selected task waits on |
 | `r` | **relate** to other entries: search and pick |
 | `o` | **open** the file in `$EDITOR`; the board reloads when it closes |
 | `x` | **delete** (asks first) |
-| `y` | **accept** the selected decision; it answers the tasks waiting on it |
-| `j` | **reject** the selected decision: the editor asks why |
+| `y` | **accept** the selected decision, or the one the selected task waits on; it answers the tasks waiting on it |
+| `Y` | **accept with a comment**: the editor asks for it, and the waiting tasks get it with the verdict |
+| `j` | **reject** the selected decision, or the one the selected task waits on: the editor asks why, which a rejection always says |
 | `w` | go to the next task **waiting for your answer**, in every project shown |
 | `M` | **move** to another project: a list of every other brain, with a search box (see [Moving to another project](tasks-and-tags.md#moving-to-another-project)) |
 | `/` | **search** titles and tags, on every tab; `#tag` matches tags only (several `#tags`: entries with all of them) |

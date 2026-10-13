@@ -39,7 +39,13 @@ pub fn draw(board: &Board, key: Key, task: &Task, scroll: &ScrollHandle, cx: &mu
                 .child(named(board, "edit", 'e', Kind::Secondary, cx))
                 .child(named(board, "relate", 'r', Kind::Secondary, cx))
                 .when(task.kind == EntryKind::Decision && task.decision != DecisionState::Accepted, |d| {
-                    d.child(named(board, "accept", 'y', Kind::Primary, cx))
+                    d.child(named(board, "accept", 'y', Kind::Primary, cx)).child(named(
+                        board,
+                        "accept-comment",
+                        'Y',
+                        Kind::Secondary,
+                        cx,
+                    ))
                 })
                 .when(task.kind == EntryKind::Decision && task.decision != DecisionState::Rejected, |d| {
                     d.child(named(board, "reject", 'j', Kind::Secondary, cx))
@@ -94,9 +100,18 @@ fn asked_block(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView>
     let callout = div().flex().flex_col().gap_2().p_3().rounded_md().border_1();
     match task.asked()? {
         Asked::Waiting(question) => {
-            let answer =
-                small(action("answer", board.label_of(KeyCode::Char('c')), Kind::Primary, KeyCode::Char('c'), cx));
-            let open = board.proposed_for(key).into_iter().map(|k| {
+            let proposed = board.proposed_for(key);
+            // Waiting on a proposed decision, it's answered by deciding on it, from here.
+            let decide: Vec<_> = if proposed.is_empty() {
+                vec![named(board, "answer", 'c', Kind::Primary, cx)]
+            } else {
+                vec![
+                    named(board, "accept", 'y', Kind::Primary, cx),
+                    named(board, "accept-comment", 'Y', Kind::Secondary, cx),
+                    named(board, "reject", 'j', Kind::Secondary, cx),
+                ]
+            };
+            let open = proposed.into_iter().map(|k| {
                 small(widgets::button(
                     ElementId::Name(format!("open-proposed {}/{}", k.src, k.id).into()),
                     format!("Open decision #{}", k.id),
@@ -104,7 +119,7 @@ fn asked_block(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView>
                 ))
                 .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.open_entry(k))))
             });
-            let buttons = div().flex().gap_2().child(answer).children(open);
+            let buttons = div().flex().flex_wrap().gap_2().children(decide.into_iter().map(small)).children(open);
             Some(
                 callout
                     .border_color(rgb(theme::ACCENT))

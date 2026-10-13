@@ -34,6 +34,7 @@ pub(super) fn draw(
         Target::NewComment(_) if board.answers(edit.target) => "Answer".to_string(),
         Target::NewComment(_) => "New comment".to_string(),
         Target::Reject(_) => "Why it's rejected".to_string(),
+        Target::Accept(_) => "Accepted, with a comment".to_string(),
         Target::Comment(_, index) => task
             .and_then(|t| t.comments.get(index))
             .map_or_else(|| "Comment".to_string(), |c| format!("Comment of {}", when(c.created))),
@@ -90,6 +91,7 @@ pub(super) fn draw(
             Target::NewComment(_) if board.answers(edit.target) => "Answer",
             Target::NewComment(_) => "Add comment",
             Target::Reject(_) => "Reject",
+            Target::Accept(_) => "Accept",
             _ => "Save",
         };
         vec![
