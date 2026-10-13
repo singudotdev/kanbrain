@@ -59,9 +59,10 @@ named_enum! {
     /// What `complete` lists, one per line.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Candidates {
-        /// Every entry of the brain, newest first, as `ID<tab>title`.
+        /// Every entry of the brain, open tasks first, each part newest first, as `ID<tab>title`.
         Ids => "ids",
-        /// Every name `--project` takes: `central`, each project, and each repository of a project with several.
+        /// Every name `--project` takes: `central`, each project of one repository, and each repository of a project
+        /// with several (`shop/api`), not the project's name alone, which it refuses.
         Projects => "projects",
         /// Every tag in use in the brain.
         Tags => "tags",
@@ -75,18 +76,15 @@ pub fn candidates(what: Candidates, store: Store, central: &Path) -> Result<Vec<
         Candidates::Ids => {
             let brain = Brain::read_only(store)?;
             let mut entries: Vec<_> = brain.tasks.iter().collect();
-            // Open tasks first: they're what status changes and comments are for.
-            entries.sort_by_key(|t| (t.is_task() && t.status == Status::Done, std::cmp::Reverse(t.id)));
+            // Open tasks first: they're what status changes and comments are for. Then the rest, notes and decisions
+            // included.
+            entries.sort_by_key(|t| (!(t.is_task() && t.status != Status::Done), std::cmp::Reverse(t.id)));
             entries.iter().map(|t| format!("{}\t{}", t.id, t.title)).collect()
         }
         Candidates::Projects => {
             let repos = projects::load(central)?;
             let mut names = vec![projects::CENTRAL.to_string()];
-            for name in repos.iter().flat_map(|r| [r.project.clone(), r.label(&repos)]) {
-                if !names.contains(&name) {
-                    names.push(name);
-                }
-            }
+            names.extend(repos.iter().map(|r| r.label(&repos)));
             names
         }
         Candidates::Tags => Brain::read_only(store)?.all_tags(),

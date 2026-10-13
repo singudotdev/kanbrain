@@ -16,7 +16,7 @@ fn every_command_offered_is_in_the_usage_and_the_reference() {
 }
 
 #[test]
-fn ids_come_open_tasks_first_and_projects_by_every_name() {
+fn ids_come_open_tasks_first_and_projects_by_the_names_project_takes() {
     let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let mut brain = Brain::open(Store::at(central.path()).unwrap()).unwrap();
     let new = |title: &str| crate::brain::NewEntry { title: title.into(), ..Default::default() };
@@ -24,14 +24,16 @@ fn ids_come_open_tasks_first_and_projects_by_every_name() {
     let done = brain.add(new("finished")).unwrap();
     brain.set_status(done, Status::Done).unwrap();
     brain.add(new("newest")).unwrap();
+    brain.add(crate::brain::NewEntry { kind: crate::model::Kind::Note, ..new("a note") }).unwrap();
     let ids = candidates(Candidates::Ids, Store::at(central.path()).unwrap(), central.path()).unwrap();
-    assert_eq!(ids, ["3\tnewest", "1\told", "2\tfinished"]);
+    assert_eq!(ids, ["3\tnewest", "1\told", "4\ta note", "2\tfinished"]);
 
     for repo in ["api", "web"] {
         projects::register(central.path(), "shop", &code.path().join(repo).join(".brain")).unwrap();
     }
+    projects::register(central.path(), "blog", &code.path().join("blog").join(".brain")).unwrap();
     let names = candidates(Candidates::Projects, Store::at(central.path()).unwrap(), central.path()).unwrap();
-    assert_eq!(names, ["central", "shop", "shop/api", "shop/web"]);
+    assert_eq!(names, ["central", "shop/api", "shop/web", "blog"], "not `shop`, which --project refuses");
 }
 
 #[test]
