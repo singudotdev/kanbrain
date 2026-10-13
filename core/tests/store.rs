@@ -75,3 +75,23 @@ fn a_temporary_brains_cache_goes_once_it_does() {
     assert!(!gone_lock.exists(), "tidied as another brain there is locked");
     assert!(cache_of(kept.path()).unwrap()[0].exists());
 }
+
+#[test]
+fn a_thread_holding_a_brains_lock_takes_it_again_without_waiting_for_itself() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let outer = store.lock().unwrap();
+    let inner = store.lock().unwrap();
+    drop(inner);
+    let path = outer.path.clone();
+    assert!(HELD.with(|held| held.borrow().contains(&path)), "the outer one still holds it");
+    drop(outer);
+    assert!(!HELD.with(|held| held.borrow().contains(&path)));
+}
+
+#[test]
+fn a_relative_brain_is_named_after_the_current_folder() {
+    let here = std::env::current_dir().unwrap();
+    let name = here.file_name().unwrap().to_string_lossy().into_owned();
+    assert_eq!(Store { dir: PathBuf::from(PROJECT_DIR), journal: RefCell::new(None) }.project(), Some(name));
+}
