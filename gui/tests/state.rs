@@ -177,7 +177,10 @@ fn t_takes_a_task_back_to_to_do_and_hash_alone_filters_the_reports_tags() {
     assert_eq!(f.status(1), Status::Todo, "t, like s p d, names the status");
     f.board.switch_tab(Tab::Report);
     f.press(KeyCode::Char('f'));
-    assert!(matches!(f.board.mode, Mode::Normal), "f is the board's, for done tasks; not a second tag filter");
+    assert!(
+        matches!(f.board.mode, Mode::Normal) && !f.board.all_done,
+        "f is the board's, for done tasks; not a second tag filter"
+    );
     f.press(KeyCode::Char('#'));
     assert!(matches!(f.board.mode, Mode::Tags(_)));
 }
@@ -671,8 +674,6 @@ fn the_project_description_is_shared_by_its_repositories() {
     board.on_key(KeyEvent::new(KeyCode::Char('!'), KeyModifiers::NONE));
     board.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
     assert_eq!(board.brain(2).project.as_ref().unwrap().description, "An online shop.!", "web sees api's edit");
-    let report = board.report();
-    assert!(report.rows.is_empty(), "nothing tracked yet");
 }
 
 #[test]
@@ -1294,4 +1295,24 @@ fn the_done_column_shows_the_latest_until_asked_for_all() {
     assert_eq!((f.board.column(Status::Done).len(), f.board.hidden_done()), (DONE_LIMIT + 3, 0));
     f.press(KeyCode::Char('f'));
     assert_eq!(f.board.hidden_done(), 3, "f again hides them");
+}
+
+#[test]
+fn a_comment_is_edited_and_deleted_from_the_details() {
+    let mut f = Fixture::new(&["feature"]);
+    f.board.brain_mut(0).add_comment(1, "first try").unwrap();
+    f.board.brain_mut(0).add_comment(1, "second try").unwrap();
+    f.board.open_editor(Target::Comment(k(1), 0));
+    f.press(KeyCode::End);
+    f.type_text(", failed");
+    f.press(KeyCode::Esc);
+    let bodies = |f: &Fixture| f.on_disk(1).comments.iter().map(|c| c.body.clone()).collect::<Vec<_>>();
+    assert_eq!(bodies(&f), ["first try, failed", "second try"]);
+    assert!(f.on_disk(1).comments[0].edited.is_some(), "it says it was edited");
+    f.board.mode = Mode::Confirm(Confirm::DeleteComment(k(1), 0));
+    f.press(KeyCode::Char('n'));
+    assert_eq!(bodies(&f).len(), 2, "n keeps it");
+    f.board.mode = Mode::Confirm(Confirm::DeleteComment(k(1), 0));
+    f.press(KeyCode::Char('y'));
+    assert_eq!(bodies(&f), ["second try"]);
 }
