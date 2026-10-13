@@ -174,7 +174,7 @@ fn toolbar(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<Brain
         .bg(rgb(theme::SURFACE))
         .child(img(LOGO.clone()).size(px(LOGO_SIZE)).flex_none().mr_2())
         .child(segmented(tabs))
-        .children((board.tab == Tab::Board).then(|| layout_switch(board, cx)))
+        .child(layout_switch(board, cx))
         // Text and tag filter every tab, like the project filter under them.
         .child(search)
         .child(tag_filter(board, scroll, follow, cx))
@@ -208,14 +208,21 @@ fn waiting_button(board: &Board, cx: &mut Context<BrainView>) -> Option<Stateful
     })
 }
 
-/// Kanban or List, for the board tab.
+/// Kanban or List, for the board tab. Its room is kept, empty, on the others, so the bar wraps the same on every tab
+/// rather than jumping as they're switched.
 fn layout_switch(board: &Board, cx: &mut Context<BrainView>) -> Div {
+    let shown = board.tab == Tab::Board;
     let segments = [(Layout::Kanban, "Kanban"), (Layout::List, "List")].map(|(layout, label)| {
-        segment(("layout", layout as usize), label, board.layout == layout)
-            .tooltip(widgets::tooltip("Shortcut: v"))
-            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.layout = layout)))
+        let segment = segment(("layout", layout as usize), label, board.layout == layout);
+        if shown {
+            segment
+                .tooltip(widgets::tooltip("Shortcut: v"))
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.layout = layout)))
+        } else {
+            segment
+        }
     });
-    segmented(segments)
+    segmented(segments).when(!shown, Styled::invisible)
 }
 
 /// Each running task with its clock, or "idle"; today's tracked total; Park and Park & quit.
