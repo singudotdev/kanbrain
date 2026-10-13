@@ -11,7 +11,7 @@ pub mod json;
 pub mod text;
 
 use crate::brain::{Brain, NewEntry};
-use crate::model::{Kind, RepoLink, Status, Task, parse_tags};
+use crate::model::{Kind, RepoLink, Status, Task};
 use anyhow::Result;
 use std::fmt;
 
@@ -132,24 +132,10 @@ impl Brain {
     /// (`#term` matches a tag prefix only), case-insensitive; tasks not done first, then newest first.
     pub fn search(&self, query: &str) -> Vec<&Task> {
         let terms: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
-        let mut found: Vec<&Task> = self.tasks.iter().filter(|t| terms.iter().all(|term| mentions(t, term))).collect();
+        let mut found: Vec<&Task> =
+            self.tasks.iter().filter(|t| terms.iter().all(|term| t.has_term(term, true))).collect();
         found.sort_by_key(|t| (t.is_task() && t.status == Status::Done, std::cmp::Reverse(t.id)));
         found
-    }
-}
-
-/// Whether the entry mentions `term` (already lowercase): `#tag` matches a tag prefix only,
-/// anything else the title, a tag, the description or a comment.
-fn mentions(task: &Task, term: &str) -> bool {
-    match term.strip_prefix('#') {
-        Some("") => true,
-        Some(tag) => parse_tags(tag).first().is_some_and(|tag| task.tags.iter().any(|t| t.starts_with(tag))),
-        None => {
-            task.title.to_lowercase().contains(term)
-                || task.tags.iter().any(|t| t.contains(term))
-                || task.description.to_lowercase().contains(term)
-                || task.comments.iter().any(|c| c.body.to_lowercase().contains(term))
-        }
     }
 }
 

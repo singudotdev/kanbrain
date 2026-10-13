@@ -331,14 +331,23 @@ impl Task {
     /// Search: every whitespace-separated term must match. `#term` matches a tag prefix;
     /// anything else matches the title or a tag. Case-insensitive.
     pub fn matches(&self, query: &str) -> bool {
-        query.split_whitespace().all(|term| {
-            let term = term.to_lowercase();
-            match term.strip_prefix('#') {
-                Some("") => true,
-                Some(tag) => self.tags.iter().any(|t| t.starts_with(tag)),
-                None => self.title.to_lowercase().contains(&term) || self.tags.iter().any(|t| t.contains(&term)),
+        query.split_whitespace().all(|term| self.has_term(&term.to_lowercase(), false))
+    }
+
+    /// Whether the entry has `term`, already lowercase: `#tag` (written as a tag is typed anywhere) a tag that
+    /// starts with it; anything else the title or a tag, and with `everywhere`, the description or a comment too.
+    pub(crate) fn has_term(&self, term: &str, everywhere: bool) -> bool {
+        match term.strip_prefix('#') {
+            Some("") => true,
+            Some(tag) => text::parse_tags(tag).first().is_some_and(|tag| self.tags.iter().any(|t| t.starts_with(tag))),
+            None => {
+                self.title.to_lowercase().contains(term)
+                    || self.tags.iter().any(|t| t.contains(term))
+                    || everywhere
+                        && (self.description.to_lowercase().contains(term)
+                            || self.comments.iter().any(|c| c.body.to_lowercase().contains(term)))
             }
-        })
+        }
     }
 }
 

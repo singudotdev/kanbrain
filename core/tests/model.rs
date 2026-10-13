@@ -48,6 +48,9 @@ fn search() {
     assert!(task.matches("supp"));
     assert!(!task.matches("#login"));
     assert!(!task.matches("login #backend"));
+    assert!(task.matches("##PROD,"), "a tag written as tags are typed, as search reads it");
+    task.description = "Flaky on mobile".into();
+    assert!(!task.matches("mobile"), "the board filter doesn't look in the description; kb search does");
 }
 
 #[test]
