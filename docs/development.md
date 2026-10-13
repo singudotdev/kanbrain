@@ -407,12 +407,19 @@ The kanban app's look is checked by running it (`KANBRAIN_DIR=/tmp/t cargo run -
 
 ### Publishing a release
 
-1. Write the version's release notes in `tag-changelog/vX.Y.Z.md` (terse bullets anchored in the code) and its section
-   in `CHANGELOG.md`, and commit them. `core/build.rs` stops a version without them from compiling in the repository.
-2. Update `version` under `[workspace.package]` in `Cargo.toml`, and `kanbrain-core`'s `version` under
+1. Every breaking change in the range (a `feat!:` or `fix!:` commit) comes with its migration, so existing users'
+   data and setup move forward on their own: a data format change has its step in `MIGRATIONS` (see
+   [Changing the file format](#changing-the-file-format)); a change of behavior or of the agents' instructions is
+   fixed on load or by `kb init --all`, which `kb update` runs. Only a change to `kanbrain-core`'s Rust API alone,
+   which isn't meant for other crates, needs none.
+2. Push `main` alone and wait for CI on Linux, macOS and Windows: a tag is a release.
+3. Write the version's release notes in `tag-changelog/vX.Y.Z.md` (terse bullets anchored in the code, naming each
+   breaking change's migration) and its section in `CHANGELOG.md`, and commit them. `core/build.rs` stops a version
+   without them from compiling in the repository.
+4. Update `version` under `[workspace.package]` in `Cargo.toml`, and `kanbrain-core`'s `version` under
    `[workspace.dependencies]` to the same, run `cargo build` so `Cargo.lock` follows, and commit it on its own. All
    three crates share it.
-3. Create a signed, annotated tag and push it:
+5. Create a signed, annotated tag and push it:
 
    ```sh
    git tag -s vX.Y.Z -m "vX.Y.Z: <summary>"
