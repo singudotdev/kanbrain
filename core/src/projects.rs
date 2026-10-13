@@ -141,6 +141,7 @@ pub fn find(central: &Path, label: &str) -> Result<Repo> {
 /// gives way.
 pub fn register(central: &Path, project: &str, dir: &Path) -> Result<()> {
     check_name(project)?;
+    let _lock = lock(central)?;
     let mut repos = load(central)?;
     let new = Repo { project: project.to_string(), dir: dir.to_path_buf() };
     // By folder, not path: `init` registers the canonical one, which another registration's may not be (`/var`
@@ -165,6 +166,7 @@ pub fn register(central: &Path, project: &str, dir: &Path) -> Result<()> {
 /// Takes the repository whose `.brain/` is `dir` out of the registry, and returns it; `None` if it
 /// wasn't registered. Its folder may be gone: a deleted repository can still be taken out.
 pub fn unregister(central: &Path, dir: &Path) -> Result<Option<Repo>> {
+    let _lock = lock(central)?;
     let mut repos = load(central)?;
     let Some(at) = repos.iter().position(|r| same_dir(&r.dir, dir)) else { return Ok(None) };
     let repo = repos.remove(at);
@@ -210,6 +212,12 @@ pub fn check_name(name: &str) -> Result<()> {
         bail!("`{CENTRAL}` is the name of the central brain; pick another: `kb init NAME`");
     }
     Ok(())
+}
+
+/// The central brain's write lock, held from reading the registry to writing it back: two `kb init`s at once
+/// would otherwise each register their repository over the other's.
+fn lock(central: &Path) -> Result<store::BrainLock> {
+    Store::at(central)?.lock()
 }
 
 /// Writes the registry.
@@ -313,6 +321,7 @@ pub fn ensure_description(central: &Path, project: &str) -> Result<bool> {
 /// Renames project `old` to `new` in the registry and its shared card (the file and its title). Its
 /// repositories' own cards are the caller's: their folders may be elsewhere, or gone.
 pub fn rename(central: &Path, old: &str, new: &str) -> Result<()> {
+    let _lock = lock(central)?;
     let mut repos = load(central)?;
     for repo in repos.iter_mut().filter(|r| r.project == old) {
         new.clone_into(&mut repo.project);

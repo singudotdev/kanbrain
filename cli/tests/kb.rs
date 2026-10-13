@@ -113,6 +113,31 @@ fn a_command_waiting_for_its_stdin_holds_up_no_other() {
 }
 
 #[test]
+fn repositories_registered_at_once_are_all_kept() {
+    let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let children: Vec<_> = (0..8)
+        .map(|n| {
+            let repo = code.path().join(format!("repo{n}"));
+            std::fs::create_dir(&repo).unwrap();
+            Command::new(env!("CARGO_BIN_EXE_kb"))
+                .args(["init", &format!("project{n}")])
+                .current_dir(repo)
+                .env("KANBRAIN_DIR", central.path())
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap()
+        })
+        .collect();
+    for child in children {
+        ok(&child.wait_with_output().unwrap());
+    }
+    let registry = std::fs::read_to_string(central.path().join("projects.md")).unwrap();
+    assert!((0..8).all(|n| registry.contains(&format!("- project{n}: "))), "{registry}");
+}
+
+#[test]
 fn commands_run_in_parallel_lose_nothing() {
     let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     ok(&kb(repo.path(), central.path(), &["init", "demo"], ""));
