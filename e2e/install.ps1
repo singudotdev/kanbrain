@@ -111,6 +111,7 @@ try {
     Set-Content -Path (Join-Path $cache 'locks\0123456789abcdef.lock') -Value ''
     Set-Content -Path (Join-Path $env:KANBRAIN_DIR 'notes-of-mine.txt') -Value 'mine'
     Set-Content -Path (Join-Path $env:KANBRAIN_DIR '.0001-left-by-a-crash.md.4242-0.tmp') -Value ''
+    Set-Content -Path (Join-Path $env:KANBRAIN_DIR 'projects\.demo.md.4242-1.tmp') -Value ''
     $env:KANBRAIN_PURGE = '1'
     $env:KANBRAIN_YES = '1'
     & (Join-Path $repo 'install.ps1') *>&1 | Out-Null
@@ -118,6 +119,7 @@ try {
     if (-not (Test-Path (Join-Path $env:KANBRAIN_DIR 'notes-of-mine.txt'))) { Fail "purge deleted a file it didn't create" }
     if (Test-Path (Join-Path $env:KANBRAIN_DIR 'projects.md')) { Fail 'purge kept the project registry' }
     if (Test-Path (Join-Path $env:KANBRAIN_DIR '.0001-left-by-a-crash.md.4242-0.tmp')) { Fail 'purge kept a leftover temporary file' }
+    if (Test-Path (Join-Path $env:KANBRAIN_DIR 'projects')) { Fail "purge kept the project cards' folder" }
     if ((Get-Content $claude -Raw) -notmatch '## Project memory: kanbrain') { Fail 'purge touched the project' }
 
     Write-Host 'PASS install.ps1'

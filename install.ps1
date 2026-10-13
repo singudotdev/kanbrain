@@ -125,7 +125,9 @@ function Install-Kanbrain {
                 $entries = @($owned | Where-Object { $_.Name -match '^\d{4,}-.*\.md$' }).Count
                 foreach ($sub in 'projects', 'reports') {
                     $dir = Join-Path $data $sub
-                    if (Test-Path $dir -PathType Container) { $owned += @(Get-ChildItem $dir -File -Force -Filter '*.md') }
+                    if (Test-Path $dir -PathType Container) {
+                        $owned += @(Get-ChildItem $dir -File -Force | Where-Object { $_.Name -match '\.md$|^\..*\.md(\.\d+-\d+)?\.tmp$' })
+                    }
                 }
                 Say "data folder: $data"
                 Say "this permanently deletes $entries entry file(s), tags.md, the project registry and cards, exported reports, and the backups taken before migrations"
