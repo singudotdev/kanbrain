@@ -214,4 +214,5 @@ New tags are added automatically. See [tag colors](tasks-and-tags.md#tag-colors)
 ## Writes are atomic
 
 Task files are written to a temporary file (`.NNNN-slug.md.PID-N.tmp`), flushed to disk, and then renamed into
-place, so a crash or power loss never leaves a half-written task file.
+place, so a crash or power loss never leaves a half-written task file. A temporary file a crash leaves behind is
+deleted once it's an hour old, the next time a `kb` command or the app writes to that brain.

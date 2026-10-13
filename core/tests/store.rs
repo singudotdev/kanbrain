@@ -95,3 +95,21 @@ fn a_relative_brain_is_named_after_the_current_folder() {
     let name = here.file_name().unwrap().to_string_lossy().into_owned();
     assert_eq!(Store { dir: PathBuf::from(PROJECT_DIR), journal: RefCell::new(None) }.project(), Some(name));
 }
+
+#[test]
+fn what_a_crash_left_of_a_write_goes_once_the_lock_is_taken() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir(dir.path().join("reports")).unwrap();
+    let left = |name: &str, age: Duration| {
+        let path = dir.path().join(name);
+        let file = fs::File::create(&path).unwrap();
+        file.set_modified(std::time::SystemTime::now() - age).unwrap();
+        path
+    };
+    let crashed = left(".0001-a.md.4242-0.tmp", Duration::from_secs(2 * 60 * 60));
+    let in_report = left("reports/.week.md.4242-1.tmp", Duration::from_secs(2 * 60 * 60));
+    let writing = left(".0002-b.md.4243-0.tmp", Duration::ZERO);
+    drop(Store::at(dir.path()).unwrap().lock().unwrap());
+    assert!(!crashed.exists() && !in_report.exists());
+    assert!(writing.exists(), "maybe still being written, by a write made without the lock");
+}

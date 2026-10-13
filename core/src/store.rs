@@ -9,6 +9,7 @@ use std::fs;
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
 
 /// Tag color assignments; lives next to the task files but isn't a task.
 const TAGS_FILE: &str = "tags.md";
@@ -166,6 +167,7 @@ impl Store {
         // have every later `lock` on this thread hand back a guard that holds nothing.
         HELD.with(|held| held.borrow_mut().push(path.clone()));
         forget_gone_temp_brains(&path);
+        forget_cut_writes(&self.dir);
         Ok(BrainLock { file: Some(file), path })
     }
 
@@ -366,6 +368,29 @@ fn forget_gone_temp_brains(lock: &Path) {
             if let (Some(cache), Some(key)) = (locks.parent(), path.file_stem()) {
                 let _ = fs::remove_dir_all(cache.join("backups").join(key));
             }
+        }
+    }
+}
+
+/// How old a write's temporary file has to be to count as a crash's leftover: no write takes that long.
+const CUT_WRITE_AGE: Duration = Duration::from_secs(60 * 60);
+
+/// Deletes the temporary files of writes a crash cut short (see [`write_file`]) in the brain in `dir` and its
+/// folders, best effort. Each has a name of its own, so no later write replaces it. Run once its lock is taken,
+/// when nothing else writes there; the age spares writes made without the lock, as `init` does.
+fn forget_cut_writes(dir: &Path) {
+    let folders = fs::read_dir(dir).into_iter().flatten().flatten().filter(|e| e.file_type().is_ok_and(|t| t.is_dir()));
+    let files = std::iter::once(dir.to_path_buf())
+        .chain(folders.map(|folder| folder.path()))
+        .filter_map(|folder| fs::read_dir(folder).ok())
+        .flatten()
+        .flatten();
+    for file in files {
+        let name = file.file_name();
+        let name = name.to_string_lossy();
+        let age = file.metadata().and_then(|m| m.modified()).ok().and_then(|at| at.elapsed().ok());
+        if name.starts_with('.') && name.ends_with(".tmp") && age.is_some_and(|age| age > CUT_WRITE_AGE) {
+            let _ = fs::remove_file(file.path());
         }
     }
 }
