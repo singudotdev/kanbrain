@@ -48,7 +48,9 @@ impl Board {
                     self.save_edit(&edit);
                 } else {
                     self.mode = Mode::Edit(edit);
+                    return;
                 }
+                self.back_to_manage(edit.back);
             }
             Mode::Confirm(confirm) => match key.code {
                 KeyCode::Char('y') | KeyCode::Enter => self.confirm(confirm),
@@ -136,9 +138,20 @@ impl Board {
 
     /// Leaves the text editor without saving.
     pub fn discard_edit(&mut self) {
-        if matches!(self.mode, Mode::Edit(_)) {
+        if let Mode::Edit(edit) = &self.mode {
+            let back = edit.back;
             self.mode = Mode::Normal;
             self.notify("changes discarded");
+            self.back_to_manage(back);
+        }
+    }
+
+    /// Reopens Manage project on `back` once the editor it opened has closed, unless that opened something else.
+    fn back_to_manage(&mut self, back: Option<usize>) {
+        if let (Some(src), Mode::Normal) = (back, &self.mode)
+            && src < self.sources.len()
+        {
+            self.mode = Mode::ManageProject(src);
         }
     }
 

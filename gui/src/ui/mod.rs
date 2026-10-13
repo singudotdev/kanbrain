@@ -195,6 +195,8 @@ struct Scrolls {
     links: ScrollHandle,
     /// "Which project?".
     place: ScrollHandle,
+    /// Manage project's body.
+    manage_project: ScrollHandle,
     /// The projects listed by the add-project and manage dialogs.
     add_project: ScrollHandle,
 }

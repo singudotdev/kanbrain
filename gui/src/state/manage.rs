@@ -44,9 +44,9 @@ impl Board {
             KeyCode::Char('r') => self.ask_rename_repo(src),
             KeyCode::Char('M') => self.ask_move_repo(src),
             KeyCode::Char('x') => self.ask_remove(src, false),
-            KeyCode::Char('N') => self.open_editor(Target::RepoNotes(src)),
+            KeyCode::Char('N') => self.open_editor_from(Target::RepoNotes(src), Some(src)),
             KeyCode::Char('R') => self.ask_rename_project(src),
-            KeyCode::Char('E') => self.open_editor(Target::Project(src)),
+            KeyCode::Char('E') => self.open_editor_from(Target::Project(src), Some(src)),
             KeyCode::Char('X') => self.ask_remove(src, true),
             KeyCode::Char('A') => {
                 self.add_repo_to(src);

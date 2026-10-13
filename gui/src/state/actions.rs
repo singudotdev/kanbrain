@@ -138,6 +138,11 @@ impl Board {
 
     /// Opens the text editor on a description or comment of an existing entry, or a project's card.
     pub fn open_editor(&mut self, target: Target) {
+        self.open_editor_from(target, None);
+    }
+
+    /// Opens the editor on `target` from Manage project on `back`, which closing it goes back to.
+    pub fn open_editor_from(&mut self, target: Target, back: Option<usize>) {
         let text = match target {
             Target::Description(key) => self.task(key).map(|t| t.description.as_str()),
             Target::NewComment(key) | Target::Reject(key) | Target::Accept(key) => self.task(key).map(|_| ""),
@@ -148,7 +153,7 @@ impl Board {
             Target::RepoNotes(src) => self.brain(src).project.as_ref().map(|p| p.notes.as_str()),
         };
         let Some(text) = text else { return };
-        self.mode = Mode::Edit(Edit { editor: TextEditor::new(text), target });
+        self.mode = Mode::Edit(Edit { editor: TextEditor::new(text), target, back });
     }
 
     /// Writes the editor's text to its target, if it changed.

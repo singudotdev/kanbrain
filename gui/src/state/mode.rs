@@ -70,7 +70,11 @@ impl Mode {
                     Target::Project(src) => Target::Project(to(src)?),
                     Target::RepoNotes(src) => Target::RepoNotes(to(src)?),
                 };
-                Self::Edit(Edit { target, ..edit })
+                let back = match edit.back {
+                    Some(src) => Some(to(src)?),
+                    None => None,
+                };
+                Self::Edit(Edit { target, back, ..edit })
             }
             Self::Confirm(confirm) => Self::Confirm(match confirm {
                 Confirm::Delete(k) => Confirm::Delete(key(k)?),
@@ -374,6 +378,8 @@ pub struct Edit {
     pub editor: TextEditor,
     /// Where the text goes.
     pub target: Target,
+    /// Manage project, on this brain, when it was opened from there: where closing it goes back to.
+    pub back: Option<usize>,
 }
 
 /// What the text editor edits.

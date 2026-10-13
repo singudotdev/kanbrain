@@ -38,7 +38,7 @@ pub fn draw(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<Brai
         Mode::Links(picker) => pickers::links(board, picker, &scroll.links, follow, cx)?,
         Mode::Comments(picker) => pickers::comments(board, picker, &scroll.links, follow, cx)?,
         Mode::Where(asked) => pickers::place(board, asked, &scroll.place, follow, cx),
-        Mode::ManageProject(src) => project::draw(board, *src, cx)?,
+        Mode::ManageProject(src) => project::draw(board, *src, &scroll.manage_project, follow, cx)?,
         Mode::Palette(picker) => pickers::palette(board, picker, &scroll.palette, follow, cx),
         Mode::AddProject(add) => add_project::draw(board, add, &scroll.add_project, follow, cx),
         Mode::Manage(manage) => manage::draw(board, manage, &scroll.add_project, follow, cx)?,

@@ -564,6 +564,10 @@ fn manage_project_acts_by_key_on_the_highlighted_repository_or_the_project() {
     assert!(matches!(&board.mode, Mode::Manage(Manage::RenameRepo { src, .. }) if *src == second));
     press(&mut board, KeyCode::Esc);
     assert!(matches!(board.mode, Mode::ManageProject(_)), "back to it");
+    press(&mut board, KeyCode::Char('N'));
+    assert!(matches!(&board.mode, Mode::Edit(edit) if edit.target == Target::RepoNotes(second)));
+    press(&mut board, KeyCode::Esc);
+    assert!(matches!(board.mode, Mode::ManageProject(src) if src == second), "the editor goes back to it too");
     press(&mut board, KeyCode::Char('X'));
     assert!(matches!(board.mode, Mode::Manage(Manage::Remove { whole: true, .. })), "the whole project");
 }
