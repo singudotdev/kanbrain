@@ -202,7 +202,7 @@ impl Board {
         };
         let src = form.src();
         let mut options: Vec<(Key, &Task)> =
-            self.linkable(src).filter(|&(key, t)| Some(key) != own && t.matches(form.links_search.text())).collect();
+            self.linkable(src).filter(|&(key, t)| Some(key) != own && t.matches(form.related.search.text())).collect();
         options.sort_by_key(|&(key, t)| (!form.links.contains(&key), key.src != src, std::cmp::Reverse(t.id)));
         options
     }
@@ -212,7 +212,7 @@ impl Board {
         let Mode::Form(form) = &self.mode else { return };
         let Some(other) = self.form_link_options(form).get(index).map(|&(key, _)| key) else { return };
         let Mode::Form(form) = &mut self.mode else { return };
-        form.links_sel = index;
+        form.related.sel = index;
         if let Some(at) = form.links.iter().position(|&l| l == other) {
             form.links.remove(at);
         } else {

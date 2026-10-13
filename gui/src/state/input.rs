@@ -214,20 +214,15 @@ impl Board {
             KeyCode::Esc => {}
             // In the project field, its dropdown takes every key but tab: enter, the arrows, what's typed.
             code if form.field == Field::Project && code != KeyCode::Tab => self.key_form_project(form, key),
-            // In the related field, enter checks the highlighted entry and arrows move in its dropdown.
-            KeyCode::Enter if links => {
-                let sel = form.links_sel;
-                self.mode = Mode::Form(form);
-                self.toggle_form_link(sel);
-            }
-            KeyCode::Up if links => {
-                form.links_sel = form.links_sel.saturating_sub(1);
-                self.mode = Mode::Form(form);
-            }
-            KeyCode::Down if links => {
+            // In the related field, its dropdown takes every key but tab: enter checks the highlighted entry.
+            code if links && code != KeyCode::Tab => {
                 let count = self.form_link_options(&form).len();
-                form.links_sel = (form.links_sel + 1).min(count.saturating_sub(1));
+                let chosen = form.related.key(key, count) == PickerKey::Choose;
+                let sel = form.related.sel;
                 self.mode = Mode::Form(form);
+                if chosen {
+                    self.toggle_form_link(sel);
+                }
             }
             KeyCode::Left | KeyCode::Right if picking => {
                 if let Some(status) = form.status() {
@@ -247,12 +242,6 @@ impl Board {
             }
             KeyCode::Up => {
                 form.go_to(form.previous_field());
-                self.mode = Mode::Form(form);
-            }
-            _ if links => {
-                if form.links_search.on_key(key) {
-                    form.links_sel = 0;
-                }
                 self.mode = Mode::Form(form);
             }
             _ => {

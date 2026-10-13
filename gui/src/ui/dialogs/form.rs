@@ -56,7 +56,7 @@ pub(super) fn draw(board: &Board, form: &Form, scroll: &Scrolls, follow: bool, c
             related_field(
                 board,
                 form,
-                field(Field::Links, &form.links_search, TextBox::Links, "Search to link, or leave empty", cx),
+                field(Field::Links, &form.related.search, TextBox::Links, "Search to link, or leave empty", cx),
                 (&scroll.form_links, follow),
                 cx,
             ),
@@ -185,7 +185,7 @@ fn related_field(
             .enumerate()
             .map(|(index, (key, other))| {
                 let checked = form.links.contains(&key);
-                row(("link-option", index), format!("link option {index}"), index == form.links_sel, true)
+                row(("link-option", index), format!("link option {index}"), index == form.related.sel, true)
                     .on_click(
                         cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.toggle_form_link(index))),
                     )
@@ -202,7 +202,7 @@ fn related_field(
             .border_color(rgb(BORDER))
             .bg(rgb(theme::POPUP))
             .text_size(px(13.))
-            .child(list("link-options", rows, form.links_sel, FORM_LINK_ROWS, scroll, follow))
+            .child(list("link-options", rows, form.related.sel, FORM_LINK_ROWS, scroll, follow))
             .when(empty, |d| d.child(dim("Nothing matches.").px_2()))
     });
     div()

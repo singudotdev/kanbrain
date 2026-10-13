@@ -107,12 +107,11 @@ pub struct Form {
     pub title: LineInput,
     /// The tags field: comma or space separated.
     pub tags: LineInput,
-    /// The related field's search box: what's typed filters the entries to link.
-    pub links_search: LineInput,
+    /// The related field's search box, what's typed filtering the entries to link, and the highlighted row of its
+    /// dropdown.
+    pub related: Picker,
     /// The entries to relate to, in the form's brain or the project's other repositories; may be empty.
     pub links: Vec<Key>,
-    /// The highlighted row of the related field's dropdown, while it's typed into.
-    pub links_sel: usize,
     /// The project field's search and highlighted row; `None` on an edit or with a single brain, where
     /// there's no other project to pick.
     pub project: Option<Picker>,
@@ -140,9 +139,8 @@ impl Form {
             target,
             title: LineInput::new(title),
             tags: LineInput::new(tags),
-            links_search: LineInput::default(),
+            related: Picker::default(),
             links,
-            links_sel: 0,
             project: None,
             field: Field::Title,
         }
@@ -161,7 +159,7 @@ impl Form {
         match self.field {
             Field::Title => Some(&self.title),
             Field::Tags => Some(&self.tags),
-            Field::Links => Some(&self.links_search),
+            Field::Links => Some(&self.related.search),
             Field::Project => self.project.as_ref().map(|p| &p.search),
             Field::Status => None,
         }
@@ -172,7 +170,7 @@ impl Form {
         match self.field {
             Field::Title => Some(&mut self.title),
             Field::Tags => Some(&mut self.tags),
-            Field::Links => Some(&mut self.links_search),
+            Field::Links => Some(&mut self.related.search),
             Field::Project => self.project.as_mut().map(|p| &mut p.search),
             Field::Status => None,
         }
@@ -199,8 +197,7 @@ impl Form {
         if let FormTarget::New(_, kind, status) = self.target {
             self.target = FormTarget::New(src, kind, status);
             self.links.clear();
-            self.links_search = LineInput::default();
-            self.links_sel = 0;
+            self.related = Picker::default();
         }
     }
 
