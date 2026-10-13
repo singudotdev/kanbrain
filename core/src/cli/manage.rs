@@ -7,7 +7,7 @@
 //! each sibling under its write lock.
 
 use super::init;
-use crate::model::Task;
+use crate::model::{Task, counted};
 use crate::projects::{self, Repo, RepoCard};
 use crate::store::{self, PROJECT_DIR, Store};
 use anyhow::{Context, Result, bail};
@@ -55,7 +55,8 @@ pub fn rename_repo(central: &Path, dir: &Path, new: &str) -> Result<Vec<String>>
     let rewritten = rewrite_sibling_links(central, &repo, |link_repo| (link_repo == old).then(|| new.clone()))?;
     let mut done = vec![format!("renamed repository `{old}` of project `{}` to `{new}`", repo.project)];
     if rewritten > 0 {
-        done.push(format!("rewrote the links to it in {rewritten} entries of its other repositories"));
+        let entries = counted(rewritten, "entry", "entries");
+        done.push(format!("rewrote the links to it in {entries} of its other repositories"));
     }
     Ok(done)
 }
@@ -73,7 +74,8 @@ pub fn move_repo(central: &Path, dir: &Path, to: &str) -> Result<Vec<String>> {
     let dropped = unlink(central, &repo)?;
     let mut done = init::init(root, Some(to), None, central)?;
     if dropped > 0 {
-        done.push(format!("dropped {dropped} links between it and project `{}`'s repositories", repo.project));
+        let links = counted(dropped, "link", "links");
+        done.push(format!("dropped {links} between it and project `{}`'s repositories", repo.project));
     }
     // They describe the repository, which moved with them, but were written among its old project's.
     if projects::read_repo_card(&repo.dir).is_some_and(|card| !card.notes.is_empty()) {

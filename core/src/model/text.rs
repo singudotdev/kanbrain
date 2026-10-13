@@ -15,6 +15,11 @@ pub fn parse_tags(s: &str) -> Vec<String> {
     tags
 }
 
+/// `1 session`, `3 sessions`: `n` with its noun, `one` for one and `many` otherwise (`0 sessions`).
+pub fn counted(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
 /// `Fix: prod login!` → `fix-prod-login`; ASCII only so the name works on every file system.
 pub fn slugify(title: &str) -> String {
     let mut slug = String::new();

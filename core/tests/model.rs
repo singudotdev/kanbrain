@@ -73,3 +73,10 @@ fn a_question_waits_for_a_person_until_the_task_is_picked_up() {
     task.set_status(Status::Parked, at(6), Author::Agent);
     assert_eq!(task.asked(), None, "picked up: parked again for another reason");
 }
+
+#[test]
+fn a_count_takes_the_singular_for_one_only() {
+    assert_eq!(counted(1, "session", "sessions"), "1 session");
+    assert_eq!(counted(0, "session", "sessions"), "0 sessions");
+    assert_eq!(counted(2, "entry", "entries"), "2 entries");
+}

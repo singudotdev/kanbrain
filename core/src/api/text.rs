@@ -4,7 +4,7 @@
 
 use super::ApiError;
 use crate::brain::Brain;
-use crate::model::{Author, Comment, DecisionState, Task, fmt_age, fmt_dur, now};
+use crate::model::{Author, Comment, DecisionState, Task, counted, fmt_age, fmt_dur, now};
 use chrono::{DateTime, Local};
 use std::fmt::Write;
 
@@ -102,7 +102,8 @@ impl Brain {
         }
         if !task.sessions.is_empty() {
             let running = task.running_for(now).map(|r| format!(", running for {}", fmt_dur(r))).unwrap_or_default();
-            facts.push(format!("tracked {} in {} session(s){running}", fmt_dur(task.total(now)), task.sessions.len()));
+            let sessions = counted(task.sessions.len(), "session", "sessions");
+            facts.push(format!("tracked {} in {sessions}{running}", fmt_dur(task.total(now))));
         }
         writeln!(out, "{}", facts.join(" · "))?;
         if let Some(path) = &task.path {

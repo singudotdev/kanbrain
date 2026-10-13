@@ -9,7 +9,7 @@ mod text;
 mod time;
 
 pub use markdown::parse_links;
-pub use text::{parse_tags, sanitize_comment, sanitize_description, slugify};
+pub use text::{counted, parse_tags, sanitize_comment, sanitize_description, slugify};
 #[cfg(test)]
 pub use time::parse_ts;
 pub use time::{covered, fmt_age, fmt_clock, fmt_dur, fmt_ts, now};

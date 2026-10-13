@@ -10,7 +10,8 @@ use crate::state::{Board, COLUMNS, Confirm, Key, Mode, Target, When};
 use crate::text::event::KeyCode;
 use gpui::{ClickEvent, Context, Div, ElementId, FontWeight, ScrollHandle, Stateful, div, prelude::*, px, rgb};
 use kanbrain_core::model::{
-    Asked, Author, Comment, DecisionState, Kind as EntryKind, StatusChange, Task, fmt_age, fmt_clock, fmt_dur, now,
+    Asked, Author, Comment, DecisionState, Kind as EntryKind, StatusChange, Task, counted, fmt_age, fmt_clock, fmt_dur,
+    now,
 };
 use kanbrain_core::period::{Period, Unit};
 
@@ -169,11 +170,11 @@ fn time_block(task: &Task) -> Div {
         fmt_dur(task.time_between(from, to, now))
     };
     let mut text = format!(
-        "Tracked today {} · this week {} · total {} in {} session(s)",
+        "Tracked today {} · this week {} · total {} in {}",
         within(Unit::Day),
         within(Unit::Week),
         fmt_dur(task.total(now)),
-        task.sessions.len()
+        counted(task.sessions.len(), "session", "sessions")
     );
     if let Some(running) = task.running_for(now) {
         text = format!("Running {} · {text}", fmt_clock(running));

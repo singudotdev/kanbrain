@@ -10,7 +10,7 @@ use crate::text::event::KeyCode;
 use chrono::{DateTime, Datelike, Local, NaiveDate};
 use gpui::{ClickEvent, Context, Div, FontWeight, ScrollHandle, Stateful, Styled, div, prelude::*, px, rgb};
 use kanbrain_core::brain::{Day, Event, Show, What};
-use kanbrain_core::model::{fmt_dur, now};
+use kanbrain_core::model::{counted, fmt_dur, now};
 use kanbrain_core::period::Unit;
 
 /// The period buttons, with the key that picks each.
@@ -55,7 +55,7 @@ pub fn draw(board: &Board, scroll: &ScrollHandle, cx: &mut Context<BrainView>) -
         .gap_3()
         .child(div().text_size(px(18.)).font_weight(FontWeight::SEMIBOLD).child(view.period.label()))
         .child(div().text_color(rgb(theme::GREEN)).font_weight(FontWeight::SEMIBOLD).child(fmt_dur(calendar.tracked)))
-        .child(dim(format!("tracked · {} interaction(s)", calendar.events())));
+        .child(dim(format!("tracked · {}", counted(calendar.events(), "interaction", "interactions"))));
     let now = now();
     let days = match view.period.unit {
         Unit::Month => month(&calendar.days, now, cx),

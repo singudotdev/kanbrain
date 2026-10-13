@@ -209,7 +209,7 @@ fn show_is_compact_text() {
     brain.add(NewEntry { links: vec![task], ..new(Kind::Decision, "Rotate tokens") }).unwrap();
     let text = brain.entry_text(task).unwrap();
     assert!(text.starts_with(&format!("# #{task} Fix login (doing)\n")), "{text}");
-    assert!(text.contains("tracked 0m in 5 session(s), running for 0m"), "{text}");
+    assert!(text.contains("tracked 0m in 5 sessions, running for 0m"), "{text}");
     assert!(text.contains("## History (latest 5 of 9)"), "{text}");
     assert!(text.contains("## Related\n\n- #2 Rotate tokens (decision)"), "{text}");
     assert!(!text.contains("## Description") && !text.contains("## Comments"), "empty sections are left out");

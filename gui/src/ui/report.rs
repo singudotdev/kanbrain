@@ -9,7 +9,7 @@ use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
 use chrono::Duration;
 use gpui::{ClickEvent, Context, Div, FontWeight, ScrollHandle, div, prelude::*, px, rgb};
 use kanbrain_core::brain::{Group, Report, ReportRow, ReportView};
-use kanbrain_core::model::{fmt_dur, now};
+use kanbrain_core::model::{counted, fmt_dur, now};
 use kanbrain_core::period::Unit;
 
 /// Width of each breakdown column and of the total column.
@@ -48,9 +48,11 @@ pub fn draw(board: &Board, scroll: &ScrollHandle, cx: &mut Context<BrainView>) -
         .child(div().text_size(px(18.)).font_weight(FontWeight::SEMIBOLD).child(view.period.label()))
         .child(div().text_color(rgb(theme::GREEN)).font_weight(FontWeight::SEMIBOLD).child(fmt_dur(report.total)))
         .child(dim(format!(
-            "tracked · {} {}",
-            report.rows.len(),
-            if view.group == Group::Tag { "tag(s)" } else { "task(s)" }
+            "tracked · {}",
+            match view.group {
+                Group::Tag => counted(report.rows.len(), "tag", "tags"),
+                Group::Task => counted(report.rows.len(), "task", "tasks"),
+            }
         )));
     let mut content = div().flex().flex_col().gap_4().p_4().child(summary);
     content = if report.rows.is_empty() {

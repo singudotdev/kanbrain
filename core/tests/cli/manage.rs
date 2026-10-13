@@ -37,7 +37,7 @@ fn renaming_a_repository_rewrites_its_siblings_links() {
     web_brain.link(header, &[], &[RepoLink { repo: "api".into(), id: target }]).unwrap();
 
     let done = rename_repo(central.path(), &api, "backend").unwrap();
-    assert!(done.iter().any(|l| l.contains("rewrote the links to it in 1 entries")), "{done:?}");
+    assert!(done.iter().any(|l| l.contains("rewrote the links to it in 1 entry of")), "{done:?}");
     assert_eq!(names(central.path()), ["shop/backend", "shop/web"]);
     let links = brain(central.path(), &web).entry(header).unwrap().repo_links.clone();
     assert_eq!(links, [RepoLink { repo: "backend".into(), id: target }]);
