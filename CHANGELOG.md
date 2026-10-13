@@ -3,6 +3,14 @@
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- `kb` commands run at the same time, as an agent's parallel calls do, no longer overwrite each other's changes or
+  give two entries the same id: each takes the brain's write lock. The kanban app takes it too while it acts on
+  input, so a change made on the board and one an agent makes at that moment don't overwrite each other.
+
 ## [0.1.0] - 2026-10-11
 
 ### Added

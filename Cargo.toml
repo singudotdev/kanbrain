@@ -19,6 +19,9 @@ chrono = "0.4.45"
 dirs = "7"
 # The effective user id for the root check, without `unsafe` (already in the tree through tempfile and GPUI).
 rustix = { version = "1.1.5", default-features = false, features = ["std", "process"] }
+# A brain's write lock, so commands an agent runs in parallel don't overwrite each other's changes. On every
+# platform with Rust 1.88, which std's `File::lock` (1.89) isn't.
+fs4 = { version = "1.1.0", default-features = false, features = ["sync"] }
 serde = { version = "1.0.228", features = ["derive"] }
 # preserve_order: settings files `init` merges into keep their keys in the order they had.
 serde_json = { version = "1.0.149", features = ["preserve_order"] }

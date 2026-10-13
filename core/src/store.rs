@@ -130,6 +130,28 @@ impl Store {
         Ok(Self { dir, journal: RefCell::new(None) })
     }
 
+    /// Takes this brain's write lock, waiting while another program holds it, until the returned guard is
+    /// dropped. Each `kb` that changes entries reads every file, changes some and writes them back: an agent
+    /// running several at once (one per subagent) would otherwise have the last one write over the others'
+    /// changes, or two `add`s take the same id. The lock is released when the process ends, however it ends.
+    ///
+    /// The lock file lives in the user's cache folder, named after the brain's folder, so `.brain/` (often
+    /// committed) gets no extra file.
+    pub fn lock(&self) -> Result<BrainLock> {
+        let path = lock_path(&self.dir)?;
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+        }
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&path)
+            .with_context(|| format!("opening {}", path.display()))?;
+        fs4::FileExt::lock(&file).with_context(|| format!("locking {}", path.display()))?;
+        Ok(BrainLock(file))
+    }
+
     /// Starts recording the files written or deleted from now on, so they can be put back (see [`undo`]).
     pub fn record(&self) {
         *self.journal.borrow_mut() = Some(Vec::new());
@@ -245,6 +267,24 @@ impl Store {
         self.remember(&path);
         write_file(&path, &colors.to_markdown())
     }
+}
+
+/// A brain's write lock, held until dropped (see [`Store::lock`]).
+#[derive(Debug)]
+pub struct BrainLock(#[expect(dead_code, reason = "held only for its lock, released on drop")] fs::File);
+
+/// Where the lock of the brain in `dir` is: `<cache>/kanbrain/locks/<hash>.lock`, the hash of the folder's
+/// canonical path. FNV-1a rather than std's hasher, whose output may change between Rust versions: two `kb`
+/// builds must agree on the file to exclude each other.
+fn lock_path(dir: &Path) -> Result<PathBuf> {
+    let dir = dir.canonicalize().with_context(|| format!("reading {}", dir.display()))?;
+    let hash = dir
+        .as_os_str()
+        .as_encoded_bytes()
+        .iter()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |hash, &byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3));
+    let cache = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
+    Ok(cache.join("kanbrain").join("locks").join(format!("{hash:016x}.lock")))
 }
 
 /// Writes `text` to `path`, creating its folder if missing. It goes to a hidden temporary file beside it

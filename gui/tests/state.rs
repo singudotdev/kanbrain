@@ -995,3 +995,21 @@ fn the_user_answers_questions_and_decides_on_proposals() {
     f.press(KeyCode::Char('y'));
     assert_eq!(f.on_disk(decision).decision, DecisionState::Accepted, "and reconsidered");
 }
+
+#[test]
+fn while_the_board_acts_a_kb_run_meanwhile_waits() {
+    let mut f = Fixture::new(&["feature"]);
+    let locks = f.board.lock_brains();
+    assert_eq!(locks.len(), f.board.sources.len(), "every brain's");
+    let dir = f.board.brain(0).store.dir().to_path_buf();
+    let (taken, waiting) = std::sync::mpsc::channel();
+    // As another `kb` process would: a lock of its own on the same brain.
+    let other = std::thread::spawn(move || {
+        let _lock = kanbrain_core::store::Store::at(&dir).unwrap().lock().unwrap();
+        taken.send(()).unwrap();
+    });
+    assert!(waiting.recv_timeout(std::time::Duration::from_millis(200)).is_err(), "it waits for the board");
+    drop(locks);
+    assert!(waiting.recv_timeout(std::time::Duration::from_secs(5)).is_ok(), "and goes on once released");
+    other.join().unwrap();
+}

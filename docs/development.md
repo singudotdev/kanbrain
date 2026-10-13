@@ -180,7 +180,7 @@ core/src/            kanbrain-core: shared by both programs
 ├── enums.rs         `named_enum!` / `ordered_enum!`: enums whose variants are listed in one place
 ├── platform.rs      OS specifics: the per-user (not root) check
 ├── projects.rs      projects of one or more repositories: the central brain's projects.md, the shared cards (projects/NAME.md), each repository's project.md
-├── store.rs         the data folder: entry files, tags.md, last-id, reports/; finding a project's .brain/; recording the files a change writes, for undo
+├── store.rs         the data folder: entry files, tags.md, last-id, reports/; its write lock (in the user's cache folder); finding a project's .brain/; recording the files a change writes, for undo
 └── tags.rs          tag colors: palette, no-repeat assignment, tags.md format
 
 cli/README.md        the `kanbrain` crate's page on crates.io: `kb` only (core/README.md: kanbrain-core's)
@@ -254,7 +254,8 @@ every second / before each input ──▶ Watcher::changed ──▶ Board::rel
   the board never saves a whole entry over one an agent just changed), `Board::reload_changed` re-reads only the
   brains whose folders changed, and everything when the list of projects or their cards may have. After `$EDITOR`
   returns, and on `R`, everything is re-read. After its own input it marks the folders as seen (`Watcher::sync`), so
-  its own saves don't trigger a reload.
+  its own saves don't trigger a reload. Each input holds every brain's write lock (`Store::lock`, the one `kb`
+  takes) from that re-read to its saves, so an agent's `kb` can't write in between, nor the board over it.
 - **Selection by key.** The board selects entries by `Key { src, id }` (which brain, and the id there, since every
   brain numbers from 1), never by position, so reloads and moves never jump to another card.
 - **Status changes** go through `Brain::set_status`, which parks the brain's running task when another starts, opens and closes
@@ -336,8 +337,8 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 
 `cli/tests/kb.rs` runs the built `kb` the way agents and scripts do, over temporary folders: an agent's session
 from `init` to `context`, text read from stdin with `-`, one-line JSON, errors on stderr with a failing exit code
-and the usage, `--project` from another folder, completion candidates, and the hooks asking until the project is
-described. They're Cargo integration tests (`CARGO_BIN_EXE_kb`), so they see only what the binary prints.
+and the usage, `--project` from another folder, completion candidates, the hooks asking until the project is
+described, and sixteen commands run at once losing no change and no id (the brain's write lock). They're Cargo integration tests (`CARGO_BIN_EXE_kb`), so they see only what the binary prints.
 
 ### Installers, end to end
 

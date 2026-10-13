@@ -226,23 +226,35 @@ impl BrainView {
 
     /// A key press: a clipboard shortcut, or handed to the board.
     fn on_key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
-        self.catch_up();
-        if self.clipboard(&event.keystroke, cx) {
-            cx.stop_propagation();
-            self.follow = true;
-            self.after_input(cx);
-            return;
-        }
         let keys = key_events(&event.keystroke);
-        if keys.is_empty() {
+        let handled = self.locked(|view| {
+            if view.clipboard(&event.keystroke, cx) {
+                return true;
+            }
+            for &key in &keys {
+                view.board.on_key(key);
+            }
+            !keys.is_empty()
+        });
+        if !handled {
             return;
         }
         cx.stop_propagation();
-        for key in keys {
-            self.board.on_key(key);
-        }
         self.follow = true;
         self.after_input(cx);
+    }
+
+    /// Runs `input` holding every brain's write lock, from catching up with the files to marking the
+    /// board's own saves as seen: a `kb` an agent runs meanwhile waits, so it can't write between the
+    /// board's read and its save, nor the board over it. Released before `after_input`, which may run
+    /// `$EDITOR` for as long as the user edits.
+    fn locked<T>(&mut self, input: impl FnOnce(&mut Self) -> T) -> T {
+        let locks = self.board.lock_brains();
+        self.catch_up();
+        let result = input(self);
+        self.watcher.sync(self.board.watched_dirs());
+        drop(locks);
+        result
     }
 
     /// Ctrl+A / C / X / V (Cmd on macOS): select all, copy, cut and paste in the field or editor being
@@ -277,16 +289,14 @@ impl BrainView {
 
     /// A button: runs `key` as if it had been pressed, on the board rather than into a field.
     fn press(&mut self, key: KeyEvent, cx: &mut Context<Self>) {
-        self.catch_up();
-        self.board.press(key);
+        self.locked(|view| view.board.press(key));
         self.follow = true;
         self.after_input(cx);
     }
 
     /// A click that changes the board some other way than a key.
     fn act(&mut self, cx: &mut Context<Self>, act: impl FnOnce(&mut Board)) {
-        self.catch_up();
-        self.board.recorded(act);
+        self.locked(|view| view.board.recorded(act));
         self.after_input(cx);
     }
 

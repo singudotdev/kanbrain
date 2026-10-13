@@ -11,7 +11,7 @@ use kanbrain_core::brain::{Brain, Calendar, CalendarView, Report, ReportView};
 use kanbrain_core::cli;
 use kanbrain_core::model::{RepoLink, Task};
 use kanbrain_core::projects::{self, Repo};
-use kanbrain_core::store::{PROJECT_DIR, Store};
+use kanbrain_core::store::{BrainLock, PROJECT_DIR, Store};
 use std::path::{Path, PathBuf};
 
 /// An entry in one of the brains: the brain's index in [`Board::sources`], and the entry's id there.
@@ -461,6 +461,20 @@ impl Board {
         let registered = repos.iter().filter(|r| r.dir.is_dir()).map(|r| (r.dir.as_path(), Some(r.project.as_str())));
         let shown = self.sources.iter().skip(1).map(|s| (s.brain.store.dir(), s.project.as_deref()));
         Ok(registered.eq(shown))
+    }
+
+    /// Takes every brain's write lock (see `Store::lock`), in order, so two windows never wait on each other.
+    /// One that can't be taken (an unwritable cache folder) is said in the status bar and skipped, rather than
+    /// keeping the board from working.
+    pub fn lock_brains(&mut self) -> Vec<BrainLock> {
+        let mut locks = Vec::with_capacity(self.sources.len());
+        for src in 0..self.sources.len() {
+            match self.sources[src].brain.store.lock() {
+                Ok(lock) => locks.push(lock),
+                Err(e) => self.notify(format!("{e:#}")),
+            }
+        }
+        locks
     }
 
     /// The data folders to watch: every brain's, and the central brain's project cards.

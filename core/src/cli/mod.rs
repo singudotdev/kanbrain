@@ -318,6 +318,9 @@ impl Command {
             Command::Status => print_status(&central),
             Command::Entries(args) => {
                 let author = author()?;
+                // Held from reading the files to writing them, so parallel commands each see the others'
+                // changes; not by `wait`, which would hold it while it waits.
+                let _lock = (!matches!(args.command, EntryCommand::Wait(..))).then(|| store.lock()).transpose()?;
                 args.run(Brain { author, ..Brain::open_in(store, &central)? })
             }
             Command::Report(args) => print_report(store, &args),

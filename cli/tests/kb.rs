@@ -81,3 +81,37 @@ fn the_hooks_hold_an_agent_to_describing_the_project() {
     ok(&kb(repo.path(), central.path(), &["project", "describe", "-"], "A demo app."));
     assert_eq!(ok(&kb(repo.path(), central.path(), &["hook", "prompt"], &input)), "", "silent once described");
 }
+
+#[test]
+fn commands_run_in_parallel_lose_nothing() {
+    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    ok(&kb(repo.path(), central.path(), &["init", "demo"], ""));
+    ok(&kb(repo.path(), central.path(), &["add", "Shared"], ""));
+    // As an agent's subagents would: all at once, each adding a task and commenting on the same one.
+    let spawn = |args: Vec<String>| {
+        Command::new(env!("CARGO_BIN_EXE_kb"))
+            .args(args)
+            .current_dir(repo.path())
+            .env("KANBRAIN_DIR", central.path())
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap()
+    };
+    let children: Vec<_> = (0..8)
+        .flat_map(|n| {
+            [vec!["add".into(), format!("Part {n}")], vec!["comment".into(), "1".into(), format!("note {n}")]]
+        })
+        .map(spawn)
+        .collect();
+    for child in children {
+        ok(&child.wait_with_output().unwrap());
+    }
+    let list = ok(&kb(repo.path(), central.path(), &["list", "all"], ""));
+    let ids: std::collections::BTreeSet<u32> =
+        list.lines().filter_map(|line| line.strip_prefix("- #")?.split(' ').next()?.parse().ok()).collect();
+    assert_eq!(ids, (1..=9).collect(), "every add got its own id: {list}");
+    let shown = ok(&kb(repo.path(), central.path(), &["show", "1"], ""));
+    assert!((0..8).all(|n| shown.contains(&format!("note {n}"))), "every comment kept: {shown}");
+}
