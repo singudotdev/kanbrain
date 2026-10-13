@@ -64,7 +64,13 @@ impl std::error::Error for TooNew {}
 pub fn format_of(dir: &Path) -> Result<u32> {
     let path = dir.join(FORMAT_FILE);
     match fs::read_to_string(&path) {
-        Ok(text) => text.trim().parse().with_context(|| format!("{} isn't a format number", path.display())),
+        // Formats count from 1: a 0 would have migrations start before the first.
+        Ok(text) => text
+            .trim()
+            .parse()
+            .ok()
+            .filter(|&format| format >= 1)
+            .with_context(|| format!("{} isn't a format number", path.display())),
         Err(e) if e.kind() == ErrorKind::NotFound => Ok(1),
         Err(e) => Err(e).with_context(|| format!("reading {}", path.display())),
     }

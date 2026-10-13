@@ -80,4 +80,6 @@ fn a_brain_a_newer_kanbrain_wrote_is_refused_entirely() {
     assert!(crate::brain::Brain::open(Store::at(store.dir()).unwrap()).is_err(), "nor opened");
     store::write_file(&store.dir().join(FORMAT_FILE), "two\n").unwrap();
     assert!(format_of(store.dir()).is_err(), "a format that isn't a number is an error, not format 1");
+    store::write_file(&store.dir().join(FORMAT_FILE), "0\n").unwrap();
+    assert!(migrate(&store).is_err(), "nor is format 0, which comes before any");
 }
