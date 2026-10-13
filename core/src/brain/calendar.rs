@@ -243,7 +243,12 @@ fn summary(task: &Task, from: DateTime<Local>, to: DateTime<Local>, now: DateTim
         .or_else(|| last(|w| matches!(w, What::Created)))
         .or_else(|| last(|w| matches!(w, What::Commented { .. })))
         .or_else(|| all.last())?;
-    Some(Event { worked, comments, ..main.clone() })
+    // A day of several sessions shown as one: from the first's start, so the span holds the time worked beside it.
+    let at = match main.what {
+        What::Worked { .. } => all.iter().find(|e| matches!(e.what, What::Worked { .. })).map_or(main.at, |e| e.at),
+        _ => main.at,
+    };
+    Some(Event { at, worked, comments, ..main.clone() })
 }
 
 /// Everything that happened to `task` in `[from, to)`.

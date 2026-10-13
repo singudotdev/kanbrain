@@ -363,6 +363,27 @@ fn the_calendar_lists_each_days_interactions() {
 }
 
 #[test]
+fn a_calendar_day_of_several_sessions_spans_from_the_first() {
+    use crate::period::{Period, Unit};
+    use chrono::Duration;
+    let t0 = crate::model::parse_ts("2026-09-24 09:00").unwrap();
+    let session =
+        |start: i64, end: i64| Session { start: t0 + Duration::minutes(start), end: Some(t0 + Duration::minutes(end)) };
+    let mut task = Task::new(1, "twice".into(), t0 - Duration::days(1));
+    task.sessions = vec![session(0, 10), session(60, 61)];
+    let f = Fixture::new(vec![task]);
+    let mut view = CalendarView::new(Period::containing(Unit::Day, t0.naive_local()));
+    view.show = Show::Time;
+    let calendar = f.brain.calendar(&view);
+    let event = &calendar.days[0].events[0];
+    let end = match event.what {
+        What::Worked { end } => end,
+        _ => None,
+    };
+    assert_eq!((event.at, end, event.worked), (t0, Some(t0 + Duration::minutes(61)), Duration::minutes(11)));
+}
+
+#[test]
 fn the_timeline_shows_untracked_gaps_of_five_minutes_or_more() {
     use crate::period::{Period, Unit};
     use chrono::Duration;
