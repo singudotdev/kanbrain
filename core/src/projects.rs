@@ -22,8 +22,8 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
-/// What a project's description holds, as the agent section, `context` and the hooks ask for it, in one
-/// wording so they can't drift apart. A literal for `concat!`, since the agent section is a `const`. The
+/// What a project's description holds, as `context` and the hooks ask for it, in one wording so they can't drift
+/// apart; the agent section spells it out too, wrapped, and a test holds it to this. A literal for `concat!`. The
 /// bounds are spelled out because agents asked for "a few lines" still added tables, columns and function
 /// signatures, details the code already holds and that go stale.
 macro_rules! description_scope {

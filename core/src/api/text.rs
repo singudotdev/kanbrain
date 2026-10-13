@@ -1,6 +1,6 @@
-//! Entries as compact text for agents: what `show`, `search` and the write commands print. Short on purpose, since agents pay for every token they read: dates without
-//! seconds or offsets, empty sections left out, sessions as one total, and only the latest history.
-//! The full record stays in the entry's file, whose path `show` gives.
+//! Entries as compact text for agents: what `show`, `search` and the write commands print. Short on purpose, since
+//! agents pay for every token they read: dates without seconds or offsets, empty sections left out, sessions as one
+//! total, and only the latest history. The full record stays in the entry's file, whose path `show` gives.
 
 use super::ApiError;
 use crate::brain::Brain;

@@ -1,9 +1,9 @@
-//! The brain: every entry in the data folder, and the operations on them. Time is always tracked:
-//! each task in `doing` has its clock running. `doing` holds one task started by a person (starting
-//! another is refused, not made room for); agents', which may run one per subagent, aren't limited. Each brain (the central one, each
-//! project repository) has its own, so work in different projects can run side by side. The command line and
-//! the desktop app both go through it, so tracking rules, tag colors and file names behave
-//! the same everywhere. It holds no screen state; the desktop app keeps its own.
+//! The brain: every entry in the data folder, and the operations on them. Time is always tracked: each task in `doing`
+//! has its clock running. `doing` holds one task started by a person (starting another is refused, not made room for);
+//! agents', which may run one per subagent, aren't limited. Each brain (the central one, each project repository) has
+//! its own, so work in different projects can run side by side. The command line and the desktop app both go through
+//! it, so tracking rules, tag colors and file names behave the same everywhere. It holds no screen state; the desktop
+//! app keeps its own.
 //!
 //! - [`actions`]: changes to entries and tags, each written to disk immediately.
 //! - [`report`]: time per task or tag over a period, from the tracked sessions.
@@ -28,7 +28,7 @@ use crate::tags::TagColors;
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
-/// Every entry in the data folder, with the tag colors and settings.
+/// Every entry in the data folder, with the tag colors.
 #[derive(Debug)]
 pub struct Brain {
     /// The data folder entries are read from and written to.
@@ -50,12 +50,12 @@ pub struct Brain {
 }
 
 impl Brain {
-    /// Loads every entry and the settings.
+    /// Loads every entry and the tag colors.
     pub fn open(store: Store) -> Result<Self> {
         Self::open_with(store, None)
     }
 
-    /// Loads every entry and the settings, knowing the central brain if `central` is given. A brain in an older
+    /// Loads every entry and the tag colors, knowing the central brain if `central` is given. A brain in an older
     /// data format is migrated first, as it's opened to be changed (see [`crate::migrate`]).
     fn open_with(store: Store, central: Option<PathBuf>) -> Result<Self> {
         crate::migrate::migrate(&store)?;
@@ -72,7 +72,7 @@ impl Brain {
         Ok(brain)
     }
 
-    /// Loads every entry and the settings as the files have them, writing nothing: for reading a brain
+    /// Loads every entry and the tag colors as the files have them, writing nothing: for reading a brain
     /// nobody is working in, such as another repository's to show links to it, or to complete a command
     /// line. [`Brain::open`] also repairs what it finds, in files that may be in another git repository.
     pub fn read_only(store: Store) -> Result<Self> {
@@ -116,7 +116,7 @@ impl Brain {
         self.find(id).ok_or(ApiError::NotFound(id))
     }
 
-    /// The tasks whose clock is running: those in `doing`, as many as the limit at most.
+    /// The tasks whose clock is running: those in `doing`.
     pub fn running(&self) -> impl Iterator<Item = &Task> {
         self.tasks.iter().filter(|t| t.is_running())
     }

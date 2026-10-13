@@ -103,9 +103,9 @@ fn excerpt(out: &mut String, what: &str, comment: &Comment, now: chrono::DateTim
     writeln!(out, "  {what} ({} ago): {excerpt}", fmt_age(now - comment.created))
 }
 
-/// What the application is about (or that it isn't described yet) and, for one of several
-/// repositories, this one's role (or that it isn't described yet) and where the others are: an agent knows the project without exploring it, and can reach the
-/// other services' tasks with `--project`.
+/// What the application is about (or that it isn't described yet) and, for one of several repositories, this one's role
+/// (or that it isn't described yet) and where the others are: an agent knows the project without exploring it, and can
+/// reach the other services' tasks with `--project`.
 fn write_project(out: &mut String, project: &ProjectInfo) -> std::fmt::Result {
     writeln!(out, "## Project {}\n", project.name)?;
     // Every session starts from the description, so an agent that finds none is told, in one line, to

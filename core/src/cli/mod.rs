@@ -453,10 +453,10 @@ fn author() -> Result<Author> {
     Ok(if agent { Author::Agent } else { Author::Human })
 }
 
-/// One line for status bars: `#id title HH:MM:SS` for each running session, or `idle`, then how many
-/// tasks wait for an answer, if any. Looks in every brain, wherever it's run from, since each runs its
-/// own tasks; a project's task says which project, and several are joined:
-/// `shop/api #3 Fix login 00:42:17 · blog #1 Post 00:05:00 · 2 waiting`. A brain it can't read (one a newer kanbrain wrote, say) is left out rather than the whole line lost.
+/// One line for status bars: `#id title HH:MM:SS` for each running session, or `idle`, then how many tasks wait for an
+/// answer, if any. Looks in every brain, wherever it's run from, since each runs its own tasks; a project's task says
+/// which project, and several are joined: `shop/api #3 Fix login 00:42:17 · blog #1 Post 00:05:00 · 2 waiting`. A brain
+/// it can't read (one a newer kanbrain wrote, say) is left out rather than the whole line lost.
 fn status_line(central: &Path, now: DateTime<Local>) -> Result<String> {
     let mut brains = vec![(None, central.to_path_buf())];
     let repos = projects::load(central)?;

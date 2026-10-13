@@ -33,12 +33,11 @@
 //! - 2026-09-25T09:30:00+02:00 -> running
 //! ```
 //!
-//! `## Sessions` is only written once the task has been tracked, so untracked files stay short.
-//! Notes and decisions have `- kind: note` / `- kind: decision` instead of `- status:`, and no
-//! History or Sessions, and a decision that isn't in force has `- decision: proposed|rejected`. What a person
-//! wrote or did carries no mark; what an agent did says `agent`. `- links:` is only written when there are links. `shop-api#3` is entry 3 of the
-//! project's `shop-api` repository. Other `- key:` lines, link words and `##` sections are kept and
-//! written back (see [`Unknown`]).
+//! `## Sessions` is only written once the task has been tracked, so untracked files stay short. Notes and decisions
+//! have `- kind: note` / `- kind: decision` instead of `- status:`, and no History or Sessions, and a decision that
+//! isn't in force has `- decision: proposed|rejected`. What a person wrote or did carries no mark; what an agent did
+//! says `agent`. `- links:` is only written when there are links. `shop-api#3` is entry 3 of the project's `shop-api`
+//! repository. Other `- key:` lines, link words and `##` sections are kept and written back (see [`Unknown`]).
 
 use super::text::parse_tags;
 use super::time::{fmt_dur, fmt_ts, now, parse_ts};
