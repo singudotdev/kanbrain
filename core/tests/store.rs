@@ -54,3 +54,10 @@ fn files_are_written_whole_with_their_folder_and_no_temporary_left() {
     let names: Vec<_> = fs::read_dir(path.parent().unwrap()).unwrap().map(|e| e.unwrap().file_name()).collect();
     assert_eq!(names, ["shop.md"]);
 }
+
+#[test]
+fn the_hash_is_fnv1a_on_every_build() {
+    // Lock files and tag colors depend on it: a change would split a brain's lock between two kb versions.
+    assert_eq!(fnv1a(b""), 0xcbf2_9ce4_8422_2325);
+    assert_eq!(fnv1a(b"a"), 0xaf63_dc4c_8601_ec8c);
+}

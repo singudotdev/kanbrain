@@ -1,7 +1,6 @@
 //! Tag colors: a 16-color palette assigned without repeats, stored in `tags.md`.
 
 use std::fmt::Write;
-use std::hash::{DefaultHasher, Hash, Hasher};
 
 /// Named xterm-256 colors, so they render the same in terminals without truecolor support.
 pub const PALETTE: [(&str, u8); 16] = [
@@ -124,9 +123,7 @@ impl TagColors {
             let least = *uses.iter().min().expect("palette is not empty");
             let candidates: Vec<usize> = (0..PALETTE.len()).filter(|&i| uses[i] == least).collect();
             // Pick one "randomly" but reproducibly: from a hash of the tag name.
-            let mut h = DefaultHasher::new();
-            tag.hash(&mut h);
-            let index = h.finish() % candidates.len() as u64;
+            let index = crate::store::fnv1a(tag.as_bytes()) % candidates.len() as u64;
             let pick = candidates[usize::try_from(index).expect("below candidates.len(), a usize")];
             self.entries.push((tag.clone(), TagColor::Palette(pick)));
             changed = true;
