@@ -2,7 +2,7 @@
 
 use super::Brain;
 use crate::enums::named_enum;
-use crate::model::{Task, covered, now};
+use crate::model::{Session, Task, covered, now};
 use crate::period::Period;
 use chrono::{DateTime, Duration, Local};
 use std::collections::BTreeMap;
@@ -69,16 +69,6 @@ impl Slot {
             Some(project) => format!("{project} · #{} {}", self.id, self.title),
             None => format!("#{} {}", self.id, self.title),
         }
-    }
-
-    /// Where the slot starts and ends within `[from, to)`, a running one ending `now`.
-    fn span(
-        &self,
-        from: DateTime<Local>,
-        to: DateTime<Local>,
-        now: DateTime<Local>,
-    ) -> (DateTime<Local>, DateTime<Local>) {
-        (self.start.max(from), self.end.unwrap_or(now).min(to))
     }
 }
 
@@ -156,7 +146,7 @@ impl Report {
             .unzip();
         timeline.sort_by_key(|s| s.start);
         let time = |slots: &[&Slot], (a, b): (DateTime<Local>, DateTime<Local>)| {
-            covered(slots.iter().map(|s| s.span(a, b, now)))
+            covered(slots.iter().map(|s| Session { start: s.start, end: s.end }.span(a, b, now)))
         };
         let all: Vec<&Slot> = timeline.iter().collect();
         // Keyed by label; BTreeMap keeps rows with equal time in a stable order.
