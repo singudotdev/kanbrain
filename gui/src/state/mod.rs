@@ -251,7 +251,7 @@ impl Board {
     /// the window may show many. Everything is
     /// re-read when the list of projects or their shared cards may have changed, or a folder is gone.
     pub fn reload_changed(&mut self, dirs: &[PathBuf]) -> Result<()> {
-        let cards = self.central.join("projects");
+        let cards = projects::cards_dir(&self.central);
         let everything =
             dirs.iter().any(|d| *d == cards || !d.is_dir()) || (dirs.contains(&self.central) && !self.same_repos()?);
         if everything {

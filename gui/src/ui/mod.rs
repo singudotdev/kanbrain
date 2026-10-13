@@ -35,7 +35,7 @@ mod theme;
 mod topbar;
 mod widgets;
 
-use crate::state::{Board, Layout, Mode, Request, Scope, Tab};
+use crate::state::{Board, COLUMNS, Layout, Mode, Request, Scope, Tab};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::update;
 use crate::watch::{self, Watcher};
@@ -143,7 +143,7 @@ pub struct BrainView {
 #[derive(Default)]
 struct Scrolls {
     /// Each board column, in `COLUMNS` order.
-    columns: [ScrollHandle; 4],
+    columns: [ScrollHandle; COLUMNS.len()],
     /// The notes or decisions list.
     list: ScrollHandle,
     /// The board's tasks in its list layout.

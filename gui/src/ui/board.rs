@@ -47,7 +47,7 @@ impl Render for DragPreview {
 }
 
 /// The four columns side by side.
-pub fn draw(board: &Board, scrolls: &[ScrollHandle; 4], follow: bool, cx: &mut Context<BrainView>) -> Div {
+pub fn draw(board: &Board, scrolls: &[ScrollHandle; COLUMNS.len()], follow: bool, cx: &mut Context<BrainView>) -> Div {
     let columns = COLUMNS.iter().zip(scrolls).map(|(&status, scroll)| column(board, status, scroll, follow, cx));
     let columns: Vec<_> = columns.collect();
     div().flex_1().min_h_0().flex().gap_3().children(columns)

@@ -288,9 +288,14 @@ pub fn check_repo_name(name: &str) -> Result<()> {
     Ok(())
 }
 
+/// The folder of the projects' shared cards in the central brain.
+pub fn cards_dir(central: &Path) -> PathBuf {
+    central.join(CARDS_DIR)
+}
+
 /// Where a project's shared card is in the central brain.
 fn card_path(central: &Path, project: &str) -> PathBuf {
-    central.join(CARDS_DIR).join(format!("{}.md", slugify(project)))
+    cards_dir(central).join(format!("{}.md", slugify(project)))
 }
 
 /// The project's shared description; empty if it has no card, or only the placeholder `init` wrote,

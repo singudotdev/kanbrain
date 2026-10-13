@@ -483,7 +483,7 @@ impl Board {
     /// The data folders to watch: every brain's, and the central brain's project cards.
     pub fn watched_dirs(&self) -> Vec<PathBuf> {
         let mut dirs: Vec<PathBuf> = self.sources.iter().map(|s| s.brain.store.dir().to_path_buf()).collect();
-        dirs.push(self.central.join("projects"));
+        dirs.push(projects::cards_dir(&self.central));
         dirs
     }
 }
