@@ -196,6 +196,7 @@ xtask/               `cargo xtask notices kb|kanbrain` (the alias is in .cargo/c
 gui/                 the crate `kanbrain-app`, the `kanbrain` program; not on crates.io (GPUI from git)
 gui/build.rs         embeds the icon into kanbrain.exe when building for Windows
 gui/icons/           the app's icons, made from docs/images/logo.svg by make.sh: .ico (Windows), .icns (macOS), 128 px PNG (X11)
+gui/fonts/           IBM Plex Sans and Lilex (from Zed's repository, with their licenses), embedded: the window's text and code
 gui/src/             kanbrain: the kanban app, and `cli::Program` when given arguments
 ├── main.rs          entry point: --help / --version, the root check, opening the window
 ├── update.rs        the app's update: a newer release asked for daily, installed in place of the app (on Windows by PowerShell once it closes), which then starts again
@@ -362,7 +363,7 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | `editor` (gui) | line editing (split/join), unicode, wrapping; one-line cursor editing; selecting, copying and replacing; mouse selection by character, word and line |
 | `markdown` (gui) | inline styles and link ranges, kept line breaks, heading levels, numbered and task lists, nesting, code, quotes, tables, rules |
 | `watch` (gui) | new, changed, renamed and deleted files are noticed once, naming the folder; temporary files aren't; own writes are taken as seen |
-| `xtask` | the notices list each license with the crates under it and leave this workspace's out; each program carries Rust's standard library and what else it embeds (musl, GPUI's fonts) |
+| `xtask` | the notices list each license with the crates under it and leave this workspace's out; each program carries Rust's standard library and what else it embeds (musl, the app's fonts in `gui/fonts/`) |
 | `ui` (gui) | in a real (test) window: GPUI keystrokes to keys, shortcut names, clicks and double-clicks on cards (in every brain), a right click's menu acting on its card, dragging a card onto a column, closing the details (no + under ✕ once they close; a click or a double-click on ✕ opening nothing), reloading after another program's change, acting right after one without undoing it, opening an entry from the calendar, buttons pressed while typing, dropdowns that scroll to the highlighted row and how many rows each shows, clipboard shortcuts, + Add project through the folder dialog |
 
 ### The command line, from outside

@@ -48,7 +48,7 @@ pub const SELECTION: u32 = 0x34_4f80;
 /// Font of the whole window.
 pub const UI_FONT: &str = ".SystemUIFont";
 /// Font of the text editor, where descriptions and comments are written in markdown.
-pub const EDITOR_FONT: &str = "monospace";
+pub const EDITOR_FONT: &str = "Lilex";
 
 /// How a piece of text looks. `None` colors inherit.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

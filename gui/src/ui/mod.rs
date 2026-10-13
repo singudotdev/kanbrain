@@ -50,6 +50,7 @@ use gpui::{
     rgb, size,
 };
 use keys::{key_events, key_name};
+use std::borrow::Cow;
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
@@ -74,9 +75,27 @@ const TICK: Duration = Duration::from_millis(500);
 /// Width of the details drawer.
 const DRAWER_WIDTH: f32 = 420.;
 
+/// The fonts the window draws with, IBM Plex Sans and Lilex (licenses beside them in `gui/fonts/`): GPUI takes "IBM
+/// Plex Sans" for the system font on Linux, where few have it, and found none to make bold or italic in its stead.
+/// Lilex is the editor's and code's monospace on every platform.
+const FONTS: [&[u8]; 8] = [
+    include_bytes!("../../fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf"),
+    include_bytes!("../../fonts/ibm-plex-sans/IBMPlexSans-Italic.ttf"),
+    include_bytes!("../../fonts/ibm-plex-sans/IBMPlexSans-SemiBold.ttf"),
+    include_bytes!("../../fonts/ibm-plex-sans/IBMPlexSans-SemiBoldItalic.ttf"),
+    include_bytes!("../../fonts/lilex/Lilex-Regular.ttf"),
+    include_bytes!("../../fonts/lilex/Lilex-Italic.ttf"),
+    include_bytes!("../../fonts/lilex/Lilex-Bold.ttf"),
+    include_bytes!("../../fonts/lilex/Lilex-BoldItalic.ttf"),
+];
+
 /// Opens the window and runs until it's closed or the board quits.
 pub fn run(board: Board) {
     gpui_platform::application().run(move |cx: &mut GpuiApp| {
+        // Without them the text still shows, in whatever the system has.
+        if let Err(e) = cx.text_system().add_fonts(FONTS.iter().map(|&font| Cow::Borrowed(font)).collect()) {
+            eprintln!("kanbrain: couldn't load the window's fonts: {e:#}");
+        }
         cx.on_window_closed(|cx, _window| {
             if cx.windows().is_empty() {
                 cx.quit();

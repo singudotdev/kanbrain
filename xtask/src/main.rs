@@ -3,8 +3,8 @@
 //! - `notices kb|kanbrain`: prints the program's THIRD-PARTY-LICENSES.txt, which its release archives carry. The
 //!   permissive licenses of the crates compiled into it (MIT, Apache-2.0, BSD, ISC, Zlib, Unicode-3.0, MPL-2.0, ...)
 //!   require their notices with every copy. cargo-about finds the crates and their license texts (see
-//!   `about.toml`); what's compiled in but isn't a crate comes from `licenses/`: Rust's standard library, musl (the
-//!   static C library of `kb` on Linux) and the fonts GPUI embeds in the kanban app.
+//!   `about.toml`); what's compiled in but isn't a crate comes from `licenses/`: Rust's standard library and musl
+//!   (the static C library of `kb` on Linux), and the fonts the kanban app embeds from beside them in `gui/fonts/`.
 
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
@@ -35,7 +35,7 @@ struct Program {
     extras: &'static [Extra],
 }
 
-/// A license of something compiled in that isn't a crate, kept in `licenses/`.
+/// A license of something compiled in that isn't a crate, kept in `licenses/` (or beside it, for the fonts).
 struct Extra {
     /// What it is.
     title: &'static str,
@@ -62,10 +62,13 @@ const PROGRAMS: [Program; 2] = [
         extras: &[
             RUST,
             Extra {
-                title: "IBM Plex Sans, a font embedded by GPUI",
-                text: include_str!("../licenses/ibm-plex-sans.txt"),
+                title: "IBM Plex Sans, a font embedded in the kanban app",
+                text: include_str!("../../gui/fonts/ibm-plex-sans/license.txt"),
             },
-            Extra { title: "Lilex, a font embedded by GPUI", text: include_str!("../licenses/lilex.txt") },
+            Extra {
+                title: "Lilex, a font embedded in the kanban app",
+                text: include_str!("../../gui/fonts/lilex/OFL.txt"),
+            },
         ],
     },
 ];
