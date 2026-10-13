@@ -42,10 +42,15 @@ pub fn fmt_age(d: Duration) -> String {
     }
 }
 
-/// `45m`, `1h 05m`; rounded down to whole minutes.
+/// `45m`, `1h 05m`; rounded down to whole minutes, but `<1m` for less than one: a report row or a total that took
+/// seconds isn't one that took none.
 pub fn fmt_dur(d: Duration) -> String {
     let minutes = d.num_minutes().max(0);
-    if minutes >= 60 { format!("{}h {:02}m", minutes / 60, minutes % 60) } else { format!("{minutes}m") }
+    match minutes {
+        0 if d > Duration::zero() => "<1m".to_string(),
+        60.. => format!("{}h {:02}m", minutes / 60, minutes % 60),
+        _ => format!("{minutes}m"),
+    }
 }
 
 /// `01:02:03` for a live clock.

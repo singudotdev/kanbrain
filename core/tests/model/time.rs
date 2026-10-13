@@ -18,7 +18,8 @@ fn ages() {
 
 #[test]
 fn durations() {
-    assert_eq!(fmt_dur(Duration::seconds(59)), "0m");
+    assert_eq!(fmt_dur(Duration::seconds(59)), "<1m");
+    assert_eq!(fmt_dur(Duration::zero()), "0m");
     assert_eq!(fmt_dur(Duration::minutes(65)), "1h 05m");
     assert_eq!(fmt_dur(Duration::minutes(-5)), "0m");
     assert_eq!(fmt_clock(Duration::seconds(3723)), "01:02:03");

@@ -66,7 +66,7 @@ The **Report** tab (`4`) shows the tracked time of the **current week**, **group
 - A task with several tags counts under **each** of them when grouping by tag, so tag rows can add up to more than
   the total too.
 - In the day and hour views, gaps of **5 minutes or more** between sessions are shown as `untracked`.
-- Durations are rounded down to whole minutes; a session crossing a period boundary counts in each period only for its own part.
+- Durations are rounded down to whole minutes, and less than one shows as `<1m` (`0m` is none at all); a session crossing a period boundary counts in each period only for its own part.
 - Export file names follow the view: `report-2026-W39.md`, `report-2026-09-24-by-tag.md`, `report-2026-09-prod.md`.
 
 ## Calendar
