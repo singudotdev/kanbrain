@@ -200,11 +200,7 @@ impl Board {
             FormTarget::Edit(key) => Some(key),
             FormTarget::New(..) => None,
         };
-        let src = form.src();
-        let mut options: Vec<(Key, &Task)> =
-            self.linkable(src).filter(|&(key, t)| Some(key) != own && t.matches(form.related.search.text())).collect();
-        options.sort_by_key(|&(key, t)| (!form.links.contains(&key), key.src != src, std::cmp::Reverse(t.id)));
-        options
+        self.link_options(form.src(), own, form.related.search.text(), &form.links)
     }
 
     /// Checks or unchecks the related field's option at `index`.
@@ -447,9 +443,8 @@ impl Board {
 
     /// Edits the description of the project shown, else the selected entry's, which its repositories share.
     pub fn edit_project_description(&mut self) {
-        match self.project_here() {
-            Some(src) => self.open_editor(Target::Project(src)),
-            None => self.notify("no project here: select one of its cards, or show it with P"),
+        if let Some(src) = self.project_to_act_on() {
+            self.open_editor(Target::Project(src));
         }
     }
 

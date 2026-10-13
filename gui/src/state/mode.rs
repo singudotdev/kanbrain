@@ -455,6 +455,13 @@ pub enum PickerKey {
 }
 
 impl Picker {
+    /// A name field holding `name`, selected so typing replaces it.
+    pub fn named(name: &str) -> Self {
+        let mut search = LineInput::new(name);
+        search.select_all();
+        Self { search, sel: 0 }
+    }
+
     /// Whether `name` contains every word of the search, ignoring case: how every dropdown filters.
     pub fn matches(&self, name: &str) -> bool {
         let name = name.to_lowercase();

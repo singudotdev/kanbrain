@@ -2,7 +2,6 @@
 //! `kb deinit` do, through the same functions, after which the window re-reads its brains.
 
 use super::{Board, Manage, Mode, Picker, PickerKey, ProjectOption, Request, Scope};
-use crate::text::editor::LineInput;
 use crate::text::event::{KeyCode, KeyEvent};
 use anyhow::Result;
 use kanbrain_core::cli;
@@ -12,13 +11,13 @@ impl Board {
     /// Asks for the project's new name, starting from the one it has.
     pub fn ask_rename_project(&mut self, src: usize) {
         let name = self.sources[src].project.clone().unwrap_or_default();
-        self.mode = Mode::Manage(Manage::RenameProject { src, name: named(&name) });
+        self.mode = Mode::Manage(Manage::RenameProject { src, name: Picker::named(&name) });
     }
 
     /// Asks for the repository's new name in its project, starting from the one it has.
     pub fn ask_rename_repo(&mut self, src: usize) {
         let name = self.brain(src).project.as_ref().map(|p| p.repo.clone()).unwrap_or_default();
-        self.mode = Mode::Manage(Manage::RenameRepo { src, name: named(&name) });
+        self.mode = Mode::Manage(Manage::RenameRepo { src, name: Picker::named(&name) });
     }
 
     /// Asks which project the repository moves to.
@@ -144,11 +143,4 @@ impl Board {
             }
         }
     }
-}
-
-/// A name field holding `name`, selected so typing replaces it.
-fn named(name: &str) -> Picker {
-    let mut search = LineInput::new(name);
-    search.select_all();
-    Picker { search, sel: 0 }
 }

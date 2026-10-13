@@ -430,10 +430,21 @@ impl Board {
     /// matching its search, the related ones first, then its brain's, then newest first.
     pub fn link_candidates(&self, picker: &LinkPicker) -> Vec<(Key, &Task)> {
         let key = picker.key;
-        let related = self.related_keys(key);
-        let mut candidates: Vec<(Key, &Task)> =
-            self.linkable(key.src).filter(|&(k, t)| k != key && t.matches(picker.rows.search.text())).collect();
-        candidates.sort_by_key(|&(k, t)| (!related.contains(&k), k.src != key.src, std::cmp::Reverse(t.id)));
-        candidates
+        self.link_options(key.src, Some(key), picker.rows.search.text(), &self.related_keys(key))
+    }
+
+    /// Every entry the brain at `src` can link to but `except`, matching `search`: `linked` first, then the
+    /// brain's own, then the newest.
+    pub(super) fn link_options(
+        &self,
+        src: usize,
+        except: Option<Key>,
+        search: &str,
+        linked: &[Key],
+    ) -> Vec<(Key, &Task)> {
+        let mut options: Vec<(Key, &Task)> =
+            self.linkable(src).filter(|&(key, t)| Some(key) != except && t.matches(search)).collect();
+        options.sort_by_key(|&(key, t)| (!linked.contains(&key), key.src != src, std::cmp::Reverse(t.id)));
+        options
     }
 }

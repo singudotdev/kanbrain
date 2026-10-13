@@ -4,7 +4,6 @@
 //! there, since every brain numbers its entries from 1.
 
 use super::{AddProject, Board, Form, Mode, Picker, ProjectOption, WhereFor};
-use crate::text::editor::LineInput;
 use crate::text::event::KeyEvent;
 use anyhow::Result;
 use kanbrain_core::brain::{Brain, Calendar, CalendarView, Report, ReportView};
@@ -189,9 +188,7 @@ impl Board {
         let card = projects::read_repo_card(&dir.join(PROJECT_DIR)).map(|card| card.project);
         let folder = || Some(dir.file_name()?.to_string_lossy().into_owned());
         let name = project.or(card).or_else(folder).unwrap_or_default();
-        let mut search = LineInput::new(&name);
-        search.select_all();
-        self.mode = Mode::AddProject(AddProject { dir, picker: Picker { search, sel: 0 } });
+        self.mode = Mode::AddProject(AddProject { dir, picker: Picker::named(&name) });
     }
 
     /// The add-project dialog's rows for what's typed: a new project of that name unless there's one already, then
@@ -269,12 +266,20 @@ impl Board {
         self.project_src().or(selected)
     }
 
-    /// Opens the info of the project shown, else of the selected entry's project. With neither, says
-    /// how to get one rather than doing nothing, since a key that does nothing reads as broken.
+    /// [`Self::project_here`] for a key that acts on it: with no project, says how to get one rather than doing
+    /// nothing, since a key that does nothing reads as broken.
+    pub(super) fn project_to_act_on(&mut self) -> Option<usize> {
+        let here = self.project_here();
+        if here.is_none() {
+            self.notify("no project here: select one of its cards, or show it with P");
+        }
+        here
+    }
+
+    /// Opens Manage project on the project shown, else on the selected entry's project.
     pub fn open_manage_project(&mut self) {
-        match self.project_here() {
-            Some(src) => self.mode = Mode::ManageProject(src),
-            None => self.notify("no project here: select one of its cards, or show it with P"),
+        if let Some(src) = self.project_to_act_on() {
+            self.mode = Mode::ManageProject(src);
         }
     }
 
