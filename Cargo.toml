@@ -6,14 +6,14 @@ members = ["core", "cli", "gui", "xtask"]
 default-members = ["core", "cli"]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 repository = "https://github.com/singudotdev/kanbrain"
 license = "AGPL-3.0-only"
 
 [workspace.dependencies]
 # The version is what crates.io resolves it to: keep it at the workspace version.
-kanbrain-core = { path = "core", version = "0.3.0" }
+kanbrain-core = { path = "core", version = "0.3.1" }
 anyhow = "1.0.104"
 chrono = "0.4.45"
 dirs = "7"
