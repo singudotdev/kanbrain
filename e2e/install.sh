@@ -122,7 +122,7 @@ case "$(uname -s)" in
             fail "the bundle doesn't say where the app's update goes"
         ;;
 esac
-sh "$repo/install.sh" --uninstall --app gui >/dev/null || fail "uninstalling the app failed"
+KANBRAIN_UNINSTALL=1 sh "$repo/install.sh" --app gui >/dev/null || fail "uninstalling the app through KANBRAIN_UNINSTALL failed"
 case "$(uname -s)" in
     Linux)
         if [ -e "$desktop" ] || [ -e "$icon" ]; then fail "uninstall left the menu entry or its icon"; fi

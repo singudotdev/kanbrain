@@ -19,7 +19,8 @@
 # installs inside $HOME. (If root is your only user, e.g. in a container: KANBRAIN_ALLOW_ROOT=1.)
 #
 # Environment overrides: KANBRAIN_APP, KANBRAIN_VERSION, KANBRAIN_INSTALL_DIR, KANBRAIN_REPO,
-# KANBRAIN_HOST (github | gitlab), KANBRAIN_GITLAB_URL, KANBRAIN_BASE_URL, KANBRAIN_ALLOW_ROOT.
+# KANBRAIN_HOST (github | gitlab), KANBRAIN_GITLAB_URL, KANBRAIN_BASE_URL, KANBRAIN_ALLOW_ROOT; and, as install.ps1
+# takes them, KANBRAIN_UNINSTALL=1, KANBRAIN_PURGE=1 and KANBRAIN_YES=1 for --uninstall, --purge and --yes.
 
 set -eu
 
@@ -37,6 +38,9 @@ INSTALL_DIR="${KANBRAIN_INSTALL_DIR:-$HOME/.local/bin}"
 UNINSTALL=0
 PURGE=0
 YES=0
+if [ "${KANBRAIN_UNINSTALL:-}" = 1 ]; then UNINSTALL=1; fi
+if [ "${KANBRAIN_PURGE:-}" = 1 ]; then UNINSTALL=1; PURGE=1; fi
+if [ "${KANBRAIN_YES:-}" = 1 ]; then YES=1; fi
 
 say() { printf '%s\n' "kanbrain: $*"; }
 die() { printf '%s\n' "kanbrain: error: $*" >&2; exit 1; }
@@ -176,7 +180,11 @@ if [ "$UNINSTALL" = 1 ]; then
             say "data folder: $data"
             say "this permanently deletes $entries entry file(s), tags.md, the project registry and cards, exported reports, and the backups taken before migrations"
             say "projects' own .brain/ folders are kept"
-            confirm "delete your kanbrain data?" || die "cancelled, nothing was removed"
+            # Not an error, as install.ps1 has it: the answer was no.
+            if ! confirm "delete your kanbrain data?"; then
+                say "cancelled, nothing was removed"
+                exit 0
+            fi
         else
             say "no data folder at $data"
             data=""
