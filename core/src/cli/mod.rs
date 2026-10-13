@@ -336,11 +336,18 @@ impl Command {
                 // app would wait meanwhile.
                 args.read_stdin()?;
                 // Held from reading the files to writing them, so parallel commands each see the others'
-                // changes; not by `wait`, which would hold it while it waits.
-                let _lock = (!matches!(args.command, EntryCommand::Wait(..))).then(|| store.lock()).transpose()?;
-                args.run(Brain { author, ..Brain::open_in(store, &central)? })
+                // changes; opening may write too, as it repairs. `wait` lets go once open, not to hold it while
+                // it waits.
+                let lock = store.lock()?;
+                let brain = Brain { author, ..Brain::open_in(store, &central)? };
+                let _lock = (!matches!(args.command, EntryCommand::Wait(..))).then_some(lock);
+                args.run(brain)
             }
-            Command::Report(args) => print_report(store, &args),
+            Command::Report(args) => {
+                // Opening may repair files, and `--save` writes one.
+                let _lock = store.lock()?;
+                print_report(store, &args)
+            }
             Command::Path => {
                 println!("{}", store.dir().display());
                 Ok(())
