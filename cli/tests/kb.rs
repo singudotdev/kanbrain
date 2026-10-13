@@ -170,3 +170,13 @@ fn commands_run_in_parallel_lose_nothing() {
     let shown = ok(&kb(repo.path(), central.path(), &["show", "1"], ""));
     assert!((0..8).all(|n| shown.contains(&format!("note {n}"))), "every comment kept: {shown}");
 }
+
+#[test]
+fn the_crates_readme_lists_the_same_commands_as_the_repositorys() {
+    // crates.io shows cli/README.md: its table is the main README's, but for the app's row.
+    let read = |path: &str| std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).unwrap();
+    let commands = |readme: String| -> Vec<String> {
+        readme.lines().filter(|l| l.starts_with("| `kb ")).map(str::to_string).collect()
+    };
+    assert_eq!(commands(read("README.md")), commands(read("../README.md")));
+}

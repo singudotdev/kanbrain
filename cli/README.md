@@ -53,6 +53,10 @@ context: write commands reply with one line, like `#4 Fix login 500 (doing) #aut
 | `kb add [--note\|--decision] [--tag T] [--link ID] [--body TEXT\|-] [--start] TITLE` | create a task (or note/decision) |
 | `kb start\|park\|done\|todo ID` | move a task; `start` runs its clock (a person runs one task at a time; agents, several) |
 | `kb comment ID TEXT` | add a timestamped comment (`-` reads from stdin) |
+| `kb ask ID TEXT` | ask the user a question on a task, which waits for the answer in Parked |
+| `kb wait ID` | block until a person answers the task's question (or decides on a decision), then print the answer; at most 8 minutes by default |
+| `kb propose ID [--body TEXT\|-] TITLE` | propose a decision for a task, for the user to accept or reject |
+| `kb accept ID [TEXT]` / `kb reject ID TEXT` | accept or reject a decision, which answers the tasks waiting on it |
 | `kb describe ID TEXT` | replace the description |
 | `kb link ID OTHER…` | link entries to each other (`REPO#ID`: in another repository of the project) |
 | `kb project [describe\|notes TEXT\|-]` | show or rewrite the project's description and this repository's role |
@@ -62,6 +66,7 @@ context: write commands reply with one line, like `#4 Fix login 500 (doing) #aut
 | `kb list [doing\|todo\|parked\|done\|all] [notes] [decisions] [--tag T]` | print tasks as markdown |
 | `kb status` | the running tasks and their clocks, for status bars |
 | `kb report [hour\|day\|week\|month] [--group task\|tag] [--save]` | tracked time as markdown |
+| `kb update` | install the latest release over this one |
 | `kb completions bash\|zsh\|fish` | tab completion of commands, ids, projects and tags |
 
 The entry commands and `list` accept `--json` (all but `wait`, `context` and `project`). `--project NAME` runs a
