@@ -73,12 +73,12 @@ pub fn install_of(exe: &Path) -> Result<Install> {
 }
 
 /// The tasks agents are working on, in doing, in every registered repository and the central brain, as
-/// `REPO#ID title`: an update waits for them. A brain that can't be read, such as one a newer kanbrain wrote, has
+/// `shop/api #3 title` (`#3 title` in the central brain), as `kb status` names them: an update waits for them. A brain that can't be read, such as one a newer kanbrain wrote, has
 /// none to wait for.
 pub fn agents_working(central: &Path) -> Result<Vec<String>> {
     let repos = projects::load(central)?;
     let brains = std::iter::once((String::new(), central.to_path_buf()))
-        .chain(repos.iter().map(|repo| (repo.label(&repos), repo.dir.clone())));
+        .chain(repos.iter().map(|repo| (format!("{} ", repo.label(&repos)), repo.dir.clone())));
     let mut working = Vec::new();
     // A deleted repository's folder isn't there to read, and opening its store would make it again.
     for (label, dir) in brains.filter(|(_, dir)| dir.is_dir()) {

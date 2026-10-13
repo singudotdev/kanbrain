@@ -64,7 +64,7 @@ fn an_update_waits_for_the_agents_tasks_in_doing_only() {
     let working = brain.add(NewEntry { title: "rate-limit the login".into(), ..NewEntry::default() }).unwrap();
     brain.set_status(working, Status::Doing).unwrap();
     let err = check_no_agent_working(central.path()).unwrap_err().to_string();
-    assert!(err.contains(&format!("#{working} rate-limit the login")), "{err}");
+    assert!(err.contains(&format!("shop #{working} rate-limit the login")), "as kb status names it: {err}");
     assert!(!err.contains("my own work"), "{err}");
 
     std::fs::remove_dir_all(repo.path()).unwrap();
