@@ -104,11 +104,7 @@ fn scope_dropdown(
 /// The shown project's description, shared by its repositories, and the shown repository's role,
 /// each with an Edit button.
 fn project_card(board: &Board, cx: &mut Context<BrainView>) -> Option<Div> {
-    let src = match &board.scope {
-        Scope::Repo(src) => *src,
-        Scope::Project(_) => board.scoped().next()?.0,
-        Scope::All | Scope::Central => return None,
-    };
+    let src = board.project_src()?;
     let project = board.brain(src).project.as_ref()?;
     let first = |text: &str| text.lines().find(|l| !l.trim().is_empty()).unwrap_or_default().to_string();
     let line = |label: String, text: &str, button: Stateful<Div>| {
