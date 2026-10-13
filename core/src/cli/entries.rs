@@ -10,6 +10,7 @@ use crate::brain::{Brain, NewEntry};
 use crate::model::{Asked, DecisionState, Kind, RepoLink, Status, Task, parse_links, parse_tags};
 use crate::projects::ProjectInfo;
 use anyhow::{Context, Result, bail};
+use serde::Serialize;
 use std::io::Read;
 use std::time::Duration;
 
@@ -558,12 +559,38 @@ fn settled(task: &Task) -> Option<String> {
     }
 }
 
+/// An entry's JSON as `show --json` prints it: [`Entry`], and the entries of the project's other repositories
+/// linking to it, as `web#1`, which `show` lists under Related along with its own `repo_links`.
+#[derive(Serialize)]
+struct Shown<'a> {
+    /// Its fields first, at the top level.
+    #[serde(flatten)]
+    entry: Entry<'a>,
+    /// Left out when empty, as `Entry`'s links are.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    repo_linked_from: Vec<String>,
+}
+
+impl<'a> Shown<'a> {
+    /// Reads the project's other repositories for the links to `task`.
+    fn new(brain: &Brain, task: &'a Task) -> Self {
+        let here = brain.project.as_ref().map(|p| RepoLink { repo: p.repo.clone(), id: task.id });
+        let repo_linked_from = brain
+            .repo_related(task.id)
+            .into_iter()
+            .filter(|(_, other)| here.as_ref().is_some_and(|here| other.repo_links.contains(here)))
+            .map(|(repo, other)| RepoLink { repo, id: other.id }.to_string())
+            .collect();
+        Self { entry: Entry::new(brain, task), repo_linked_from }
+    }
+}
+
 /// Prints the entry: as one line of JSON, as compact text (`show`), or as a one-line confirmation.
 /// JSON is on one line since its readers are programs, and agents pay for the indentation.
 fn print_entry(brain: &Brain, id: u32, json: bool, full: bool) -> Result<()> {
     let task = brain.entry(id)?;
     if json {
-        println!("{}", serde_json::to_string(&Entry::new(brain, task))?);
+        println!("{}", serde_json::to_string(&Shown::new(brain, task))?);
     } else if full {
         print!("{}", brain.entry_text(id)?);
     } else {

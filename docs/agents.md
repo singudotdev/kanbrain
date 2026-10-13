@@ -244,8 +244,9 @@ For scripts, `show`, `add`, the status moves, `comment`, `describe`, `link`, `as
 }
 ```
 
-Fields without a value are left out: `status` for notes and decisions, `links`, `linked_from`, `description` and
-`comments` when empty, `tracked_minutes` for tasks never in doing, `running` unless the clock runs, and `edited` on
+An entry links to `links` (ids) and to `repo_links` (entries of the project's other repositories, as `web#1`), and
+`linked_from` and `repo_linked_from` link to it. Fields without a value are left out: `status` for notes and
+decisions, the four links, `description` and `comments` when empty, `tracked_minutes` for tasks never in doing, `running` unless the clock runs, and `edited` on
 comments never edited. Decisions have `decision` (`accepted`, `proposed` or `rejected`); a parked task with a
 question has `asked` (`waiting for an answer` or `answered`); a comment has `"author": "agent"` when an agent wrote
 it and `"question": true` when it's one. `search --json` and `list --json` print every match as

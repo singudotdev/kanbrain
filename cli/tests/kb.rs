@@ -46,6 +46,20 @@ fn an_agent_session_runs_through_the_binary() {
 }
 
 #[test]
+fn show_json_names_the_links_from_other_repositories() {
+    let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (api, web) = (code.path().join("api"), code.path().join("web"));
+    for repo in [&api, &web] {
+        std::fs::create_dir(repo).unwrap();
+        ok(&kb(repo, central.path(), &["init", "shop"], ""));
+    }
+    ok(&kb(&api, central.path(), &["add", "Expose", "the", "total"], ""));
+    ok(&kb(&web, central.path(), &["add", "--link", "api#1", "Show", "the", "total"], ""));
+    let json = ok(&kb(&api, central.path(), &["show", "1", "--json"], ""));
+    assert!(json.contains(r#""repo_linked_from":["web#1"]"#) && json.lines().count() == 1, "{json}");
+}
+
+#[test]
 fn errors_go_to_stderr_with_a_failing_exit_code() {
     let (central, dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let run = |args: &[&str]| kb(dir.path(), central.path(), args, "");
