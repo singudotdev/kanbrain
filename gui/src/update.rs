@@ -21,8 +21,12 @@ fn failure_note() -> PathBuf {
     std::env::temp_dir().join("kanbrain-update-failed.txt")
 }
 
-/// The error a failed update on Windows left, taken so it's shown once.
+/// The error a failed update on Windows left, taken so it's shown once. Not in tests, which would take the
+/// user's own.
 pub fn take_failure() -> Option<String> {
+    if cfg!(test) {
+        return None;
+    }
     let path = failure_note();
     let text = std::fs::read_to_string(&path).ok()?;
     std::fs::remove_file(&path).ok();
