@@ -240,7 +240,8 @@ fn asked(task: &Task) -> Option<Div> {
             .items_start()
             .gap_1()
             .children(state_pill(task))
-            .child(div().text_size(px(12.)).text_color(rgb(DIM)).line_clamp(2).child(first.to_string())),
+            // As wide as the card: at the text's own width it ran past the card's edge, cut mid-word.
+            .child(div().w_full().text_size(px(12.)).text_color(rgb(DIM)).line_clamp(2).child(first.to_string())),
     )
 }
 
