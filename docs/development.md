@@ -437,22 +437,22 @@ passing CI run.
    [Changing the file format](#changing-the-file-format)); a change of behavior or of the agents' instructions is
    fixed on load or by `kb init --all`, which `kb update` runs. Only a change to `kanbrain-core`'s Rust API alone,
    which isn't meant for other crates, needs none.
-2. Push `main` alone and wait for CI on Linux, macOS and Windows: a tag is a release.
-3. Write the version's release notes in `tag-changelog/vX.Y.Z.md` (terse bullets anchored in the code, naming each
+2. Write the version's release notes in `tag-changelog/vX.Y.Z.md` (terse bullets anchored in the code, naming each
    breaking change's migration) and its section in `CHANGELOG.md`, with its compare link at the end of the file, and
-   commit them. `core/build.rs` stops a version
-   without them from compiling in the repository.
-4. Update `version` under `[workspace.package]` in `Cargo.toml`, and `kanbrain-core`'s `version` under
+   commit them. `core/build.rs` stops a version without them from compiling in the repository.
+3. Update `version` under `[workspace.package]` in `Cargo.toml`, and `kanbrain-core`'s `version` under
    `[workspace.dependencies]` to the same, run `cargo build` so `Cargo.lock` follows, and commit it on its own. Every
    crate of the workspace shares it.
+4. Push `main` alone and wait for CI on Linux, macOS and Windows to pass on the version's commit: a tag is a release,
+   and the release workflow refuses a commit without a passing CI run.
 5. Create a signed, annotated tag and push it:
 
    ```sh
    git tag -s vX.Y.Z -m "vX.Y.Z: <summary>"
-   git push origin main vX.Y.Z
+   git push origin vX.Y.Z
    ```
 
-`.github/workflows/release.yml` then checks that the tag matches `Cargo.toml`, builds both programs for every platform
+`.github/workflows/release.yml` then checks that the tag matches `Cargo.toml` and that CI passed on its commit, builds both programs for every platform
 (Linux x86_64 and ARM64, macOS universal, Windows x64), and creates the GitHub release with
 `tag-changelog/vX.Y.Z.md` as its notes and the assets below, their `.sha256` files, and `install.sh` / `install.ps1`. From then on the one-line installers work.
 Before that it records a signed build provenance attestation for every archive, which
