@@ -85,7 +85,7 @@ fn column(board: &Board, status: Status, scroll: &ScrollHandle, follow: bool, cx
                 } else {
                     "New task here"
                 }))
-                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.new_entry(status)))),
+                .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| add_on_click(this, event, status, cx))),
         );
     let now = now();
     let rows: Vec<_> = cards
@@ -109,6 +109,14 @@ fn column(board: &Board, status: Status, scroll: &ScrollHandle, follow: bool, cx
         .children(empty)
         .children((status == Status::Done).then(|| show_all_done(board, cx)).flatten());
     drop_target(card().flex_1().min_w(px(COLUMN_MIN_WIDTH)), status, cx).child(header).child(body)
+}
+
+/// A column's or section's +: a new entry in `status`. Closing the details widens the board and brings the last
+/// column's + under the closing button, so the second click of a double-click there isn't taken as one on it.
+pub(super) fn add_on_click(this: &mut BrainView, event: &ClickEvent, status: Status, cx: &mut Context<BrainView>) {
+    if event.click_count() == 1 {
+        this.act(cx, |b| b.new_entry(status));
+    }
 }
 
 /// Makes `target` take dropped cards, moving them to `status`, and light up while one is over it.

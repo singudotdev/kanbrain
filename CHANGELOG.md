@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- Closing a task's details in the kanban app with a double-click on ✕ no longer opens a new task: the second click
+  landed on the last column's **+**, which closing the details brings under the pointer.
+
 ## [0.3.3] - 2026-10-13
 
 ### Removed

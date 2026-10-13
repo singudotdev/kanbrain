@@ -442,3 +442,34 @@ fn the_window_carries_the_logo_for_x11() {
     let icon = window_icon().expect("the built-in PNG decodes");
     assert_eq!(icon.dimensions(), (128, 128));
 }
+
+#[gpui::test]
+fn closing_the_details_opens_nothing(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a", "b"]);
+    let open = |cx: &mut gpui::VisualTestContext| {
+        let card = cx.debug_bounds("card 0/2").expect("card 2 is drawn").center();
+        for click_count in [1, 2] {
+            let (button, modifiers, first_mouse) = (MouseButton::Left, gpui::Modifiers::none(), false);
+            cx.simulate_event(gpui::MouseDownEvent { position: card, button, modifiers, click_count, first_mouse });
+            cx.simulate_event(gpui::MouseUpEvent { position: card, button, modifiers, click_count });
+        }
+    };
+    open(cx);
+    view.read_with(cx, |view, _| assert!(view.board.drawer, "a double-click opens it"));
+    let close = cx.debug_bounds("close drawer").expect("the drawer has a close button").center();
+    for click_count in [1, 2] {
+        let (button, modifiers, first_mouse) = (MouseButton::Left, gpui::Modifiers::none(), false);
+        cx.simulate_event(gpui::MouseDownEvent { position: close, button, modifiers, click_count, first_mouse });
+        cx.simulate_event(gpui::MouseUpEvent { position: close, button, modifiers, click_count });
+    }
+    view.read_with(cx, |view, _| {
+        assert!(!view.board.drawer, "the close button closes it");
+        assert!(matches!(view.board.mode, crate::state::Mode::Normal), "and opens nothing: {:?}", view.board.mode);
+    });
+    open(cx);
+    cx.simulate_keystrokes("escape");
+    view.read_with(cx, |view, _| {
+        assert!(!view.board.drawer, "esc closes it");
+        assert!(matches!(view.board.mode, crate::state::Mode::Normal), "and opens nothing: {:?}", view.board.mode);
+    });
+}

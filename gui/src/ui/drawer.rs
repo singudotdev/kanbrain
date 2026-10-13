@@ -75,7 +75,10 @@ fn heading(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView>) ->
                 .children(place.map(|p| div().text_size(px(12.)).text_color(rgb(theme::ACCENT)).child(p)))
                 .child(dim_small(format!("#{}", task.id)))
                 .child(div().flex_1())
-                .child(small(action("close-drawer", "✕", Kind::Ghost, KeyCode::Esc, cx))),
+                .child(
+                    small(action("close-drawer", "✕", Kind::Ghost, KeyCode::Esc, cx))
+                        .debug_selector(|| "close drawer".into()),
+                ),
         )
         .child(div().text_size(px(18.)).font_weight(FontWeight::SEMIBOLD).child(task.title.clone()))
         .child(dim_small(format!("created {}", when(task.created))))

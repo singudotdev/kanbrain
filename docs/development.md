@@ -353,7 +353,7 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | `markdown` (gui) | inline styles and link ranges, kept line breaks, heading levels, numbered and task lists, nesting, code, quotes, tables, rules |
 | `watch` (gui) | new, changed, renamed and deleted files are noticed once, naming the folder; temporary files aren't; own writes are taken as seen |
 | `xtask` | the notices list each license with the crates under it and leave this workspace's out; each program carries Rust's standard library and what else it embeds (musl, GPUI's fonts) |
-| `ui` (gui) | in a real (test) window: GPUI keystrokes to keys, shortcut names, clicks and double-clicks on cards (in every brain), a right click's menu acting on its card, dragging a card onto a column, reloading after another program's change, acting right after one without undoing it, opening an entry from the calendar, buttons pressed while typing, dropdowns that scroll to the highlighted row and how many rows each shows, clipboard shortcuts, + Add project through the folder dialog |
+| `ui` (gui) | in a real (test) window: GPUI keystrokes to keys, shortcut names, clicks and double-clicks on cards (in every brain), a right click's menu acting on its card, dragging a card onto a column, closing the details (a double-click on ✕ opening nothing under it), reloading after another program's change, acting right after one without undoing it, opening an entry from the calendar, buttons pressed while typing, dropdowns that scroll to the highlighted row and how many rows each shows, clipboard shortcuts, + Add project through the folder dialog |
 
 ### The command line, from outside
 
