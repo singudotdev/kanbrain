@@ -1,5 +1,5 @@
-//! What each key does: on the board, the notes and decisions lists and the report, and in each dialog.
-//! Buttons in the window run the same keys ([`Board::on_key`]), so a button and its shortcut can't differ.
+//! What each key does in each dialog, handing the rest to [`super::keys`]. Buttons in the window run the same keys
+//! ([`Board::on_key`]), so a button and its shortcut can't differ.
 //! Also typing into whichever field has the keys, for the mouse and the clipboard.
 
 use super::nav::Step;

@@ -7,6 +7,7 @@
 //! - [`input`]: what each key does in each dialog, and typing into fields.
 //! - [`keys`]: the keys outside dialogs, which the palette and the right-click menu offer too.
 //! - [`manage`]: renaming, moving and removing projects and repositories.
+//! - [`menu`]: the right-click menu on an entry.
 //! - [`nav`]: moving the selection around the board.
 //! - [`palette`]: the command palette, every action with its key.
 //! - [`sources`]: the central brain and every project repository, and the scope that filters them.

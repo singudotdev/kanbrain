@@ -78,7 +78,7 @@ impl TextEditor {
 
     /// Applies one key press: typing, deleting, moving (selecting with shift), or `esc` to save.
     pub fn on_key(&mut self, key: KeyEvent) -> Outcome {
-        // Ctrl combinations are not text (ctrl+c is handled by the app: discard).
+        // Ctrl combinations are not text; the app handles the clipboard's before they get here.
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
             KeyCode::Esc => return Outcome::Save,

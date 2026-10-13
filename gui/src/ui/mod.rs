@@ -4,11 +4,16 @@
 //!
 //! - [`topbar`]: tabs, search, the running tasks' clocks and the window's buttons.
 //! - [`board`]: the kanban columns and their cards.
+//! - [`list`]: the board as one list, a section per status.
 //! - [`entries`]: the notes and decisions lists.
 //! - [`drawer`]: the selected entry's details, beside the board or list.
 //! - [`report`]: tracked time by task or tag.
 //! - [`calendar`]: each day's interactions, for a day, week or month.
-//! - [`dialogs`]: the new / edit form, the text editor, deletes, links and the command palette.
+//! - [`dialogs`]: the new / edit form, the text editor, confirmations, links, the command palette and the project
+//!   dialogs.
+//! - [`mod@menu`]: the right-click menu.
+//! - [`dropdown`]: the project and tag filters' dropdowns.
+//! - [`markdown`]: descriptions and comments drawn as formatted text.
 //! - [`widgets`]: buttons, fields, pills and chips.
 //! - [`caret`]: the blinking text cursor.
 //! - [`mod@pointer`]: the mouse in text fields and the text editor.
@@ -163,7 +168,7 @@ struct Scrolls {
     links: ScrollHandle,
     /// "Which project?".
     place: ScrollHandle,
-    /// The add-project dialog's projects.
+    /// The projects listed by the add-project and manage dialogs.
     add_project: ScrollHandle,
 }
 

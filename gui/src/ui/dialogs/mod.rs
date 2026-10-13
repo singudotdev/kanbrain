@@ -3,11 +3,11 @@
 //! - [`form`]: the new / edit form, with its project, related entries and column.
 //! - [`editor`]: the text editor, for descriptions, comments and project text.
 //! - [`pickers`]: the link picker, "which project?" and the command palette.
-//! - [`project`]: a project at a glance.
+//! - [`project`]: Manage project: a project at a glance, and the buttons that change it.
 //! - [`add_project`]: the project a folder picked in the system's dialog joins or starts.
 //! - [`manage`]: renaming, moving and removing a project or its repositories.
 //!
-//! A delete's confirmation is here.
+//! The confirmation of a delete or the update is here.
 
 mod add_project;
 mod editor;

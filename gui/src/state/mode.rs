@@ -17,9 +17,9 @@ pub enum Mode {
     Form(Box<Form>),
     /// Typing a new task's title at the top of a column.
     QuickAdd(QuickAdd),
-    /// The text editor, for a description or a comment.
+    /// The text editor: a description, a comment or an answer, a decision's reason, or a project's text.
     Edit(Edit),
-    /// A delete that waits for a yes.
+    /// A delete, or the update, that waits for a yes.
     Confirm(Confirm),
     /// Choosing the entries related to one, by searching for them.
     Links(LinkPicker),
