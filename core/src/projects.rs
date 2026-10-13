@@ -297,11 +297,13 @@ fn card_path(central: &Path, project: &str) -> PathBuf {
 /// so nobody reads the placeholder as a description (an agent pays for it in every `context`).
 pub fn read_description(central: &Path, project: &str) -> String {
     let text = fs::read_to_string(card_path(central, project)).unwrap_or_default();
-    let body = text.lines().skip_while(|l| !l.starts_with("# ")).skip(1).collect::<Vec<_>>().join("\n");
-    match body.trim() {
-        DESCRIPTION_TEMPLATE => String::new(),
-        described => described.to_string(),
-    }
+    let body = card_body(&text);
+    if body == DESCRIPTION_TEMPLATE { String::new() } else { body }
+}
+
+/// What a card says under its `# name` title, trimmed.
+fn card_body(text: &str) -> String {
+    text.lines().skip_while(|l| !l.starts_with("# ")).skip(1).collect::<Vec<_>>().join("\n").trim().to_string()
 }
 
 /// Writes the project's shared card.
@@ -330,8 +332,7 @@ pub fn rename(central: &Path, old: &str, new: &str) -> Result<()> {
     let from = card_path(central, old);
     match fs::read_to_string(&from) {
         Ok(text) => {
-            let body = text.lines().skip_while(|l| !l.starts_with("# ")).skip(1).collect::<Vec<_>>().join("\n");
-            store::write_file(&card_path(central, new), &format!("# {new}\n\n{}\n", body.trim()))?;
+            write_description(central, new, &card_body(&text))?;
             if card_path(central, new) != from {
                 fs::remove_file(&from).with_context(|| format!("removing {}", from.display()))?;
             }
