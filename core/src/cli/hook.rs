@@ -33,10 +33,10 @@ named_enum! {
 
 /// What to print for `event`, given the JSON Claude Code sent (`input`) and the central brain: `None`
 /// outside a project, or when there's nothing to remind. Malformed input reads as empty, so a hook never
-/// breaks a session: it falls back to the current folder and lets the turn end.
-pub fn respond(event: HookEvent, input: &str, central: &Path) -> Option<String> {
+/// breaks a session: it falls back to the folder it runs in, `here`, and lets the turn end.
+pub fn respond(event: HookEvent, input: &str, central: &Path, here: &Path) -> Option<String> {
     let input: Value = serde_json::from_str(input).unwrap_or(Value::Null);
-    let cwd = input["cwd"].as_str().map(PathBuf::from).or_else(|| std::env::current_dir().ok())?;
+    let cwd = input["cwd"].as_str().map_or_else(|| here.to_path_buf(), PathBuf::from);
     let dir = store::find_project(&cwd)?;
     let project = projects::info(&dir, Some(central))?;
     let missing = missing(&project).join("; and ");

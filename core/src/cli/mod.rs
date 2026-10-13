@@ -301,7 +301,8 @@ impl Command {
                 if !std::io::stdin().is_terminal() {
                     std::io::stdin().read_to_string(&mut input).context("reading the hook's input")?;
                 }
-                if let Some(out) = hook::respond(event, &input, &projects::central_dir()?) {
+                let here = std::env::current_dir().context("reading the current directory")?;
+                if let Some(out) = hook::respond(event, &input, &projects::central_dir()?, &here) {
                     println!("{out}");
                 }
                 return Ok(());

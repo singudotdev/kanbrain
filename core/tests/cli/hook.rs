@@ -1,6 +1,12 @@
 use super::*;
 use crate::projects;
 
+/// What the hook says for `input`, run in a folder outside any project.
+fn hook(event: HookEvent, input: &str, central: &Path) -> Option<String> {
+    let outside = tempfile::tempdir().unwrap();
+    respond(event, input, central, outside.path())
+}
+
 /// A central brain and a repository folder registered as project `shop`, with its card as `init` makes
 /// it; the folders live as long as the returned ones.
 fn project() -> (tempfile::TempDir, tempfile::TempDir, PathBuf) {
@@ -23,7 +29,7 @@ fn input(cwd: &Path, stop_hook_active: bool) -> String {
 #[test]
 fn an_undescribed_project_is_asked_for_with_every_prompt_and_holds_the_turn_once() {
     let (central, _code, root) = project();
-    let prompt = respond(HookEvent::Prompt, &input(&root, false), central.path()).expect("it asks");
+    let prompt = hook(HookEvent::Prompt, &input(&root, false), central.path()).expect("it asks");
     assert!(
         prompt.contains("Before anything else in this turn") && prompt.contains("`kb project describe -`"),
         "{prompt}"
@@ -31,11 +37,11 @@ fn an_undescribed_project_is_asked_for_with_every_prompt_and_holds_the_turn_once
     assert!(!prompt.contains("role"), "one repository has no role to describe: {prompt}");
 
     let stop: Value =
-        serde_json::from_str(&respond(HookEvent::Stop, &input(&root, false), central.path()).unwrap()).unwrap();
+        serde_json::from_str(&hook(HookEvent::Stop, &input(&root, false), central.path()).unwrap()).unwrap();
     let reminder = stop["hookSpecificOutput"]["additionalContext"].as_str().expect("the turn goes on with it");
     assert_eq!(stop["hookSpecificOutput"]["hookEventName"], "Stop");
     assert!(reminder.contains("Before ending this turn") && reminder.contains("`kb project describe -`"), "{reminder}");
-    assert_eq!(respond(HookEvent::Stop, &input(&root, true), central.path()), None, "but only once: no loop");
+    assert_eq!(hook(HookEvent::Stop, &input(&root, true), central.path()), None, "but only once: no loop");
 }
 
 #[test]
@@ -43,15 +49,12 @@ fn a_described_project_costs_nothing_and_outside_one_too() {
     let (central, _code, root) = project();
     projects::write_description(central.path(), "shop", "An online shop.").unwrap();
     for event in [HookEvent::Prompt, HookEvent::Stop] {
-        assert_eq!(respond(event, &input(&root, false), central.path()), None);
+        assert_eq!(hook(event, &input(&root, false), central.path()), None);
     }
     let elsewhere = tempfile::tempdir().unwrap();
-    assert_eq!(respond(HookEvent::Stop, &input(elsewhere.path(), false), central.path()), None, "not a project");
-    // Bad input falls back to the working directory, which is a project when this repository has a brain of its own.
-    let bad = respond(HookEvent::Stop, "not json", central.path());
-    if store::find_project(&std::env::current_dir().unwrap()).is_none() {
-        assert_eq!(bad, None, "bad input never breaks a session");
-    }
+    assert_eq!(hook(HookEvent::Stop, &input(elsewhere.path(), false), central.path()), None, "not a project");
+    let bad = respond(HookEvent::Stop, "not json", central.path(), elsewhere.path());
+    assert_eq!(bad, None, "bad input falls back to the folder it runs in, and never breaks a session");
 }
 
 #[test]
@@ -61,14 +64,14 @@ fn with_several_repositories_this_ones_role_counts_too() {
     std::fs::create_dir_all(&web).unwrap();
     projects::register(central.path(), "shop", &web).unwrap();
     projects::write_description(central.path(), "shop", "An online shop.").unwrap();
-    let prompt = respond(HookEvent::Prompt, &input(&root, false), central.path()).expect("the role is missing");
+    let prompt = hook(HookEvent::Prompt, &input(&root, false), central.path()).expect("the role is missing");
     assert!(prompt.contains("`kb project notes -`") && !prompt.contains("describe -"), "{prompt}");
     projects::write_repo_card(
         &root.join(".brain"),
         &projects::RepoCard { project: "shop".into(), repo: None, notes: "The API.".into() },
     )
     .unwrap();
-    assert_eq!(respond(HookEvent::Prompt, &input(&root, false), central.path()), None);
+    assert_eq!(hook(HookEvent::Prompt, &input(&root, false), central.path()), None);
 }
 
 #[test]
@@ -78,17 +81,17 @@ fn a_task_an_agent_started_and_never_commented_on_is_reminded_once() {
     let mut brain = crate::brain::Brain::open(Store::at(root.join(".brain")).unwrap()).unwrap();
     let new = |title: &str| crate::brain::NewEntry { title: title.into(), start: true, ..Default::default() };
     let users = brain.add(new("The user's")).unwrap();
-    assert_eq!(respond(HookEvent::Stop, &input(&root, false), central.path()), None, "not the agent's to report");
+    assert_eq!(hook(HookEvent::Stop, &input(&root, false), central.path()), None, "not the agent's to report");
 
     brain.author = Author::Agent;
     let task = brain.add(new("Cache sessions")).unwrap();
     assert_ne!(users, task);
     let other = brain.add(new("Expire sessions")).unwrap();
-    let stop = respond(HookEvent::Stop, &input(&root, false), central.path()).expect("a reminder");
+    let stop = hook(HookEvent::Stop, &input(&root, false), central.path()).expect("a reminder");
     assert!(stop.contains(&format!("`kb comment {task}`")), "{stop}");
     assert!(stop.contains(&format!("`kb comment {other}`")), "each one a subagent runs: {stop}");
     brain.add_comment(other, "expiry set to a day").unwrap();
-    assert_eq!(respond(HookEvent::Stop, &input(&root, true), central.path()), None, "once a turn");
+    assert_eq!(hook(HookEvent::Stop, &input(&root, true), central.path()), None, "once a turn");
     brain.add_comment(task, "sessions cached; next: expiry").unwrap();
-    assert_eq!(respond(HookEvent::Stop, &input(&root, false), central.path()), None);
+    assert_eq!(hook(HookEvent::Stop, &input(&root, false), central.path()), None);
 }
