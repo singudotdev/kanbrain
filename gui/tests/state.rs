@@ -204,8 +204,10 @@ fn shift_arrows_move_the_card_across_columns_and_record_it() {
 fn a_brain_left_with_nothing_running_asks_whats_next() {
     let mut f = Fixture::new(&["feature", "bug", "docs"]);
     f.board.set_status(k(1), Status::Doing);
+    f.board.set_status(k(1), Status::Parked);
+    let Mode::Next(_) = &f.board.mode else { panic!("#1 stopped and nothing runs: it asks") };
+    f.press(KeyCode::Esc);
     f.board.set_status(k(2), Status::Doing);
-    assert!(matches!(f.board.mode, Mode::Normal), "starting another isn't stopping: #1 is parked, #2 runs");
     f.board.set_status(k(2), Status::Done);
     let Mode::Next(picker) = &f.board.mode else { panic!("#2 stopped and nothing runs: it asks") };
     let choices = f.board.next_choices(picker);
@@ -230,24 +232,31 @@ fn a_brain_left_with_nothing_running_asks_whats_next() {
     f.press(KeyCode::Char('n'));
     f.type_text("hotfix");
     f.press(KeyCode::Enter);
-    let running = f.board.brain(0).running().map(|t| t.title.clone());
-    assert_eq!(running.as_deref(), Some("hotfix"), "n creates a task there, already started");
+    let running: Vec<_> = f.board.brain(0).running().map(|t| t.title.as_str()).collect();
+    assert_eq!(running, ["hotfix"], "n creates a task there, already started");
 
     f.board.open_entry(k(4));
     f.press(KeyCode::Char('x'));
     f.press(KeyCode::Char('y'));
     assert!(matches!(f.board.mode, Mode::Next(_)), "deleting the running task asks too");
     f.press(KeyCode::Esc);
-    assert!(matches!(f.board.mode, Mode::Normal) && f.board.brain(0).running().is_none(), "Esc: nothing for now");
+    assert!(matches!(f.board.mode, Mode::Normal), "Esc: nothing for now");
+    assert_eq!(f.board.brain(0).running().count(), 0);
 }
 
 #[test]
-fn starting_a_task_parks_the_running_one() {
-    let mut f = Fixture::new(&["feature", "bug"]);
+fn starting_a_second_task_of_yours_is_refused_but_an_agents_isnt() {
+    let mut f = Fixture::new(&["feature", "bug", "agent's"]);
     f.board.set_status(k(1), Status::Doing);
-    f.board.set_status(k(2), Status::Doing);
-    assert_eq!((f.status(1), f.status(2)), (Status::Parked, Status::Doing));
-    assert!(f.board.message().unwrap().contains("#1 parked"));
+    f.board.drop_card(k(2), Status::Doing);
+    assert_eq!((f.status(1), f.status(2)), (Status::Doing, Status::Todo), "nobody's task is parked for it");
+    assert!(f.board.message().unwrap().contains("#1 is in doing"), "{:?}", f.board.message());
+    f.board.brain_mut(0).author = kanbrain_core::model::Author::Agent;
+    f.board.brain_mut(0).set_status(3, Status::Doing).unwrap();
+    f.board.brain_mut(0).author = kanbrain_core::model::Author::Human;
+    assert_eq!(f.board.running().len(), 2, "yours and the agent's both run");
+    f.board.set_status(k(1), Status::Parked);
+    assert!(matches!(f.board.mode, Mode::Next(_)), "what's next is about yours, whatever the agent runs");
 }
 
 #[test]
@@ -668,14 +677,14 @@ fn each_project_runs_its_own_task() {
     board.set_status(Key::new(3, 1), Status::Doing);
     let running: Vec<Key> = board.running().into_iter().map(|(key, _)| key).collect();
     assert_eq!(running, [Key::new(1, 1), Key::new(3, 1)], "shop/api and blog both run");
-    // Within one brain, starting another parks it.
+    // Within one brain, you run one task at a time.
     let id =
         board.brain_mut(1).add(kanbrain_core::brain::NewEntry { title: "next".into(), ..Default::default() }).unwrap();
     board.set_status(Key::new(1, id), Status::Doing);
-    assert_eq!(board.task(Key::new(1, 1)).unwrap().status, Status::Parked);
-    assert!(board.message().unwrap().contains("#1 parked"));
+    assert_eq!(board.task(Key::new(1, id)).unwrap().status, Status::Todo);
+    assert!(board.message().unwrap().contains("#1 is in doing"), "{:?}", board.message());
     board.park_and_quit();
-    assert!(board.running().is_empty(), "Park & quit parks them all");
+    assert!(board.running().is_empty(), "Park & quit parks yours, in every brain");
 }
 
 #[test]

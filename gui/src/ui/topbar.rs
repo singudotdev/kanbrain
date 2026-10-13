@@ -3,7 +3,7 @@
 
 use super::dropdown::{Dropdown, Row};
 use super::pointer::TextBox;
-use super::theme::{self, BORDER, GREEN, YELLOW};
+use super::theme::{self, BORDER, YELLOW};
 use super::widgets::{self, Kind, dim, dim_small, segment, segmented, small, tag_chips};
 use super::{BrainView, Scrolls, action, tag_filter};
 use crate::state::{Board, Key, Layout, Mode, Picker, Scope, Tab, Target};
@@ -32,7 +32,7 @@ static LOGO: std::sync::LazyLock<std::sync::Arc<Image>> = std::sync::LazyLock::n
 });
 
 /// Tabs, search, new entry and the window's buttons; the projects filter, with the shown project's
-/// card; then the running task.
+/// card; then the running tasks.
 pub fn draw(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<BrainView>) -> Div {
     div()
         .flex()
@@ -218,7 +218,7 @@ fn layout_switch(board: &Board, cx: &mut Context<BrainView>) -> Div {
     segmented(segments)
 }
 
-/// The running task with its clock, or "idle"; today's tracked total; Park and Park & quit.
+/// Each running task with its clock, or "idle"; today's tracked total; Park and Park & quit.
 fn running_bar(board: &Board, cx: &mut Context<BrainView>) -> Div {
     let now = now();
     let (from, to) = Period::current(Unit::Day).bounds();
@@ -262,7 +262,7 @@ fn running_item(
         .items_center()
         .gap_2()
         .min_w_0()
-        .child(div().text_color(rgb(GREEN)).font_weight(FontWeight::SEMIBOLD).child("▶"))
+        .child(div().text_color(rgb(theme::running_color(task))).font_weight(FontWeight::SEMIBOLD).child("▶"))
         .child(
             div()
                 .id(ElementId::Name(format!("running {}/{}", key.src, key.id).into()))
@@ -277,7 +277,7 @@ fn running_item(
         .child(tag_chips(board.brain(key.src), &task.tags).flex_nowrap().flex_none())
         .child(
             div()
-                .text_color(rgb(GREEN))
+                .text_color(rgb(theme::running_color(task)))
                 .font_family(theme::EDITOR_FONT)
                 .child(fmt_clock(task.running_for(now).unwrap_or_default())),
         )

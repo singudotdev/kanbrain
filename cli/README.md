@@ -36,7 +36,7 @@ it and keeps the data.
 ```sh
 kb context                         # start of session: project card, active tasks, decisions, notes
 kb search login                    # find the task (or `kb add "Fix login 500"`)
-kb start 4                         # clock starts; the previously running task is parked
+kb start 4                         # clock starts (an agent can run several at once)
 kb comment 4 "token refresh race; fix next"
 echo "Context…/Decision…/Consequences…" | kb add --decision --link 4 --body - "Retry refresh once"
 kb done 4
@@ -51,7 +51,7 @@ context: write commands reply with one line, like `#4 Fix login 500 (doing) #aut
 | --- | --- |
 | `kb context` | summary for agents: project card, active tasks, recent done, decisions, notes |
 | `kb add [--note\|--decision] [--tag T] [--link ID] [--body TEXT\|-] [--start] TITLE` | create a task (or note/decision) |
-| `kb start\|park\|done\|todo ID` | move a task; `start` runs its clock and parks the running one |
+| `kb start\|park\|done\|todo ID` | move a task; `start` runs its clock (a person runs one task at a time; agents, several) |
 | `kb comment ID TEXT` | add a timestamped comment (`-` reads from stdin) |
 | `kb describe ID TEXT` | replace the description |
 | `kb link ID OTHER…` | link entries to each other (`REPO#ID`: in another repository of the project) |
@@ -59,7 +59,7 @@ context: write commands reply with one line, like `#4 Fix login 500 (doing) #aut
 | `kb show ID` | one entry in full: status, time, description, comments, links, history |
 | `kb search WORDS…` | find entries by words; `#tag` matches tags only |
 | `kb list [doing\|todo\|parked\|done\|all] [notes] [decisions] [--tag T]` | print tasks as markdown |
-| `kb status` | the running task and its clock, for status bars |
+| `kb status` | the running tasks and their clocks, for status bars |
 | `kb report [hour\|day\|week\|month] [--group task\|tag] [--save]` | tracked time as markdown |
 | `kb completions bash\|zsh\|fish` | tab completion of commands, ids, projects and tags |
 

@@ -258,7 +258,7 @@ every second / before each input ──▶ Watcher::changed ──▶ Board::rel
   takes) from that re-read to its saves, so an agent's `kb` can't write in between, nor the board over it.
 - **Selection by key.** The board selects entries by `Key { src, id }` (which brain, and the id there, since every
   brain numbers from 1), never by position, so reloads and moves never jump to another card.
-- **Status changes** go through `Brain::set_status`, which parks the brain's running task when another starts, opens and closes
+- **Status changes** go through `Brain::set_status`, which refuses a person's start while one of theirs runs (agents' aren't limited), opens and closes
   sessions, and appends a `StatusChange` to the history only when the status really changes. The `- status:` line in
   the file is the truth; the history is the record of how the task got there.
 - **Modes** (`state::Mode`): `Normal`, `Search`, `Form`, `QuickAdd`, `Edit` (text editor with a `Target`: description,
@@ -317,7 +317,7 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 
 | module | covers |
 | --- | --- |
-| `brain` | status history, columns, one task in doing (starting parks the running one, loading fixes several), sessions, comments, links, renames and deletes, ids never given twice, moving to another brain, reports, the calendar's days and filters, the decision template |
+| `brain` | status history, columns, one person's task in doing and agents' unlimited (a second start refused, loading parks the extra ones), sessions, comments, links, renames and deletes, ids never given twice, moving to another brain, reports, the calendar's days and filters, the decision template |
 | `api`, `cli` | agent operations and their refusals, links to other repositories, compact text and JSON, `context`'s caps, command parsing, `--project`, `list` output, usage, completion scripts and candidates, which apps `update` installs |
 | `cli::init` | the agent section written, updated in place and left alone when unclosed; `init --all` updating every registered repository that has it, and no other; registering repositories and joining them into a project; `deinit` taking it all back but `.brain/`; the Claude Code hooks added once beside other settings (one from before `kb` replaced), and removed leaving them as they were; `kb hook` asking with every prompt and holding the turn once while the project or this repository's role isn't described, and silent once they are |
 | `projects` | the registry and its labels, cards, moving a repository between projects, refusing two repositories with one name |
@@ -366,6 +366,8 @@ Code headless on small throwaway projects, one per scenario, and judges what lan
 | `propose` | facing a storage choice nobody made, proposes a decision and leaves its task waiting on it |
 | `wait` | with the user at the board, asks, waits with `kb wait` in the background, and finishes with the answer in the same session |
 | `answered` | in a new session, picks up the task whose question was answered, and applies the answer |
+| `full` | with the user's own task running, starts its own beside it, does the work, and leaves the user's alone |
+| `parallel` | asked for three independent changes by subagents, gives each its own task, running at once, each commented on |
 | `repos` | with two repositories, leaves the other one's work there as a task, linked to the task here |
 | `resume` | in a new session, picks up the task that was running, from its last comment |
 

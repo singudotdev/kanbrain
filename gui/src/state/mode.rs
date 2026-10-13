@@ -370,7 +370,7 @@ impl Picker {
     }
 }
 
-/// "What's next?", after the running task of a brain stopped: start one of its parked or to-do
+/// "What's next?", after your running task in a brain stopped: start one of its parked or to-do
 /// tasks, found with a search, create a new one there, or nothing.
 #[derive(Debug)]
 pub struct NextPicker {

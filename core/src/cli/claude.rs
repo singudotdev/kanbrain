@@ -7,7 +7,7 @@
 //! - with every prompt, and when the agent would end its turn, `kb hook prompt` and `kb hook stop`
 //!   check that the project is described (see [`super::hook`]). Agents skipped describing it when only
 //!   asked to, so until it's done the prompt carries the request and the turn can't end without it.
-//!   `stop` also reminds an agent of a task it started and hasn't commented on since.
+//!   `stop` also reminds an agent of each task it started and hasn't commented on since.
 //!
 //! They go in `.claude/settings.local.json`, the repository's personal settings, since `init` runs on
 //! each machine anyway and a teammate without kanbrain installed shouldn't get failing hooks.

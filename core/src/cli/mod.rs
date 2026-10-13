@@ -4,7 +4,7 @@
 //! - [`mod@init`]: a project's `.brain/`, and the section telling its agents about it; `deinit` undoes it.
 //! - [`claude`]: the Claude Code hooks `init` adds: the context at each session start, and [`hook`]'s checks.
 //! - [`hook`]: `kb hook prompt|stop`, which hold an agent to describing an undescribed project first, and
-//!   to commenting on the task it started.
+//!   to commenting on the tasks it started.
 //! - [`completions`]: `kb completions SHELL`, tab completion, and the ids, projects and tags it offers.
 //! - [`update`]: `kb update`, the latest release over this one, through the installer.
 
@@ -83,9 +83,9 @@ usage:
   {pad}           card; its .brain/ is kept
   {name} hook prompt|stop
   {pad}           what the Claude Code hooks `init` adds run: they hold an agent to describing an
-  {pad}           undescribed project first, and to commenting on the task it started (they read the
+  {pad}           undescribed project first, and to commenting on the tasks it started (they read the
   {pad}           hook's JSON on stdin)
-  {name} status    print the running task, in whichever project, and how many wait for an answer
+  {name} status    print the running tasks, in whichever project, and how many wait for an answer
   {pad}           (for status bars)
   {name} report [{units}] [--group {groups}] [--tag TAG] [--save]
   {pad}           print the current period's tracked time as markdown
@@ -142,7 +142,7 @@ pub enum Command {
     Deinit,
     /// `hook prompt|stop`: what Claude Code's hooks run (see [`hook`]).
     Hook(hook::HookEvent),
-    /// `status`: print the running task for status bars.
+    /// `status`: print the running tasks for status bars.
     Status,
     /// `report`: print a time report as markdown.
     Report(ReportArgs),
@@ -428,7 +428,7 @@ fn author() -> Result<Author> {
 
 /// One line for status bars: `#id title HH:MM:SS` for each running session, or `idle`, then how many
 /// tasks wait for an answer, if any. Looks in every brain, wherever it's run from, since each runs its
-/// own task; a project's task says which project, and several are joined:
+/// own tasks; a project's task says which project, and several are joined:
 /// `shop/api #3 Fix login 00:42:17 · blog #1 Post 00:05:00 · 2 waiting`.
 fn print_status(central: &Path) -> Result<()> {
     let now = now();
@@ -439,8 +439,8 @@ fn print_status(central: &Path) -> Result<()> {
     let mut waiting = 0;
     for (name, dir) in brains.into_iter().filter(|(_, dir)| dir.is_dir()) {
         let (tasks, _) = Store::at(&dir)?.load()?;
-        if let Some((task, clock)) = tasks.iter().find_map(|t| Some((t, t.running_for(now)?))) {
-            let project = name.map(|n| format!("{n} ")).unwrap_or_default();
+        let project = name.map(|n| format!("{n} ")).unwrap_or_default();
+        for (task, clock) in tasks.iter().filter_map(|t| Some((t, t.running_for(now)?))) {
             running.push(format!("{project}#{} {} {}", task.id, task.title, fmt_clock(clock)));
         }
         waiting += tasks.iter().filter(|t| matches!(t.asked(), Some(Asked::Waiting(_)))).count();

@@ -7,7 +7,7 @@ The **Board** tab (`1`) has one column per status:
 | column | means |
 | --- | --- |
 | **To do** | not started |
-| **Doing** | being worked on, with its clock running. **One task at a time per project repository** (and in the central brain): starting another there parks this one (see [Time tracking](time-tracking.md)) |
+| **Doing** | being worked on, with its clock running. **One of yours at a time per project repository** (and in the central brain): starting another there is refused until you park or finish it. Agents can run several (see [Time tracking](time-tracking.md)) |
 | **Parked** | started, then set aside: blocked, waiting on someone, or interrupted |
 | **Done** | finished. The 20 most recently finished show; **Show N older** (or `f`) shows the rest |
 
@@ -64,7 +64,7 @@ nothing.
 
 Each repository numbers its entries from 1, so `#3` can be in several; the label tells them apart. Entries of
 different repositories of one project can be related too (see [Related entries](#related-entries)). Each repository
-runs its own task, so different projects can have one in Doing each.
+has its own Doing, so different projects run side by side.
 
 ## Tasks
 
@@ -98,8 +98,8 @@ the next one. `esc` closes it.
 **Move…** in the details (`M`) moves an entry to another brain: a list of every other one (the central brain, each
 project and each repository of a project with several), whatever the filter shows, with a search box. The entry gets
 a new number there and keeps its status, history, tracked time, description, comments and tags. Its links
-are dropped, on both sides (links from other repositories too), since they name it by its old number. A task running its clock keeps it, and
-parks the task that was running there. The button only shows while there's more than one brain.
+are dropped, on both sides (links from other repositories too), since they name it by its old number. A task running its clock keeps it, unless
+one of yours already runs there: then the move is refused. The button only shows while there's more than one brain.
 
 ### The new / edit form
 

@@ -2,7 +2,7 @@
 //! status bar. Buttons run the same keys as the keyboard ([`Board::on_key`]); other clicks select or
 //! open something.
 //!
-//! - [`topbar`]: tabs, search, the running task's clock and the window's buttons.
+//! - [`topbar`]: tabs, search, the running tasks' clocks and the window's buttons.
 //! - [`board`]: the kanban columns and their cards.
 //! - [`entries`]: the notes and decisions lists.
 //! - [`drawer`]: the selected entry's details, beside the board or list.

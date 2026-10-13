@@ -2,7 +2,7 @@
 
 ## Status bars
 
-`kb status` prints the running task and its clock, or `idle`, then how many tasks wait for your answer, if any
+`kb status` prints the running tasks and their clocks, or `idle`, then how many tasks wait for your answer, if any
 (`· 2 waiting`). It reads the files directly, so it's fast and
 works whether or not the board is open:
 

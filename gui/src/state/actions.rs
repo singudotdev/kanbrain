@@ -20,17 +20,14 @@ impl Board {
         }
     }
 
-    /// Moves a task to `status`. Starting one parks the task running in the same brain, and says so;
-    /// other brains keep theirs.
+    /// Moves a task to `status`. Starting one while the brain already runs a task you started is refused,
+    /// saying which: nothing is parked for it. Agents' tasks don't count.
     pub fn set_status(&mut self, key: Key, status: Status) {
-        let running = self.brain(key.src).running().map(|t| t.id);
-        let stops = running == Some(key.id) && status != Status::Doing;
+        let stops = self.brain(key.src).running().any(|t| t.id == key.id) && status != Status::Doing;
         match self.brain_mut(key.src).set_status(key.id, status) {
             Ok(true) => {
                 let title = self.task(key).map(|t| t.title.clone()).unwrap_or_default();
-                let parked = running.filter(|&r| r != key.id && status == Status::Doing);
-                let parked = parked.map(|p| format!(" · #{p} parked")).unwrap_or_default();
-                self.notify(format!("#{} {title} → {}{parked}", key.id, status.as_str()));
+                self.notify(format!("#{} {title} → {}", key.id, status.as_str()));
             }
             Ok(false) => self.notify(format!("#{} is already {}", key.id, status.as_str())),
             Err(e) => self.notify(format!("{e:#}")),
@@ -41,10 +38,10 @@ impl Board {
         }
     }
 
-    /// Asks what to work on next in the brain at `src`, once its running task stopped and nothing
-    /// else runs there.
+    /// Asks what to work on next in the brain at `src`, once your running task there stopped.
     fn ask_next(&mut self, src: usize) {
-        if self.brain(src).running().is_none() {
+        // Agents' tasks may still run there: what's next is about yours.
+        if self.brain(src).person_doing().is_none() {
             self.mode = Mode::Next(NextPicker { src, search: LineInput::default(), sel: 0 });
         }
     }
@@ -442,7 +439,7 @@ impl Board {
 
     /// Runs a confirmed delete.
     pub(super) fn confirm(&mut self, confirm: Confirm) {
-        let running = |board: &Self, key: Key| board.brain(key.src).running().is_some_and(|t| t.id == key.id);
+        let running = |board: &Self, key: Key| board.brain(key.src).running().any(|t| t.id == key.id);
         let stops = match confirm {
             Confirm::Delete(key) => running(self, key).then_some(key.src),
             Confirm::DeleteComment(..) => None,
@@ -550,10 +547,11 @@ impl Board {
         }
     }
 
-    /// Parks every running task, in every brain, and closes the window, for the end of the day.
+    /// Parks every running task you started, in every brain, and closes the window, for the end of the day.
+    /// Agents' tasks keep running: they may still be at work.
     pub fn park_and_quit(&mut self) {
         for src in 0..self.sources.len() {
-            let result = self.brain_mut(src).park_running();
+            let result = self.brain_mut(src).park_people_running();
             self.report_error(result);
         }
         self.quit = true;

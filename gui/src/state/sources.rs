@@ -406,12 +406,12 @@ impl Board {
         tags
     }
 
-    /// The tasks whose clocks run: at most one per brain, whatever the scope shows.
+    /// The tasks whose clocks run, in every brain whatever the scope shows: as many per brain as its limit.
     pub fn running(&self) -> Vec<(Key, &Task)> {
         self.sources
             .iter()
             .enumerate()
-            .filter_map(|(src, s)| s.brain.running().map(|t| (Key::new(src, t.id), t)))
+            .flat_map(|(src, s)| s.brain.running().map(move |t| (Key::new(src, t.id), t)))
             .collect()
     }
 

@@ -22,7 +22,7 @@
 
 </div>
 
-<p align="center"><img src="docs/images/agent.gif" alt="An agent adds a task with kb and starts it, then asks a question: the kanban board shows the card parked and waiting for you. You answer, the agent picks it up again, comments and finishes it, and the board follows each step" width="100%"/></p>
+<p align="center"><img src="docs/images/agent.gif" alt="An agent adds a task with kb and starts it, running in green beside your own task in cyan, then asks a question: the kanban board shows the card parked and waiting for you. You answer, the agent picks it up again, comments and finishes it, and the board follows each step" width="100%"/></p>
 
 **Project memory for you and your coding agents.** Tasks, decisions and notes stored as plain markdown files next to
 your code, with a kanban board for you and a CLI for agents. Agents keep the board current and stop to ask you when a
@@ -103,7 +103,7 @@ kb context                         # 1. start of session: project card, active t
                                    #    comment, recently done, decisions, notes
 kb project describe -              #    once, if context says the project isn't described yet
 kb search login                    # 2. find the task (or `add "Fix login 500"`)
-kb start 4                         # 3. clock starts; the previously running task is parked
+kb start 4                         # 3. clock starts (an agent can run several at once)
 kb comment 4 "token refresh race; fix next"   # 4. a step done, a cause found: one or two lines
 echo "Context…/Decision…/Consequences…" | \
   kb add --decision --link 4 --body - "Retry refresh once"   # 5. record why an approach was chosen
@@ -131,7 +131,7 @@ The output is kept small so it doesn't waste the agent's context, and the CLI co
 | --- | --- |
 | `kb context` | summary for agents: project card, active tasks, recent done, decisions, notes |
 | `kb add [--note\|--decision] [--tag T] [--link ID] [--body TEXT\|-] [--start] TITLE` | create a task (or note/decision) |
-| `kb start\|park\|done\|todo ID` | move a task; `start` runs its clock and parks the running one |
+| `kb start\|park\|done\|todo ID` | move a task; `start` runs its clock (a person runs one task at a time; agents, several) |
 | `kb comment ID TEXT` | add a timestamped comment (`-` reads from stdin) |
 | `kb ask ID TEXT` | ask the user a question on a task, which waits for the answer in Parked |
 | `kb wait ID` | block until a person answers the task's question (or decides on a decision), then print the answer; at most 8 minutes by default |
@@ -143,7 +143,7 @@ The output is kept small so it doesn't waste the agent's context, and the CLI co
 | `kb show ID` | one entry in full: status, time, description, comments, links, history |
 | `kb search WORDS…` | find entries by words; `#tag` matches tags only |
 | `kb list [doing\|todo\|parked\|done\|all] [notes] [decisions] [--tag T]` | print tasks as markdown |
-| `kb status` | the running task and its clock, for status bars |
+| `kb status` | the running tasks and their clocks, for status bars |
 | `kb report [hour\|day\|week\|month] [--group task\|tag] [--save]` | tracked time as markdown |
 | `kb update` | install the latest release over this one |
 | `kb completions bash\|zsh\|fish` | tab completion of commands, ids, projects and tags |
@@ -156,8 +156,10 @@ The output is kept small so it doesn't waste the agent's context, and the CLI co
 ## Key ideas
 
 - **Tasks** move across To do → Doing → Parked → Done. Every move is recorded with its date.
-- **One task in Doing at a time**, per brain. Starting a task parks the one that was running, so time tracking needs
-  no effort. On the board, **Park & quit** (`Q`) ends the day.
+- **One task of yours in Doing at a time**, per brain: starting another while one runs is refused, so nothing gets
+  set aside behind your back. Agents aren't limited: one splitting its work between subagents runs a task per
+  subagent. Running tasks show in cyan when you started them, in green when an agent did. On the board, **Park &
+  quit** (`Q`) ends the day.
 - **Notes** record what you learned. **Decisions** record what was chosen and why, using the ADR sections Context,
   Decision and Consequences. Both link to tasks by id. A decision an agent proposes waits for you to accept or
   reject it.

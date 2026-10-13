@@ -12,7 +12,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | `←` `→` `↑` `↓` | move between cards and columns (up and down on the notes and decisions lists) |
 | `shift+←` `shift+→` | move the selected card to the previous or next column |
 | `v` | lay the board out as kanban columns or as a list (see [Kanban or list](tasks-and-tags.md#kanban-or-list)) |
-| `s` | **start**: move to Doing and run its clock; the running task is parked |
+| `s` | **start**: move to Doing and run its clock; refused while another of yours runs in that brain |
 | `p` | **park**: move to Parked |
 | `d` | **done**: move to Done |
 | `t` | **back to to do**: move to To do, e.g. to reopen a done task |
@@ -39,9 +39,9 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | `P` | choose the project shown: a dropdown of All, Central, each project and each repository of a project with several; type to filter, `↑` `↓` and `enter` to show one, `esc` to close |
 | `u` | **undo** the last change the board made (a delete, a move, an edit…); pressed again, redo it. Refused if another program changed those files since |
 | `R` | reload the files (the board also reloads by itself when they change) |
-| `Q` | **park** the running task and **quit** |
+| `Q` | **park** your running tasks and **quit**; agents' keep running |
 | `?` | the **command palette**: every action with its key; type to filter, `↑` `↓` move, `enter` runs it, `esc` closes |
-| `q` | quit; the running task keeps its clock running |
+| `q` | quit; running tasks keep their clocks running |
 
 ## Report tab
 

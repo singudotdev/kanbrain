@@ -10,7 +10,7 @@ remember when they moved, and track the time spent on them.
 
 1. [Getting started](getting-started.md): install, first run, where data lives
 2. [Tasks, tags & search](tasks-and-tags.md): the board, statuses and history, tags, descriptions and comments, notes and decisions, search
-3. [Time tracking](time-tracking.md): sessions, one task at a time, and reports
+3. [Time tracking](time-tracking.md): sessions, one task of yours at a time, and reports
 4. [For coding agents](agents.md): `.brain/` per project, what goes where, the agent commands, JSON
 5. [Keybindings](keybindings.md): every key and mouse action in the kanban app
 6. [Command line](cli.md): `list`, `status`, `report`, `init`, `deinit`, `hook`, `path`, and the agent commands
@@ -26,9 +26,9 @@ remember when they moved, and track the time spent on them.
   the board follows their changes by itself.
 - **The board for people, the CLI for agents.** You see and move cards; agents run commands that print text or JSON.
   Neither has to know the other is there.
-- **One thing at a time.** Doing holds one task per brain (each project repository, and the central one), and its
-  clock runs while it's there. Interruptions park it, so the
-  board always shows what you were doing before.
+- **One thing at a time, for you.** Doing holds one task of yours per brain (each project repository, and the
+  central one), and its clock runs while it's there; to switch, you park it, so the board always shows what you
+  were doing before. Agents can run several, one per subagent.
 - **Mouse or keyboard.** Every action has a button, and every button has a key, named in its tooltip; `?` opens a command palette that lists them all, searchable, and runs one.
 - **Zero config.** The only settings are optional environment variables.
 
@@ -40,7 +40,7 @@ remember when they moved, and track the time spent on them.
 | **note** | something to remember: a finding, how something works. Like a task without a status |
 | **decision** | something decided, with its context and consequences (an ADR). Starts from a template |
 | **link** | relates two entries (`r`, or the form's Related field); both show the other under "Related", and clicking it goes there |
-| **status** | the task's column: `todo` (not started), `doing` (being worked on: one task at a time per brain, with its clock running), `parked` (started, set aside for now), `done` |
+| **status** | the task's column: `todo` (not started), `doing` (being worked on, with its clock running: one of yours at a time per brain, several of an agent's), `parked` (started, set aside for now), `done` |
 | **history** | when the task's status changed, e.g. `todo → doing` on Mon 28 Sep 10:12 |
 | **tag** | a label such as `prod` or `support`, shown as a colored chip |
 | **brain** | a folder of entries: the central brain, for everything outside a project, or a project repository's `.brain/` |

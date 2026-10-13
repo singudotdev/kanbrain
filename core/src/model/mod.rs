@@ -292,6 +292,12 @@ impl Task {
         self.sessions.iter().map(|s| s.overlap(from, to, now)).sum()
     }
 
+    /// Who last moved the task to `doing`: a person or an agent. A task in `doing` with no such change (from
+    /// an older version, or edited by hand) counts as a person's.
+    pub fn started_by(&self) -> Author {
+        self.history.iter().rev().find(|c| c.to == Status::Doing).map_or(Author::Human, |c| c.by)
+    }
+
     /// When the status last changed (or the task was created, if never); used for sorting.
     pub fn status_since(&self) -> DateTime<Local> {
         self.history.last().map_or(self.created, |c| c.at)

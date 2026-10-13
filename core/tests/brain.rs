@@ -73,39 +73,47 @@ fn columns_show_the_latest_move_first() {
 }
 
 #[test]
-fn tracking_runs_one_task_at_a_time() {
+fn a_person_runs_one_task_and_another_start_is_refused() {
     let mut f = Fixture::with_titles(&["feature", "bug"]);
     f.brain.set_status(1, Status::Doing).unwrap();
-    f.brain.set_status(2, Status::Doing).unwrap();
+    assert_eq!(error(f.brain.set_status(2, Status::Doing)), ApiError::DoingFull(1));
+    let new = NewEntry { title: "new".into(), start: true, ..NewEntry::default() };
+    assert_eq!(error(f.brain.create(new)), ApiError::DoingFull(1));
     let tasks = f.reloaded();
-    let (feature, bug) = (&tasks[0], &tasks[1]);
-    assert_eq!((feature.status, feature.is_running()), (Status::Parked, false));
-    assert!(feature.sessions[0].end.is_some());
-    assert_eq!((bug.status, bug.is_running()), (Status::Doing, true));
-    assert_eq!(f.brain.running().map(|t| t.id), Some(2));
+    assert_eq!(tasks.len(), 2, "a task that can't start isn't created");
+    assert_eq!((tasks[0].status, tasks[1].status), (Status::Doing, Status::Todo), "nothing is parked to make room");
+    f.brain.set_status(1, Status::Parked).unwrap();
+    f.brain.set_status(2, Status::Doing).unwrap();
+    assert_eq!(f.brain.person_doing(), Some(2));
 }
 
 #[test]
-fn parking_the_running_task_stops_its_clock() {
-    let mut f = Fixture::with_titles(&["feature"]);
+fn agents_start_as_many_tasks_as_they_work_on() {
+    let mut f = Fixture::with_titles(&["mine", "api", "web", "docs"]);
     f.brain.set_status(1, Status::Doing).unwrap();
-    f.brain.park_running().unwrap();
-    let task = &f.reloaded()[0];
-    assert_eq!((task.status, task.is_running()), (Status::Parked, false));
+    f.brain.author = Author::Agent;
+    for id in [2, 3, 4] {
+        f.brain.set_status(id, Status::Doing).unwrap();
+    }
+    assert_eq!(f.brain.running().count(), 4, "one per subagent, beside the person's");
+    assert_eq!(f.brain.person_doing(), Some(1), "only the person's counts");
+    f.brain.author = Author::Human;
+    f.brain.set_status(4, Status::Parked).unwrap();
+    assert_eq!(error(f.brain.set_status(4, Status::Doing)), ApiError::DoingFull(1), "resumed by a person");
+    let reopened = Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    assert_eq!(reopened.running().count(), 3, "loading parks none of the agents'");
 }
 
 #[test]
-fn loading_keeps_only_the_latest_session_running() {
-    let t0 = now() - chrono::Duration::hours(2);
-    let mut older = Task::new(1, "older".into(), t0);
-    older.status = Status::Doing;
-    older.sessions = vec![Session { start: t0, end: None }];
-    let mut newer = Task::new(2, "newer".into(), t0);
-    newer.status = Status::Doing;
-    newer.sessions = vec![Session { start: t0 + chrono::Duration::hours(1), end: None }];
-    let f = Fixture::new(vec![older, newer]);
-    assert_eq!(f.brain.running().map(|t| t.id), Some(2));
-    assert_eq!(f.reloaded()[0].sessions[0].end, Some(t0 + chrono::Duration::hours(1)));
+fn parking_for_the_day_stops_peoples_clocks_and_leaves_agents_running() {
+    let mut f = Fixture::with_titles(&["feature", "bug"]);
+    f.brain.set_status(1, Status::Doing).unwrap();
+    f.brain.author = Author::Agent;
+    f.brain.set_status(2, Status::Doing).unwrap();
+    f.brain.park_people_running().unwrap();
+    let tasks = f.reloaded();
+    assert_eq!((tasks[0].status, tasks[0].is_running()), (Status::Parked, false));
+    assert_eq!((tasks[1].status, tasks[1].is_running()), (Status::Doing, true), "the agent may still be at work");
 }
 
 #[test]
@@ -195,12 +203,13 @@ fn moving_an_entry_renumbers_it_drops_its_links_and_keeps_the_rest() {
     from.brain.add_comment(1, "halfway").unwrap();
     from.brain.set_status(1, Status::Doing).unwrap();
     to.brain.set_status(2, Status::Doing).unwrap();
+    assert_eq!(error(from.brain.move_to(1, &mut to.brain)), ApiError::DoingFull(2), "no room there");
+    to.brain.set_status(2, Status::Parked).unwrap();
 
     assert_eq!(from.brain.move_to(1, &mut to.brain).unwrap(), 3, "the next free id there");
     let moved = &to.reloaded()[2];
     assert_eq!((moved.title.as_str(), moved.status, moved.comments.len()), ("feature", Status::Doing, 1));
     assert!(moved.is_running() && moved.links.is_empty(), "keeps its clock, not its links");
-    assert_eq!(to.reloaded()[1].status, Status::Parked, "it parks the task running there");
     let left: Vec<_> = from.reloaded().iter().map(|t| (t.id, t.links.clone())).collect();
     assert_eq!(left, [(2, vec![])], "gone from here, and nothing links to it");
     assert!(matches!(error(from.brain.move_to(1, &mut to.brain)), ApiError::NotFound(1)));

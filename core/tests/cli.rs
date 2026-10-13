@@ -34,7 +34,7 @@ fn usage_names_the_program_only_on_command_lines() {
     );
     assert!(!named.iter().any(|l| l.starts_with("create") || l.starts_with("(all")), "{text}");
     // Every description starts in the same column, the agent commands' included.
-    let at: Vec<_> = ["print the running task", "create a task", "print an entry"]
+    let at: Vec<_> = ["print the running tasks", "create a task", "print an entry"]
         .iter()
         .filter_map(|d| text.lines().find_map(|l| l.find(d)))
         .collect();

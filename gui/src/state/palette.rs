@@ -123,8 +123,8 @@ const EVERYWHERE: &[Command] = &[
     run("tab", "Go to the next tab", KeyCode::Tab, Needs::Nothing),
     letter("u", 'u', "Undo the last change; again, redo it", Needs::Nothing),
     letter("R", 'R', "Reload the files", Needs::Nothing),
-    letter("Q", 'Q', "Park the running task and quit", Needs::Nothing),
-    letter("q", 'q', "Quit; the running task keeps its clock running", Needs::Nothing),
+    letter("Q", 'Q', "Park your running tasks and quit (agents' keep running)", Needs::Nothing),
+    letter("q", 'q', "Quit; running tasks keep their clocks running", Needs::Nothing),
 ];
 
 impl Board {

@@ -34,6 +34,8 @@ pub enum ApiError {
     NoRepo(String),
     /// A link to an entry that the other repository doesn't have.
     NotFoundIn(RepoLink),
+    /// A person starting a task while `doing` holds the one a person started: its id.
+    DoingFull(u32),
 }
 
 impl fmt::Display for ApiError {
@@ -49,6 +51,9 @@ impl fmt::Display for ApiError {
             ApiError::NoComment(id, index) => write!(f, "#{id} has no comment {}", index + 1),
             ApiError::NoRepo(repo) => write!(f, "`{repo}` isn't another repository of this project"),
             ApiError::NotFoundIn(link) => write!(f, "no entry {link}"),
+            ApiError::DoingFull(id) => {
+                write!(f, "#{id} is in doing, and a person works on one task at a time: park or finish it first")
+            }
         }
     }
 }
@@ -74,12 +79,9 @@ impl Brain {
         self.create(new)
     }
 
-    /// Moves a task to `status`. `doing` starts its clock and parks the running task, whose id it
-    /// returns, so the agent learns its move set another task aside.
-    pub fn change_status(&mut self, id: u32, status: Status) -> Result<Option<u32>> {
-        let running = self.running().map(|t| t.id).filter(|&r| r != id && status == Status::Doing);
-        self.set_status(id, status)?;
-        Ok(running)
+    /// Moves a task to `status`; `doing` starts its clock (refused for a person who already runs a task).
+    pub fn change_status(&mut self, id: u32, status: Status) -> Result<()> {
+        self.set_status(id, status).map(drop)
     }
 
     /// Adds a timestamped comment, e.g. progress notes from an agent.

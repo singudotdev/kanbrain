@@ -110,7 +110,7 @@ fn row(
         .cursor_pointer()
         .when(selected, |d| d.bg(rgb(theme::SELECTED)))
         .when(!selected, |d| d.hover(|s| s.bg(rgb(theme::HOVER))))
-        .when(running.is_some(), |d| d.border_l_4().border_color(rgb(theme::GREEN)))
+        .when(running.is_some(), |d| d.border_l_4().border_color(rgb(theme::running_color(task))))
         .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
             this.act(cx, |b| b.click_entry(key, event.click_count()));
         }))
@@ -131,7 +131,7 @@ fn row(
         .child(tag_chips(board.brain(key.src), &task.tags).flex_nowrap().flex_none())
         .child(div().flex_1())
         .child(dim(meta(board, key, task, now)).text_size(px(11.)).flex_none())
-        .children(running.map(|r| clock(r).text_size(px(11.)).flex_none()))
+        .children(running.map(|r| clock(r, theme::running_color(task)).text_size(px(11.)).flex_none()))
         .child(dim(fmt_age(now - task.status_since())).text_size(px(11.)).w(px(32.)).flex_none().text_right());
     draggable(row, key, task)
 }

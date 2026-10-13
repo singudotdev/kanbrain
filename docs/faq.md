@@ -2,11 +2,11 @@
 
 ### Can several tasks be in "doing" at the same time?
 
-One per brain: the central brain and each project repository have their own Doing, so work in different projects
-can run side by side, each with its clock. Within one, Doing is what you're working on right now: starting another
-task parks the running one, so it waits on top of Parked until you come back to it. If files edited by hand or synced
-from another machine leave several tasks in one brain's doing, the most recently started stays and the others are
-parked when the files are read.
+Yours, one per brain: the central brain and each project repository have their own Doing, so work in different
+projects can run side by side, each with its clock. Within one, starting another task while yours runs is refused:
+park or finish it first. Agents aren't limited, so one working with subagents can run several tasks next to yours;
+they show in green, yours in cyan. If files edited by hand or synced from another machine leave several of your
+tasks in one brain's doing, the most recently started stays and the others are parked when the files are read.
 
 ### Can I turn time tracking off?
 

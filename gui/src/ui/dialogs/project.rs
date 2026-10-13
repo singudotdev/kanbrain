@@ -38,7 +38,7 @@ pub(super) fn draw(board: &Board, src: usize, cx: &mut Context<BrainView>) -> Op
                 .join(" · ");
             let root = brain.store.dir().parent().unwrap_or(brain.store.dir()).display().to_string();
             let running = brain.running().map(|t| {
-                div().text_color(rgb(theme::GREEN)).child(format!(
+                div().text_color(rgb(theme::running_color(t))).child(format!(
                     "▶ #{} {} {}",
                     t.id,
                     t.title,

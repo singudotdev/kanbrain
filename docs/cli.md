@@ -13,7 +13,7 @@ kb deinit    stop this folder (or --project NAME) being a project: unregister it
                  its .brain/ is kept
 kb hook prompt|stop
                  what the Claude Code hooks `init` adds run (see For coding agents)
-kb status    print the running task, in whichever project, and how many wait for an answer
+kb status    print the running tasks, in whichever project, and how many wait for an answer
                  (for status bars)
 kb report [hour|day|week|month] [--group task|tag] [--tag TAG] [--save]
                  print the current period's tracked time as markdown
@@ -64,7 +64,7 @@ Makes the current folder a repository of project `NAME` (default: the folder's n
   project without exploring it;
 - writes the "Project memory" section into `CLAUDE.md` / `AGENTS.md` and, with `CLAUDE.md`, Claude Code hooks into
   `.claude/settings.local.json`: the context at the start of each session, and `kb hook prompt|stop`, which hold an
-  agent to describing an undescribed project first and to commenting on the task it started (see
+  agent to describing an undescribed project first and to commenting on the tasks it started (see
   [For coding agents](agents.md)).
 
 Running it again is safe: it updates the agent section and the hooks, and `init NAME` moves the repository to project
@@ -141,8 +141,8 @@ $ kb status          # nothing running
 idle
 ```
 
-It looks in every brain, wherever it's run from. A project's task starts with its label, and when several run (one
-per brain at most) they're joined on the line: `shop/shop-web #3 Checkout page 00:42:17 · blog #1 First post 00:05:10`.
+It looks in every brain, wherever it's run from. A project's task starts with its label, and when several run
+(agents can run several per brain) they're joined on the line: `shop/shop-web #3 Checkout page 00:42:17 · blog #1 First post 00:05:10`.
 Tasks an agent asked you about, in any brain, are counted at the end: `idle · 2 waiting`.
 
 The time is the length of the **current session**, not the task's total. See [Integrations](integrations.md) for status bar setups.

@@ -7,8 +7,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- **Breaking:** a person runs one task at a time per brain, and starting another while one runs is refused instead
+  of parking it. Agents aren't limited: one splitting its work between subagents runs a task per subagent, and the
+  agents' section says how. Running tasks show in cyan when a person started them, in green when an agent did.
 - Report totals, tag rows, the calendar's days and the app's Today count by the clock: time several tasks ran at
   once counts once. Task rows keep each task's own time.
+- **Park & quit** parks the tasks you started; agents' keep running. "What's next?" asks once yours stops, whatever
+  agents run there.
+- The `Stop` hook reminds an agent of each task it started without commenting since, not only the first.
 
 ### Fixed
 

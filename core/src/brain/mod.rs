@@ -1,6 +1,7 @@
 //! The brain: every entry in the data folder, and the operations on them. Time is always tracked:
-//! `doing` holds one task at a time, whose clock runs; each brain (the central one, each project
-//! repository) has its own, so work in different projects can run side by side. The command line and
+//! each task in `doing` has its clock running. `doing` holds one task started by a person (starting
+//! another is refused, not made room for); agents', which may run one per subagent, aren't limited. Each brain (the central one, each
+//! project repository) has its own, so work in different projects can run side by side. The command line and
 //! the desktop app both go through it, so tracking rules, tag colors and file names behave
 //! the same everywhere. It holds no screen state; the desktop app keeps its own.
 //!
@@ -89,9 +90,7 @@ impl Brain {
         let (tasks, warnings) = self.store.load()?;
         self.tasks = tasks;
         self.warnings = warnings;
-        // Sessions first, so a parked task's session ends when the newer one started, not now.
-        self.keep_one_session_running()?;
-        self.keep_one_task_doing()?;
+        self.keep_one_person_doing()?;
         self.drop_dangling_links()?;
         self.remember_highest_id()?;
         self.tag_colors = self.store.load_tag_colors()?;
@@ -115,9 +114,14 @@ impl Brain {
         self.find(id).ok_or(ApiError::NotFound(id))
     }
 
-    /// The task whose clock is running (there is at most one).
-    pub fn running(&self) -> Option<&Task> {
-        self.tasks.iter().find(|t| t.is_running())
+    /// The tasks whose clock is running: those in `doing`, as many as the limit at most.
+    pub fn running(&self) -> impl Iterator<Item = &Task> {
+        self.tasks.iter().filter(|t| t.is_running())
+    }
+
+    /// The task in `doing` that a person started, if any: there's one at most.
+    pub fn person_doing(&self) -> Option<u32> {
+        self.tasks.iter().find(|t| started_by_person(t)).map(|t| t.id)
     }
 
     /// Tasks with `status`, most recently moved there first.
@@ -232,10 +236,11 @@ impl Brain {
         Ok(())
     }
 
-    /// Time is always tracked, so `doing` holds one task: data from older versions, hand edits or a
-    /// sync conflict can leave several there, and all but the most recently started are parked.
-    fn keep_one_task_doing(&mut self) -> Result<()> {
-        let doing = |t: &&mut Task| t.is_task() && t.status == Status::Doing;
+    /// `doing` holds one task started by a person: data from older versions, hand edits or a sync conflict
+    /// can leave several there, and all but the most recently started are parked. Agents' tasks are left
+    /// alone.
+    fn keep_one_person_doing(&mut self) -> Result<()> {
+        let doing = |t: &&mut Task| started_by_person(t);
         let Some(latest) = self.tasks.iter_mut().filter(doing).map(|t| (t.status_since(), t.id)).max() else {
             return Ok(());
         };
@@ -263,22 +268,6 @@ impl Brain {
         Ok(())
     }
 
-    /// Hand edits or a sync conflict can leave several sessions open; only the most recently
-    /// started keeps running, and the others end when it started.
-    fn keep_one_session_running(&mut self) -> Result<()> {
-        let started = |t: &Task| t.sessions.last().map(|s| s.start);
-        let Some(latest) = self.tasks.iter().filter(|t| t.is_running()).filter_map(started).max() else {
-            return Ok(());
-        };
-        for task in &mut self.tasks {
-            if task.is_running() && started(task) != Some(latest) {
-                task.stop_session(latest);
-                self.store.save(task)?;
-            }
-        }
-        Ok(())
-    }
-
     /// Colors any new tags, oldest entries first so earlier tags claim colors first.
     fn sync_tag_colors(&mut self) -> Result<()> {
         let mut by_age: Vec<&Task> = self.tasks.iter().collect();
@@ -288,6 +277,11 @@ impl Brain {
         }
         Ok(())
     }
+}
+
+/// Whether `task` is in `doing` because a person started it.
+fn started_by_person(task: &Task) -> bool {
+    task.is_task() && task.status == Status::Doing && task.started_by() == Author::Human
 }
 
 /// Where a kind's related entries are listed: notes and decisions (what a task needs to know) before tasks.

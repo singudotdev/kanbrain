@@ -48,8 +48,8 @@ fn keys_reach_the_board(cx: &mut gpui::TestAppContext) {
     cx.simulate_keystrokes("n s q enter");
     cx.simulate_keystrokes("s");
     view.read_with(cx, |view, _| {
-        let running = view.board.brain(0).running().map(|t| t.title.as_str());
-        assert_eq!(running, Some("sq"), "the new task is selected, and s started it");
+        let running: Vec<_> = view.board.brain(0).running().map(|t| t.title.as_str()).collect();
+        assert_eq!(running, ["sq"], "the new task is selected, and s started it");
     });
 }
 
@@ -293,8 +293,8 @@ fn whats_next_starts_the_clicked_task(cx: &mut gpui::TestAppContext) {
     let row = cx.debug_bounds("next 1").expect("the question lists #2 then #1").center();
     cx.simulate_click(row, gpui::Modifiers::none());
     view.read_with(cx, |view, _| {
-        let running = view.board.brain(0).running().map(|t| t.id);
-        assert_eq!(running, Some(1));
+        let running: Vec<u32> = view.board.brain(0).running().map(|t| t.id).collect();
+        assert_eq!(running, [1]);
         assert!(matches!(view.board.mode, crate::state::Mode::Normal));
     });
 }

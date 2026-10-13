@@ -83,7 +83,7 @@ described() {
 # Runs the agent in folder `$1` with prompt `$2`; its answer goes to `$1.log`.
 agent() {
     local args=(-p "$2" --no-session-persistence --permission-mode acceptEdits
-        --allowedTools "Bash(kb:*)" "Bash(python3:*)" Read Edit Write Glob Grep
+        --allowedTools "Bash(kb:*)" "Bash(python3:*)" Read Edit Write Glob Grep Task Agent
         --max-budget-usd "${E2E_BUDGET:-1}")
     if [ -n "${E2E_MODEL:-}" ]; then args+=(--model "$E2E_MODEL"); fi
     (cd "$1" && claude "${args[@]}" >"$1.log" 2>&1) || true
@@ -233,6 +233,44 @@ asked = [t for t in tasks if any(c.get("question") for c in t["comments"])]
 assert asked, "it asked: " + str([(t["title"], t.get("status")) for t in tasks])
 assert asked[0]["status"] in ("doing", "done"), "and went on in the same session: " + asked[0]["status"]
 assert "280" in open("app.py").read(), "with the answer"
+'
+fi
+
+# The user has a task of their own running: the agent starts its own beside it, works, and leaves the user's alone.
+if wanted full; then
+    dir="$work/full"
+    app "$dir" full
+    described "$dir"
+    (cd "$dir" && KANBRAIN_AUTHOR=human kb add --start "Write the release notes" >/dev/null)
+    agent "$dir" "Add a GET /health endpoint that returns {\"status\": \"ok\"}."
+    check full "$dir" '
+mine = next(t for t in tasks if t["title"] == "Write the release notes")
+assert mine["status"] == "doing", "the user'"'"'s task stays in doing: " + mine["status"]
+assert "/health" in open("app.py").read(), "the work is done all the same"
+assert by_status("done"), "the agent'"'"'s own task, done"
+'
+fi
+
+# Three independent changes, asked to be done by subagents in parallel: one task each, started before its subagent
+# runs, so several are in doing at once, each commented on.
+if wanted parallel; then
+    dir="$work/parallel"
+    app "$dir" parallel
+    described "$dir"
+    agent "$dir" "Add three independent endpoints, each by its own subagent, in parallel: GET /health returning \
+{\"status\": \"ok\"}, GET /version returning {\"version\": \"1.0\"}, and DELETE /notes clearing every note."
+    check parallel "$dir" '
+# Done, or parked when the sandbox kept it from running its check: what matters here is the split.
+worked = [t for t in tasks if t.get("status") in ("done", "parked") and t["comments"]]
+assert len(worked) >= 3, "a task per part, worked on: " + str([(t["title"], t.get("status")) for t in tasks])
+import glob, re
+sessions = []
+for path in glob.glob(".brain/*.md"):
+    sessions += re.findall(r"^- (\S+) -> (\S+) \(", open(path).read().split("## Sessions")[-1], re.M)
+overlap = any(a[0] < b[1] and b[0] < a[1] for i, a in enumerate(sessions) for b in sessions[i + 1:])
+assert overlap, "at least two ran at once: " + str(sessions)
+code = open("app.py").read()
+assert "/health" in code and "/version" in code and "DELETE" in code.upper(), "the three parts are in the code"
 '
 fi
 

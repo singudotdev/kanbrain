@@ -155,7 +155,7 @@ fn draw_card(
         .text_size(px(11.))
         .text_color(rgb(DIM))
         .child(meta(board, key, task, now))
-        .children(running.map(clock));
+        .children(running.map(|r| clock(r, theme::running_color(task))));
     let card = div()
         // Ids repeat across brains, so the element's id names the brain too: two cards with one id
         // would share GPUI's hit-testing and click state, and only the first would take clicks.
@@ -171,7 +171,7 @@ fn draw_card(
         .border_color(rgb(if selected { theme::ACCENT } else { BORDER }))
         .bg(rgb(if selected { theme::SELECTED } else { theme::BG }))
         .when(!selected, |d| d.hover(|s| s.bg(rgb(theme::HOVER))))
-        .when(running.is_some(), |d| d.border_l_4().border_color(rgb(theme::GREEN)))
+        .when(running.is_some(), |d| d.border_l_4().border_color(rgb(theme::running_color(task))))
         .when(matches!(task.asked(), Some(Asked::Waiting(_))), |d| d.border_l_4().border_color(rgb(theme::ACCENT)))
         .cursor_pointer()
         .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
@@ -240,9 +240,9 @@ pub(super) fn meta(board: &Board, key: Key, task: &Task, now: chrono::DateTime<c
     meta.into_iter().flatten().collect::<Vec<_>>().join(" · ")
 }
 
-/// A running task's clock.
-pub(super) fn clock(running: chrono::Duration) -> Div {
-    div().text_color(rgb(theme::GREEN)).font_family(theme::EDITOR_FONT).child(format!("▶ {}", fmt_clock(running)))
+/// A running task's clock, in `color` (see [`theme::running_color`]).
+pub(super) fn clock(running: chrono::Duration, color: u32) -> Div {
+    div().text_color(rgb(color)).font_family(theme::EDITOR_FONT).child(format!("▶ {}", fmt_clock(running)))
 }
 
 /// `n` things, in the singular for one: `1 comment`, `2 comments`.

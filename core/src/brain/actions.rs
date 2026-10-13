@@ -4,7 +4,7 @@ use super::{Brain, ReportView};
 use crate::api::ApiError;
 use crate::export;
 use crate::model::{
-    Asked, Comment, DecisionState, Kind, RepoLink, Status, Task, now, sanitize_comment, sanitize_description,
+    Asked, Author, Comment, DecisionState, Kind, RepoLink, Status, Task, now, sanitize_comment, sanitize_description,
 };
 use crate::projects;
 use anyhow::Result;
@@ -44,8 +44,9 @@ impl Brain {
         }
     }
 
-    /// Moves a task to `status`, recording when. `doing` starts its clock and parks whatever else was
-    /// in `doing`. Returns whether anything changed.
+    /// Moves a task to `status`, recording when. `doing` starts its clock; for a person, it's refused while
+    /// `doing` holds a task a person started: making room is their call, never a side effect. Agents start
+    /// as many as they work on. Returns whether anything changed.
     pub fn set_status(&mut self, id: u32, status: Status) -> Result<bool> {
         let index = self.task_index(id)?;
         if status == Status::Doing {
@@ -58,19 +59,16 @@ impl Brain {
         Ok(true)
     }
 
-    /// Moves the task at `index` to `doing` and opens a session, parking the other `doing` task.
-    /// A task already in `doing` without a session (from an older version) starts its clock.
+    /// Moves the task at `index` to `doing` and opens a session, if `doing` has room. A task already in
+    /// `doing` without a session (from an older version) starts its clock.
     fn start_task(&mut self, index: usize) -> Result<bool> {
         if self.tasks[index].is_running() {
             return Ok(false);
         }
-        let now = now();
-        for (i, task) in self.tasks.iter_mut().enumerate() {
-            if i != index && task.status == Status::Doing {
-                task.set_status(Status::Parked, now, self.author);
-                self.store.save(task)?;
-            }
+        if self.tasks[index].status != Status::Doing {
+            self.check_doing_room(self.author)?;
         }
+        let now = now();
         self.tasks[index].set_status(Status::Doing, now, self.author);
         self.tasks[index].start_session(now);
         self.store.save(&mut self.tasks[index])?;
@@ -93,11 +91,22 @@ impl Brain {
         projects::write_repo_card(self.store.dir(), &project.name, &project.notes)
     }
 
-    /// Parks the running task, if any, e.g. when the user stops for the day.
-    pub fn park_running(&mut self) -> Result<()> {
-        if let Some(index) = self.tasks.iter().position(Task::is_running) {
-            self.tasks[index].set_status(Status::Parked, now(), self.author);
-            self.store.save(&mut self.tasks[index])?;
+    /// Refuses with [`ApiError::DoingFull`] a person starting a task while `doing` holds one a person
+    /// started; an agent always has room.
+    fn check_doing_room(&self, by: Author) -> Result<(), ApiError> {
+        match self.person_doing() {
+            Some(doing) if by == Author::Human => Err(ApiError::DoingFull(doing)),
+            _ => Ok(()),
+        }
+    }
+
+    /// Parks every running task a person started, when they stop for the day. Agents' keep running: they may
+    /// still be at work, and each agent closes its own.
+    pub fn park_people_running(&mut self) -> Result<()> {
+        let now = now();
+        for task in self.tasks.iter_mut().filter(|t| t.is_running() && t.started_by() == Author::Human) {
+            task.set_status(Status::Parked, now, self.author);
+            self.store.save(task)?;
         }
         Ok(())
     }
@@ -106,6 +115,10 @@ impl Brain {
     /// that starts from the ADR sections unless it comes with a description. The caller has checked
     /// the title and links (see `Brain::add`).
     pub(crate) fn create(&mut self, new: NewEntry) -> Result<u32> {
+        // Before anything is written: a task that can't start isn't created half-way.
+        if new.start && new.kind == Kind::Task {
+            self.check_doing_room(self.author)?;
+        }
         let mut task = Task::new(self.take_id()?, new.title, now());
         task.kind = new.kind;
         task.description = match new.description {
@@ -155,8 +168,8 @@ impl Brain {
     /// Moves the entry to `to`, another brain (another project or repository, or the central one), and
     /// returns its id there: a new one, since each brain numbers its own. Everything else comes
     /// along (status, history, sessions, description, comments, tags) except its links, which name it by
-    /// its id here, so they're dropped on both sides (links to other repositories too). A running task keeps its clock, and parks
-    /// the task running in `to`, as starting it there would.
+    /// its id here, so they're dropped on both sides (links to other repositories too). A running task keeps
+    /// its clock; one a person started needs room in `to`'s `doing`, as starting it there would.
     ///
     /// The entry is saved in `to` before it's deleted here: if something fails in between, it's in both
     /// brains rather than in neither.
@@ -164,6 +177,9 @@ impl Brain {
         let index = self.index_of(id)?;
         if projects::same_dir(self.store.dir(), to.store.dir()) {
             anyhow::bail!("#{id} is already there");
+        }
+        if self.tasks[index].status == Status::Doing {
+            to.check_doing_room(self.tasks[index].started_by())?;
         }
         let mut entry = Task {
             id: to.take_id()?,
@@ -173,9 +189,6 @@ impl Brain {
             ..self.tasks[index].clone()
         };
         entry.unknown.links.clear();
-        if entry.status == Status::Doing {
-            to.park_running()?;
-        }
         to.store.save(&mut entry)?;
         let new_id = entry.id;
         to.tasks.push(entry);

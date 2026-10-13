@@ -111,7 +111,7 @@ Raised to 30s, monitoring.
 | `- created:` | creation time |
 | `## Description` | free text about the task, kept as is. Edit it with `m` in the kanban app |
 | `## Comments` | one `### <created>` heading per comment, then the comment's text, oldest first. After the time, in parentheses and separated by commas: `agent` when an agent wrote it, `question` when it's a question to the user, `edited <time>` if it was changed later. A person's plain comment has none. A parked task whose latest question has no person's comment after it waits for an answer |
-| `## History` | one line per status change: `- TIME FROM -> TO`, with ` (agent)` when an agent made it. Oldest first |
+| `## History` | one line per status change: `- TIME FROM -> TO`, with ` (agent)` when an agent made it. Oldest first. The latest `-> doing` line says who runs the task: a person runs one at a time, and the board shows it in cyan; an agent, any number, in green |
 | `## Sessions` | tracked time, one line per session: `- START -> END (duration)`, or `- START -> running` for the open one. Only written once the task has been in doing; the duration is informational |
 
 Headings inside the description must be `###` or deeper, and inside comments `####` or deeper. A `##` line starts a new
@@ -158,7 +158,7 @@ The `- status:` line decides where the task stands; the history is only the reco
 | a `running` session on a task that isn't `doing` | closed at the task's latest status change |
 | `- links:` to an entry that no longer exists (e.g. its file was deleted by hand) | removed |
 | `- links:` to another repository's entry that no longer exists (e.g. its file was deleted by hand) | removed. Only once that repository can be read: while its folder is missing (an unmounted disk, say) links to it are kept, and `show` and the app leave them out |
-| several tasks in `doing` (e.g. from a sync) | the most recently started stays; the others are moved to `parked`, with a history line |
+| several tasks a person started in `doing` (e.g. from a sync) | the most recently started stays; the others are moved to `parked`, with a history line. Tasks an agent started stay |
 | missing `created` | the time of the first history line, or now |
 | other `- key:` lines, `- links:` words or `##` sections (e.g. written by a newer version, or by you) | kept and written back as they are; other sections move to the end of the file |
 | a file that can't be read (e.g. no `id`, or a history line it can't parse) | skipped, with a warning in the status bar. **The file is not touched** |

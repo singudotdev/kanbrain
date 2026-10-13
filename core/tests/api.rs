@@ -169,12 +169,17 @@ fn entries_link_to_other_repositories_of_the_project_and_show_both_ways() {
 }
 
 #[test]
-fn starting_a_task_says_which_one_it_parked() {
+fn a_person_starting_a_second_task_is_told_which_one_runs() {
     let (mut brain, _dir) = brain();
     let first = brain.add(NewEntry { start: true, ..new(Kind::Task, "first") }).unwrap();
     let second = brain.add(new(Kind::Task, "second")).unwrap();
-    assert_eq!(brain.change_status(second, Status::Doing).unwrap(), Some(first));
-    assert_eq!(brain.change_status(second, Status::Done).unwrap(), None);
+    let refused = brain.change_status(second, Status::Doing).unwrap_err().to_string();
+    assert_eq!(
+        refused,
+        format!("#{first} is in doing, and a person works on one task at a time: park or finish it first")
+    );
+    brain.author = Author::Agent;
+    brain.change_status(second, Status::Doing).unwrap();
 }
 
 #[test]

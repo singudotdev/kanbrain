@@ -10,7 +10,8 @@
 //! `stop` also catches the board falling behind: a task an agent started and hasn't commented on since
 //! gets a reminder to say where it stands, as the section asks, so the person watching sees it.
 //!
-//! Once the project is described and the running task commented on, they print nothing, so they cost nothing.
+//! Once the project is described and the tasks the agent started commented on, they print nothing, so they cost
+//! nothing.
 
 use crate::model::{Author, Status, Task};
 use crate::projects::{self, ProjectInfo};
@@ -64,13 +65,14 @@ pub fn respond(event: HookEvent, input: &str, central: &Path) -> Option<String> 
             }
             // A brain that can't be read only loses the reminder, never the turn.
             let tasks = Store::at(&dir).and_then(|s| s.load()).map(|(tasks, _)| tasks).unwrap_or_default();
-            if let Some(task) = tasks.iter().find(|t| uncommented(t)) {
-                reminders.push(format!(
+            // Each one: with subagents, an agent may have several running.
+            reminders.extend(tasks.iter().filter(|t| uncommented(t)).map(|task| {
+                format!(
                     "kanbrain: #{0} {1} is in doing with no comment since you started it. Before ending this turn, \
                      `kb comment {0}` what changed and what's next, or `kb done {0}` if it's finished.",
                     task.id, task.title
-                ));
-            }
+                )
+            }));
             // As additional context rather than `decision: "block"`: the turn goes on all the same, but
             // Claude Code shows it as a reminder instead of a hook error.
             (!reminders.is_empty()).then(|| {

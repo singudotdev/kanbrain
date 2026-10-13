@@ -5,18 +5,22 @@ week or month. There's nothing to turn on, and nothing extra to do: moving cards
 
 ## How it works
 
-- **Doing holds one task at a time, per brain.** Moving a task to Doing starts its clock: a **session** opens. The
-  central brain and each project repository have their own, so tasks in different projects can run at once; the top
-  bar lists every running task, each with its own **Park**.
-- **Starting another task parks the one running in the same brain.** Its session closes and it moves to Parked, where it waits, on
-  top, for you to come back to it.
-- **Moving the running task out of Doing** (to Parked, Done or To do), or deleting it, stops the clock.
+- **Moving a task to Doing starts its clock**: a **session** opens. Every task in Doing has its own clock running.
+- **You run one task at a time, per brain.** Starting another while one of yours is in Doing is refused, saying
+  which: park or finish it first. Nothing is parked for you. The central brain and each project repository have
+  their own Doing, so tasks in different projects can run at once; the top bar lists every running task, each with
+  its own **Park**.
+- **Agents aren't limited.** An agent that splits its work between subagents runs one task per subagent, beside
+  yours. Running tasks are marked in **cyan** when you started them and in **green** when an agent did (the card's
+  border, its clock, the top bar). Each task tracks its own time; totals count by the clock (see [Reports](#reports)).
+- **Moving a task out of Doing** (to Parked, Done or To do), or deleting it, stops its clock.
 - **Closing the window doesn't stop the clock.** The open session is on disk, so time keeps counting while the board
-  is closed, and when an agent works through the command line. Use **Park & quit** to stop every clock for the day.
+  is closed, and when an agent works through the command line. Use **Park & quit** to stop your clocks for the day;
+  agents' tasks keep running, since an agent may still be at work, and it closes its own.
 
 The same rules apply everywhere: on the board, with `kb start ID` from a terminal or an agent.
 
-The bar under the toolbar shows the running task, its clock, its total time and today's total for every task, with
+The bar under the toolbar shows each running task, its clock, its total time and today's total for every task, with
 **Park** and **Park & quit** (`Q`) buttons. Click the task's name to open it. With nothing running, it says **Idle**.
 Cards show their tracked total, the running one its clock (▶), and the details show today, this week and the
 total, with the number of sessions.
@@ -25,8 +29,8 @@ Sessions are saved in the task file under `## Sessions` (see [Data format](data-
 
 ## "What's next?"
 
-When you stop a brain's running task from the app (Park, moving it to Done or To do, deleting it) and nothing else
-runs there, the app asks what's next in that brain:
+When you stop your running task in a brain from the app (Park, moving it to Done or To do, deleting it), the app
+asks what's next in that brain (agents' tasks running there don't count):
 
 ```
 Nothing running in shop/api: what's next?
@@ -45,7 +49,8 @@ nothing running. Starting another task, Park & quit, and changes made by agents 
 
 ```
 09:00  drag "Feature: export CSV" to Doing         the clock starts
-10:20  + on Doing: "PROD fix login 500"            the feature is parked, the fix runs
+10:20  p on the feature, then + on Doing:
+       "PROD fix login 500"                         the feature waits in Parked, the fix runs
 11:05  drag the fix to Done                        idle
 11:06  drag the feature from Parked to Doing       it resumes
 12:30  Park                                        lunch

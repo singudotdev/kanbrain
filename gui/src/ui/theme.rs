@@ -4,7 +4,7 @@
 //! and becomes one [`StyledText`] (wrapping as a whole) when drawn.
 
 use gpui::{FontStyle, FontWeight, HighlightStyle, SharedString, StrikethroughStyle, StyledText, px, rgb};
-use kanbrain_core::model::{Kind, Status};
+use kanbrain_core::model::{Author, Kind, Status, Task};
 
 /// Window background.
 pub const BG: u32 = 0x1b_1c21;
@@ -119,6 +119,15 @@ pub fn status_color(status: Status) -> u32 {
         Status::Todo => TEXT,
         Status::Parked => YELLOW,
         Status::Done => DIM,
+    }
+}
+
+/// The color a running task is marked with (its card's border, its clock): green if an agent started it,
+/// cyan if you did, so your own work stands out among agents' running in parallel.
+pub fn running_color(task: &Task) -> u32 {
+    match task.started_by() {
+        Author::Agent => GREEN,
+        Author::Human => CYAN,
     }
 }
 

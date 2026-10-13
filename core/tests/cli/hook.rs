@@ -74,8 +74,11 @@ fn a_task_an_agent_started_and_never_commented_on_is_reminded_once() {
     brain.author = Author::Agent;
     let task = brain.add(new("Cache sessions")).unwrap();
     assert_ne!(users, task);
+    let other = brain.add(new("Expire sessions")).unwrap();
     let stop = respond(HookEvent::Stop, &input(&root, false), central.path()).expect("a reminder");
     assert!(stop.contains(&format!("`kb comment {task}`")), "{stop}");
+    assert!(stop.contains(&format!("`kb comment {other}`")), "each one a subagent runs: {stop}");
+    brain.comment(other, "expiry set to a day").unwrap();
     assert_eq!(respond(HookEvent::Stop, &input(&root, true), central.path()), None, "once a turn");
     brain.comment(task, "sessions cached; next: expiry").unwrap();
     assert_eq!(respond(HookEvent::Stop, &input(&root, false), central.path()), None);

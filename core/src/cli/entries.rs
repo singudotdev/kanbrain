@@ -27,7 +27,7 @@ pub const USAGE: &str = "\
   search WORDS…
             find entries by title, tags, description or comments (#tag: tags only)
   start|park|done|todo ID
-            change a task's status (start runs its clock and parks the running task)
+            change a task's status (start runs its clock; a person runs one task at a time)
   comment ID TEXT…|-
             add a comment, e.g. progress notes
   ask ID TEXT…|-
@@ -217,11 +217,7 @@ impl EntryArgs {
             }
             EntryCommand::Search(query) => return print_search(&brain, &query, json),
             EntryCommand::SetStatus(id, status) => {
-                let parked = brain.change_status(id, status)?;
-                if let (false, Some(parked)) = (json, parked) {
-                    println!("{} · parked #{parked}", line(brain.entry(id)?));
-                    return Ok(());
-                }
+                brain.change_status(id, status)?;
                 id
             }
             EntryCommand::Comment(id, text) => {

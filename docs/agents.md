@@ -35,11 +35,11 @@ kb init        # creates .brain/ and tells the project's agents about it
    | --- | --- | --- |
    | `SessionStart` | `kb context` | when a session starts or resumes, after `/clear` and after compaction, the agent gets the brain's state without spending a tool call, and keeps it deep into a long session |
    | `UserPromptSubmit` | `kb hook prompt` | while the project isn't described (or, with several repositories, this one's role isn't), every prompt arrives with the request to write it before anything else |
-   | `Stop` | `kb hook stop` | an agent about to end its turn with it still missing is sent back to write it, once a turn, so it can't loop. It also reminds an agent that started a task and hasn't commented on it since to say where it stands |
+   | `Stop` | `kb hook stop` | an agent about to end its turn with it still missing is sent back to write it, once a turn, so it can't loop. It also reminds an agent of each task it started and hasn't commented on since, to say where it stands |
 
    Agents skipped describing the project when only the section and `context` asked them to; with these, Claude
-   Code holds them to it on their first turn. Once it's described and the running task commented on, both print
-   nothing and cost nothing. An explicit
+   Code holds them to it on their first turn. Once it's described and the tasks the agent started commented on,
+   both print nothing and cost nothing. An explicit
    instruction from you still wins: told to use no tools, the agent says it couldn't describe the project and stops.
 
 `kb deinit` undoes all three, except that `.brain/` is kept: see [Command line](cli.md#kb-deinit).
@@ -59,9 +59,12 @@ The user follows them live on a kanban board: keep it showing what you're doing 
   keep it for steps within the task you've started. A task with real work gets a body, `add --body - TITLE`:
   **Goal** (what and why, a line or two) and **Done when** (what the user will check).
 - While working: `comment ID TEXT` when a step is done, when you find a cause, and before you stop (one or two
-  lines: what changed, what's next); `start` the next task when you switch; `done ID` as soon as one is finished.
-  Stopping before it is: `comment`, then `park ID`. If `start` answers `· parked #N` for a task you didn't start,
-  it was the user's: tell them.
+  lines: what changed, what's next); `done ID` as soon as one is finished. Stopping before it is: `comment`, then
+  `park ID`. Doing isn't limited for you: several of your tasks can run at once. Never park, finish or move a task
+  you didn't start (the user's, or another session's).
+- Splitting work between subagents: give each part that changes the repository its own task, and run the board
+  yourself: `add --start` it before launching the subagent, then `comment` its result and `done` it. Subagents
+  only do the work; lookups and research get no task. `kb` commands can run in parallel.
 - Blocked on the user (a requirement, access, a choice that's theirs): `ask ID TEXT` parks the task with the
   question; don't guess. A choice you shouldn't make alone and weren't asked to (architecture, a dependency,
   storage, a public interface): `propose ID --body - TITLE`, Context / Options / Recommendation on stdin; it parks
@@ -132,6 +135,18 @@ from the environment (`AGENT`, `AI_AGENT`, `CLAUDECODE`, `CODEX_SANDBOX`, `CODEX
 `GEMINI_CLI`); `KANBRAIN_AUTHOR=human` or `agent` overrides it. Only a person's comment answers a question, and the
 app always writes as a person.
 
+### Working in parallel
+
+An agent that splits its work between subagents (Claude Code's, for one) gives each part that changes the repository
+its own task and runs the board itself: it starts the task before launching the subagent, then comments the result
+and finishes it. Subagents only do the work, so they need to know nothing about kanbrain. Doing isn't limited for
+agents, so the board shows every part running at once, in green; your own task, if one runs, stays in cyan, and
+the agent never parks, finishes or moves it. Its `kb` commands can run at the same time: each takes the brain's
+write lock, as the kanban app does while it acts, so none overwrites another's change.
+
+Each task tracks its own time, but the report's totals count by the clock: four subagents working for an hour add
+an hour to the day, not four (see [Reports](time-tracking.md#reports)).
+
 ### Projects with several repositories
 
 Services of one project often live in separate repositories. Run `kb init shop` in each: every repository
@@ -161,7 +176,7 @@ While a repository's role isn't written down, `context` asks for it (`project no
 
 Everything an agent reads costs tokens and context, so the outputs are made for that:
 
-- **The section** in `CLAUDE.md` / `AGENTS.md` is about 800 tokens, read every session. It's the one place the
+- **The section** in `CLAUDE.md` / `AGENTS.md` is about 900 tokens, read every session. It's the one place the
   commands are explained: `context` doesn't repeat them inside a project. What only matters with several
   repositories (their roles, tasks in a sibling) is in `context`, and only in those projects.
 - **`context`** lists titles and ids, not contents. Each section stops at 20 entries (5 for recently done) and says
@@ -169,8 +184,8 @@ Everything an agent reads costs tokens and context, so the outputs are made for 
   their latest comment, which is usually where the work stopped.
 - **`show`** is compact text, not the file: no empty sections, dates to the minute, the time tracked as one line
   instead of every session, and only the latest 5 status changes. The file's path is there if the rest is needed.
-- **Changes** (`add`, `start`, `comment`, …) answer with one line, `#4 Fix login (doing) #auth`, plus `· parked #2`
-  when starting a task set another aside. The agent knows what it wrote, so the entry isn't sent back.
+- **Changes** (`add`, `start`, `comment`, …) answer with one line, `#4 Fix login (doing) #auth`. The agent knows
+  what it wrote, so the entry isn't sent back.
 - **`search`** returns one line per entry, at most 20.
 - **`--json`** is for scripts: one line, without empty fields. For an agent, the text is shorter.
 - **A CLI, not tools:** nothing is loaded into the agent's context until it runs a command, and the section already
@@ -188,7 +203,7 @@ hand.
 | `show ID` | the entry as compact text: state, time tracked, description, comments, related entries, latest status changes, file path |
 | `list notes decisions` | every note and decision (add statuses such as `doing` to include tasks) |
 | `search WORDS…` | entries whose title, tags, description or comments contain every word, one line each, at most 20; `#tag` matches tags only |
-| `start` / `park` / `done` / `todo ID` | changes a task's status; `start` runs its clock and parks the running task, and says which |
+| `start` / `park` / `done` / `todo ID` | changes a task's status; `start` runs its clock. An agent can have several tasks running; a person, one per brain (another `start` is refused, naming it) |
 | `comment ID TEXT…\|-` | adds a timestamped comment |
 | `ask ID TEXT…\|-` | asks the user a question on a task and parks it until a person comments |
 | `wait ID [--timeout MINUTES]` | blocks until task `ID` no longer waits for an answer (or decision `ID` is accepted or rejected), reading the files every second; prints the answer, or that the task waits on nothing (never asked, or picked up since). Fails after 8 minutes without one (`--timeout`, or `KANBRAIN_WAIT_TIMEOUT`, in minutes; 0: never). No `--json` |

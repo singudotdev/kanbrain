@@ -41,9 +41,12 @@ The user follows them live on a kanban board: keep it showing what you're doing 
   keep it for steps within the task you've started. A task with real work gets a body, `add --body - TITLE`:
   **Goal** (what and why, a line or two) and **Done when** (what the user will check).
 - While working: `comment ID TEXT` when a step is done, when you find a cause, and before you stop (one or two
-  lines: what changed, what's next); `start` the next task when you switch; `done ID` as soon as one is finished.
-  Stopping before it is: `comment`, then `park ID`. If `start` answers `· parked #N` for a task you didn't start,
-  it was the user's: tell them.
+  lines: what changed, what's next); `done ID` as soon as one is finished. Stopping before it is: `comment`, then
+  `park ID`. Doing isn't limited for you: several of your tasks can run at once. Never park, finish or move a task
+  you didn't start (the user's, or another session's).
+- Splitting work between subagents: give each part that changes the repository its own task, and run the board
+  yourself: `add --start` it before launching the subagent, then `comment` its result and `done` it. Subagents
+  only do the work; lookups and research get no task. `kb` commands can run in parallel.
 - Blocked on the user (a requirement, access, a choice that's theirs): `ask ID TEXT` parks the task with the
   question; don't guess. A choice you shouldn't make alone and weren't asked to (architecture, a dependency,
   storage, a public interface): `propose ID --body - TITLE`, Context / Options / Recommendation on stdin; it parks
