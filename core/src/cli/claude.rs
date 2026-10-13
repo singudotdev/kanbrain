@@ -29,21 +29,14 @@ struct Hook {
     matcher: Option<&'static str>,
     /// What it runs; also how its entry is recognised, to update or remove it.
     command: &'static str,
-    /// What it ran before the command line was `kb`, if it existed then: replaced, or removed.
-    old_command: Option<&'static str>,
 }
 
 /// The hooks, in the order they're written.
 const HOOKS: [Hook; 3] = [
     // A new session, a resumed one, after `/clear`, and after compaction.
-    Hook {
-        event: "SessionStart",
-        matcher: Some("startup|resume|clear|compact"),
-        command: "kb context",
-        old_command: Some("kanbrain context"),
-    },
-    Hook { event: "UserPromptSubmit", matcher: None, command: "kb hook prompt", old_command: None },
-    Hook { event: "Stop", matcher: None, command: "kb hook stop", old_command: None },
+    Hook { event: "SessionStart", matcher: Some("startup|resume|clear|compact"), command: "kb context" },
+    Hook { event: "UserPromptSubmit", matcher: None, command: "kb hook prompt" },
+    Hook { event: "Stop", matcher: None, command: "kb hook stop" },
 ];
 
 /// What adding or removing the hooks did.
@@ -57,8 +50,7 @@ pub enum Change {
     Removed,
 }
 
-/// Adds the hooks to `root`'s settings, creating the file if needed and keeping everything else in it;
-/// a hook written before `kb` is replaced rather than doubled.
+/// Adds the hooks to `root`'s settings, creating the file if needed and keeping everything else in it.
 pub fn add_hooks(root: &Path) -> Result<Change> {
     let path = root.join(SETTINGS);
     let mut settings = read(&path)?;
@@ -77,10 +69,7 @@ pub fn add_hooks(root: &Path) -> Result<Change> {
             continue;
         }
         changed = true;
-        match groups.iter_mut().find(|group| hook.old_command.is_some_and(|old| runs(group, old))) {
-            Some(old) => *old = group(hook),
-            None => groups.push(group(hook)),
-        }
+        groups.push(group(hook));
     }
     if !changed {
         return Ok(Change::Unchanged);
@@ -98,7 +87,7 @@ fn group(hook: &Hook) -> Value {
     }
 }
 
-/// Takes the hooks out of `root`'s settings (those written before `kb` too), and the keys they leave
+/// Takes the hooks out of `root`'s settings, and the keys they leave
 /// empty; deletes the file if nothing else is in it.
 pub fn remove_hooks(root: &Path) -> Result<Change> {
     let path = root.join(SETTINGS);
@@ -111,7 +100,7 @@ pub fn remove_hooks(root: &Path) -> Result<Change> {
     for hook in &HOOKS {
         let Some(groups) = hooks.get_mut(hook.event).and_then(Value::as_array_mut) else { continue };
         let before = groups.len();
-        groups.retain(|group| !runs(group, hook.command) && !hook.old_command.is_some_and(|old| runs(group, old)));
+        groups.retain(|group| !runs(group, hook.command));
         changed |= groups.len() != before;
         if groups.is_empty() {
             hooks.remove(hook.event);

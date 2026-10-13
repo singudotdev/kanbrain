@@ -34,19 +34,6 @@ fn the_hooks_are_added_once_beside_other_settings_and_removed_cleanly() {
 }
 
 #[test]
-fn a_hook_written_before_sb_is_replaced_and_removed() {
-    let root = tempfile::tempdir().unwrap();
-    let path = root.path().join(SETTINGS);
-    fs::create_dir_all(path.parent().unwrap()).unwrap();
-    let old = r#"{"hooks":{"SessionStart":[{"matcher":"startup|resume|clear|compact","hooks":[{"type":"command","command":"kanbrain context"}]}]}}"#;
-    fs::write(&path, old).unwrap();
-    assert_eq!(add_hooks(root.path()).unwrap(), Change::Written);
-    assert_eq!(commands(&path, "SessionStart"), ["kb context"], "replaced, not added");
-    fs::write(&path, old).unwrap();
-    assert_eq!(remove_hooks(root.path()).unwrap(), Change::Removed, "deinit takes the old one out too");
-}
-
-#[test]
 fn a_file_holding_only_the_hooks_goes_with_them() {
     let root = tempfile::tempdir().unwrap();
     assert_eq!(add_hooks(root.path()).unwrap(), Change::Written);
