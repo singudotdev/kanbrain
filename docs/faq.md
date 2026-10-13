@@ -115,7 +115,7 @@ See [Uninstalling](getting-started.md#uninstalling).
 ### Does kanbrain connect to the internet?
 
 Only the kanban app, to see whether a newer release is out: when it opens and once a day, it asks GitHub where the
-latest release is, sending nothing else. Set `KANBRAIN_NO_UPDATE_CHECK=1` to turn it off. `kb update` and the
+latest release is, sending nothing else. Set `KANBRAIN_NO_UPDATE_CHECK` (to any value) to turn it off. `kb update` and the
 app's **Update** download the installer and the release from GitHub. Nothing else does.
 
 ### How do I back up my data?

@@ -264,6 +264,7 @@ startup:
 | `KANBRAIN_DIR` | the central brain's folder, instead of the platform default; a project's `.brain/` still takes precedence inside it |
 | `KANBRAIN_WAIT_TIMEOUT` | minutes `kb wait` waits for an answer without `--timeout` (default 8; `0`: no limit) |
 | `KANBRAIN_AUTHOR` | `human` or `agent`: who the comments and status changes `kb` makes are recorded as. Without it, `kb` writes `agent` when a coding agent's own variable is set (`AGENT`, `AI_AGENT`, `CLAUDECODE`, `CODEX_SANDBOX`, `CODEX_CI`, `CODEX_THREAD_ID`, `GEMINI_CLI`), else `human` |
+| `KANBRAIN_NO_UPDATE_CHECK` | set (to any value, even `0`) to keep the kanban app from asking GitHub whether a newer release is out |
 | `KANBRAIN_ALLOW_ROOT` | set to `1` to allow running as root. kanbrain is per-user and refuses root by default; only use this where root is the only user, e.g. containers |
 | `VISUAL`, `EDITOR` | editor for **Open file** (`o`) in the kanban app, checked in that order. It may include arguments, e.g. `code -w`. The fallback is `vi`, or `notepad` on Windows |
 

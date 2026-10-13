@@ -123,7 +123,10 @@ Then it brings the agent instructions of every project you ran `kb init` in up t
 
 The kanban app checks for a newer release when it opens and once a day, and offers it in the status bar:
 **Update to X.Y.Z** (`U`) does the same as `kb update`, then opens the new version. On Windows it closes first,
-since a running program can't be replaced there, and the installer opens it again.
+since a running program can't be replaced there, and the installer opens it again. `KANBRAIN_NO_UPDATE_CHECK`
+turns the check off ([environment variables](cli.md#environment-variables)).
+
+Both use `curl`, which macOS and Windows have; on Linux, install it if `kb update` says it can't run it.
 
 Neither updates while an agent has a task in doing, in any project, since the agents' instructions, and maybe their
 data, would change mid-session: they say which tasks to wait for. A task an agent left in doing, you can park.
