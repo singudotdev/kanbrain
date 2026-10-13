@@ -170,3 +170,13 @@ fn dragging_after_a_double_or_triple_click_selects_whole_words_or_lines() {
     ed.point((0, 1), Pointer::Extend);
     assert_eq!(ed.selected_text().as_deref(), Some("ne\n"));
 }
+
+#[test]
+fn tab_indents_with_spaces_and_esc_saves() {
+    let mut ed = TextEditor::new("- item");
+    ed.on_key(key(KeyCode::Home));
+    assert_eq!(ed.on_key(key(KeyCode::Tab)), Outcome::Continue);
+    assert_eq!(ed.text(), "  - item", "two spaces, as markdown nests a list");
+    assert_eq!(ed.on_key(key(KeyCode::Esc)), Outcome::Save);
+    assert_eq!(ed.text(), "  - item", "esc changes nothing itself");
+}
