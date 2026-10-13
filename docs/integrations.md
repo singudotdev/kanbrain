@@ -81,8 +81,9 @@ cards in `projects/` are fine to sync. A registered path that doesn't exist on a
 
 ### Syncthing, Dropbox, iCloud, OneDrive, Nextcloud
 
-These work as is. If the sync tool creates conflict copies (`… (conflicted copy).md`), kanbrain loads them as tasks too.
-Delete the one you don't want.
+These work as is. If the sync tool creates conflict copies (`… (conflicted copy).md`), kanbrain loads them too: the
+copy gets the next free id (and the file name to match), so commands and links reach one entry each. Delete the one
+you don't want.
 
 ### Obsidian and other notes apps
 

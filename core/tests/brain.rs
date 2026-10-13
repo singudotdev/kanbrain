@@ -135,6 +135,29 @@ fn loading_keeps_one_task_doing() {
 }
 
 #[test]
+fn an_entry_sharing_its_id_with_another_gets_a_new_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let mut original = Task::new(5, "p14".into(), now());
+    store.save(&mut original).unwrap();
+    // A sync tool's conflict copy of it, with the same title, edited on the other machine.
+    let copy = dir.path().join("0005-p14 (conflicted copy).md");
+    let mut edited = original.clone();
+    edited.description = "edited elsewhere".into();
+    std::fs::write(&copy, edited.to_markdown()).unwrap();
+
+    let mut brain = Brain::open(Store::at(dir.path()).unwrap()).unwrap();
+    let kept = brain.task(5).unwrap();
+    assert_eq!((kept.description.as_str(), kept.path.clone()), ("", original.path.clone()), "under its own name");
+    let renumbered = brain.tasks.iter().find(|t| t.description == "edited elsewhere").unwrap().id;
+    assert_eq!(renumbered, 6);
+    assert!(!copy.exists() && dir.path().join("0006-p14.md").exists());
+    brain.set_status(5, Status::Done).unwrap();
+    assert_eq!(brain.task(renumbered).unwrap().status, Status::Todo, "a command reaches only its own");
+    assert_eq!(brain.add(NewEntry { title: "next".into(), ..NewEntry::default() }).unwrap(), 7);
+}
+
+#[test]
 fn comments_are_added_edited_and_deleted() {
     let mut f = Fixture::with_titles(&["feature"]);
     f.brain.add_comment(1, "first").unwrap();

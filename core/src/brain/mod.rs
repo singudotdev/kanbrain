@@ -23,7 +23,7 @@ pub use report::{Group, Report, ReportRow, ReportView, Slot};
 use crate::api::ApiError;
 use crate::model::{Author, Kind, RepoLink, Status, Task, now};
 use crate::projects::{self, ProjectInfo};
-use crate::store::Store;
+use crate::store::{self, Store};
 use crate::tags::TagColors;
 use anyhow::Result;
 use std::path::{Path, PathBuf};
@@ -92,6 +92,7 @@ impl Brain {
         let (tasks, warnings) = self.store.load()?;
         self.tasks = tasks;
         self.warnings = warnings;
+        self.renumber_shared_ids()?;
         self.keep_one_person_doing()?;
         self.drop_dangling_links()?;
         self.remember_highest_id()?;
@@ -224,6 +225,29 @@ impl Brain {
         }
         for link in &gone {
             self.drop_repo_links_to(link)?;
+        }
+        Ok(())
+    }
+
+    /// Two entries with one id, a sync tool's conflict copy (`0005-title (conflicted copy).md`) or one added on
+    /// two machines at once, would each take commands meant for the other, and saving one could overwrite the
+    /// other's file: all but one get new ids. The one kept is under its own name, else the oldest.
+    fn renumber_shared_ids(&mut self) -> Result<()> {
+        let own_name =
+            |t: &Task| t.path.as_ref().and_then(|p| p.file_name()).is_some_and(|n| *n == *store::file_name(t));
+        let mut order: Vec<usize> = (0..self.tasks.len()).collect();
+        order.sort_by_key(|&i| {
+            let t = &self.tasks[i];
+            (t.id, !own_name(t), t.created, t.path.clone())
+        });
+        let mut seen = std::collections::HashSet::new();
+        for i in order {
+            if !seen.insert(self.tasks[i].id) {
+                let id = self.take_id()?;
+                let task = &mut self.tasks[i];
+                task.id = id;
+                self.store.save(task)?;
+            }
         }
         Ok(())
     }

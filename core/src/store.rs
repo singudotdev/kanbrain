@@ -233,8 +233,7 @@ impl Store {
 
     /// Writes atomically and renames the file when the title (slug) changed.
     pub fn save(&self, task: &mut Task) -> Result<()> {
-        let name = format!("{:04}-{}.md", task.id, slugify(&task.title));
-        let path = self.dir.join(&name);
+        let path = self.dir.join(file_name(task));
         self.remember(&path);
         if let Some(old) = &task.path {
             self.remember(old);
@@ -422,6 +421,11 @@ pub(crate) fn write_file(path: &Path, text: &str) -> Result<()> {
         return Err(e).with_context(|| format!("writing {}", path.display()));
     }
     Ok(())
+}
+
+/// The name `task`'s file is saved under: `0005-fix-login.md`.
+pub(crate) fn file_name(task: &Task) -> String {
+    format!("{:04}-{}.md", task.id, slugify(&task.title))
 }
 
 /// The nearest `.brain/` folder in `start` or one of its parents.
