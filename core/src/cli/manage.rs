@@ -75,6 +75,10 @@ pub fn move_repo(central: &Path, dir: &Path, to: &str) -> Result<Vec<String>> {
     if dropped > 0 {
         done.push(format!("dropped {dropped} links between it and project `{}`'s repositories", repo.project));
     }
+    // They describe the repository, which moved with them, but were written among its old project's.
+    if projects::read_repo_card(&repo.dir).is_some_and(|card| !card.notes.is_empty()) {
+        done.push("kept its role's notes, written for its old project: `kb project notes -` replaces them".into());
+    }
     Ok(done)
 }
 

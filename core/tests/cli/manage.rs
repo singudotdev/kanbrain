@@ -74,7 +74,10 @@ fn moving_a_repository_drops_its_links_to_the_old_project() {
     let header = web_brain.add(NewEntry { title: "Show the total".into(), ..NewEntry::default() }).unwrap();
     web_brain.link(header, &[], &[RepoLink { repo: "api".into(), id: target }]).unwrap();
 
-    move_repo(central.path(), &web, "storefront").unwrap();
+    let card = projects::read_repo_card(&web).unwrap();
+    projects::write_repo_card(&web, &RepoCard { notes: "The shop's front end.".into(), ..card }).unwrap();
+    let done = move_repo(central.path(), &web, "storefront").unwrap();
+    assert!(done.iter().any(|l| l.contains("kept its role's notes")), "{done:?}");
     assert_eq!(names(central.path()), ["shop", "storefront"]);
     assert!(brain(central.path(), &web).entry(header).unwrap().repo_links.is_empty(), "api is another project's");
     assert_eq!(projects::read_repo_card(&web).unwrap().project, "storefront");
