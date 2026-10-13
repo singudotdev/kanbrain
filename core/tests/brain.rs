@@ -340,6 +340,30 @@ fn the_calendar_lists_each_days_interactions() {
 }
 
 #[test]
+fn the_timeline_shows_untracked_gaps_of_five_minutes_or_more() {
+    use crate::period::{Period, Unit};
+    use chrono::Duration;
+    let t0 = crate::model::parse_ts("2026-09-24 09:00").unwrap();
+    let session =
+        |start: i64, end: i64| Session { start: t0 + Duration::minutes(start), end: Some(t0 + Duration::minutes(end)) };
+    let mut long = Task::new(1, "long".into(), t0);
+    // 09:00-10:00, then 10:04-10:10 (a 4-minute pause: not shown) and 10:30-10:40 (20 minutes: shown).
+    long.sessions = vec![session(0, 60), session(64, 70), session(90, 100)];
+    let mut inside = Task::new(2, "inside".into(), t0);
+    // 09:10-09:20 runs within the first: no gap before it, and 10:04 still counts from 10:00.
+    inside.sessions = vec![session(10, 20)];
+    let report = Fixture::new(vec![long, inside])
+        .brain
+        .report(&ReportView::new(Period::containing(Unit::Day, t0.naive_local())));
+    let gaps: Vec<_> = report
+        .timeline_with_gaps(t0 + Duration::minutes(120))
+        .iter()
+        .map(|(gap, slot)| (slot.id, gap.map(|g| g.num_minutes())))
+        .collect();
+    assert_eq!(gaps, [(1, None), (2, None), (1, None), (1, Some(20))]);
+}
+
+#[test]
 fn reports_and_calendars_of_several_brains_merge_counting_overlaps_once() {
     use crate::period::{Period, Unit};
     use chrono::Duration;
