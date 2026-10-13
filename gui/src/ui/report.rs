@@ -134,7 +134,7 @@ fn timeline(board: &Board, report: &Report) -> Div {
 fn row_name(board: &Board, view: &ReportView, r: &ReportRow) -> Div {
     let name = div().flex_1().min_w_0().flex().items_center().gap_2();
     match r.label.strip_prefix('#').filter(|_| view.group == Group::Tag) {
-        Some(tag) => name.child(tag_chip(board.tag_brain(tag), tag)),
+        Some(tag) => name.child(tag_chip(board, tag)),
         None => name.child(div().min_w_0().truncate().child(r.label.clone())).child(chips(board, &r.tags)),
     }
 }
@@ -142,7 +142,7 @@ fn row_name(board: &Board, view: &ReportView, r: &ReportRow) -> Div {
 /// Tags in a row that doesn't wrap, each in its color: rows can mix brains, so each tag's comes
 /// from a brain that uses it.
 fn chips(board: &Board, tags: &[String]) -> Div {
-    div().flex().flex_none().gap_1().children(tags.iter().map(|tag| tag_chip(board.tag_brain(tag), tag)))
+    div().flex().flex_none().gap_1().children(tags.iter().map(|tag| tag_chip(board, tag)))
 }
 
 /// A table row.

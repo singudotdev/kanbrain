@@ -104,7 +104,7 @@ fn row(
                 .child(task.title.clone()),
         )
         .children(widgets::state_pill(task))
-        .child(tag_chips(board.brain(key.src), &task.tags).flex_nowrap().flex_none())
+        .child(tag_chips(board, &task.tags).flex_nowrap().flex_none())
         .child(div().flex_1())
         .child(dim(meta(board, key, task, now)).text_size(px(11.)).flex_none())
         .children(running.map(|r| clock(r, theme::running_color(task)).text_size(px(11.)).flex_none()))

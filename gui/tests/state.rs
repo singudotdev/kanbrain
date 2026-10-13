@@ -491,6 +491,20 @@ fn only_the_brains_that_changed_are_read_again() {
 }
 
 #[test]
+fn a_tag_has_one_color_whichever_brain_or_scope_shows_it() {
+    let (central, code) = projects();
+    let colors = |dir: &std::path::Path, text: &str| std::fs::write(dir.join("tags.md"), text).unwrap();
+    colors(&code.path().join("api/.brain"), "# Tag colors\n\n- ui: red\n");
+    colors(&code.path().join("web/.brain"), "# Tag colors\n\n- ui: blue\n");
+    let mut board = Board::open(central.path(), None).unwrap();
+    let red = board.tag_colors("ui");
+    assert_eq!(red, board.brain(1).tag_colors.chip("ui"), "the first brain that has it: api's");
+    board.set_scope(Scope::Repo(2));
+    assert_eq!(board.tag_colors("ui"), red, "on web's own cards too");
+    assert_eq!(board.tag_colors("nowhere"), None);
+}
+
+#[test]
 fn every_project_shows_and_the_scope_filters_them() {
     let (central, _code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();

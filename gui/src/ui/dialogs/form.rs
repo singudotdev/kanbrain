@@ -25,10 +25,6 @@ pub(super) fn draw(board: &Board, form: &Form, scroll: &Scrolls, follow: bool, c
     let field = |which: Field, input: &LineInput, text_box: TextBox, placeholder: &str, cx: &mut Context<BrainView>| {
         text_field(text_box, input, form.field == which, placeholder, cx)
     };
-    let src = match form.target {
-        FormTarget::New(src, ..) => src,
-        FormTarget::Edit(key) => key.src,
-    };
     let (kind, known) = board.form_tags(form);
     let content = div()
         .flex()
@@ -48,7 +44,7 @@ pub(super) fn draw(board: &Board, form: &Form, scroll: &Scrolls, follow: bool, c
                     .flex_col()
                     .gap_1()
                     .child(dim_small(format!("Tags in use in {}s", kind.as_str())))
-                    .child(tag_chips(board.brain(src), &known)),
+                    .child(tag_chips(board, &known)),
             )
         })
         .child(labeled(

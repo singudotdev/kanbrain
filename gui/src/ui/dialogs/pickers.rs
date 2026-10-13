@@ -46,7 +46,7 @@ pub(super) fn links(
                     board.link_name(picker.key.src, key),
                     other.title
                 )))
-                .child(tag_chips(board.brain(key.src), &other.tags).flex_nowrap().flex_none())
+                .child(tag_chips(board, &other.tags).flex_nowrap().flex_none())
         })
         .collect();
     let empty = candidates.is_empty();

@@ -76,7 +76,7 @@ pub fn draw(board: &Board, scroll: &ScrollHandle, follow: bool, cx: &mut Context
                         .child(dim_small(format!("#{id}")).w(px(40.)).flex_none())
                         .child(div().min_w_0().truncate().font_weight(FontWeight::MEDIUM).child(entry.title.clone()))
                         .children(state_pill(entry))
-                        .child(tag_chips(board.brain(key.src), &entry.tags).flex_nowrap().flex_none()),
+                        .child(tag_chips(board, &entry.tags).flex_nowrap().flex_none()),
                 )
                 .children(first_line.map(|line| {
                     div().pl(px(48.)).text_size(px(12.)).text_color(rgb(DIM)).truncate().child(line.to_string())

@@ -276,7 +276,7 @@ fn running_item(
                 .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.open_entry(key))))
                 .child(format!("{place}#{} {}", task.id, task.title)),
         )
-        .child(tag_chips(board.brain(key.src), &task.tags).flex_nowrap().flex_none())
+        .child(tag_chips(board, &task.tags).flex_nowrap().flex_none())
         .child(
             div()
                 .text_color(rgb(theme::running_color(task)))
@@ -307,7 +307,7 @@ fn tag_filter(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<Br
     let button = action("filter", "Tags", Kind::Secondary, KeyCode::Char('#'), cx)
         .debug_selector(|| "tag-filter".into())
         .gap_1p5()
-        .children(chosen.iter().map(|tag| widgets::labeled_chip(board.tag_brain(tag), tag, format!("#{tag}"))))
+        .children(chosen.iter().map(|tag| widgets::labeled_chip(board, tag, format!("#{tag}"))))
         .child("▾");
     let open = match &board.mode {
         Mode::Tags(picker) => Some(picker),
@@ -325,7 +325,7 @@ fn tag_filter(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<Br
                         .flex()
                         .items_center()
                         .gap_2()
-                        .child(widgets::labeled_chip(board.tag_brain(t), t, format!("#{t}")))
+                        .child(widgets::labeled_chip(board, t, format!("#{t}")))
                         .child(widgets::dim_small(uses(board.tag_uses(t))))
                         .into_any_element(),
                     None => div().child("All tags").into_any_element(),

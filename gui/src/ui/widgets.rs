@@ -4,12 +4,12 @@ use super::caret::caret;
 use super::pointer::{Hit, TextBox, pointable};
 use super::theme::{self, ACCENT, BORDER, DIM, INPUT, Line, TEXT};
 use super::{BrainView, byte_at, edited};
+use crate::state::Board;
 use crate::text::editor::LineInput;
 use gpui::{
     AnyView, App as GpuiApp, Context, Div, ElementId, FontWeight, SharedString, Stateful, Window, div, prelude::*, px,
     rgb, rgba, transparent_black,
 };
-use kanbrain_core::brain::Brain;
 use kanbrain_core::model::{Asked, DecisionState, Status, Task};
 
 /// How a button looks.
@@ -174,13 +174,13 @@ fn pill(label: &'static str, color: u32) -> Div {
 }
 
 /// A tag as a colored chip.
-pub fn tag_chip(brain: &Brain, tag: &str) -> Div {
-    labeled_chip(brain, tag, tag.to_string())
+pub fn tag_chip(board: &Board, tag: &str) -> Div {
+    labeled_chip(board, tag, tag.to_string())
 }
 
-/// `tag`'s chip, in its color, reading `label` instead of the bare name, e.g. `#devops`.
-pub fn labeled_chip(brain: &Brain, tag: &str, label: String) -> Div {
-    let (bg, fg) = brain.tag_colors.chip(tag).unwrap_or((theme::HOVER, TEXT));
+/// `tag`'s chip, in its color (see [`Board::tag_colors`]), reading `label` instead of the bare name, e.g. `#devops`.
+pub fn labeled_chip(board: &Board, tag: &str, label: String) -> Div {
+    let (bg, fg) = board.tag_colors(tag).unwrap_or((theme::HOVER, TEXT));
     div()
         .flex_none()
         .px_1p5()
@@ -193,8 +193,8 @@ pub fn labeled_chip(brain: &Brain, tag: &str, label: String) -> Div {
 }
 
 /// Tags as chips in a row that wraps.
-pub fn tag_chips(brain: &Brain, tags: &[String]) -> Div {
-    div().flex().flex_wrap().gap_1().children(tags.iter().map(|tag| tag_chip(brain, tag)))
+pub fn tag_chips(board: &Board, tags: &[String]) -> Div {
+    div().flex().flex_wrap().gap_1().children(tags.iter().map(|tag| tag_chip(board, tag)))
 }
 
 /// A bordered panel.

@@ -222,6 +222,8 @@ Each tag is shown as a colored chip.
 - A new tag gets a **random color from the colors used least so far**. The 16 palette colors are all used once before any repeats.
 - Once assigned, **a tag keeps its color**. Adding tags or deleting tasks doesn't reshuffle them.
 - The text on the chip is black or white, whichever is easier to read on that background.
+- Each brain colors its own tags. A tag that several have shows in one color all over the app: the first one's that
+  has it, the central brain's, then the repositories' in the order they were registered.
 
 The assignments are stored in `tags.md` in your data folder, and you can edit it:
 

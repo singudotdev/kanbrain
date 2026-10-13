@@ -398,11 +398,11 @@ impl Board {
         self.sources[src].label.as_deref().unwrap_or("Central")
     }
 
-    /// The brain whose colors a tag is shown in where it isn't on any one entry (the report's and the
-    /// calendar's filters): the first in scope that uses it.
-    pub fn tag_brain(&self, tag: &str) -> &Brain {
-        let uses = |brain: &Brain| brain.tasks.iter().any(|t| t.tags.iter().any(|t| t == tag));
-        self.scoped().map(|(_, b)| b).find(|b| uses(b)).unwrap_or_else(|| self.brain(0))
+    /// A tag's chip colors, background and text, from the first brain whose `tags.md` has it (the central brain's,
+    /// then the repositories' in order): one tag, one color, wherever it shows and whatever the scope, though two
+    /// brains may have given it different ones.
+    pub fn tag_colors(&self, tag: &str) -> Option<(u32, u32)> {
+        self.sources.iter().find_map(|s| s.brain.tag_colors.chip(tag))
     }
 
     /// Every tag the scope's entries use, sorted.

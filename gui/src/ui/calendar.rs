@@ -215,9 +215,7 @@ fn event_row(
         )
         .child(title)
         .children(excerpt)
-        .when(wide, |r| {
-            r.child(div().flex_1()).child(tag_chips(board.brain(event.source), &event.tags).flex_nowrap().flex_none())
-        })
+        .when(wide, |r| r.child(div().flex_1()).child(tag_chips(board, &event.tags).flex_nowrap().flex_none()))
 }
 
 /// What happened to the entry that day, colored by kind: its last move (`doing → parked`), else

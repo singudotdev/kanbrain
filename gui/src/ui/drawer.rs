@@ -91,7 +91,7 @@ fn heading(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView>) ->
         )
         .child(div().text_size(px(18.)).font_weight(FontWeight::SEMIBOLD).child(task.title.clone()))
         .child(dim_small(format!("created {}", when(task.created))))
-        .when(!task.tags.is_empty(), |d| d.child(tag_chips(board.brain(key.src), &task.tags).pt_1()))
+        .when(!task.tags.is_empty(), |d| d.child(tag_chips(board, &task.tags).pt_1()))
 }
 
 /// The question an agent asked and the task waits on, with a button to answer it and one to open each

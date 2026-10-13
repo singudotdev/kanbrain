@@ -162,7 +162,6 @@ fn draw_card(
     cx: &mut Context<BrainView>,
 ) -> Stateful<Div> {
     let id = task.id;
-    let brain = board.brain(key.src);
     let selected = board.selected == Some(key);
     let running = task.running_for(now);
     let footer = div()
@@ -221,7 +220,7 @@ fn draw_card(
                 .text_color(rgb(if task.status == Status::Done { DIM } else { TEXT }))
                 .child(task.title.clone()),
         )
-        .when(!task.tags.is_empty(), |d| d.child(tag_chips(brain, &task.tags)))
+        .when(!task.tags.is_empty(), |d| d.child(tag_chips(board, &task.tags)))
         .children(asked(task))
         .child(footer)
 }
