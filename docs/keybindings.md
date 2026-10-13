@@ -83,7 +83,6 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | "which project?" (quick add, or move) | type to filter; `↑` `↓` move; `enter` opens the quick-add field there, or moves the entry; `esc` does nothing |
 | delete confirmation | `y` or `enter` deletes; `n` or `esc` cancels |
 | right-click menu | `↑` `↓` move; `enter` or an item's own key chooses it; `esc` or a click outside closes it |
-| "what's next?" | type to filter; `↑` `↓` choose; `enter` starts it; `n` (with nothing typed) new task, started; `esc` nothing for now |
 | command palette | type to filter by what it does or its key; `↑` `↓` move; `enter` runs it; `esc` closes |
 
 Dropdowns and pickers show 8 rows at most (the form's Project and Related fields, 6; the command palette, 12) and scroll past that; a line under them says

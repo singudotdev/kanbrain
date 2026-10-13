@@ -286,20 +286,6 @@ fn the_project_dropdown_filters_and_picks_with_the_mouse(cx: &mut gpui::TestAppC
 }
 
 #[gpui::test]
-fn whats_next_starts_the_clicked_task(cx: &mut gpui::TestAppContext) {
-    let (view, cx, _dir) = window(cx, &["a", "b"]);
-    // #2 is selected first (newest); start it, then park it: nothing runs, so it asks.
-    cx.simulate_keystrokes("s p");
-    let row = cx.debug_bounds("next 1").expect("the question lists #2 then #1").center();
-    cx.simulate_click(row, gpui::Modifiers::none());
-    view.read_with(cx, |view, _| {
-        let running: Vec<u32> = view.board.brain(0).running().map(|t| t.id).collect();
-        assert_eq!(running, [1]);
-        assert!(matches!(view.board.mode, crate::state::Mode::Normal));
-    });
-}
-
-#[gpui::test]
 fn project_info_draws_every_repository(cx: &mut gpui::TestAppContext) {
     let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     for repo in ["api", "web"] {
@@ -439,9 +425,6 @@ fn every_dropdown_with_a_search_scrolls_past_its_most_rows(cx: &mut gpui::TestAp
     assert!((rows_shown(cx, "project option 0") - form_rows).abs() < 1., "the form's project field");
     cx.simulate_keystrokes("tab tab tab");
     assert!((rows_shown(cx, "link option 0") - form_rows).abs() < 1., "the form's related field");
-    // The selected task started and finished: its brain asks what's next among the eight others.
-    cx.simulate_keystrokes("escape s d");
-    assert!((rows_shown(cx, "next 0") - most).abs() < 1., "what's next");
     cx.simulate_keystrokes("escape ?");
     assert!((rows_shown(cx, "command 0") - 12.).abs() < 1., "the command palette, the longest");
 }

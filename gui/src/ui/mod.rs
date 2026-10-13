@@ -161,8 +161,6 @@ struct Scrolls {
     form_projects: ScrollHandle,
     /// The link picker.
     links: ScrollHandle,
-    /// "What's next?".
-    next: ScrollHandle,
     /// "Which project?".
     place: ScrollHandle,
     /// The add-project dialog's projects.

@@ -32,8 +32,6 @@ pub enum Mode {
     Menu(super::MenuPicker),
     /// Choosing the tag every tab is filtered by, from a list filtered by a search.
     Tags(Picker),
-    /// A brain was left with nothing running: what to work on next there.
-    Next(NextPicker),
     /// What a project is and how it's doing: its description, its repositories and their tasks.
     /// The index is one of its repositories' brains.
     ProjectInfo(usize),
@@ -427,27 +425,4 @@ impl Picker {
         }
         PickerKey::Stay
     }
-}
-
-/// "What's next?", after your running task in a brain stopped: start one of its parked or to-do
-/// tasks, found with a search, create a new one there, or nothing.
-#[derive(Debug)]
-pub struct NextPicker {
-    /// The brain left with nothing running, by index.
-    pub src: usize,
-    /// Filters its tasks; see `Task::matches`.
-    pub search: LineInput,
-    /// Index into `Board::next_choices`.
-    pub sel: usize,
-}
-
-/// One row of "what's next?".
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NextChoice {
-    /// Start this task.
-    Start(Key),
-    /// Create a task there, already started.
-    New,
-    /// Leave the brain with nothing running.
-    Nothing,
 }

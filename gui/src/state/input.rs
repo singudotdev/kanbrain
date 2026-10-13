@@ -3,10 +3,7 @@
 //! Also typing into whichever field has the keys, for the mouse and the clipboard.
 
 use super::nav::Step;
-use super::{
-    Board, COLUMNS, Confirm, Field, Form, Manage, Mode, NextPicker, Picker, PickerKey, Request, Tab, Target,
-    WherePicker,
-};
+use super::{Board, COLUMNS, Confirm, Field, Form, Manage, Mode, Picker, PickerKey, Request, Tab, Target, WherePicker};
 use crate::text::editor::{LineInput, Outcome, Pointer, TextEditor};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
 use kanbrain_core::brain::Group;
@@ -101,7 +98,6 @@ impl Board {
                     self.choose_tag(sel);
                 }
             }
-            Mode::Next(picker) => self.key_next(picker, key),
             Mode::ProjectInfo(src) => {
                 if !matches!(key.code, KeyCode::Esc | KeyCode::Enter | KeyCode::Char('I' | 'q')) {
                     self.mode = Mode::ProjectInfo(src);
@@ -124,31 +120,6 @@ impl Board {
         }
         if outcome == PickerKey::Choose {
             self.choose_where(sel);
-        }
-    }
-
-    /// "What's next?": arrows move, typing filters the tasks, enter runs the highlighted row, `esc` is
-    /// nothing for now. `n` is a new task while nothing is searched; once something is, it's a letter.
-    fn key_next(&mut self, mut picker: NextPicker, key: KeyEvent) {
-        let count = self.next_choices(&picker).len();
-        match key.code {
-            KeyCode::Up => picker.sel = picker.sel.saturating_sub(1),
-            KeyCode::Down => picker.sel = (picker.sel + 1).min(count - 1),
-            KeyCode::Enter => picker.sel = picker.sel.min(count - 1),
-            KeyCode::Char('n') if picker.search.is_empty() => picker.sel = count - 2,
-            KeyCode::Esc => picker.sel = count - 1,
-            _ => {
-                if picker.search.on_key(key) {
-                    picker.sel = 0;
-                }
-                self.mode = Mode::Next(picker);
-                return;
-            }
-        }
-        let sel = picker.sel;
-        self.mode = Mode::Next(picker);
-        if matches!(key.code, KeyCode::Enter | KeyCode::Char('n') | KeyCode::Esc) {
-            self.choose_next(sel);
         }
     }
 
@@ -466,7 +437,6 @@ impl Board {
             Mode::Scopes(picker) | Mode::Tags(picker) | Mode::Where(WherePicker { picker, .. }) => {
                 Some(Typing::Line(&mut picker.search))
             }
-            Mode::Next(picker) => Some(Typing::Line(&mut picker.search)),
             Mode::Palette(picker) => Some(Typing::Line(&mut picker.search)),
             Mode::AddProject(add) => Some(Typing::Line(&mut add.picker.search)),
             Mode::Manage(manage) => manage.picker_mut().map(|picker| Typing::Line(&mut picker.search)),
@@ -504,7 +474,6 @@ impl Board {
             Mode::Scopes(picker) | Mode::Tags(picker) | Mode::Where(WherePicker { picker, .. }) => {
                 picker.search.selected_text().map(str::to_string)
             }
-            Mode::Next(picker) => picker.search.selected_text().map(str::to_string),
             Mode::Palette(picker) => picker.search.selected_text().map(str::to_string),
             Mode::AddProject(add) => add.picker.search.selected_text().map(str::to_string),
             Mode::Manage(manage) => match manage {

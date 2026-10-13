@@ -2,7 +2,7 @@
 //!
 //! - [`form`]: the new / edit form, with its project, related entries and column.
 //! - [`editor`]: the text editor, for descriptions, comments and project text.
-//! - [`pickers`]: the link picker, "which project?", "what's next?" and the command palette.
+//! - [`pickers`]: the link picker, "which project?" and the command palette.
 //! - [`project`]: a project at a glance.
 //! - [`add_project`]: the project a folder picked in the system's dialog joins or starts.
 //! - [`manage`]: renaming, moving and removing a project or its repositories.
@@ -36,7 +36,6 @@ pub fn draw(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<Brai
         Mode::Edit(edit) => editor::draw(board, edit, &scroll.editor, follow, cx),
         Mode::Confirm(confirm) => draw_confirm(board, *confirm, cx)?,
         Mode::Links(picker) => pickers::links(board, picker, &scroll.links, follow, cx)?,
-        Mode::Next(picker) => pickers::next(board, picker, &scroll.next, follow, cx),
         Mode::Where(asked) => pickers::place(board, asked, &scroll.place, follow, cx),
         Mode::ProjectInfo(src) => project::draw(board, *src, cx)?,
         Mode::Palette(picker) => pickers::palette(board, picker, &scroll.palette, follow, cx),

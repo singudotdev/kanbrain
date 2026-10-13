@@ -1,13 +1,13 @@
-//! Dialogs that pick from a searchable list: the link picker, "which project?", "what's next?" and the
+//! Dialogs that pick from a searchable list: the link picker, "which project?" and the
 //! command palette.
 
 use super::{WIDE_WIDTH, check, dialog};
-use crate::state::{Board, Command, LinkPicker, NextChoice, NextPicker, Picker, Tab, WhereFor, WherePicker};
+use crate::state::{Board, Command, LinkPicker, Picker, Tab, WhereFor, WherePicker};
 use crate::text::event::KeyCode;
 use crate::ui::dropdown::{MAX_ROWS, list, row};
 use crate::ui::pointer::TextBox;
 use crate::ui::theme::{self, BORDER};
-use crate::ui::widgets::{self, Kind, button, dim, dim_small, entry_pill, tag_chips, text_field};
+use crate::ui::widgets::{Kind, dim, dim_small, entry_pill, tag_chips, text_field};
 use crate::ui::{BrainView, action, truncate};
 use gpui::{ClickEvent, Context, Div, FontWeight, ScrollHandle, div, prelude::*, px, rgb};
 use kanbrain_core::model::Kind as EntryKind;
@@ -112,55 +112,6 @@ pub(super) fn place(
         WhereFor::QuickAdd(_) => content,
     };
     dialog(title, content, buttons).w(px(WIDE_WIDTH))
-}
-
-/// "What's next?" for a brain left with nothing running: its parked tasks (the latest first, to
-/// resume after an interruption), its to-do tasks, a new task, or nothing.
-pub(super) fn next(
-    board: &Board,
-    picker: &NextPicker,
-    scroll: &ScrollHandle,
-    follow: bool,
-    cx: &mut Context<BrainView>,
-) -> Div {
-    let brain = board.brain(picker.src);
-    let rows: Vec<_> = board
-        .next_choices(picker)
-        .into_iter()
-        .enumerate()
-        .map(|(index, choice)| {
-            let row = row(("next", index), format!("next {index}"), index == picker.sel, true)
-                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.choose_next(index))));
-            match choice {
-                NextChoice::Start(key) => {
-                    let Some(task) = board.task(key) else { return row };
-                    row.child(entry_pill(task))
-                        .child(div().flex_1().min_w_0().truncate().child(format!("#{} {}", task.id, task.title)))
-                        .child(tag_chips(brain, &task.tags).flex_nowrap().flex_none())
-                }
-                NextChoice::New => row.child(div().text_color(rgb(theme::ACCENT)).child("+ New task, started")),
-                NextChoice::Nothing => row.child(dim("■ Nothing for now")),
-            }
-        })
-        .collect();
-    let list = list("next-list", rows, picker.sel, MAX_ROWS, scroll, follow);
-    let content = div()
-        .flex()
-        .flex_col()
-        .gap_3()
-        .child(text_field(TextBox::NextSearch, &picker.search, true, "Search titles, or #tag", cx))
-        .child(dim_small("Parked tasks first: the latest is usually the one to get back to."))
-        .child(list);
-    let buttons = vec![
-        action("next-nothing", "Nothing for now", Kind::Secondary, KeyCode::Esc, cx),
-        // Not `n`'s action: once something is searched, n is a letter of it.
-        button("next-new", "New task", Kind::Secondary)
-            .tooltip(widgets::tooltip("Shortcut: n (with nothing searched)"))
-            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.act(cx, Board::next_new))),
-        action("next-start", "Start", Kind::Primary, KeyCode::Enter, cx),
-    ];
-    let place = board.sources[picker.src].label.clone().unwrap_or_else(|| "the central brain".to_string());
-    dialog(format!("Nothing running in {place}: what's next?"), content, buttons).w(px(WIDE_WIDTH))
 }
 
 /// The command palette: every action of the tab with its key, filtered by a search; a click or `enter`

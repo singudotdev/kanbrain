@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Removed
+
+- The kanban app's "What's next?" dialog: stopping your running task (Park, Done, To do, deleting it) asks nothing;
+  the board shows what's parked and to do.
+
 ## [0.3.2] - 2026-10-13
 
 ### Added

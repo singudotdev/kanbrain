@@ -27,23 +27,8 @@ total, with the number of sessions.
 
 Sessions are saved in the task file under `## Sessions` (see [Data format](data-format.md)), next to the status history.
 
-## "What's next?"
-
-When you stop your running task in a brain from the app (Park, moving it to Done or To do, deleting it), the app
-asks what's next in that brain (agents' tasks running there don't count):
-
-```
-Nothing running in shop/api: what's next?
-  [ Search titles, or #tag ]
-  ‖ #2 Export CSV                 ← parked tasks first, the latest on top: Enter resumes it
-  · #5 Add tests
-  + New task, started
-  ■ Nothing for now
-```
-
-Typing filters the tasks by title or `#tag`; the new task and nothing stay at the end. `↑` `↓` choose, `enter` (or a
-click) starts the task, `n` (with nothing typed) or **New task** creates one there already started, `esc` leaves
-nothing running. Starting another task, Park & quit, and changes made by agents from the command line don't ask.
+When you stop your running task (Park, moving it to Done or To do, deleting it), nothing asks what's next: the
+board shows what's parked and to do, and you start one, add one, or leave it.
 
 ## Handling interruptions
 

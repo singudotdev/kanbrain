@@ -1,8 +1,8 @@
 //! Changes to entries, through the brain: each one says in the status bar what it did, or why not.
 
 use super::{
-    Board, Confirm, Edit, Field, Form, FormTarget, Key, LinkPicker, Mode, NextChoice, NextPicker, Picker, QuickAdd,
-    Request, Tab, Target, WhereFor, WherePicker,
+    Board, Confirm, Edit, Field, Form, FormTarget, Key, LinkPicker, Mode, Picker, QuickAdd, Request, Tab, Target,
+    WhereFor, WherePicker,
 };
 use crate::text::editor::{LineInput, TextEditor};
 use anyhow::Result;
@@ -24,7 +24,6 @@ impl Board {
     /// Moves a task to `status`. Starting one while the brain already runs a task you started is refused,
     /// saying which: nothing is parked for it. Agents' tasks don't count.
     pub fn set_status(&mut self, key: Key, status: Status) {
-        let stops = self.brain(key.src).running().any(|t| t.id == key.id) && status != Status::Doing;
         match self.brain_mut(key.src).set_status(key.id, status) {
             Ok(true) => {
                 let title = self.task(key).map(|t| t.title.clone()).unwrap_or_default();
@@ -34,54 +33,6 @@ impl Board {
             Err(e) => self.notify(format!("{e:#}")),
         }
         self.keep_selection();
-        if stops {
-            self.ask_next(key.src);
-        }
-    }
-
-    /// Asks what to work on next in the brain at `src`, once your running task there stopped.
-    fn ask_next(&mut self, src: usize) {
-        // Agents' tasks may still run there: what's next is about yours.
-        if self.brain(src).person_doing().is_none() {
-            self.mode = Mode::Next(NextPicker { src, search: LineInput::default(), sel: 0 });
-        }
-    }
-
-    /// The rows of "what's next?": its brain's parked tasks, the most recently set aside first (usually
-    /// the one to resume), then its to-do tasks, those matching its search (see `Task::matches`); then a
-    /// new task and nothing, whatever the search, so they're always there to pick.
-    pub fn next_choices(&self, picker: &NextPicker) -> Vec<NextChoice> {
-        let brain = self.brain(picker.src);
-        let tasks = brain.column(Status::Parked).into_iter().chain(brain.column(Status::Todo));
-        tasks
-            .filter(|t| t.matches(picker.search.text()))
-            .map(|t| NextChoice::Start(Key::new(picker.src, t.id)))
-            .chain([NextChoice::New, NextChoice::Nothing])
-            .collect()
-    }
-
-    /// Creates a task in the brain "what's next?" asks about, already started: its New task row, which
-    /// is always the second to last.
-    pub fn next_new(&mut self) {
-        let Mode::Next(picker) = &self.mode else { return };
-        let index = self.next_choices(picker).len() - 2;
-        self.choose_next(index);
-    }
-
-    /// Runs the row of "what's next?" at `index`.
-    pub fn choose_next(&mut self, index: usize) {
-        let Mode::Next(picker) = std::mem::replace(&mut self.mode, Mode::Normal) else { return };
-        match self.next_choices(&picker).get(index) {
-            Some(NextChoice::Start(key)) => {
-                self.set_status(*key, Status::Doing);
-                self.selected = Some(*key);
-            }
-            Some(NextChoice::New) => {
-                self.show_tab(Tab::Board);
-                self.mode = Mode::Form(Box::new(Form::new(picker.src, Kind::Task, Status::Doing, false)));
-            }
-            Some(NextChoice::Nothing) | None => {}
-        }
     }
 
     /// A card dropped on `status`'s column: it moves there and is selected. Dropping it back on its own
@@ -454,15 +405,6 @@ impl Board {
 
     /// Runs a confirmed delete, or asks the window for the update.
     pub(super) fn confirm(&mut self, confirm: Confirm) {
-        let running = |board: &Self, key: Key| board.brain(key.src).running().any(|t| t.id == key.id);
-        let stops = match confirm {
-            Confirm::Delete(key) => running(self, key).then_some(key.src),
-            Confirm::DeleteComment(..) => None,
-            Confirm::Update => {
-                self.request = Some(Request::Update);
-                return;
-            }
-        };
         let result = match confirm {
             Confirm::Delete(key) => self
                 .brain_mut(key.src)
@@ -472,17 +414,16 @@ impl Board {
             Confirm::DeleteComment(key, index) => {
                 self.brain_mut(key.src).delete_comment(key.id, index).map(|()| "comment deleted".into())
             }
-            // Taken above.
-            Confirm::Update => return,
+            Confirm::Update => {
+                self.request = Some(Request::Update);
+                return;
+            }
         };
         match result {
             Ok(msg) => self.notify(msg),
             Err(e) => self.notify(format!("{e:#}")),
         }
         self.keep_selection();
-        if let Some(src) = stops {
-            self.ask_next(src);
-        }
     }
 
     /// Opens the link picker for the selected entry.

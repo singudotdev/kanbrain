@@ -189,8 +189,6 @@ fn shift_arrows_move_the_card_across_columns_and_record_it() {
     assert_eq!(f.status(1), Status::Doing);
     assert!(f.board.brain(0).task(1).unwrap().is_running(), "doing runs the clock");
     f.shift(KeyCode::Right);
-    assert!(matches!(f.board.mode, Mode::Next(_)), "stopping the running task asks what's next");
-    f.press(KeyCode::Esc);
     f.shift(KeyCode::Right);
     assert_eq!(f.status(1), Status::Done);
     f.shift(KeyCode::Right);
@@ -201,46 +199,21 @@ fn shift_arrows_move_the_card_across_columns_and_record_it() {
 }
 
 #[test]
-fn a_brain_left_with_nothing_running_asks_whats_next() {
-    let mut f = Fixture::new(&["feature", "bug", "docs"]);
+fn stopping_your_task_asks_nothing_and_selects_it() {
+    let mut f = Fixture::new(&["feature", "bug"]);
     f.board.set_status(k(1), Status::Doing);
     f.board.set_status(k(1), Status::Parked);
-    let Mode::Next(_) = &f.board.mode else { panic!("#1 stopped and nothing runs: it asks") };
-    f.press(KeyCode::Esc);
+    assert!(matches!(f.board.mode, Mode::Normal), "parking it: the board shows what's there to start");
     f.board.set_status(k(2), Status::Doing);
+    f.board.open_entry(k(2));
     f.board.set_status(k(2), Status::Done);
-    let Mode::Next(picker) = &f.board.mode else { panic!("#2 stopped and nothing runs: it asks") };
-    let choices = f.board.next_choices(picker);
-    assert_eq!(
-        choices,
-        [NextChoice::Start(k(1)), NextChoice::Start(k(3)), NextChoice::New, NextChoice::Nothing],
-        "parked #1 first, then to-do #3"
-    );
-    f.type_text("do");
-    let Mode::Next(picker) = &f.board.mode else { panic!("typing searches") };
-    let choices = f.board.next_choices(picker);
-    assert_eq!(choices, [NextChoice::Start(k(3)), NextChoice::New, NextChoice::Nothing], "docs; new and nothing stay");
-    f.type_text("n");
-    assert!(matches!(&f.board.mode, Mode::Next(p) if p.search.text() == "don"), "n is a letter once searching");
-    for _ in 0..3 {
-        f.press(KeyCode::Backspace);
-    }
-    f.press(KeyCode::Enter);
-    assert!(f.board.brain(0).task(1).unwrap().is_running(), "Enter resumes the parked one");
-
-    f.board.set_status(k(1), Status::Parked);
-    f.press(KeyCode::Char('n'));
-    f.type_text("hotfix");
-    f.press(KeyCode::Enter);
-    let running: Vec<_> = f.board.brain(0).running().map(|t| t.title.as_str()).collect();
-    assert_eq!(running, ["hotfix"], "n creates a task there, already started");
-
-    f.board.open_entry(k(4));
+    assert!(matches!(f.board.mode, Mode::Normal), "finishing it");
+    assert_eq!(f.board.selected, Some(k(2)));
+    f.board.set_status(k(1), Status::Doing);
+    f.board.open_entry(k(1));
     f.press(KeyCode::Char('x'));
     f.press(KeyCode::Char('y'));
-    assert!(matches!(f.board.mode, Mode::Next(_)), "deleting the running task asks too");
-    f.press(KeyCode::Esc);
-    assert!(matches!(f.board.mode, Mode::Normal), "Esc: nothing for now");
+    assert!(matches!(f.board.mode, Mode::Normal), "deleting it");
     assert_eq!(f.board.brain(0).running().count(), 0);
 }
 
@@ -255,8 +228,6 @@ fn starting_a_second_task_of_yours_is_refused_but_an_agents_isnt() {
     f.board.brain_mut(0).set_status(3, Status::Doing).unwrap();
     f.board.brain_mut(0).author = kanbrain_core::model::Author::Human;
     assert_eq!(f.board.running().len(), 2, "yours and the agent's both run");
-    f.board.set_status(k(1), Status::Parked);
-    assert!(matches!(f.board.mode, Mode::Next(_)), "what's next is about yours, whatever the agent runs");
 }
 
 #[test]

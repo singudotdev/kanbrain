@@ -35,8 +35,6 @@ pub enum TextBox {
     TagSearch,
     /// The command palette's search box.
     PaletteSearch,
-    /// The search box of "what's next?".
-    NextSearch,
     /// The search box of "which project?".
     WhereSearch,
     /// The new name of a project or repository, or the project a repository moves to.
@@ -61,7 +59,6 @@ impl TextBox {
             Self::ScopeSearch => "scope-search",
             Self::TagSearch => "tag-search",
             Self::WhereSearch => "where-search",
-            Self::NextSearch => "next-search",
             Self::PaletteSearch => "palette-search",
             Self::ProjectName => "project-name",
             Self::ManageName => "manage-name",
@@ -193,7 +190,6 @@ fn focus(this: &mut BrainView, which: TextBox) {
         | TextBox::ScopeSearch
         | TextBox::TagSearch
         | TextBox::WhereSearch
-        | TextBox::NextSearch
         | TextBox::PaletteSearch
         | TextBox::ProjectName
         | TextBox::ManageName

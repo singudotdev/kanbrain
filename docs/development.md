@@ -202,7 +202,7 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
 ├── watch.rs         polls the data folders (names, sizes, times) every second, naming those other programs changed
 ├── state/           what's on screen and every action, without GPUI (tested without a window)
 │   ├── mod.rs       Board: the brains, the scope, the tab and the board's layout (Layout: kanban or list), the selected entry (by Key), the details, search, report view, status message, what the window must do (Request: $EDITOR, the folder dialog, the update), a newer release found; columns and lists
-│   ├── mode.rs      the dialogs and fields that take the keys (Mode): search, form, quick add, editor, confirm, links, project and tag dropdowns, which project a quick-added task goes in or an entry moves to, what's next, project info, command palette, adding a project (AddProject, ProjectOption), renaming, moving or removing a project or repository (Manage)
+│   ├── mode.rs      the dialogs and fields that take the keys (Mode): search, form, quick add, editor, confirm, links, project and tag dropdowns, which project a quick-added task goes in or an entry moves to, project info, command palette, adding a project (AddProject, ProjectOption), renaming, moving or removing a project or repository (Manage)
 │   ├── actions.rs   status changes and drops, new / edit / quick add (asking which brain when the scope shows several), moving an entry to another brain, the editor's save, deletes, links, undo (recording what each change writes), reload, park & quit, export
 │   ├── manage.rs    renaming, moving and removing projects and repositories from the project's info
 │   ├── input.rs     keys → actions per tab and dialog; the shortcut lists; typing, select all, cut, paste, the mouse in text
@@ -225,7 +225,7 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
     ├── dialogs/     dialogs over the window; a delete's confirmation in mod.rs
     │   ├── form.rs     the new / edit form: project, title, tags, related entries, column
     │   ├── editor.rs   the text editor for descriptions, comments and project text
-    │   ├── pickers.rs  the link picker, which project, what's next, the command palette
+    │   ├── pickers.rs  the link picker, which project, the command palette
     │   ├── project.rs  project info: description, repositories, the week's time, and the buttons that manage them
     │   ├── manage.rs   renaming a project or repository, moving a repository, removing either
     │   └── add_project.rs  adding a project: the folder picked, and the project it joins or starts, from a searchable list
@@ -267,7 +267,7 @@ every second / before each input ──▶ Watcher::changed ──▶ Board::rel
   sessions, and appends a `StatusChange` to the history only when the status really changes. The `- status:` line in
   the file is the truth; the history is the record of how the task got there.
 - **Modes** (`state::Mode`): `Normal`, `Search`, `Form`, `QuickAdd`, `Edit` (text editor with a `Target`: description,
-  new comment or existing comment), `Confirm`, `Links`, `Scopes` and `Tags` (the dropdowns), `Where` (which brain a quick-added task goes in, or an entry moves to), `Menu` (the right-click menu), `Next` ("what's next?"),
+  new comment or existing comment), `Confirm`, `Links`, `Scopes` and `Tags` (the dropdowns), `Where` (which brain a quick-added task goes in, or an entry moves to), `Menu` (the right-click menu),
   `ProjectInfo` and `Palette` (the command palette). `on_key` takes the current mode out, handles the
   key, and each handler puts back the mode to continue in.
 - **A button is its key.** `ui::action(id, label, kind, code, cx)` makes a button that presses its key through
@@ -348,7 +348,7 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | `tags` | no color repeats until the palette is used up, `tags.md` round trip, custom colors |
 | `period`, `export` | period bounds and stepping, report tables |
 | `enums` | generated `ALL` / `position` / `next`, `parse` as the inverse of `as_str` |
-| `state` (gui) | the board driven by keys over a temporary folder: moving between cards and columns, moving cards, drops, quick add, the form and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, what's next and its search, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from the project's info, the update offered once a newer release is found and refused while an agent works |
+| `state` (gui) | the board driven by keys over a temporary folder: moving between cards and columns, moving cards, drops, quick add, the form and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, nothing asked once your task stops, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from the project's info, the update offered once a newer release is found and refused while an agent works |
 | `editor` (gui) | line editing (split/join), unicode, wrapping; one-line cursor editing; selecting, copying and replacing; mouse selection by character, word and line |
 | `markdown` (gui) | inline styles and link ranges, kept line breaks, heading levels, numbered and task lists, nesting, code, quotes, tables, rules |
 | `watch` (gui) | new, changed, renamed and deleted files are noticed once, naming the folder; temporary files aren't; own writes are taken as seen |

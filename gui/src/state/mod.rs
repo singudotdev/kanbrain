@@ -24,8 +24,8 @@ mod tests;
 
 pub use menu::MenuPicker;
 pub use mode::{
-    AddProject, Confirm, Edit, Field, Form, FormTarget, LinkPicker, Manage, Mode, NextChoice, NextPicker, Picker,
-    PickerKey, ProjectOption, QuickAdd, Target, WhereFor, WherePicker,
+    AddProject, Confirm, Edit, Field, Form, FormTarget, LinkPicker, Manage, Mode, Picker, PickerKey, ProjectOption,
+    QuickAdd, Target, WhereFor, WherePicker,
 };
 pub use palette::Command;
 pub use sources::{Key, Scope, Source};
