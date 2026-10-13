@@ -414,10 +414,8 @@ pub enum Confirm {
 pub struct LinkPicker {
     /// The entry whose related entries are being chosen; candidates come from its brain.
     pub key: Key,
-    /// Filters the candidates; see `Task::matches`.
-    pub search: LineInput,
-    /// Index into `Board::link_candidates`.
-    pub sel: usize,
+    /// Filters the candidates (see `Task::matches`), and its row is an index into `Board::link_candidates`.
+    pub rows: Picker,
 }
 
 /// A dropdown with a search box: projects or tags, filtered as you type, so a long list stays usable.

@@ -50,26 +50,16 @@ impl Board {
                 KeyCode::Esc | KeyCode::Char('n') => {}
                 _ => self.mode = Mode::Confirm(confirm),
             },
+            // Choosing a row links or unlinks it, and the picker stays open for the next.
             Mode::Links(mut picker) => {
                 let count = self.link_candidates(&picker).len();
-                match key.code {
-                    KeyCode::Esc => {}
-                    KeyCode::Up => picker.sel = picker.sel.saturating_sub(1),
-                    KeyCode::Down => picker.sel = (picker.sel + 1).min(count.saturating_sub(1)),
-                    KeyCode::Enter => {
-                        let sel = picker.sel;
-                        self.mode = Mode::Links(picker);
-                        self.toggle_link(sel);
-                        return;
-                    }
-                    _ => {
-                        if picker.search.on_key(key) {
-                            picker.sel = 0;
-                        }
-                    }
-                }
-                if key.code != KeyCode::Esc {
+                let outcome = picker.rows.key(key, count);
+                let sel = picker.rows.sel;
+                if outcome != PickerKey::Close {
                     self.mode = Mode::Links(picker);
+                }
+                if outcome == PickerKey::Choose {
+                    self.toggle_link(sel);
                 }
             }
             Mode::Scopes(picker) => {
@@ -318,7 +308,7 @@ impl Board {
             Mode::Search => Some(Typing::Line(&mut self.search)),
             Mode::Form(form) => form.active_mut().map(Typing::Line),
             Mode::QuickAdd(add) => Some(Typing::Line(&mut add.title)),
-            Mode::Links(picker) => Some(Typing::Line(&mut picker.search)),
+            Mode::Links(picker) => Some(Typing::Line(&mut picker.rows.search)),
             Mode::Scopes(picker) | Mode::Tags(picker) | Mode::Where(WherePicker { picker, .. }) => {
                 Some(Typing::Line(&mut picker.search))
             }
@@ -355,7 +345,7 @@ impl Board {
             Mode::Search => self.search.selected_text().map(str::to_string),
             Mode::Form(form) => form.active().and_then(LineInput::selected_text).map(str::to_string),
             Mode::QuickAdd(add) => add.title.selected_text().map(str::to_string),
-            Mode::Links(picker) => picker.search.selected_text().map(str::to_string),
+            Mode::Links(picker) => picker.rows.search.selected_text().map(str::to_string),
             Mode::Scopes(picker) | Mode::Tags(picker) | Mode::Where(WherePicker { picker, .. }) => {
                 picker.search.selected_text().map(str::to_string)
             }

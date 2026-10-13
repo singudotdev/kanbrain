@@ -37,7 +37,7 @@ pub(super) fn links(
             } else {
                 format!("link {}/{}", key.src, key.id)
             };
-            row(("link", index), selector, index == picker.sel, true)
+            row(("link", index), selector, index == picker.rows.sel, true)
                 .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.toggle_link(index))))
                 .child(check(linked))
                 .child(entry_pill(other))
@@ -51,12 +51,12 @@ pub(super) fn links(
         .collect();
     let empty = candidates.is_empty();
     let list =
-        list("links", rows, picker.sel, MAX_ROWS, scroll, follow).when(empty, |d| d.child(dim("Nothing matches.")));
+        list("links", rows, picker.rows.sel, MAX_ROWS, scroll, follow).when(empty, |d| d.child(dim("Nothing matches.")));
     let content = div()
         .flex()
         .flex_col()
         .gap_3()
-        .child(text_field(TextBox::LinkSearch, &picker.search, true, "Search titles, or #tag", cx))
+        .child(text_field(TextBox::LinkSearch, &picker.rows.search, true, "Search titles, or #tag", cx))
         .child(dim_small("Click an entry (or Enter) to link or unlink it. Links show on both entries."))
         .child(list);
     let buttons = vec![action("links-done", "Done", Kind::Primary, KeyCode::Esc, cx)];

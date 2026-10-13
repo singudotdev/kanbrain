@@ -432,7 +432,7 @@ impl Board {
         let key = picker.key;
         let related = self.related_keys(key);
         let mut candidates: Vec<(Key, &Task)> =
-            self.linkable(key.src).filter(|&(k, t)| k != key && t.matches(picker.search.text())).collect();
+            self.linkable(key.src).filter(|&(k, t)| k != key && t.matches(picker.rows.search.text())).collect();
         candidates.sort_by_key(|&(k, t)| (!related.contains(&k), k.src != key.src, std::cmp::Reverse(t.id)));
         candidates
     }

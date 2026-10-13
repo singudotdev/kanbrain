@@ -503,7 +503,7 @@ impl Board {
     /// Opens the link picker for the selected entry.
     pub fn open_links(&mut self) {
         if let Some(key) = self.selected {
-            self.mode = Mode::Links(LinkPicker { key, search: LineInput::default(), sel: 0 });
+            self.mode = Mode::Links(LinkPicker { key, rows: Picker::default() });
         }
     }
 
@@ -513,7 +513,7 @@ impl Board {
         let key = picker.key;
         let Some(other) = self.link_candidates(picker).get(index).map(|&(k, _)| k) else { return };
         if let Mode::Links(picker) = &mut self.mode {
-            picker.sel = index;
+            picker.rows.sel = index;
         }
         let name = self.link_name(key.src, other);
         match self.toggle_link_between(key, other) {
