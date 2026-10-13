@@ -22,7 +22,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Time under a minute shows as `<1m`, not `0m`, which now means none.
 - `kb list` marks a task waiting for an answer and a decision proposed or rejected, as `kb context` does.
 - A command-line error is followed by that command's usage only, not every command's.
-- `--project` takes a name in any case when only one project or repository has it.
+- `--project` takes a name in any case when only one project or repository has it, and `central` in any case.
 
 ### Fixed
 
@@ -42,8 +42,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   rather than a crash.
 - Brains in the temporary folder, as tests make, leave nothing in its cache once they're gone.
 - The kanban app:
-  - the board scrolls sideways to the selected card's column instead of hiding the Done column under the details;
-  - a card's question wraps within the card instead of being cut at its edge;
+  - the board scrolls sideways to the selected card's column instead of hiding the Done column under the details,
+    also when the details open on it;
+  - a card's question wraps within the card instead of being cut at its edge, and a cut title or question ends in an
+    ellipsis;
+  - Manage project's editors go back to it when closed, and it keeps the highlighted repository and its keys in view;
+  - a note or decision of headings alone previews its first heading, and the delete dialogs say what will be removed;
+  - a calendar day of several sessions spans from the first, beside their total;
   - a dialog left open follows its project when another is added or removed;
   - a button's tooltip names its key only where the key does the same;
   - the `#tag` filter matches as `kb search` does;
@@ -55,13 +60,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   - it redraws only when something on it changes with time, not twice a second while idle.
 - `kb update` and the app's update run the latest release's installer, not the one on `main`.
 - New tags get the same color whatever build of kanbrain picks it.
-- `kb list --json` prints on one line, like every other command's JSON; `kb list` with nothing to show says so, and
-  `kb search` asks for words rather than listing everything.
+- `kb list --json` prints on one line, like every other command's JSON; `kb list` with nothing to show says so, gives
+  a conflict copy its own id before listing it, and `kb search` asks for words rather than listing everything.
 - Shell completions offer every `kb project` subcommand, `deinit --purge`, `init --repo` and `wait --timeout`, only
   the project names `--project` takes, and open tasks' ids first.
-- Errors name their command once (`reject needs why`, `propose needs the decision's title`), `kb wait` on a note
-  gives no status, counts say `1 session` and `1 entry`, `kb update` names agents' tasks as `kb status` does, and
-  moving or removing a repository says what happens to its notes and tasks.
+- Errors name their command once (`reject needs why`, `propose needs the decision's title`) and a bad id without the
+  parser's words, `kb wait` on a note gives no status, counts say `1 session` and `1 entry`, ages say `<1m`, `kb
+  update` names agents' tasks as `kb status` does, and moving or removing a repository says what happens to its notes
+  and tasks.
 - `kb --help` names every command that takes `--json`.
 - `install.sh` takes `KANBRAIN_UNINSTALL`, `KANBRAIN_PURGE` and `KANBRAIN_YES` as `install.ps1` does, and cancelling
   a purge is no longer an error; `install.ps1` installs the second app at the version asked for.
