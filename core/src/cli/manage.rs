@@ -174,16 +174,20 @@ fn rewrite_links(dir: &Path, change: impl Fn(&str) -> Option<String>) -> Result<
 
 /// Applies `change` to `task`'s links to other repositories; returns whether any changed.
 fn rewrite(task: &mut Task, change: impl Fn(&str) -> Option<String>) -> bool {
-    let before = task.repo_links.clone();
-    task.repo_links = before
-        .iter()
-        .filter_map(|link| match change(&link.repo) {
-            Some(name) if name.is_empty() => None,
-            Some(name) => Some(crate::model::RepoLink { repo: name, id: link.id }),
-            None => Some(link.clone()),
-        })
-        .collect();
-    task.repo_links != before
+    let mut changed = false;
+    task.repo_links.retain_mut(|link| match change(&link.repo) {
+        Some(name) if name.is_empty() => {
+            changed = true;
+            false
+        }
+        Some(name) => {
+            changed |= name != link.repo;
+            link.repo = name;
+            true
+        }
+        None => true,
+    });
+    changed
 }
 
 #[cfg(test)]
