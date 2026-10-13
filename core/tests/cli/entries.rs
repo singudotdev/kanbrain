@@ -145,6 +145,11 @@ fn wait_ends_on_a_persons_answer_or_verdict() {
     let head = format!("#{task} Rate-limit login");
     assert_eq!(settled_on(&brain, task).unwrap(), format!("{head}: not waiting for an answer (todo)"));
     wait(&brain, task, None).expect("nothing to wait for: it returns at once");
+    let note = brain.add(NewEntry { kind: Kind::Note, ..new("Webhooks repeat") }).unwrap();
+    assert_eq!(
+        settled_on(&brain, note).unwrap(),
+        format!("#{note} Webhooks repeat: a note, not waiting for an answer")
+    );
     assert!(wait(&brain, 99, None).is_err(), "no such entry");
 
     brain.ask(task, "Per IP or per account?").unwrap();

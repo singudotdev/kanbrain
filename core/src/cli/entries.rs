@@ -547,7 +547,9 @@ fn settled(task: &Task) -> Option<String> {
     match task.asked() {
         Some(Asked::Waiting(_)) => None,
         Some(Asked::Answered(answer)) => Some(format!("{head}: answered\n\n{}", answer.body)),
-        None => Some(format!("{head}: not waiting for an answer ({})", task.status.as_str())),
+        None if task.is_task() => Some(format!("{head}: not waiting for an answer ({})", task.status.as_str())),
+        // A note has no status to name.
+        None => Some(format!("{head}: a note, not waiting for an answer")),
     }
 }
 
