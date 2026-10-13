@@ -54,7 +54,9 @@ pub fn draw(board: &Board, scroll: &ScrollHandle, follow: bool, cx: &mut Context
         .map(|(row, &(key, entry))| {
             let id = entry.id;
             let selected = board.selected == Some(key);
-            let first_line = entry.description.lines().find(|l| !l.trim().is_empty() && !l.starts_with('#'));
+            // The first line of text, else of a heading: a body of headings alone still shows something.
+            let lines = || entry.description.lines().filter(|l| !l.trim().is_empty());
+            let first_line = lines().find(|l| !l.starts_with('#')).or_else(|| lines().next());
             // With several brains, each row names its own in a column of one width, so the titles line up.
             let label = board.source_label(key.src).map(|l| {
                 div()
