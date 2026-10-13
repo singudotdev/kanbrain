@@ -4,7 +4,7 @@
 
 use super::ApiError;
 use crate::brain::Brain;
-use crate::model::{Asked, Author, Comment, DecisionState, Task, fmt_age, fmt_dur, now};
+use crate::model::{Author, Comment, DecisionState, Task, fmt_age, fmt_dur, now};
 use chrono::{DateTime, Local};
 use std::fmt::Write;
 
@@ -28,13 +28,17 @@ pub fn line(task: &Task) -> String {
     line
 }
 
+/// `#id title #tag…`, how `context` and `list` name an entry.
+pub fn head(out: &mut String, task: &Task) -> std::fmt::Result {
+    write!(out, "#{} {}", task.id, task.title)?;
+    task.tags.iter().try_for_each(|tag| write!(out, " #{tag}"))
+}
+
 /// What an entry's status alone doesn't say: that a parked task waits for an answer or got one, or that a
 /// decision is proposed or rejected.
 pub fn state_note(task: &Task) -> Option<&'static str> {
-    match task.asked() {
-        Some(Asked::Waiting(_)) => return Some("waiting for an answer"),
-        Some(Asked::Answered(_)) => return Some("answered"),
-        None => {}
+    if let Some(asked) = task.asked() {
+        return Some(asked.label());
     }
     match task.decision {
         DecisionState::Accepted => None,

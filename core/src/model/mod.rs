@@ -156,6 +156,16 @@ pub enum Asked<'a> {
     Answered(&'a Comment),
 }
 
+impl Asked<'_> {
+    /// Where it stands, as the command line's text and JSON say it.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Waiting(_) => "waiting for an answer",
+            Self::Answered(_) => "answered",
+        }
+    }
+}
+
 /// An entry in another repository of the same project, written `shop-api#3`: ids repeat across
 /// repositories, so the repository's name goes with it.
 #[derive(Clone, Debug, PartialEq, Eq)]

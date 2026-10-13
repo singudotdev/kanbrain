@@ -153,8 +153,5 @@ fn decision(task: &Task) -> Option<&'static str> {
 
 /// Where a parked task's question stands; `None` without one.
 fn asked(task: &Task) -> Option<&'static str> {
-    task.asked().map(|asked| match asked {
-        Asked::Waiting(_) => "waiting for an answer",
-        Asked::Answered(_) => "answered",
-    })
+    task.asked().map(Asked::label)
 }

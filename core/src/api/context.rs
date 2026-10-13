@@ -2,7 +2,7 @@
 //! Titles and ids, plus the latest comment on tasks in progress so work can be picked up where it
 //! stopped; `show` gives the rest. Every section is capped, so it stays cheap however big the brain gets.
 
-use super::text::state_note;
+use super::text::{head, state_note};
 use crate::brain::Brain;
 use crate::model::{Asked, Comment, Kind, Status, Task, fmt_age, fmt_clock, now};
 use crate::projects::ProjectInfo;
@@ -64,10 +64,8 @@ fn section(out: &mut String, title: &str, tasks: &[&Task], limit: usize) -> std:
     writeln!(out, "## {title}\n")?;
     let now = now();
     for task in tasks.iter().take(limit) {
-        write!(out, "- #{} {}", task.id, task.title)?;
-        for tag in &task.tags {
-            write!(out, " #{tag}")?;
-        }
+        out.push_str("- ");
+        head(out, task)?;
         if let Some(running) = task.running_for(now) {
             write!(out, " · running {}", fmt_clock(running))?;
         }

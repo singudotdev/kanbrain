@@ -545,10 +545,8 @@ fn list_markdown(tasks: &[Task], args: &ListArgs) -> String {
         }
         writeln!(out, "## {heading}\n").expect("writing to a String cannot fail");
         for task in entries {
-            write!(out, "- #{} {}", task.id, task.title).expect("writing to a String cannot fail");
-            for tag in &task.tags {
-                write!(out, " #{tag}").expect("writing to a String cannot fail");
-            }
+            out.push_str("- ");
+            crate::api::text::head(&mut out, task).expect("writing to a String cannot fail");
             out.push('\n');
         }
     }
