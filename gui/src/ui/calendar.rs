@@ -241,10 +241,8 @@ fn marker(event: &Event, compact: bool) -> Div {
             format!("▶ {}", fmt_dur(event.worked))
         })
     });
-    let comments = (!compact && event.comments > 0 && !matches!(event.what, What::Commented { .. })).then(|| {
-        let plural = if event.comments == 1 { "" } else { "s" };
-        div().text_color(rgb(theme::PURPLE)).child(format!("{} comment{plural}", event.comments))
-    });
+    let comments = (!compact && event.comments > 0 && !matches!(event.what, What::Commented { .. }))
+        .then(|| div().text_color(rgb(theme::PURPLE)).child(counted(event.comments, "comment", "comments")));
     // Each piece stays whole; outside the month, the pieces wrap when the column is narrow.
     div()
         .flex()

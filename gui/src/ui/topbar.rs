@@ -12,7 +12,7 @@ use gpui::{
     ClickEvent, Context, Div, ElementId, FontWeight, Image, ImageFormat, ScrollHandle, Stateful, div, img, prelude::*,
     px, rgb,
 };
-use kanbrain_core::model::{Kind as EntryKind, Status, Task, fmt_clock, fmt_dur, now, worked};
+use kanbrain_core::model::{Kind as EntryKind, Status, Task, counted, fmt_clock, fmt_dur, now, worked};
 use kanbrain_core::period::{Period, Unit};
 
 /// Width of the project dropdown.
@@ -198,7 +198,7 @@ fn toolbar(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<Brain
 /// How many tasks wait for the user's answer, when any do; each click opens the next one.
 fn waiting_button(board: &Board, cx: &mut Context<BrainView>) -> Option<Stateful<Div>> {
     let waiting = board.waiting().len();
-    let label = if waiting == 1 { "1 waiting for you".to_string() } else { format!("{waiting} waiting for you") };
+    let label = format!("{waiting} waiting for you");
     (waiting > 0).then(|| {
         let tip = match board.shortcut(When::Waiting) {
             Some(key) => format!("Tasks an agent asked you about · Shortcut: {key}"),
@@ -351,7 +351,7 @@ fn uses(counts: [usize; 3]) -> String {
         .iter()
         .zip(names)
         .filter(|(n, _)| **n > 0)
-        .map(|(n, (one, many))| format!("{n} {}", if *n == 1 { one } else { many }))
+        .map(|(&n, (one, many))| counted(n, one, many))
         .collect::<Vec<_>>()
         .join(" · ")
 }

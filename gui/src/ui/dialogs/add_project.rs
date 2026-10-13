@@ -10,6 +10,7 @@ use crate::ui::theme::{self, BORDER};
 use crate::ui::widgets::{Kind, dim, dim_small, text_field};
 use crate::ui::{BrainView, action};
 use gpui::{ClickEvent, Context, Div, FontWeight, ScrollHandle, div, prelude::*, px, rgb};
+use kanbrain_core::model::counted;
 
 /// Rows of projects shown before the list scrolls: few, since it's inside the dialog.
 const PROJECT_ROWS: usize = 5;
@@ -40,8 +41,7 @@ pub(super) fn draw(
                     .child(dim("+ New project").flex_none())
                     .child(div().font_weight(FontWeight::MEDIUM).min_w_0().truncate().child(name)),
                 ProjectOption::Existing(name) => {
-                    let repos = board.repos_of(&name).count();
-                    let repos = if repos == 1 { "1 repository".to_string() } else { format!("{repos} repositories") };
+                    let repos = counted(board.repos_of(&name).count(), "repository", "repositories");
                     row.child(div().flex_none().font_weight(FontWeight::MEDIUM).child(name)).child(dim_small(repos))
                 }
             }
