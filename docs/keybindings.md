@@ -48,7 +48,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 
 ## Report tab
 
-`1`–`5`, `tab`, `/`, `esc`, `A`, `P`, `I`, `E`, `u`, `R`, `Q`, `?` and `q` work as above.
+`1` `2` `3` `4` `5`, `tab`, `n`, `/`, `esc`, `P`, `I`, `E`, `A`, `u`, `R`, `U`, `Q`, `?` and `q` work as above.
 
 | key | action |
 | --- | --- |
@@ -61,7 +61,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 
 ## Calendar tab
 
-`1`–`5`, `tab`, `/`, `esc`, `A`, `P`, `I`, `E`, `u`, `R`, `Q`, `?` and `q` work as above.
+`1` `2` `3` `4` `5`, `tab`, `n`, `/`, `esc`, `P`, `I`, `E`, `A`, `u`, `R`, `U`, `Q`, `?` and `q` work as above.
 
 | key | action |
 | --- | --- |

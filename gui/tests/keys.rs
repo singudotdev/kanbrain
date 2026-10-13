@@ -22,3 +22,29 @@ fn what_the_menu_offers_it_names_and_the_palette_describes() {
         assert!(action.runs, "{} only tells", action.label);
     }
 }
+
+#[test]
+fn every_key_is_documented_on_its_tabs() {
+    // On Windows, git may check the docs out with CRLF line endings.
+    let docs = include_str!("../../docs/keybindings.md").replace("\r\n", "\n");
+    let section = |title: &str| {
+        docs.split("\n## ").find(|s| s.starts_with(title)).unwrap_or_else(|| panic!("no section {title}"))
+    };
+    for action in ACTIONS.iter().filter(|a| !a.does.is_empty()) {
+        let tabs: &[&str] = match action.tabs {
+            Tabs::Report => &["Report tab"],
+            Tabs::Calendar => &["Calendar tab"],
+            Tabs::Every => &["Board, notes and decisions", "Report tab", "Calendar tab"],
+            Tabs::Entries | Tabs::Board | Tabs::Lists => &["Board, notes and decisions"],
+        };
+        for tab in tabs {
+            for key in action.shown.split([' ', '/']).filter(|k| !k.is_empty()) {
+                assert!(
+                    section(tab).contains(&format!("`{key}`")),
+                    "docs/keybindings.md, {tab}: `{key}` ({})",
+                    action.does
+                );
+            }
+        }
+    }
+}
