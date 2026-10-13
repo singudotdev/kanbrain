@@ -2,7 +2,7 @@
 //! filtered by a search. Choosing one presses its key, so the palette can't do anything the keyboard wouldn't, and
 //! it doubles as the list of shortcuts.
 
-use super::{Board, Mode, Picker, PickerKey};
+use super::{Board, Mode, Picker};
 use crate::text::event::KeyEvent;
 
 impl Board {
@@ -25,15 +25,8 @@ impl Board {
 
     /// Keys while the palette is open: arrows move, typing filters, `enter` runs the highlighted
     /// command, `esc` closes it.
-    pub(super) fn key_palette(&mut self, mut picker: Picker, key: KeyEvent) {
+    pub(super) fn key_palette(&mut self, picker: Picker, key: KeyEvent) {
         let count = self.commands(&picker).len();
-        let outcome = picker.key(key, count);
-        let sel = picker.sel;
-        if outcome != PickerKey::Close {
-            self.mode = Mode::Palette(picker);
-        }
-        if outcome == PickerKey::Choose {
-            self.choose_command(sel);
-        }
+        self.pick(picker, key, count, |p| p, Mode::Palette, Self::choose_command);
     }
 }

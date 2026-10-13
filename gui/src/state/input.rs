@@ -72,29 +72,15 @@ impl Board {
                     self.mode = Mode::Links(picker);
                 }
             }
-            Mode::Scopes(mut picker) => {
+            Mode::Scopes(picker) => {
                 let count = self.scope_candidates(&picker).len();
-                let outcome = picker.key(key, count);
-                let sel = picker.sel;
-                if outcome != PickerKey::Close {
-                    self.mode = Mode::Scopes(picker);
-                }
-                if outcome == PickerKey::Choose {
-                    self.choose_scope(sel);
-                }
+                self.pick(picker, key, count, |p| p, Mode::Scopes, Self::choose_scope);
             }
             Mode::Where(asked) => self.key_where(asked, key),
             Mode::Menu(menu) => self.key_menu(menu, key),
-            Mode::Tags(mut picker) => {
+            Mode::Tags(picker) => {
                 let count = self.tag_candidates(&picker).len();
-                let outcome = picker.key(key, count);
-                let sel = picker.sel;
-                if outcome != PickerKey::Close {
-                    self.mode = Mode::Tags(picker);
-                }
-                if outcome == PickerKey::Choose {
-                    self.choose_tag(sel);
-                }
+                self.pick(picker, key, count, |p| p, Mode::Tags, Self::choose_tag);
             }
             Mode::ManageProject(src) => {
                 if !matches!(key.code, KeyCode::Esc | KeyCode::Enter | KeyCode::Char('I' | 'q')) {
@@ -109,15 +95,30 @@ impl Board {
 
     /// "Which project?": arrows move, typing filters, Enter opens the quick-add field there or moves the
     /// entry there.
-    fn key_where(&mut self, mut asked: WherePicker, key: KeyEvent) {
+    fn key_where(&mut self, asked: WherePicker, key: KeyEvent) {
         let count = self.where_candidates(&asked.picker, asked.then).len();
-        let outcome = asked.picker.key(key, count);
-        let sel = asked.picker.sel;
+        self.pick(asked, key, count, |a| &mut a.picker, Mode::Where, Self::choose_where);
+    }
+
+    /// Hands `key` to the picker in `dialog`, which shows `count` rows: the dialog stays open, as `mode` makes it,
+    /// unless the key closed it, and `enter` chooses the highlighted row.
+    pub(super) fn pick<T>(
+        &mut self,
+        mut dialog: T,
+        key: KeyEvent,
+        count: usize,
+        picker: fn(&mut T) -> &mut Picker,
+        mode: fn(T) -> Mode,
+        choose: fn(&mut Self, usize),
+    ) {
+        let picker = picker(&mut dialog);
+        let outcome = picker.key(key, count);
+        let sel = picker.sel;
         if outcome != PickerKey::Close {
-            self.mode = Mode::Where(asked);
+            self.mode = mode(dialog);
         }
         if outcome == PickerKey::Choose {
-            self.choose_where(sel);
+            choose(self, sel);
         }
     }
 

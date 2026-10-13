@@ -3,7 +3,7 @@
 //! repository of a project with several). Entries are known by [`Key`]: which brain, and the id
 //! there, since every brain numbers its entries from 1.
 
-use super::{AddProject, Board, Form, Mode, Picker, PickerKey, ProjectOption, WhereFor};
+use super::{AddProject, Board, Form, Mode, Picker, ProjectOption, WhereFor};
 use crate::text::editor::LineInput;
 use crate::text::event::KeyEvent;
 use anyhow::Result;
@@ -211,16 +211,9 @@ impl Board {
 
     /// The add-project dialog's keys: arrows move, typing names or searches, `enter` adds the folder to the
     /// highlighted row's project, `esc` cancels.
-    pub(super) fn key_add_project(&mut self, mut add: AddProject, key: KeyEvent) {
+    pub(super) fn key_add_project(&mut self, add: AddProject, key: KeyEvent) {
         let count = self.add_project_options(&add.picker).len();
-        let outcome = add.picker.key(key, count);
-        let sel = add.picker.sel;
-        if outcome != PickerKey::Close {
-            self.mode = Mode::AddProject(add);
-        }
-        if outcome == PickerKey::Choose {
-            self.choose_add_project(sel);
-        }
+        self.pick(add, key, count, |a| &mut a.picker, Mode::AddProject, Self::choose_add_project);
     }
 
     /// Makes the folder a repository of the project at `index` among the dialog's rows, as `kb init` does there,
