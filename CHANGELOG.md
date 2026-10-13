@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-13
+
 ### Added
 
 - Data format versions and migrations: each brain records its format in a `format` file. A version that changes it
