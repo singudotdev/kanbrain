@@ -18,6 +18,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Closing the kanban app's answer editor without writing anything no longer looks like answering: until something's
+  typed its button is **Close**, then **Answer** (**Add comment**, **Reject**, **Save** elsewhere), and the status bar
+  says "nothing answered: the question still waits". A blank comment, answer or reason for rejecting isn't saved.
 - The command palette (`?`) offers only what works now, in sections: the selected entry's actions (no Start for a
   started task, Accept and Reject only on a decision, Move to project only with another one), the tab's, then
   every tab's (Manage project only with a project shown, Update only with a newer release); `esc` is there when it

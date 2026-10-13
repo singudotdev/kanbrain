@@ -307,10 +307,21 @@ impl Board {
 
     /// Writes the editor's text to its target, if it changed.
     pub(super) fn save_edit(&mut self, edit: &Edit) {
+        let answers = self.answers(edit.target);
+        let text = edit.editor.text();
+        // A comment or a reason is something said: closing with none says so, rather than closing as if it was
+        // sent, since an answer that was never written leaves the agent waiting.
+        if matches!(edit.target, Target::NewComment(_) | Target::Reject(_)) && text.trim().is_empty() {
+            return match edit.target {
+                Target::Reject(_) => self.notify("not rejected: say why it's rejected"),
+                _ if answers => self.notify("nothing answered: the question still waits"),
+                _ if edit.editor.modified => self.notify("nothing added: the comment was empty"),
+                _ => {}
+            };
+        }
         if !edit.editor.modified {
             return;
         }
-        let text = edit.editor.text();
         let saved = match edit.target {
             Target::Description(key) => {
                 self.brain_mut(key.src).set_description(key.id, &text).map(|d| (d, "description saved"))
@@ -335,6 +346,12 @@ impl Board {
             Ok((false, what)) => self.notify(what),
             Err(e) => self.notify(format!("{e:#}")),
         }
+    }
+
+    /// Whether saving `target` answers a question the task waits on.
+    pub fn answers(&self, target: Target) -> bool {
+        let Target::NewComment(key) = target else { return false };
+        self.task(key).is_some_and(|t| matches!(t.asked(), Some(Asked::Waiting(_))))
     }
 
     /// Accepts the selected decision, which answers the tasks waiting on it; rejecting asks why first,

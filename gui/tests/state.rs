@@ -1156,3 +1156,29 @@ fn e_edits_the_description_of_the_project_here() {
     let Mode::Edit(edit) = &board.mode else { panic!("E opens the editor: {:?}", board.mode) };
     assert_eq!(edit.target, Target::Project(api));
 }
+
+#[test]
+fn closing_an_answer_never_written_says_nothing_was_answered() {
+    let mut f = Fixture::new(&["css"]);
+    let mut agent = kanbrain_core::brain::Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    agent.author = Author::Agent;
+    agent.ask(1, "Which colour?").unwrap();
+    f.press(KeyCode::Char('R'));
+    f.board.open_entry(k(1));
+    let waits = |f: &Fixture| matches!(f.on_disk(1).asked(), Some(Asked::Waiting(_)));
+
+    f.press(KeyCode::Char('c'));
+    f.press(KeyCode::Esc);
+    assert!(matches!(f.board.mode, Mode::Normal) && waits(&f), "closed, and still waiting");
+    assert_eq!(f.board.message(), Some("nothing answered: the question still waits"));
+
+    f.press(KeyCode::Char('c'));
+    f.type_text("  ");
+    f.press(KeyCode::Esc);
+    assert!(waits(&f) && f.on_disk(1).comments.len() == 1, "blanks aren't an answer");
+
+    f.press(KeyCode::Char('c'));
+    f.type_text("Blue");
+    f.press(KeyCode::Esc);
+    assert!(!waits(&f), "something said answers it");
+}

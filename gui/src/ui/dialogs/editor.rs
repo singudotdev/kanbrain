@@ -31,7 +31,7 @@ pub(super) fn draw(
     .unwrap_or_default();
     let what = match edit.target {
         Target::Description(_) => "Description".to_string(),
-        Target::NewComment(_) if task.is_some_and(|t| t.asked().is_some()) => "Answer".to_string(),
+        Target::NewComment(_) if board.answers(edit.target) => "Answer".to_string(),
         Target::NewComment(_) => "New comment".to_string(),
         Target::Reject(_) => "Why it's rejected".to_string(),
         Target::Comment(_, index) => task
@@ -76,19 +76,29 @@ pub(super) fn draw(
         .text_size(px(13.))
         .children(lines);
     let text = pointable(text, TextBox::Editor, hits, cx);
-    let content = div()
-        .flex_1()
-        .min_h_0()
-        .flex()
-        .flex_col()
-        .gap_2()
-        .child(dim_small(name))
-        .child(text)
-        .child(dim_small("Markdown is fine. Esc or Ctrl+Enter saves and closes."));
-    let buttons = vec![
-        button("discard", "Discard changes", Kind::Secondary)
-            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.act(cx, Board::discard_edit))),
-        action("save", "Save", Kind::Primary, KeyCode::Esc, cx),
-    ];
+    let content = div().flex_1().min_h_0().flex().flex_col().gap_2().child(dim_small(name)).child(text).child(
+        dim_small(if edit.editor.modified {
+            "Markdown is fine. Esc or Ctrl+Enter saves and closes."
+        } else {
+            "Markdown is fine. Esc closes."
+        }),
+    );
+    // Until something's typed there's nothing to save, and the button says so: as "Save", closing an answer
+    // never written read as sending it.
+    let buttons = if edit.editor.modified {
+        let save = match edit.target {
+            Target::NewComment(_) if board.answers(edit.target) => "Answer",
+            Target::NewComment(_) => "Add comment",
+            Target::Reject(_) => "Reject",
+            _ => "Save",
+        };
+        vec![
+            button("discard", "Discard changes", Kind::Secondary)
+                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.act(cx, Board::discard_edit))),
+            action("save", save, Kind::Primary, KeyCode::Esc, cx),
+        ]
+    } else {
+        vec![action("save", "Close", Kind::Secondary, KeyCode::Esc, cx)]
+    };
     dialog(format!("{what}{modified}"), content, buttons).w(px(EDITOR_WIDTH)).h(relative(0.8))
 }

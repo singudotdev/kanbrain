@@ -161,7 +161,9 @@ saying why: the waiting tasks get the verdict as your answer. Proposed and rejec
 decisions list too.
 
 Descriptions and comments are written in the text editor: `esc` or **Save** saves (`ctrl+enter` too),
-**Discard changes** throws the edit away. Saving an empty new comment adds nothing; to remove a comment, delete it.
+**Discard changes** throws the edit away; until something's typed, the button is **Close**. An empty comment or
+answer adds nothing, and the status bar says so (an answer never written leaves the question waiting); to remove a
+comment, delete it.
 Markdown headings inside descriptions and comments are moved down a level when saved (`##` → `###` in a description,
 `##`/`###` → `####` in a comment), because those levels mark sections and comments in the task file.
 
