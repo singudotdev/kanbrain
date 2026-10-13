@@ -51,8 +51,7 @@ pub const USAGE: &str = "\
   project rename NAME… | repo NAME | move PROJECT… | remove [--purge]
             rename the project, or this repository in it; move this repository to another project;
             take every repository of the project out (--purge: and delete their tasks)
-  context   what's going on: active tasks, decisions and notes, for an agent to read first
-            (all but wait, context and project take --json to print JSON instead)";
+  context   what's going on: active tasks, decisions and notes, for an agent to read first";
 
 /// One of the entry commands, and whether to print JSON.
 #[derive(Debug, PartialEq, Eq)]
