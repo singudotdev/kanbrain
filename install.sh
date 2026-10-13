@@ -11,8 +11,9 @@
 #   --dir PATH         install directory inside your home (default: ~/.local/bin)
 #   --uninstall        remove the app(s) (your tasks are kept)
 #   --purge            remove the app(s) AND your central brain's data: entries, tags.md, the project registry
-#                      and cards, exported reports (asks for confirmation; add --yes to skip it). Projects'
-#                      own .brain/ folders are kept.
+#                      and cards, exported reports, and kanbrain's cache: write locks, backups taken before
+#                      migrations (asks for confirmation; add --yes to skip it). Projects' own .brain/ folders are
+#                      kept.
 #
 # kanbrain is installed and used per user: this script refuses to run as root/sudo and only
 # installs inside $HOME. (If root is your only user, e.g. in a container: KANBRAIN_ALLOW_ROOT=1.)
@@ -131,6 +132,16 @@ data_dir() {
     fi
 }
 
+# kanbrain's folder in the user's cache, as `kb` finds it: each brain's write lock, and the copies taken before
+# migrating one, which hold its data.
+cache_dir() {
+    if [ "$(uname -s)" = Darwin ]; then
+        printf '%s\n' "$HOME/Library/Caches/kanbrain"
+    else
+        printf '%s\n' "${XDG_CACHE_HOME:-$HOME/.cache}/kanbrain"
+    fi
+}
+
 # Files kanbrain creates in the central brain: NNNN-slug.md entries, tags.md, last-id, format, the project registry
 # (projects.md) and cards (projects/*.md), exported reports, older versions' config.md, leftover temp files.
 owned_files() {
@@ -163,7 +174,7 @@ if [ "$UNINSTALL" = 1 ]; then
         if [ -d "$data" ]; then
             entries=$(find "$data" -maxdepth 1 -type f -name '[0-9][0-9][0-9][0-9]*-*.md' | wc -l | tr -d ' ')
             say "data folder: $data"
-            say "this permanently deletes $entries entry file(s), tags.md, the project registry and cards, and exported reports"
+            say "this permanently deletes $entries entry file(s), tags.md, the project registry and cards, exported reports, and the backups taken before migrations"
             say "projects' own .brain/ folders are kept"
             confirm "delete your kanbrain data?" || die "cancelled, nothing was removed"
         else
@@ -202,6 +213,16 @@ if [ "$UNINSTALL" = 1 ]; then
         fi
     elif [ "$PURGE" = 0 ]; then
         say "your tasks were kept in $(data_dir) (use --purge to delete them too)"
+    fi
+    # Only what kanbrain puts there: the locks and the backups.
+    cache=$(cache_dir)
+    if [ "$PURGE" = 1 ] && [ -d "$cache" ]; then
+        rm -rf -- "$cache/locks" "$cache/backups"
+        if rmdir "$cache" 2>/dev/null; then
+            say "removed $cache"
+        else
+            say "deleted kanbrain's locks and backups; kept $cache because it contains other files"
+        fi
     fi
     exit 0
 fi

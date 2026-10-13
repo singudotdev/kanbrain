@@ -11,6 +11,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   also deletes what the cache folder kept about it: its write lock file and its migration backups.
 - A brain in the system's temporary folder keeps its write lock and backups there (`<tmp>/kanbrain-cache/`), not in
   the user's cache folder, so tests and throwaway brains leave nothing behind.
+- Uninstalling with `--purge` (`KANBRAIN_PURGE` on Windows) also clears kanbrain's cache folder: the write locks and
+  the backups taken before migrations, which hold copies of the data. Only those two go.
 
 ## [0.3.4] - 2026-10-13
 

@@ -191,6 +191,9 @@ What purge does:
 - **It deletes only what kanbrain created:** entry files (`NNNN-*.md`), `tags.md`, `last-id`, `format`, the project registry
   (`projects.md`) and cards (`projects/*.md`), exported reports (`reports/*.md`) and leftover temp files.
   **Projects' own `.brain/` folders are kept**: they belong to their repositories, so delete them there if you want.
+- **It also clears kanbrain's cache folder** (`~/.cache/kanbrain` on Linux, `~/Library/Caches/kanbrain` on macOS,
+  `%LOCALAPPDATA%\kanbrain` on Windows): each brain's write lock, and the backups taken before migrating one, which
+  are copies of its data. Only those two go; anything else there is kept.
   If the folder has anything else in it (for example your `KANBRAIN_DIR` is inside a notes vault or a git repository), those files and the folder are **kept**.
 - **It refuses** to work on your home folder or a drive root.
 

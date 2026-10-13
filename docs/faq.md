@@ -108,8 +108,8 @@ It's about 1 MB, so the duplication doesn't matter.
 
 ### How do I uninstall, or remove all my data?
 
-`--uninstall` removes only the program. `--purge` also deletes the central brain's data, after asking; projects'
-`.brain/` folders are kept. It never deletes files that kanbrain didn't create.
+`--uninstall` removes only the program. `--purge` also deletes the central brain's data and kanbrain's cache (write
+locks, the backups taken before migrations), after asking; projects' `.brain/` folders are kept. It never deletes files that kanbrain didn't create.
 See [Uninstalling](getting-started.md#uninstalling).
 
 ### Does kanbrain connect to the internet?

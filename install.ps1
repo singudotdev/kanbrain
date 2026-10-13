@@ -10,8 +10,9 @@
 #   $env:KANBRAIN_INSTALL_DIR = "D:\tools"    # default: %LOCALAPPDATA%\Programs\kanbrain
 #   $env:KANBRAIN_UNINSTALL   = "1"           # remove the app(s) (your tasks are kept)
 #   $env:KANBRAIN_PURGE       = "1"           # remove the app(s) AND your central brain's data: entries, tags.md,
-#                                                 # the project registry and cards, exported reports (projects' own
-#                                                 # .brain/ folders are kept)
+#                                                 # the project registry and cards, exported reports, and kanbrain's
+#                                                 # cache: write locks, backups taken before migrations (projects'
+#                                                 # own .brain/ folders are kept)
 #   $env:KANBRAIN_YES         = "1"           # with PURGE: don't ask for confirmation
 # Also: KANBRAIN_REPO, KANBRAIN_HOST (github | gitlab), KANBRAIN_GITLAB_URL, KANBRAIN_BASE_URL.
 #
@@ -127,7 +128,7 @@ function Install-Kanbrain {
                     if (Test-Path $dir -PathType Container) { $owned += @(Get-ChildItem $dir -File -Force -Filter '*.md') }
                 }
                 Say "data folder: $data"
-                Say "this permanently deletes $entries entry file(s), tags.md, the project registry and cards, and exported reports"
+                Say "this permanently deletes $entries entry file(s), tags.md, the project registry and cards, exported reports, and the backups taken before migrations"
                 Say "projects' own .brain folders are kept"
                 if ($env:KANBRAIN_YES -ne '1') {
                     $answer = ''
@@ -168,6 +169,17 @@ function Install-Kanbrain {
             else { Say "deleted kanbrain's files; kept $data because it contains other files" }
         } elseif (-not $purge) {
             Say "your tasks were kept in $data (set `$env:KANBRAIN_PURGE = `"1`" to delete them too)"
+        }
+        # kanbrain's folder in the user's cache, as kb finds it: each brain's write lock, and the copies taken before
+        # migrating one, which hold its data. Only those go.
+        $cache = Join-Path $env:LOCALAPPDATA 'kanbrain'
+        if ($purge -and (Test-Path $cache -PathType Container)) {
+            foreach ($sub in 'locks', 'backups') {
+                $dir = Join-Path $cache $sub
+                if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+            }
+            if (-not (Get-ChildItem $cache -Force)) { Remove-Item $cache -Force; Say "removed $cache" }
+            else { Say "deleted kanbrain's locks and backups; kept $cache because it contains other files" }
         }
         return
     }

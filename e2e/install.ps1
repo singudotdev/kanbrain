@@ -79,6 +79,20 @@ try {
     if ($userPath -and ($userPath -split ';') -contains $env:KANBRAIN_INSTALL_DIR) { Fail 'uninstall left the PATH entry' }
     if ((Get-Content $claude -Raw) -notmatch '## Project memory: kanbrain') { Fail 'uninstall touched the project' }
 
+    # Purging deletes the central brain's data and kanbrain's locks and backups in the cache, nothing else of either.
+    $env:LOCALAPPDATA = Join-Path $work 'localappdata'
+    $cache = Join-Path $env:LOCALAPPDATA 'kanbrain'
+    New-Item -ItemType Directory -Force -Path (Join-Path $cache 'locks'), (Join-Path $cache 'backups\0123456789abcdef') | Out-Null
+    Set-Content -Path (Join-Path $cache 'locks\0123456789abcdef.lock') -Value ''
+    Set-Content -Path (Join-Path $env:KANBRAIN_DIR 'notes-of-mine.txt') -Value 'mine'
+    $env:KANBRAIN_PURGE = '1'
+    $env:KANBRAIN_YES = '1'
+    & (Join-Path $repo 'install.ps1') *>&1 | Out-Null
+    if (Test-Path $cache) { Fail "purge left kanbrain's cache" }
+    if (-not (Test-Path (Join-Path $env:KANBRAIN_DIR 'notes-of-mine.txt'))) { Fail "purge deleted a file it didn't create" }
+    if (Test-Path (Join-Path $env:KANBRAIN_DIR 'projects.md')) { Fail 'purge kept the project registry' }
+    if ((Get-Content $claude -Raw) -notmatch '## Project memory: kanbrain') { Fail 'purge touched the project' }
+
     Write-Host 'PASS install.ps1'
 } finally {
     if ($server) { Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue }

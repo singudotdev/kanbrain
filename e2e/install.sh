@@ -4,7 +4,8 @@
 #
 # - the download is checked against its checksum, and refused when that doesn't match;
 # - the installed `kb` runs, and `init --all` has brought a registered project's agent section up to date;
-# - `--uninstall` takes it out again;
+# - `--uninstall` takes it out again; `--purge` deletes the central brain's files and kanbrain's locks and backups in
+#   the cache, keeping a file it didn't create;
 # - the kanban app gets its launcher with the logo: an application menu entry and icon on Linux, an app bundle on
 #   macOS. `kb` stands in for the app, which takes the same commands, so GPUI needn't be built.
 #
@@ -128,5 +129,20 @@ case "$(uname -s)" in
         ;;
     Darwin) [ ! -e "$HOME/Applications/kanbrain.app" ] || fail "uninstall left the app bundle" ;;
 esac
+
+# --purge deletes the central brain's data and kanbrain's locks and backups in the cache, and nothing else of either.
+case "$(uname -s)" in
+    Darwin) cache="$HOME/Library/Caches/kanbrain" ;;
+    *) cache="${XDG_CACHE_HOME:-$HOME/.cache}/kanbrain" ;;
+esac
+mkdir -p "$cache/locks" "$cache/backups/0123456789abcdef/20261013T120000-format-1-to-2"
+: >"$cache/locks/0123456789abcdef.lock"
+[ -d "$KANBRAIN_DIR" ] || fail "the central brain wasn't there to purge"
+: >"$KANBRAIN_DIR/notes-of-mine.txt"
+sh "$repo/install.sh" --purge --yes >/dev/null || fail "purging failed"
+[ ! -e "$cache" ] || fail "purge left kanbrain's cache"
+[ -e "$KANBRAIN_DIR/notes-of-mine.txt" ] && [ ! -e "$KANBRAIN_DIR/projects.md" ] ||
+    fail "purge deleted a file it didn't create, or kept one it did"
+grep -q "## Project memory: kanbrain" "$claude" || fail "purge touched the project"
 
 echo "PASS install.sh"
