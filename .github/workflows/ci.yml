@@ -104,7 +104,10 @@ jobs:
         shell: pwsh
         run: |
           Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
-          Invoke-ScriptAnalyzer -Path install.ps1, e2e/install.ps1 -Severity Error -EnableExit
+          # -Path takes one file.
+          foreach ($script in 'install.ps1', 'e2e/install.ps1') {
+            Invoke-ScriptAnalyzer -Path $script -Severity Error -EnableExit
+          }
       # This build installed by the installer users run, from a local copy of a release: checksum, a refused bad
       # one, `init --all` updating a registered project, the app's launcher, uninstalling and purging (see the
       # scripts' headers).
