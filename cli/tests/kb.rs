@@ -60,6 +60,18 @@ fn show_json_names_the_links_from_other_repositories() {
 }
 
 #[test]
+fn list_gives_a_sync_conflict_copy_an_id_of_its_own() {
+    let (central, dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    ok(&kb(dir.path(), central.path(), &["add", "First"], ""));
+    let first = std::fs::read_dir(central.path())
+        .unwrap()
+        .flatten()
+        .find(|e| e.file_name().to_string_lossy().starts_with("0001-"));
+    std::fs::copy(first.unwrap().path(), central.path().join("0001-first (conflicted copy).md")).unwrap();
+    assert_eq!(ok(&kb(dir.path(), central.path(), &["list"], "")), "## todo\n\n- #2 First\n- #1 First\n");
+}
+
+#[test]
 fn errors_go_to_stderr_with_a_failing_exit_code() {
     let (central, dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let run = |args: &[&str]| kb(dir.path(), central.path(), args, "");

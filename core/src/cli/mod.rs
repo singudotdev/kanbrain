@@ -353,11 +353,15 @@ impl Command {
         let central = projects::central_dir()?;
         match self {
             Command::List(args) => {
-                let (tasks, _) = store.load()?;
+                // Opened as the entry commands open it, repairs and all, so the ids it lists are the ones they take:
+                // a sync conflict copy listed under its original's id would be ambiguous.
+                let _lock = store.lock()?;
+                let brain = Brain::open_in(store, &central)?;
+                let tasks = &brain.tasks;
                 if args.json {
-                    println!("{}", list_json(&tasks, &args)?);
+                    println!("{}", list_json(tasks, &args)?);
                 } else {
-                    match list_markdown(&tasks, &args) {
+                    match list_markdown(tasks, &args) {
                         // As `search` says it, rather than nothing a reader could take for a failure.
                         empty if empty.is_empty() => println!("nothing to list"),
                         listed => print!("{listed}"),
