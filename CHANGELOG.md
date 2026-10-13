@@ -24,8 +24,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   closes the details or clears the search, and the notes and decisions tabs say their arrows move up and down.
 - A task's details name their buttons as the right-click menu does (**Edit title and tags**, **Move to
   project…**, **Delete…**, **Answer…**), from the same table, so the two can't drift apart.
-- Closing a task's details in the kanban app with a double-click on ✕ no longer opens a new task: the second click
-  landed on the last column's **+**, which closing the details brings under the pointer.
+- Closing a task's details in the kanban app with ✕ no longer opens a new task in Done: closing them widens the
+  board and brought the last column's **+** under the pointer. Each column's **+** now sits beside its count.
 
 ## [0.3.3] - 2026-10-13
 

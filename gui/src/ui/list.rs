@@ -2,7 +2,7 @@
 //! To do · Doing · Parked · Done. A row is one line, so long titles fit and more tasks show at once.
 //! Rows are dragged onto a section to change their status, as cards are onto a column.
 
-use super::board::{add_on_click, clock, draggable, drop_target, empty_hint, meta, quick_add, show_all_done};
+use super::board::{clock, draggable, drop_target, empty_hint, meta, quick_add, show_all_done};
 use super::theme::{self, BORDER, DIM, TEXT};
 use super::widgets::{self, Kind, card, dim, dim_small, small, tag_chips};
 use super::{BrainView, menu};
@@ -70,7 +70,8 @@ fn header(board: &Board, status: Status, shown: usize, cx: &mut Context<BrainVie
         .child(div().size(px(8.)).rounded_full().bg(rgb(theme::status_color(status))))
         .child(div().font_weight(FontWeight::SEMIBOLD).child(theme::status_label(status)))
         .child(dim_small(count))
-        .child(div().flex_1())
+        // Beside the count, not at the header's end: closing the details widens the board and brought the last
+        // column's + under the pointer, which clicked it as the details closed.
         .child(
             small(widgets::button(("list-add", status as usize), "+", Kind::Ghost))
                 .tooltip(widgets::tooltip(if status == Status::Todo {
@@ -78,7 +79,7 @@ fn header(board: &Board, status: Status, shown: usize, cx: &mut Context<BrainVie
                 } else {
                     "New task here"
                 }))
-                .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| add_on_click(this, event, status, cx))),
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.new_entry(status)))),
         );
     drop_target(header, status, cx)
 }

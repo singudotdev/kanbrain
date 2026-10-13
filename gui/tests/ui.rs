@@ -457,6 +457,13 @@ fn closing_the_details_opens_nothing(cx: &mut gpui::TestAppContext) {
     open(cx);
     view.read_with(cx, |view, _| assert!(view.board.drawer, "a double-click opens it"));
     let close = cx.debug_bounds("close drawer").expect("the drawer has a close button").center();
+    cx.simulate_click(close, gpui::Modifiers::none());
+    for add in ["add todo", "add doing", "add parked", "add done"] {
+        let plus = cx.debug_bounds(add).expect("each column has a +");
+        assert!(!plus.contains(&close), "{add} is where the close button was");
+    }
+    view.read_with(cx, |view, _| assert!(!view.board.drawer && matches!(view.board.mode, crate::state::Mode::Normal)));
+    open(cx);
     for click_count in [1, 2] {
         let (button, modifiers, first_mouse) = (MouseButton::Left, gpui::Modifiers::none(), false);
         cx.simulate_event(gpui::MouseDownEvent { position: close, button, modifiers, click_count, first_mouse });

@@ -76,7 +76,8 @@ fn column(board: &Board, status: Status, scroll: &ScrollHandle, follow: bool, cx
         .child(div().size(px(8.)).rounded_full().bg(rgb(theme::status_color(status))))
         .child(div().font_weight(FontWeight::SEMIBOLD).child(theme::status_label(status)))
         .child(dim_small(count))
-        .child(div().flex_1())
+        // Beside the count, not at the header's end: closing the details widens the board and brought the last
+        // column's + under the pointer, which clicked it as the details closed.
         .child(
             small(widgets::button(("add", status as usize), "+", Kind::Ghost))
                 .debug_selector(move || format!("add {}", status.as_str()))
@@ -85,7 +86,7 @@ fn column(board: &Board, status: Status, scroll: &ScrollHandle, follow: bool, cx
                 } else {
                     "New task here"
                 }))
-                .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| add_on_click(this, event, status, cx))),
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.new_entry(status)))),
         );
     let now = now();
     let rows: Vec<_> = cards
@@ -109,14 +110,6 @@ fn column(board: &Board, status: Status, scroll: &ScrollHandle, follow: bool, cx
         .children(empty)
         .children((status == Status::Done).then(|| show_all_done(board, cx)).flatten());
     drop_target(card().flex_1().min_w(px(COLUMN_MIN_WIDTH)), status, cx).child(header).child(body)
-}
-
-/// A column's or section's +: a new entry in `status`. Closing the details widens the board and brings the last
-/// column's + under the closing button, so the second click of a double-click there isn't taken as one on it.
-pub(super) fn add_on_click(this: &mut BrainView, event: &ClickEvent, status: Status, cx: &mut Context<BrainView>) {
-    if event.click_count() == 1 {
-        this.act(cx, |b| b.new_entry(status));
-    }
 }
 
 /// Makes `target` take dropped cards, moving them to `status`, and light up while one is over it.
