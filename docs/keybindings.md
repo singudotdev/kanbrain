@@ -81,7 +81,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | search box | type to filter; `enter` or `esc` stop typing and keep the filter |
 | quick add | `enter` adds the task and keeps the field open for the next; `esc` closes it |
 | new / edit form | `tab` moves between project (new entries), title, tags, related and, for a new task, its column; `enter` saves; `esc` cancels. In **Project**: type to search, `↑` `↓` move, `enter` picks it. In **Related**: type to search, `↑` `↓` move, `enter` checks or unchecks; the Save button saves. On **Column**: `←` `→` pick it |
-| text editor (descriptions, comments, answers, a decision's reason, a project's description and notes) | `enter` new line; `esc` or `ctrl+enter` **save** (the button says what: **Answer**, **Add comment**, **Accept**, **Reject**, **Save**); **Discard changes** throws the edit away; with nothing typed, `esc` or **Close** closes it |
+| text editor (descriptions, comments, answers, a decision's reason, a project's description and notes) | `enter` new line; `esc` or `ctrl+enter` **save** (the button says what: **Answer**, **Add comment**, **Accept**, **Reject**, **Save**); **Discard changes** (`ctrl+d`) throws the edit away; with nothing typed, `esc` or **Close** closes it |
 | link picker | type to search; `↑` `↓` move; `enter` links or unlinks; `esc` closes |
 | "which project?" (quick add, or move) | type to filter; `↑` `↓` move; `enter` opens the quick-add field there, or moves the entry; `esc` closes it |
 | confirmation (delete, update) | `y` or `enter` goes ahead; `n` or `esc` cancels |

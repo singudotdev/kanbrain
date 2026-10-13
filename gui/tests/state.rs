@@ -305,6 +305,10 @@ fn comments_and_descriptions_are_written_from_the_editor() {
     f.press(KeyCode::Char('m'));
     f.type_text("notes");
     f.board.discard_edit();
+    f.press(KeyCode::Char('m'));
+    f.type_text("more notes");
+    f.board.on_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL));
+    assert!(matches!(f.board.mode, Mode::Normal), "ctrl+d discards too");
     let task = f.on_disk(1);
     assert_eq!(task.comments[0].body, "found it");
     assert_eq!(task.description, "", "discarded");

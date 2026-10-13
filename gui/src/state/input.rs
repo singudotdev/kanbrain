@@ -39,7 +39,10 @@ impl Board {
             },
             Mode::Edit(mut edit) => {
                 let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-                if edit.editor.on_key(key) == Outcome::Save || (ctrl && key.code == KeyCode::Enter) {
+                if ctrl && key.code == KeyCode::Char('d') {
+                    // Discard changes; the mode is already taken.
+                    self.notify("changes discarded");
+                } else if edit.editor.on_key(key) == Outcome::Save || (ctrl && key.code == KeyCode::Enter) {
                     self.save_edit(&edit);
                 } else {
                     self.mode = Mode::Edit(edit);

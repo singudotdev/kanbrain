@@ -6,7 +6,7 @@ use crate::text::event::KeyCode;
 use crate::ui::caret::caret;
 use crate::ui::pointer::{Hit, TextBox, pointable};
 use crate::ui::theme::{self, ACCENT};
-use crate::ui::widgets::{Kind, button, dim_small};
+use crate::ui::widgets::{Kind, button, dim_small, tooltip};
 use crate::ui::{BrainView, action, byte_at, edited, when};
 use gpui::{ClickEvent, Context, Div, ScrollHandle, div, prelude::*, px, relative, rgb};
 
@@ -79,7 +79,7 @@ pub(super) fn draw(
     let text = pointable(text, TextBox::Editor, hits, cx);
     let content = div().flex_1().min_h_0().flex().flex_col().gap_2().child(dim_small(name)).child(text).child(
         dim_small(if edit.editor.modified {
-            "Markdown is fine. Esc or Ctrl+Enter saves and closes."
+            "Markdown is fine. Esc or Ctrl+Enter saves and closes; Ctrl+D discards the changes."
         } else {
             "Markdown is fine. Esc closes."
         }),
@@ -96,6 +96,7 @@ pub(super) fn draw(
         };
         vec![
             button("discard", "Discard changes", Kind::Secondary)
+                .tooltip(tooltip("Shortcut: ctrl+d"))
                 .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.act(cx, Board::discard_edit))),
             action("save", save, Kind::Primary, KeyCode::Esc, cx),
         ]

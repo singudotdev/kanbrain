@@ -168,7 +168,7 @@ the decisions list too.
 
 Descriptions and comments are written in the text editor: `esc` or **Save** saves (`ctrl+enter` too; the button
 says **Add comment**, **Answer**, **Accept** or **Reject** when that's what saving does),
-**Discard changes** throws the edit away; until something's typed, the button is **Close**. An empty comment or
+**Discard changes** (`ctrl+d`) throws the edit away; until something's typed, the button is **Close**. An empty comment or
 answer adds nothing, and the status bar says so (an answer never written leaves the question waiting); to remove a
 comment, delete it.
 Markdown headings inside descriptions and comments are moved down a level when saved (`##` → `###` in a description,
