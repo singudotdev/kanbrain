@@ -676,7 +676,7 @@ fn the_project_description_is_shared_by_its_repositories() {
 }
 
 #[test]
-fn project_info_opens_for_a_shown_project() {
+fn manage_project_opens_for_a_shown_project() {
     let (central, _code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
     let key = |board: &mut Board, code| board.on_key(KeyEvent::new(code, KeyModifiers::NONE));
@@ -686,11 +686,11 @@ fn project_info_opens_for_a_shown_project() {
     assert!(board.message().is_some_and(|m| m.contains("select one of its cards")));
     board.selected = Some(Key { src: 2, id: 1 });
     key(&mut board, KeyCode::Char('I'));
-    assert!(matches!(board.mode, Mode::ProjectInfo(2)), "the selected card's project");
+    assert!(matches!(board.mode, Mode::ManageProject(2)), "the selected card's project");
     key(&mut board, KeyCode::Esc);
     board.set_scope(Scope::Repo(2));
     key(&mut board, KeyCode::Char('I'));
-    assert!(matches!(board.mode, Mode::ProjectInfo(2)));
+    assert!(matches!(board.mode, Mode::ManageProject(2)));
     assert_eq!(board.project_repos(2), [1, 2], "it lists every repository of shop");
     key(&mut board, KeyCode::Esc);
     assert!(matches!(board.mode, Mode::Normal));
@@ -705,10 +705,10 @@ fn an_open_dialog_follows_its_project_when_another_goes() {
         board.sources.iter().position(|s| s.project.as_deref() == Some(project)).unwrap()
     };
     let blog = src_of(&board, "blog");
-    board.mode = Mode::ProjectInfo(blog);
+    board.mode = Mode::ManageProject(blog);
     projects::unregister(central.path(), &code.path().join("api/.brain")).unwrap();
     board.reload().unwrap();
-    assert!(matches!(board.mode, Mode::ProjectInfo(src) if src == blog - 1 && src == src_of(&board, "blog")));
+    assert!(matches!(board.mode, Mode::ManageProject(src) if src == blog - 1 && src == src_of(&board, "blog")));
     projects::unregister(central.path(), &code.path().join("blog/.brain")).unwrap();
     board.reload().unwrap();
     assert!(matches!(board.mode, Mode::Normal), "closed with its project");
@@ -917,7 +917,7 @@ fn the_palette_lists_what_can_be_done_with_its_key_and_runs_it() {
 }
 
 #[test]
-fn a_picked_folder_becomes_a_project_as_sb_init_makes_it() {
+fn a_picked_folder_becomes_a_project_as_kb_init_makes_it() {
     use kanbrain_core::projects;
     let (central, code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
@@ -1030,7 +1030,7 @@ fn projects_and_repositories_are_managed_from_the_projects_info() {
     type_in(&mut board, "store");
     key(&mut board, KeyCode::Enter);
     assert_eq!(labels(&board), ["store/api", "store/web", "blog"]);
-    assert!(matches!(board.mode, Mode::ProjectInfo(_)), "back to the project's info");
+    assert!(matches!(board.mode, Mode::ManageProject(_)), "back to Manage project");
 
     board.ask_rename_repo(src(&board, "store/api"));
     type_in(&mut board, "web");
@@ -1038,7 +1038,7 @@ fn projects_and_repositories_are_managed_from_the_projects_info() {
     assert!(matches!(board.mode, Mode::Manage(_)), "a name the project has: the dialog stays, with why");
     assert!(board.message().unwrap().contains("already has a repository named `web`"), "{:?}", board.message());
     key(&mut board, KeyCode::Esc);
-    assert!(matches!(board.mode, Mode::ProjectInfo(_)), "esc goes back to the project's info");
+    assert!(matches!(board.mode, Mode::ManageProject(_)), "esc goes back to Manage project");
     board.ask_rename_repo(src(&board, "store/api"));
     type_in(&mut board, "backend");
     key(&mut board, KeyCode::Enter);

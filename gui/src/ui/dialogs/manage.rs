@@ -1,4 +1,4 @@
-//! Changing a project or one of its repositories, from the project's info: renaming either, moving a repository
+//! Changing a project or one of its repositories, from Manage project: renaming either, moving a repository
 //! to another project, and taking a repository or the whole project out, keeping their tasks or deleting them.
 
 use super::{DIALOG_WIDTH, dialog, labeled};

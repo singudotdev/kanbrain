@@ -1,4 +1,4 @@
-//! Renaming, moving and removing projects and their repositories, from the project's info: what `kb project` and
+//! Renaming, moving and removing projects and their repositories, from Manage project: what `kb project` and
 //! `kb deinit` do, through the same functions, after which the window re-reads its brains.
 
 use super::{Board, Manage, Mode, Picker, PickerKey, ProjectOption, Request, Scope};
@@ -52,7 +52,7 @@ impl Board {
             match key.code {
                 KeyCode::Char('y') | KeyCode::Enter => self.remove(src, whole, false),
                 KeyCode::Char('d') => self.remove(src, whole, true),
-                KeyCode::Esc | KeyCode::Char('n') => self.mode = Mode::ProjectInfo(src),
+                KeyCode::Esc | KeyCode::Char('n') => self.mode = Mode::ManageProject(src),
                 _ => self.mode = Mode::Manage(manage),
             }
             return;
@@ -65,7 +65,7 @@ impl Board {
         let outcome = picker.key(key, count);
         let sel = picker.sel;
         match outcome {
-            PickerKey::Close => self.mode = Mode::ProjectInfo(src),
+            PickerKey::Close => self.mode = Mode::ManageProject(src),
             PickerKey::Stay => self.mode = Mode::Manage(manage),
             PickerKey::Choose => {
                 self.mode = Mode::Manage(manage);
@@ -103,7 +103,7 @@ impl Board {
             if matches!(self.scope, Scope::Project(_) | Scope::Repo(_)) {
                 self.set_scope(Scope::Project(project));
             }
-            self.mode = self.src_at(&dir).map_or(Mode::Normal, Mode::ProjectInfo);
+            self.mode = self.src_at(&dir).map_or(Mode::Normal, Mode::ManageProject);
         }
     }
 

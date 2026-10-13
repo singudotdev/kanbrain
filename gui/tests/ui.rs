@@ -286,7 +286,7 @@ fn the_project_dropdown_filters_and_picks_with_the_mouse(cx: &mut gpui::TestAppC
 }
 
 #[gpui::test]
-fn project_info_draws_every_repository(cx: &mut gpui::TestAppContext) {
+fn manage_project_draws_every_repository(cx: &mut gpui::TestAppContext) {
     let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     for repo in ["api", "web"] {
         let dir = code.path().join(repo).join(".brain");
@@ -304,7 +304,7 @@ fn project_info_draws_every_repository(cx: &mut gpui::TestAppContext) {
     cx.run_until_parked();
     let info = cx.debug_bounds("manage-project-button").expect("the bar has the manage button").center();
     cx.simulate_click(info, gpui::Modifiers::none());
-    view.read_with(cx, |view, _| assert!(matches!(view.board.mode, crate::state::Mode::ProjectInfo(1))));
+    view.read_with(cx, |view, _| assert!(matches!(view.board.mode, crate::state::Mode::ManageProject(1))));
     cx.simulate_keystrokes("escape");
     view.read_with(cx, |view, _| assert!(matches!(view.board.mode, crate::state::Mode::Normal)));
 }

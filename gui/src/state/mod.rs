@@ -118,7 +118,7 @@ pub enum Request {
     /// Open the file in `$EDITOR`, and re-read the files when it exits.
     Edit(PathBuf),
     /// Open the system's folder dialog, for a project to add, and hand the folder to [`Board::name_project`],
-    /// with the project it joins when it's added from that project's info.
+    /// with the project it joins when it's added from Manage project.
     Folder(Option<String>),
     /// Install the newer release and start it in place of this app; see `crate::update`.
     Update,

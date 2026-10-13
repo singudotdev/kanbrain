@@ -34,12 +34,12 @@ pub enum Mode {
     Tags(Picker),
     /// What a project is and how it's doing: its description, its repositories and their tasks.
     /// The index is one of its repositories' brains.
-    ProjectInfo(usize),
+    ManageProject(usize),
     /// The command palette: every action with its key, filtered by a search.
     Palette(Picker),
     /// Naming the project a folder picked in the system's dialog becomes.
     AddProject(AddProject),
-    /// Renaming, moving or removing a project or one of its repositories, from its info.
+    /// Renaming, moving or removing a project or one of its repositories, from Manage project.
     Manage(Manage),
 }
 
@@ -80,7 +80,7 @@ impl Mode {
                 Self::Where(WherePicker { picker, then: WhereFor::Move(key(k)?) })
             }
             Self::Menu(menu) => Self::Menu(super::MenuPicker { key: key(menu.key)?, ..menu }),
-            Self::ProjectInfo(src) => Self::ProjectInfo(to(src)?),
+            Self::ManageProject(src) => Self::ManageProject(to(src)?),
             Self::Manage(manage) => Self::Manage(match manage {
                 Manage::RenameProject { src, name } => Manage::RenameProject { src: to(src)?, name },
                 Manage::RenameRepo { src, name } => Manage::RenameRepo { src: to(src)?, name },
@@ -283,7 +283,7 @@ pub struct AddProject {
     pub picker: Picker,
 }
 
-/// A change to a project or one of its repositories, asked from the project's info. Each `src` is one of the
+/// A change to a project or one of its repositories, asked from Manage project. Each `src` is one of the
 /// project's repositories' brains, by index in `Board::sources`.
 #[derive(Debug)]
 pub enum Manage {
@@ -318,7 +318,7 @@ pub enum Manage {
 }
 
 impl Manage {
-    /// The repository it was asked from, whose project's info it goes back to.
+    /// The repository it was asked from, whose Manage project it goes back to.
     pub fn src(&self) -> usize {
         match self {
             Self::RenameProject { src, .. }

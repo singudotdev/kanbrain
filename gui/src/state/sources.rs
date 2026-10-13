@@ -278,9 +278,9 @@ impl Board {
 
     /// Opens the info of the project shown, else of the selected entry's project. With neither, says
     /// how to get one rather than doing nothing, since a key that does nothing reads as broken.
-    pub fn open_project_info(&mut self) {
+    pub fn open_manage_project(&mut self) {
         match self.project_here() {
-            Some(src) => self.mode = Mode::ProjectInfo(src),
+            Some(src) => self.mode = Mode::ManageProject(src),
             None => self.notify("no project here: select one of its cards, or show it with P"),
         }
     }

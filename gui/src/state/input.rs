@@ -96,9 +96,9 @@ impl Board {
                     self.choose_tag(sel);
                 }
             }
-            Mode::ProjectInfo(src) => {
+            Mode::ManageProject(src) => {
                 if !matches!(key.code, KeyCode::Esc | KeyCode::Enter | KeyCode::Char('I' | 'q')) {
-                    self.mode = Mode::ProjectInfo(src);
+                    self.mode = Mode::ManageProject(src);
                 }
             }
             Mode::Palette(picker) => self.key_palette(picker, key),
@@ -325,7 +325,7 @@ impl Board {
             Mode::AddProject(add) => Some(Typing::Line(&mut add.picker.search)),
             Mode::Manage(manage) => manage.picker_mut().map(|picker| Typing::Line(&mut picker.search)),
             Mode::Edit(edit) => Some(Typing::Text(&mut edit.editor)),
-            Mode::Normal | Mode::Confirm(_) | Mode::ProjectInfo(_) | Mode::Menu(_) => None,
+            Mode::Normal | Mode::Confirm(_) | Mode::ManageProject(_) | Mode::Menu(_) => None,
         }
     }
 
@@ -367,7 +367,7 @@ impl Board {
                 Manage::Remove { .. } => None,
             },
             Mode::Edit(edit) => edit.editor.selected_text(),
-            Mode::Normal | Mode::Confirm(_) | Mode::ProjectInfo(_) | Mode::Menu(_) => None,
+            Mode::Normal | Mode::Confirm(_) | Mode::ManageProject(_) | Mode::Menu(_) => None,
         }
     }
 

@@ -270,7 +270,7 @@ every second / before each input ──▶ Watcher::changed ──▶ Board::rel
 - **Modes** (`state::Mode`): `Normal`, `Search`, `Form`, `QuickAdd`, `Edit` (text editor with a `Target`: description,
   new or existing comment, a decision's reason, a project's description or a repository's notes), `Confirm` (a
   delete, or the update), `Links`, `Scopes` and `Tags` (the dropdowns), `Where` (which brain a quick-added task goes
-  in, or an entry moves to), `Menu` (the right-click menu), `ProjectInfo` (Manage project), `Palette` (the command
+  in, or an entry moves to), `Menu` (the right-click menu), `ManageProject`, `Palette` (the command
   palette), `AddProject` (naming a picked folder's project) and `Manage` (renaming, moving or removing from Manage
   project). A reload points an open one at its brains' new places (`Mode::remap`). `on_key` takes the current mode out, handles the
   key, and each handler puts back the mode to continue in.

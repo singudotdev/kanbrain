@@ -332,7 +332,7 @@ pub const ACTIONS: &[Action] = &[
         Tabs::Every,
         When::Project,
         "Manage project: rename, move or remove it and its repositories; its description and time",
-        Board::open_project_info,
+        Board::open_manage_project,
     ),
     letter("E", Tabs::Every, When::Project, "Edit the project's description", Board::edit_project_description),
     letter("A", Tabs::Every, When::Always, "Add a project: pick a code folder, as `kb init` there", |b| {
