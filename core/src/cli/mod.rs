@@ -28,6 +28,7 @@ use crate::period::{Period, Unit};
 use crate::store::{self, Store};
 use crate::{export, platform, projects};
 use anyhow::{Context, Result, anyhow, bail};
+use chrono::{DateTime, Local};
 use std::fmt::Write;
 use std::io::{IsTerminal, Read};
 use std::path::Path;
@@ -329,7 +330,10 @@ impl Command {
                 }
                 Ok(())
             }
-            Command::Status => print_status(&central),
+            Command::Status => {
+                println!("{}", status_line(&central, now())?);
+                Ok(())
+            }
             Command::Entries(args) => run_entries(store, &central, args),
             Command::Report(args) => print_report(store, &args),
             Command::Path => {
@@ -452,16 +456,15 @@ fn author() -> Result<Author> {
 /// One line for status bars: `#id title HH:MM:SS` for each running session, or `idle`, then how many
 /// tasks wait for an answer, if any. Looks in every brain, wherever it's run from, since each runs its
 /// own tasks; a project's task says which project, and several are joined:
-/// `shop/api #3 Fix login 00:42:17 · blog #1 Post 00:05:00 · 2 waiting`.
-fn print_status(central: &Path) -> Result<()> {
-    let now = now();
+/// `shop/api #3 Fix login 00:42:17 · blog #1 Post 00:05:00 · 2 waiting`. A brain it can't read (one a newer kanbrain wrote, say) is left out rather than the whole line lost.
+fn status_line(central: &Path, now: DateTime<Local>) -> Result<String> {
     let mut brains = vec![(None, central.to_path_buf())];
     let repos = projects::load(central)?;
     brains.extend(repos.iter().map(|r| (Some(r.label(&repos)), r.dir.clone())));
     let mut running = Vec::new();
     let mut waiting = 0;
     for (name, dir) in brains.into_iter().filter(|(_, dir)| dir.is_dir()) {
-        let (tasks, _) = Store::at(&dir)?.load()?;
+        let Ok((tasks, _)) = Store::at(&dir).and_then(|store| store.load()) else { continue };
         let project = name.map(|n| format!("{n} ")).unwrap_or_default();
         for (task, clock) in tasks.iter().filter_map(|t| Some((t, t.running_for(now)?))) {
             running.push(format!("{project}#{} {} {}", task.id, task.title, fmt_clock(clock)));
@@ -474,8 +477,7 @@ fn print_status(central: &Path) -> Result<()> {
     if waiting > 0 {
         running.push(format!("{waiting} waiting"));
     }
-    println!("{}", running.join(" · "));
-    Ok(())
+    Ok(running.join(" · "))
 }
 
 /// Runs one of the entry commands on the brain in `store`.

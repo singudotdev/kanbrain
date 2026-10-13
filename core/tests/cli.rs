@@ -132,3 +132,21 @@ fn the_usage_gives_the_attribution_notice_requires() {
     assert!(usage.contains("kanbrain by singudotdev (https://github.com/singudotdev/kanbrain)"));
     assert!(usage.contains("AGPL-3.0-only with the additional terms in\nNOTICE"));
 }
+
+#[test]
+fn the_status_line_names_running_tasks_and_skips_a_brain_it_cant_read() {
+    use crate::brain::NewEntry;
+    let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let [api, blog] = ["api", "blog"].map(|name| code.path().join(name).join(store::PROJECT_DIR));
+    for (dir, project) in [(&api, "shop"), (&blog, "blog")] {
+        projects::register(central.path(), project, dir).unwrap();
+    }
+    assert_eq!(status_line(central.path(), now()).unwrap(), "idle");
+    let mut brain = Brain::open(Store::at(&api).unwrap()).unwrap();
+    let id = brain.add(NewEntry { title: "Fix login".into(), ..NewEntry::default() }).unwrap();
+    brain.set_status(id, Status::Doing).unwrap();
+    assert!(status_line(central.path(), now()).unwrap().starts_with("shop #1 Fix login 00:00:"));
+    Store::at(&blog).unwrap();
+    std::fs::write(blog.join(crate::migrate::FORMAT_FILE), "99\n").unwrap();
+    assert!(status_line(central.path(), now()).unwrap().starts_with("shop #1 Fix login"), "blog is newer");
+}
