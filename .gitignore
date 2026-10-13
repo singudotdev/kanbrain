@@ -1,1 +1,7 @@
 /target
+
+# Project memory and agent context: kept locally, not in the repository.
+/.brain/
+/CLAUDE.md
+/AGENTS.md
+/.claude/
