@@ -102,14 +102,14 @@ fn draw_confirm(board: &Board, confirm: Confirm, cx: &mut Context<BrainView>) ->
     let (title, lines) = match confirm {
         Confirm::Delete(key) => {
             let task = board.task(key)?;
-            let consequence = "Its markdown file, with description, comments and history, is removed.";
+            let consequence = "Its markdown file, with description, comments and history, will be removed.";
             (format!("Delete {}?", task.kind.as_str()), vec![question(task), Line::styled(consequence, DIM_STYLE)])
         }
         Confirm::DeleteComment(key, index) => {
             let comment = board.task(key).and_then(|t| t.comments.get(index))?;
             let preview = comment.body.lines().next().unwrap_or_default();
             let lines = vec![
-                Line::raw("This comment is removed."),
+                Line::raw("This comment will be removed."),
                 Line::styled(format!("{} · {}", when(comment.created), truncate(preview, 48)), DIM_STYLE),
             ];
             ("Delete comment?".to_string(), lines)
