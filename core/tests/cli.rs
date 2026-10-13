@@ -98,7 +98,9 @@ fn list_notes_and_decisions() {
         list_markdown(&tasks, &docs),
         "## notes\n\n- #2 Token TTL #auth\n\n## decisions\n\n- #3 Refresh server-side\n"
     );
-    let json: serde_json::Value = serde_json::from_str(&list_json(&tasks, &docs).unwrap()).unwrap();
+    let line = list_json(&tasks, &docs).unwrap();
+    assert_eq!(line.lines().count(), 1, "{line}");
+    let json: serde_json::Value = serde_json::from_str(&line).unwrap();
     assert_eq!(json[0]["kind"], "note");
     assert_eq!(json[1]["id"], 3);
 }

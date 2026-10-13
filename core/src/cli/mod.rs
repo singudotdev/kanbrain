@@ -555,10 +555,11 @@ fn list_markdown(tasks: &[Task], args: &ListArgs) -> String {
     out
 }
 
-/// The same entries as `list_markdown`, in the same order, as a JSON array of summaries.
+/// The same entries as `list_markdown`, in the same order, as a JSON array of summaries on one line, as every
+/// command's JSON is.
 fn list_json(tasks: &[Task], args: &ListArgs) -> Result<String> {
     let entries: Vec<Summary> = list_sections(tasks, args).into_iter().flat_map(|(_, e)| e).map(Summary::new).collect();
-    Ok(serde_json::to_string_pretty(&entries)?)
+    Ok(serde_json::to_string(&entries)?)
 }
 
 #[cfg(test)]
