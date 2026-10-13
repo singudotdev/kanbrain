@@ -52,6 +52,19 @@ its description, shared by its repositories, and with one repository shown, that
 them. **Project info** at the end of the bar (`I`) shows the whole project: its description, each repository with
 its folder, notes, tasks per status and what's running, and the time tracked this week.
 
+It's also where a project is managed:
+
+| button | does |
+| --- | --- |
+| **Rename…** by About | renames the project |
+| **Rename…** on a repository | renames it in the project (one word); the other repositories' links to it follow |
+| **Move…** on a repository | moves it to another project, found with a search or named new; its links to this project's repositories are dropped |
+| **Remove…** on a repository, **Remove project…** | takes it (or every repository of the project) out: **Unlink** keeps its `.brain/` and tasks, to add it again later; **Unlink and delete tasks** deletes them too |
+| **+ Add repository** | picks another folder for this project, as **+ Add project** does with the project already chosen |
+
+Each repository of a project has its own name, its folder's unless another repository has it: then the folder above
+goes first (`backend-app`), so two folders named alike can join one project.
+
 New entries (**+ New task**, `n` or a column's `+`) go where the filter points: with **Central**, a project of one
 repository, or one repository shown, that brain; with **All**, or a project of several repositories, the selected
 card's brain, or else the first shown. The form's **Project** field says which and changes it: click it (or `tab`

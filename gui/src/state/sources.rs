@@ -178,12 +178,13 @@ impl Board {
         self.set_scope(scope);
     }
 
-    /// Asks which project the folder `dir`, picked in the system's dialog, joins or starts. The name begins as the
-    /// one its `.brain/` card gives if it has one (it was a repository before), else the folder's, selected so that
-    /// typing replaces it.
-    pub fn name_project(&mut self, dir: PathBuf) {
+    /// Asks which project the folder `dir`, picked in the system's dialog, joins or starts. The name begins as
+    /// `project`, the one it's added from, else the one its `.brain/` card gives if it has one (it was a repository
+    /// before), else the folder's, selected so that typing replaces it.
+    pub fn name_project(&mut self, dir: PathBuf, project: Option<String>) {
         let card = projects::read_repo_card(&dir.join(PROJECT_DIR)).map(|card| card.project);
-        let name = card.or_else(|| Some(dir.file_name()?.to_string_lossy().into_owned())).unwrap_or_default();
+        let folder = || Some(dir.file_name()?.to_string_lossy().into_owned());
+        let name = project.or(card).or_else(folder).unwrap_or_default();
         let mut search = LineInput::new(&name);
         search.select_all();
         self.mode = Mode::AddProject(AddProject { dir, picker: Picker { search, sel: 0 } });

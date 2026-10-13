@@ -14,7 +14,8 @@ fn commands() {
     assert_eq!(parse(&["init"]).unwrap(), Command::Init(None, None));
     assert_eq!(parse(&["init", "api"]).unwrap(), Command::Init(Some("api".into()), None));
     assert_eq!(parse(&["init", "--all"]).unwrap(), Command::InitAll);
-    assert_eq!(parse(&["deinit"]).unwrap(), Command::Deinit);
+    assert_eq!(parse(&["deinit"]).unwrap(), Command::Deinit(false));
+    assert_eq!(parse(&["deinit", "--purge"]).unwrap(), Command::Deinit(true));
     assert_eq!(
         parse(&["init", "--repo", "web", "shop"]).unwrap(),
         Command::Init(Some("shop".into()), Some("web".into()))

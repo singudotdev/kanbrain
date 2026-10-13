@@ -56,6 +56,7 @@ context: write commands reply with one line, like `#4 Fix login 500 (doing) #aut
 | `kb describe ID TEXT` | replace the description |
 | `kb link ID OTHER…` | link entries to each other (`REPO#ID`: in another repository of the project) |
 | `kb project [describe\|notes TEXT\|-]` | show or rewrite the project's description and this repository's role |
+| `kb project rename\|repo\|move\|remove` | rename the project or this repository, move it to another project, or remove the project |
 | `kb show ID` | one entry in full: status, time, description, comments, links, history |
 | `kb search WORDS…` | find entries by words; `#tag` matches tags only |
 | `kb list [doing\|todo\|parked\|done\|all] [notes] [decisions] [--tag T]` | print tasks as markdown |

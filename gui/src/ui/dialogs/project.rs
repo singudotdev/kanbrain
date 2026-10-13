@@ -1,4 +1,5 @@
-//! A project at a glance: its description, its repositories and the week's time.
+//! A project at a glance, and where it's managed: its description, its repositories and the week's time, with
+//! buttons to rename the project or a repository, move or remove a repository, add one, and remove the project.
 
 use super::{WIDE_WIDTH, dialog};
 use crate::state::{Board, COLUMNS, Target};
@@ -7,6 +8,7 @@ use crate::ui::markdown;
 use crate::ui::theme::{self};
 use crate::ui::widgets::{Kind, button, dim, dim_small, section, small};
 use crate::ui::{BrainView, action};
+use gpui::Stateful;
 use gpui::{ClickEvent, Context, Div, ElementId, div, prelude::*, px, rgb};
 use kanbrain_core::model::{fmt_clock, fmt_dur, now, worked};
 use kanbrain_core::period::{Period, Unit};
@@ -18,6 +20,11 @@ pub(super) fn draw(board: &Board, src: usize, cx: &mut Context<BrainView>) -> Op
     let edit = |id: String, target: Target, cx: &mut Context<BrainView>| {
         small(button(ElementId::Name(id.into()), "Edit", Kind::Ghost))
             .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.open_editor(target))))
+    };
+    // Rename, Move and Remove on each repository (`at`), and on the project.
+    let manage = |id: &str, at: usize, label: &'static str, act: fn(&mut Board, usize), cx: &mut Context<BrainView>| {
+        small(button(ElementId::Name(format!("{id} {at}").into()), label, Kind::Ghost))
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| act(b, at))))
     };
     let text = |id: String, text: &str, empty: &'static str| {
         if text.is_empty() { dim(empty) } else { markdown::render(id, text) }
@@ -55,7 +62,12 @@ pub(super) fn draw(board: &Board, src: usize, cx: &mut Context<BrainView>) -> Op
                 .border_color(rgb(theme::BORDER))
                 .child(section(
                     info.map_or_else(String::new, |i| i.repo.clone()),
-                    [edit(format!("edit-notes {repo}"), Target::RepoNotes(repo), cx)],
+                    [
+                        manage("rename-repo", repo, "Rename…", Board::ask_rename_repo, cx),
+                        manage("move-repo", repo, "Move…", Board::ask_move_repo, cx),
+                        manage("remove-repo", repo, "Remove…", |b, at| b.ask_remove(at, false), cx),
+                        edit(format!("edit-notes {repo}"), Target::RepoNotes(repo), cx),
+                    ],
                 ))
                 .child(dim_small(root))
                 .child(div().text_size(px(12.)).child(counts))
@@ -74,15 +86,26 @@ pub(super) fn draw(board: &Board, src: usize, cx: &mut Context<BrainView>) -> Op
         .gap_3()
         .max_h(px(520.))
         .overflow_y_scroll()
-        .child(section("About", [edit("edit-project".into(), Target::Project(src), cx)]))
+        .child(section(
+            "About",
+            [
+                manage("rename-project", src, "Rename…", Board::ask_rename_project, cx),
+                edit("edit-project".into(), Target::Project(src), cx),
+            ],
+        ))
         .child(text(
             "description".into(),
             &project.description,
             "Not described yet: what the application is, its services and how they connect, conventions they share.",
         ))
         .child(dim_small(format!("{} tracked this week across its repositories", fmt_dur(week))))
-        .child(section(format!("Repositories ({})", repos.len()), []))
+        .child(section(
+            format!("Repositories ({})", repos.len()),
+            [manage("add-repo", src, "+ Add repository", Board::add_repo_to, cx)],
+        ))
         .children(repo_blocks);
-    let buttons = vec![action("close-project-info", "Close", Kind::Primary, KeyCode::Esc, cx)];
+    let remove: Stateful<Div> = button("remove-project", "Remove project…", Kind::Danger)
+        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.ask_remove(src, true))));
+    let buttons = vec![remove, action("close-project-info", "Close", Kind::Primary, KeyCode::Esc, cx)];
     Some(dialog(format!("Project {}", project.name), content, buttons).w(px(WIDE_WIDTH)))
 }

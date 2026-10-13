@@ -41,6 +41,8 @@ pub enum Mode {
     Palette(Picker),
     /// Naming the project a folder picked in the system's dialog becomes.
     AddProject(AddProject),
+    /// Renaming, moving or removing a project or one of its repositories, from its info.
+    Manage(Manage),
 }
 
 /// The new / edit dialog.
@@ -226,6 +228,61 @@ pub struct AddProject {
     /// The name typed, which also searches the projects there are, and the highlighted row of
     /// [`Board::add_project_options`](super::Board::add_project_options).
     pub picker: Picker,
+}
+
+/// A change to a project or one of its repositories, asked from the project's info. Each `src` is one of the
+/// project's repositories' brains, by index in `Board::sources`.
+#[derive(Debug)]
+pub enum Manage {
+    /// The project's new name.
+    RenameProject {
+        /// One of the project's repositories.
+        src: usize,
+        /// The name typed, in the search box of a picker that lists nothing.
+        name: Picker,
+    },
+    /// The repository's new name in its project.
+    RenameRepo {
+        /// The repository.
+        src: usize,
+        /// The name typed, likewise.
+        name: Picker,
+    },
+    /// The project the repository moves to.
+    MoveRepo {
+        /// The repository.
+        src: usize,
+        /// The project typed: one there is, found with it, or a new one named so.
+        picker: Picker,
+    },
+    /// Taking a repository, or a whole project, out: unlinking it and keeping its tasks, or deleting them too.
+    Remove {
+        /// The repository, or one of the project's.
+        src: usize,
+        /// Every repository of the project, not only this one.
+        whole: bool,
+    },
+}
+
+impl Manage {
+    /// The repository it was asked from, whose project's info it goes back to.
+    pub fn src(&self) -> usize {
+        match self {
+            Self::RenameProject { src, .. }
+            | Self::RenameRepo { src, .. }
+            | Self::MoveRepo { src, .. }
+            | Self::Remove { src, .. } => *src,
+        }
+    }
+
+    /// Its text field and dropdown, if it has one.
+    pub fn picker_mut(&mut self) -> Option<&mut Picker> {
+        match self {
+            Self::RenameProject { name, .. } | Self::RenameRepo { name, .. } => Some(name),
+            Self::MoveRepo { picker, .. } => Some(picker),
+            Self::Remove { .. } => None,
+        }
+    }
 }
 
 /// A row of the add-project dialog's dropdown.

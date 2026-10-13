@@ -34,7 +34,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | `esc` | close the details; with them closed, clear the search (words and tags) |
 | `f` | show every done task, or only the latest 20 |
 | `1` `2` `3` `4` `5` / `tab` | Board, Notes, Decisions, Report, Calendar |
-| `I` | the info of the project shown, or with **All** of the selected card's project: description, repositories with their roles, tasks per status, what's running, this week's time |
+| `I` | the info of the project shown, or with **All** of the selected card's project: description, repositories with their roles, tasks per status, what's running, this week's time; with buttons to rename, move and remove them and add a repository |
 | `A` | **add a project**: pick its code folder, then a project from the list or a new name; see [Projects](tasks-and-tags.md#projects) |
 | `P` | choose the project shown: a dropdown of All, Central, each project and each repository of a project with several; type to filter, `↑` `↓` and `enter` to show one, `esc` to close |
 | `u` | **undo** the last change the board made (a delete, a move, an edit…); pressed again, redo it. Refused if another program changed those files since |

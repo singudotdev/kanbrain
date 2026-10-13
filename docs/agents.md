@@ -212,6 +212,7 @@ hand.
 | `describe ID TEXT…\|-` | replaces the description |
 | `link ID OTHER…` | links an entry to others: an id here, or `REPO#ID` in another repository of the project |
 | `project [describe\|notes TEXT…\|-]` | shows the project's description (shared by its repositories) and this repository's role, or replaces one |
+| `project rename NAME…` / `repo NAME` / `move PROJECT…` / `remove [--purge]` | renames the project or this repository, moves this repository to another project, or takes the project out (see [Managing a project](cli.md#managing-a-project)); only when the user asks |
 
 `-` reads the text from stdin, for multi-line markdown. Ids may be written `12` or `#12`.
 

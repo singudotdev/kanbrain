@@ -152,7 +152,8 @@ pub fn register(central: &Path, project: &str, dir: &Path) -> Result<()> {
     repos.retain(|r| r.dir != dir);
     if let Some(twin) = repos.iter().find(|r| r.project == project && r.name() == new.name() && r.dir.is_dir()) {
         bail!(
-            "project `{project}` already has a repository named `{}`, at {}; rename one of the folders",
+            "project `{project}` already has a repository named `{}`, at {}; name this one with `kb init --repo NAME`, \
+             or rename that one with `kb project repo NAME`",
             new.name(),
             twin.dir.display()
         );
@@ -308,6 +309,29 @@ pub fn ensure_description(central: &Path, project: &str) -> Result<bool> {
     }
     write_description(central, project, DESCRIPTION_TEMPLATE)?;
     Ok(true)
+}
+
+/// Renames project `old` to `new` in the registry and its shared card (the file and its title). Its
+/// repositories' own cards are the caller's: their folders may be elsewhere, or gone.
+pub fn rename(central: &Path, old: &str, new: &str) -> Result<()> {
+    let mut repos = load(central)?;
+    for repo in repos.iter_mut().filter(|r| r.project == old) {
+        new.clone_into(&mut repo.project);
+    }
+    save(central, &repos)?;
+    let from = card_path(central, old);
+    match fs::read_to_string(&from) {
+        Ok(text) => {
+            let body = text.lines().skip_while(|l| !l.starts_with("# ")).skip(1).collect::<Vec<_>>().join("\n");
+            store::write_file(&card_path(central, new), &format!("# {new}\n\n{}\n", body.trim()))?;
+            if card_path(central, new) != from {
+                fs::remove_file(&from).with_context(|| format!("removing {}", from.display()))?;
+            }
+            Ok(())
+        }
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e).with_context(|| format!("reading {}", from.display())),
+    }
 }
 
 /// Deletes the project's shared card; returns whether there was one.

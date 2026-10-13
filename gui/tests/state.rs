@@ -938,11 +938,11 @@ fn a_picked_folder_becomes_a_project_as_sb_init_makes_it() {
         board.add_project_options(&add.picker)
     };
     key(&mut board, KeyCode::Char('A'));
-    assert_eq!(board.request.take(), Some(Request::Folder), "A asks the window for the folder dialog");
+    assert_eq!(board.request.take(), Some(Request::Folder(None)), "A asks the window for the folder dialog");
 
     let notes = code.path().join("notes");
     std::fs::create_dir_all(&notes).unwrap();
-    board.name_project(notes.clone());
+    board.name_project(notes.clone(), None);
     assert_eq!(options(&board), [ProjectOption::New("notes".into())], "named after the folder to begin with");
     // The name starts selected, so typing replaces it.
     "journal".chars().for_each(|c| key(&mut board, KeyCode::Char(c)));
@@ -956,12 +956,12 @@ fn a_picked_folder_becomes_a_project_as_sb_init_makes_it() {
     assert!(repos.iter().any(|r| r.project == "journal"), "registered in the central brain");
 
     // A repository's folder offers its own project, which there is, so no new one.
-    board.name_project(code.path().join("api"));
+    board.name_project(code.path().join("api"), None);
     assert_eq!(options(&board), [ProjectOption::Existing("shop".into())]);
     // Nothing typed lists every project; typing searches them, after a new one of that name.
     let admin = code.path().join("admin");
     std::fs::create_dir_all(&admin).unwrap();
-    board.name_project(admin);
+    board.name_project(admin, None);
     key(&mut board, KeyCode::Backspace);
     let names: Vec<String> = options(&board).iter().map(|o| o.name().to_string()).collect();
     assert_eq!(names, ["shop", "blog", "journal"]);
@@ -1025,4 +1025,54 @@ fn while_the_board_acts_a_kb_run_meanwhile_waits() {
     drop(locks);
     assert!(waiting.recv_timeout(std::time::Duration::from_secs(5)).is_ok(), "and goes on once released");
     other.join().unwrap();
+}
+
+#[test]
+fn projects_and_repositories_are_managed_from_the_projects_info() {
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    let key = |board: &mut Board, code| board.on_key(KeyEvent::new(code, KeyModifiers::NONE));
+    let type_in = |board: &mut Board, text: &str| text.chars().for_each(|c| key(board, KeyCode::Char(c)));
+    let labels = |board: &Board| board.sources.iter().filter_map(|s| s.label.clone()).collect::<Vec<_>>();
+    let src =
+        |board: &Board, label: &str| board.sources.iter().position(|s| s.label.as_deref() == Some(label)).unwrap();
+
+    board.ask_rename_project(src(&board, "shop/api"));
+    type_in(&mut board, "store");
+    key(&mut board, KeyCode::Enter);
+    assert_eq!(labels(&board), ["store/api", "store/web", "blog"]);
+    assert!(matches!(board.mode, Mode::ProjectInfo(_)), "back to the project's info");
+
+    board.ask_rename_repo(src(&board, "store/api"));
+    type_in(&mut board, "web");
+    key(&mut board, KeyCode::Enter);
+    assert!(matches!(board.mode, Mode::Manage(_)), "a name the project has: the dialog stays, with why");
+    assert!(board.message().unwrap().contains("already has a repository named `web`"), "{:?}", board.message());
+    key(&mut board, KeyCode::Esc);
+    assert!(matches!(board.mode, Mode::ProjectInfo(_)), "esc goes back to the project's info");
+    board.ask_rename_repo(src(&board, "store/api"));
+    type_in(&mut board, "backend");
+    key(&mut board, KeyCode::Enter);
+    assert_eq!(labels(&board), ["store/backend", "store/web", "blog"]);
+
+    board.ask_move_repo(src(&board, "store/web"));
+    type_in(&mut board, "blog");
+    let Mode::Manage(Manage::MoveRepo { picker, .. }) = &board.mode else { panic!("the move dialog") };
+    assert_eq!(board.move_options(src(&board, "store/web"), picker), [ProjectOption::Existing("blog".into())]);
+    key(&mut board, KeyCode::Enter);
+    assert_eq!(labels(&board), ["store", "blog/blog", "blog/web"]);
+
+    board.ask_remove(src(&board, "blog/web"), false);
+    key(&mut board, KeyCode::Char('y'));
+    assert_eq!(labels(&board), ["store", "blog"]);
+    assert!(code.path().join("web/.brain").is_dir(), "unlinked, its tasks kept");
+
+    board.add_repo_to(src(&board, "blog"));
+    assert_eq!(board.request.take(), Some(Request::Folder(Some("blog".into()))), "the folder joins this project");
+
+    board.ask_remove(src(&board, "store"), true);
+    key(&mut board, KeyCode::Char('d'));
+    assert_eq!(labels(&board), ["blog"]);
+    assert!(!code.path().join("api/.brain").exists(), "its tasks deleted too");
+    assert!(matches!(board.mode, Mode::Normal));
 }

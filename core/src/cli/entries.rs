@@ -2,6 +2,7 @@
 //! `start`/`park`/`done`/`todo`, `comment`, `ask`, `wait`, `propose`, `accept`/`reject`, `describe`, `link`
 //! and `context`. Each prints a short confirmation, or with `--json`, the entry (or entries) as JSON.
 
+use super::manage;
 use crate::api::ApiError;
 use crate::api::json::{Entry, Summary};
 use crate::api::text::line;
@@ -47,6 +48,9 @@ pub const USAGE: &str = "\
   project [describe|notes TEXT…|-]
             show the project's description (shared by its repositories) and this repository's role,
             or replace one
+  project rename NAME… | repo NAME | move PROJECT… | remove [--purge]
+            rename the project, or this repository in it; move this repository to another project;
+            take every repository of the project out (--purge: and delete their tasks)
   context   what's going on: active tasks, decisions and notes, for an agent to read first
             (all but project take --json to print JSON instead)";
 
@@ -86,12 +90,26 @@ pub enum EntryCommand {
     Link(u32, Vec<u32>, Vec<RepoLink>),
     /// `context`.
     Context,
-    /// `project`: show the project's description and this repository's role; with a part and text,
-    /// replace that part.
-    Project(Option<(ProjectPart, Text)>),
+    /// `project`: show the project's description and this repository's role, or change the project.
+    Project(Option<ProjectChange>),
 }
 
 /// What `project` changes.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ProjectChange {
+    /// `describe|notes TEXT…|-`: replace one of its texts.
+    Text(ProjectPart, Text),
+    /// `rename NAME…`: the project's name.
+    Rename(String),
+    /// `repo NAME`: this repository's name in its project.
+    Repo(String),
+    /// `move PROJECT…`: this repository to another project, created if new.
+    Move(String),
+    /// `remove [--purge]`: take every repository of the project out of it; `true` also deletes their tasks.
+    Remove(bool),
+}
+
+/// What `project` changes in one of its texts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProjectPart {
     /// `describe`: the project's description, on the card all its repositories share.
@@ -351,17 +369,32 @@ fn rest_as_text(args: &mut Vec<String>) -> Result<Text> {
     }
 }
 
-/// `describe TEXT…|-` or `notes TEXT…|-` after `project`; nothing, to show them.
-fn project_args(args: &mut Vec<String>) -> Result<Option<(ProjectPart, Text)>> {
+/// What follows `project`: nothing, to show it; else what to change.
+fn project_args(args: &mut Vec<String>) -> Result<Option<ProjectChange>> {
     if args.is_empty() {
         return Ok(None);
     }
-    let part = match args.remove(0).as_str() {
-        "describe" => ProjectPart::Description,
-        "notes" => ProjectPart::Notes,
-        other => bail!("unknown project command `{other}`: describe or notes"),
+    let command = args.remove(0);
+    // A project's name may have spaces; a repository's is one word, which `project::check_repo_name` checks.
+    let words = |args: &mut Vec<String>, what: &str| match std::mem::take(args).join(" ") {
+        name if name.trim().is_empty() => bail!("project {command} needs {what}"),
+        name => Ok(name),
     };
-    Ok(Some((part, rest_as_text(args)?)))
+    Ok(Some(match command.as_str() {
+        "describe" => ProjectChange::Text(ProjectPart::Description, rest_as_text(args)?),
+        "notes" => ProjectChange::Text(ProjectPart::Notes, rest_as_text(args)?),
+        "rename" => ProjectChange::Rename(words(args, "the new name")?),
+        "repo" => ProjectChange::Repo(words(args, "the repository's new name")?),
+        "move" => ProjectChange::Move(words(args, "the project to move to")?),
+        "remove" => {
+            let purge = args.first().is_some_and(|a| a == "--purge");
+            if purge {
+                args.remove(0);
+            }
+            ProjectChange::Remove(purge)
+        }
+        other => bail!("unknown project command `{other}`: describe, notes, rename, repo, move or remove"),
+    }))
 }
 
 /// What `kb project` shows: the project's description and, in a project of several repositories (or
@@ -379,22 +412,34 @@ fn project_text(project: &ProjectInfo) -> String {
     format!("{card}\n## Repository {}\n\n{}\n", project.repo, shown(&project.notes))
 }
 
-/// Shows the project's description and this repository's role, or replaces one of them.
-fn run_project(brain: &mut Brain, change: Option<(ProjectPart, Text)>) -> Result<()> {
+/// Shows the project's description and this repository's role, or changes the project.
+fn run_project(brain: &mut Brain, change: Option<ProjectChange>) -> Result<()> {
     let Some(project) = &brain.project else {
         bail!("this isn't a project: `kb init` makes it one, or use --project NAME");
     };
     let name = project.name.clone();
-    match change {
-        None => print!("{}", project_text(project)),
-        Some((ProjectPart::Description, text)) => {
+    let central = brain.central.clone().context("the central brain isn't known here")?;
+    let dir = brain.store.dir().to_path_buf();
+    let done = match change {
+        None => {
+            print!("{}", project_text(project));
+            return Ok(());
+        }
+        Some(ProjectChange::Text(ProjectPart::Description, text)) => {
             brain.set_project_description(&text.read()?)?;
-            println!("project {name}: description saved");
+            vec![format!("project {name}: description saved")]
         }
-        Some((ProjectPart::Notes, text)) => {
+        Some(ProjectChange::Text(ProjectPart::Notes, text)) => {
             brain.set_repo_notes(&text.read()?)?;
-            println!("project {name}: repository role saved");
+            vec![format!("project {name}: repository role saved")]
         }
+        Some(ProjectChange::Rename(new)) => manage::rename_project(&central, &name, &new)?,
+        Some(ProjectChange::Repo(new)) => manage::rename_repo(&central, &dir, &new)?,
+        Some(ProjectChange::Move(to)) => manage::move_repo(&central, &dir, &to)?,
+        Some(ProjectChange::Remove(purge)) => manage::remove_project(&central, &name, purge)?,
+    };
+    for line in &done {
+        println!("{line}");
     }
     Ok(())
 }

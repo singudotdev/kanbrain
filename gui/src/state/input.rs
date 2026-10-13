@@ -4,7 +4,8 @@
 
 use super::nav::Step;
 use super::{
-    Board, COLUMNS, Confirm, Field, Form, Mode, NextPicker, Picker, PickerKey, Request, Tab, Target, WherePicker,
+    Board, COLUMNS, Confirm, Field, Form, Manage, Mode, NextPicker, Picker, PickerKey, Request, Tab, Target,
+    WherePicker,
 };
 use crate::text::editor::{LineInput, Outcome, Pointer, TextEditor};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -108,6 +109,7 @@ impl Board {
             }
             Mode::Palette(picker) => self.key_palette(picker, key),
             Mode::AddProject(add) => self.key_add_project(add, key),
+            Mode::Manage(manage) => self.key_manage(manage, key),
         }
     }
 
@@ -176,7 +178,7 @@ impl Board {
             KeyCode::Char('u') => self.undo(),
             KeyCode::Char('P') => self.open_scopes(),
             KeyCode::Char('I') => self.open_project_info(),
-            KeyCode::Char('A') => self.request = Some(Request::Folder),
+            KeyCode::Char('A') => self.request = Some(Request::Folder(None)),
             KeyCode::Esc if self.drawer => self.drawer = false,
             KeyCode::Esc => {
                 self.search.clear();
@@ -466,6 +468,7 @@ impl Board {
             Mode::Next(picker) => Some(Typing::Line(&mut picker.search)),
             Mode::Palette(picker) => Some(Typing::Line(&mut picker.search)),
             Mode::AddProject(add) => Some(Typing::Line(&mut add.picker.search)),
+            Mode::Manage(manage) => manage.picker_mut().map(|picker| Typing::Line(&mut picker.search)),
             Mode::Edit(edit) => Some(Typing::Text(&mut edit.editor)),
             Mode::Normal | Mode::Confirm(_) | Mode::ProjectInfo(_) | Mode::Menu(_) => None,
         }
@@ -503,6 +506,12 @@ impl Board {
             Mode::Next(picker) => picker.search.selected_text().map(str::to_string),
             Mode::Palette(picker) => picker.search.selected_text().map(str::to_string),
             Mode::AddProject(add) => add.picker.search.selected_text().map(str::to_string),
+            Mode::Manage(manage) => match manage {
+                Manage::RenameProject { name: picker, .. }
+                | Manage::RenameRepo { name: picker, .. }
+                | Manage::MoveRepo { picker, .. } => picker.search.selected_text().map(str::to_string),
+                Manage::Remove { .. } => None,
+            },
             Mode::Edit(edit) => edit.editor.selected_text(),
             Mode::Normal | Mode::Confirm(_) | Mode::ProjectInfo(_) | Mode::Menu(_) => None,
         }

@@ -8,9 +8,10 @@ kb init [NAME] [--repo REPO]
                  folder's name) with a card for the application, and a section telling its agents
                  about it in CLAUDE.md / AGENTS.md (run again to update them)
 kb init --all    update the agents' section and hooks in every registered project to this version's
-kb deinit    stop this folder (or --project NAME) being a project: unregister it, remove its
+kb deinit [--purge]
+                 stop this folder (or --project NAME) being a project: unregister it, remove its
                  section from CLAUDE.md / AGENTS.md and, with its last repository, the project's card;
-                 its .brain/ is kept
+                 its .brain/ is kept unless --purge
 kb hook prompt|stop
                  what the Claude Code hooks `init` adds run (see For coding agents)
 kb status    print the running tasks, in whichever project, and how many wait for an answer
@@ -73,7 +74,20 @@ Running it again is safe: it updates the agent section and the hooks, and `init 
 Within a project, each repository has a name of its own: its folder's, unless that's taken by another of the project's
 repositories (two folders named `app` in different places), when the folder above goes before it (`backend-app`), or
 a number. `--repo REPO` names it yourself. A name other than the folder's is kept in its `.brain/project.md`, so links
-to it (`REPO#3`) read the same on every machine.
+to it (`REPO#3`) read the same on every machine. `kb project repo NAME` renames it later.
+
+### Managing a project
+
+Run inside one of the project's repositories (or with `--project`):
+
+| command | does |
+| --- | --- |
+| `kb project rename NAME…` | renames the project: the registry, its card and each repository's `.brain/project.md` |
+| `kb project repo NAME` | renames this repository in its project, and rewrites the other repositories' links to it |
+| `kb project move PROJECT…` | moves this repository to another project, created if new; its links to the old project's repositories are dropped, on both sides |
+| `kb project remove [--purge]` | takes every repository of the project out, as `deinit` does each; `--purge` deletes their `.brain/` too |
+
+The kanban app does the same from **Project info** (`I`).
 
 ### `kb init --all`
 
@@ -96,8 +110,10 @@ Undoes `init` for the repository of the current folder, or for the one `--projec
 - removes the "Project memory" section from `CLAUDE.md` / `AGENTS.md`, and deletes a file left empty, which is
   the one `init` created; the same for the hooks in `.claude/settings.local.json`.
 
-**`.brain/` is kept**, with its tasks, notes and decisions: commands run in the folder still use it. Delete it to
-drop them, or run `init` again to register it again. A repository whose folder is already gone can still be taken
+It also drops the links the project's other repositories have to it, since it's no longer one of them.
+
+**`.brain/` is kept**, with its tasks, notes and decisions: commands run in the folder still use it. `--purge` deletes
+it too; otherwise run `init` again to register it again. A repository whose folder is already gone can still be taken
 out with `--project`.
 
 ## `kb list`

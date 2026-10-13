@@ -39,6 +39,8 @@ pub enum TextBox {
     NextSearch,
     /// The search box of "which project?".
     WhereSearch,
+    /// The new name of a project or repository, or the project a repository moves to.
+    ManageName,
     /// The name of a project being added.
     ProjectName,
     /// The description or comment editor.
@@ -62,6 +64,7 @@ impl TextBox {
             Self::NextSearch => "next-search",
             Self::PaletteSearch => "palette-search",
             Self::ProjectName => "project-name",
+            Self::ManageName => "manage-name",
             Self::Editor => "editor",
         }
     }
@@ -193,6 +196,7 @@ fn focus(this: &mut BrainView, which: TextBox) {
         | TextBox::NextSearch
         | TextBox::PaletteSearch
         | TextBox::ProjectName
+        | TextBox::ManageName
         | TextBox::Editor => {}
     }
 }

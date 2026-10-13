@@ -223,8 +223,8 @@ fn on_path(path: Option<std::ffi::OsString>, name: &str) -> bool {
 
 /// Takes the repository whose `.brain/` is `dir` out of the project registry, deleting the project's
 /// card if it was its last repository, and takes the section out of each agent file of the repository
-/// (deleting a file left empty, which `init` created). `.brain/` is kept. Returns what it did, one
-/// line each.
+/// (deleting a file left empty, which `init` created). `.brain/` is left as it is: whether it goes is
+/// [`super::manage::remove_repo`]'s. Returns what it did, one line each.
 pub fn deinit(dir: &Path, central: &Path) -> Result<Vec<String>> {
     let Some(repo) = projects::unregister(central, dir)? else {
         bail!("{} isn't a registered project: there's nothing to deinit", dir.display());
@@ -266,10 +266,6 @@ pub fn deinit(dir: &Path, central: &Path) -> Result<Vec<String>> {
             done.push(format!("removed the \"Project memory\" section from {name}"));
         }
     }
-    done.push(format!(
-        "kept {}: commands run here still use it; delete it to drop its tasks, notes and decisions",
-        repo.dir.display()
-    ));
     Ok(done)
 }
 

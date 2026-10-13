@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Managing projects: rename a project or one of its repositories, move a repository to another project, and remove a
+  repository or a whole project, keeping its tasks or deleting them. In the kanban app from **Project info** (`I`),
+  which also adds a repository to the project; from the command line with `kb project rename|repo|move|remove` and
+  `kb deinit --purge`.
+
+### Changed
+
+- `kb deinit` also drops the links the project's other repositories have to the repository it takes out.
+
 ### Fixed
 
 - Adding two folders with the same name to one project (from the app or `kb init`) no longer fails: the second gets

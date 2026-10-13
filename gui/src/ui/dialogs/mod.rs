@@ -5,12 +5,14 @@
 //! - [`pickers`]: the link picker, "which project?", "what's next?" and the command palette.
 //! - [`project`]: a project at a glance.
 //! - [`add_project`]: the project a folder picked in the system's dialog joins or starts.
+//! - [`manage`]: renaming, moving and removing a project or its repositories.
 //!
 //! A delete's confirmation is here.
 
 mod add_project;
 mod editor;
 mod form;
+mod manage;
 mod pickers;
 mod project;
 
@@ -39,6 +41,7 @@ pub fn draw(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<Brai
         Mode::ProjectInfo(src) => project::draw(board, *src, cx)?,
         Mode::Palette(picker) => pickers::palette(board, picker, &scroll.palette, follow, cx),
         Mode::AddProject(add) => add_project::draw(board, add, &scroll.add_project, follow, cx),
+        Mode::Manage(manage) => manage::draw(board, manage, &scroll.add_project, follow, cx)?,
         // The project dropdown hangs from its button in the top bar.
         // The menu is drawn at the click, over everything: see `menu::draw`.
         Mode::Normal | Mode::Search | Mode::QuickAdd(_) | Mode::Scopes(_) | Mode::Tags(..) | Mode::Menu(_) => {

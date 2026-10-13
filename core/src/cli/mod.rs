@@ -13,10 +13,12 @@ mod completions;
 mod entries;
 mod hook;
 mod init;
+mod manage;
 mod update;
 
-pub use entries::{AddArgs, EntryArgs, EntryCommand, ProjectPart, Text};
+pub use entries::{AddArgs, EntryArgs, EntryCommand, ProjectChange, ProjectPart, Text};
 pub use init::init;
+pub use manage::{move_repo, remove_project, remove_repo, rename_project, rename_repo};
 
 use crate::api::json::Summary;
 use crate::brain::{Brain, Group, ReportView};
@@ -79,9 +81,10 @@ usage:
   {name} init --all
   {pad}           update the agents' section and hooks in every registered project to this version's
   {pad}           (the installer and update run it)
-  {name} deinit    stop this folder (or --project NAME) being a project: unregister it, remove its
-  {pad}           section from CLAUDE.md / AGENTS.md and, with its last repository, the project's
-  {pad}           card; its .brain/ is kept
+  {name} deinit [--purge]
+  {pad}           stop this folder (or --project NAME) being a project: unregister it, remove its
+  {pad}           section from CLAUDE.md / AGENTS.md, the other repositories' links to it and, with
+  {pad}           its last repository, the project's card; its .brain/ is kept unless --purge
   {name} hook prompt|stop
   {pad}           what the Claude Code hooks `init` adds run: they hold an agent to describing an
   {pad}           undescribed project first, and to commenting on the tasks it started (they read the
@@ -140,8 +143,9 @@ pub enum Command {
     Init(Option<String>, Option<String>),
     /// `init --all`: bring every registered repository's agent instructions up to this version's.
     InitAll,
-    /// `deinit`: undo `init` for the current directory's project, or the one `--project` names.
-    Deinit,
+    /// `deinit [--purge]`: undo `init` for the current directory's project, or the one `--project` names;
+    /// `true` also deletes its `.brain/`.
+    Deinit(bool),
     /// `hook prompt|stop`: what Claude Code's hooks run (see [`hook`]).
     Hook(hook::HookEvent),
     /// `status`: print the running tasks for status bars.
@@ -204,7 +208,11 @@ impl Command {
                     _ => init_args(words)?,
                 }
             }
-            Some("deinit") => Command::Deinit,
+            Some("deinit") => Command::Deinit(match args.next() {
+                None => false,
+                Some(purge) if purge == "--purge" => true,
+                Some(other) => bail!("unexpected argument `{other}`"),
+            }),
             Some("hook") => {
                 let name = args.next().context("hook needs prompt or stop")?;
                 Command::Hook(
@@ -289,7 +297,7 @@ impl Command {
                 }
                 return Ok(());
             }
-            Command::Deinit => {
+            Command::Deinit(purge) => {
                 platform::ensure_not_root()?;
                 let central = projects::central_dir()?;
                 // Not through `Store::open_named`, which would create the folder of a deleted repository.
@@ -303,7 +311,7 @@ impl Command {
                         )?
                     }
                 };
-                init::deinit(&dir, &central)?.iter().for_each(|line| println!("{line}"));
+                manage::remove_repo(&central, &dir, purge)?.iter().for_each(|line| println!("{line}"));
                 return Ok(());
             }
             _ => platform::ensure_not_root()?,
@@ -344,7 +352,7 @@ impl Command {
             | Command::Update
             | Command::Init(..)
             | Command::InitAll
-            | Command::Deinit
+            | Command::Deinit(_)
             | Command::Hook(_) => Ok(()),
         }
     }

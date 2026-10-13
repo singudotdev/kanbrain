@@ -42,14 +42,27 @@ fn project_shows_or_replaces_a_part() {
     assert_eq!(parse(&["project"]).unwrap().command, EntryCommand::Project(None));
     assert_eq!(
         parse(&["project", "describe", "An", "online", "shop."]).unwrap().command,
-        EntryCommand::Project(Some((ProjectPart::Description, Text::Given("An online shop.".into()))))
+        EntryCommand::Project(Some(ProjectChange::Text(
+            ProjectPart::Description,
+            Text::Given("An online shop.".into())
+        )))
     );
     assert_eq!(
         parse(&["project", "notes", "-"]).unwrap().command,
-        EntryCommand::Project(Some((ProjectPart::Notes, Text::Stdin)))
+        EntryCommand::Project(Some(ProjectChange::Text(ProjectPart::Notes, Text::Stdin)))
     );
     assert!(parse(&["project", "describe"]).is_err(), "text is needed");
-    assert!(parse(&["project", "rename", "x"]).is_err());
+    let change = |args: &[&str]| parse(args).unwrap().command;
+    assert_eq!(
+        change(&["project", "rename", "Web", "shop"]),
+        EntryCommand::Project(Some(ProjectChange::Rename("Web shop".into())))
+    );
+    assert_eq!(change(&["project", "repo", "api"]), EntryCommand::Project(Some(ProjectChange::Repo("api".into()))));
+    assert_eq!(change(&["project", "move", "blog"]), EntryCommand::Project(Some(ProjectChange::Move("blog".into()))));
+    assert_eq!(change(&["project", "remove", "--purge"]), EntryCommand::Project(Some(ProjectChange::Remove(true))));
+    assert!(parse(&["project", "rename"]).is_err(), "a name is needed");
+    assert!(parse(&["project", "remove", "now"]).is_err());
+    assert!(parse(&["project", "frobnicate"]).is_err());
 }
 
 #[test]
@@ -65,8 +78,9 @@ fn project_writes_the_shared_card_and_the_repository_notes() {
     .unwrap();
     let open = || Brain::open_in(crate::store::Store::at(&dir).unwrap(), central.path()).unwrap();
     let mut brain = open();
-    run_project(&mut brain, Some((ProjectPart::Description, Text::Given("An online shop.".into())))).unwrap();
-    run_project(&mut brain, Some((ProjectPart::Notes, Text::Given("The API.".into())))).unwrap();
+    run_project(&mut brain, Some(ProjectChange::Text(ProjectPart::Description, Text::Given("An online shop.".into()))))
+        .unwrap();
+    run_project(&mut brain, Some(ProjectChange::Text(ProjectPart::Notes, Text::Given("The API.".into())))).unwrap();
     let project = open().project.unwrap();
     assert_eq!((project.description.as_str(), project.notes.as_str()), ("An online shop.", "The API."));
     let mut outside = Brain::open(crate::store::Store::at(central.path()).unwrap()).unwrap();

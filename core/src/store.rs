@@ -136,9 +136,13 @@ impl Store {
     /// changes, or two `add`s take the same id. The lock is released when the process ends, however it ends.
     ///
     /// The lock file lives in the user's cache folder, named after the brain's folder, so `.brain/` (often
-    /// committed) gets no extra file.
+    /// committed) gets no extra file. Taking it again on a thread that holds it gets a guard that does nothing:
+    /// the app holds every brain's while it acts, and managing projects takes some of them itself.
     pub fn lock(&self) -> Result<BrainLock> {
         let path = lock_path(&self.dir)?;
+        if HELD.with(|held| held.borrow().contains(&path)) {
+            return Ok(BrainLock { file: None, path });
+        }
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
         }
@@ -149,7 +153,8 @@ impl Store {
             .open(&path)
             .with_context(|| format!("opening {}", path.display()))?;
         fs4::FileExt::lock(&file).with_context(|| format!("locking {}", path.display()))?;
-        Ok(BrainLock(file))
+        HELD.with(|held| held.borrow_mut().push(path.clone()));
+        Ok(BrainLock { file: Some(file), path })
     }
 
     /// Starts recording the files written or deleted from now on, so they can be put back (see [`undo`]).
@@ -269,9 +274,29 @@ impl Store {
     }
 }
 
+thread_local! {
+    /// The lock files this thread holds. `flock` on a second handle of the same file waits for the first, so a
+    /// thread taking a lock it holds would wait for itself forever.
+    static HELD: RefCell<Vec<PathBuf>> = const { RefCell::new(Vec::new()) };
+}
+
 /// A brain's write lock, held until dropped (see [`Store::lock`]).
 #[derive(Debug)]
-pub struct BrainLock(#[expect(dead_code, reason = "held only for its lock, released on drop")] fs::File);
+pub struct BrainLock {
+    /// The locked file, whose handle holds the lock; `None` for a lock the thread already held.
+    file: Option<fs::File>,
+    /// The lock file.
+    path: PathBuf,
+}
+
+impl Drop for BrainLock {
+    fn drop(&mut self) {
+        // The handle closes after this, releasing the lock.
+        if self.file.is_some() {
+            HELD.with(|held| held.borrow_mut().retain(|p| *p != self.path));
+        }
+    }
+}
 
 /// Where the lock of the brain in `dir` is: `<cache>/kanbrain/locks/<hash>.lock`, the hash of the folder's
 /// canonical path. FNV-1a rather than std's hasher, whose output may change between Rust versions: two `kb`

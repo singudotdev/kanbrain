@@ -5,12 +5,14 @@
 //! - [`mode`]: the dialogs and fields that take the keys.
 //! - [`actions`]: changes to entries, through the brain, with a message for the status bar.
 //! - [`input`]: what each key does on each tab and dialog, and typing into fields.
+//! - [`manage`]: renaming, moving and removing projects and repositories.
 //! - [`nav`]: moving the selection around the board.
 //! - [`palette`]: the command palette, every action with its key.
 //! - [`sources`]: the central brain and every project repository, and the scope that filters them.
 
 mod actions;
 mod input;
+mod manage;
 mod menu;
 pub mod mode;
 mod nav;
@@ -22,8 +24,8 @@ mod tests;
 
 pub use menu::MenuPicker;
 pub use mode::{
-    AddProject, Confirm, Edit, Field, Form, FormTarget, LinkPicker, Mode, NextChoice, NextPicker, Picker, PickerKey,
-    ProjectOption, QuickAdd, Target, WhereFor, WherePicker,
+    AddProject, Confirm, Edit, Field, Form, FormTarget, LinkPicker, Manage, Mode, NextChoice, NextPicker, Picker,
+    PickerKey, ProjectOption, QuickAdd, Target, WhereFor, WherePicker,
 };
 pub use palette::Command;
 pub use sources::{Key, Scope, Source};
@@ -113,8 +115,9 @@ impl Tab {
 pub enum Request {
     /// Open the file in `$EDITOR`, and re-read the files when it exits.
     Edit(PathBuf),
-    /// Open the system's folder dialog, for a project to add, and hand the folder to [`Board::name_project`].
-    Folder,
+    /// Open the system's folder dialog, for a project to add, and hand the folder to [`Board::name_project`],
+    /// with the project it joins when it's added from that project's info.
+    Folder(Option<String>),
 }
 
 /// Everything the window shows and remembers.

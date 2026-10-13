@@ -352,15 +352,15 @@ impl BrainView {
                 })
                 .detach();
             }
-            Some(Request::Folder) => Self::pick_project_folder(cx),
+            Some(Request::Folder(project)) => Self::pick_project_folder(project, cx),
             None => {}
         }
         cx.notify();
     }
 
-    /// Opens the system's folder dialog, and asks which project the folder picked joins or starts. On Linux the
-    /// dialog is the desktop portal's: without one, the status bar says so.
-    fn pick_project_folder(cx: &mut Context<Self>) {
+    /// Opens the system's folder dialog, and asks which project the folder picked joins or starts, `project` if
+    /// given. On Linux the dialog is the desktop portal's: without one, the status bar says so.
+    fn pick_project_folder(project: Option<String>, cx: &mut Context<Self>) {
         let picked = cx.prompt_for_paths(PathPromptOptions {
             files: false,
             directories: true,
@@ -373,7 +373,7 @@ impl BrainView {
                 match picked {
                     Ok(Ok(Some(dirs))) => {
                         if let Some(dir) = dirs.into_iter().next() {
-                            this.board.name_project(dir);
+                            this.board.name_project(dir, project);
                         }
                     }
                     Ok(Err(e)) => this.board.notify(format!("{e:#}")),
