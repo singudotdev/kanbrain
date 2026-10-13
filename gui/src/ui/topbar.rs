@@ -121,17 +121,17 @@ fn project_card(board: &Board, cx: &mut Context<BrainView>) -> Option<Div> {
             .child(if text.is_empty() { dim("Not described yet.") } else { dim(first(text)) }.min_w_0().truncate())
             .child(small(button))
     };
-    let edit = |id: &'static str, target: Target, cx: &mut Context<BrainView>| {
-        widgets::button(id, "Edit", Kind::Ghost)
-            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.open_editor(target))))
-    };
     let card = div().flex().flex_col().gap_0p5().child(line(
         project.name.clone(),
         &project.description,
-        edit("edit-project", Target::Project(src), cx),
+        action("edit-project", "Edit", Kind::Ghost, KeyCode::Char('E'), cx),
     ));
-    let repo = matches!(board.scope, Scope::Repo(_))
-        .then(|| line(project.repo.clone(), &project.notes, edit("edit-repo-notes", Target::RepoNotes(src), cx)));
+    let notes = |cx: &mut Context<BrainView>| {
+        widgets::button("edit-repo-notes", "Edit", Kind::Ghost).on_click(
+            cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.open_editor(Target::RepoNotes(src)))),
+        )
+    };
+    let repo = matches!(board.scope, Scope::Repo(_)).then(|| line(project.repo.clone(), &project.notes, notes(cx)));
     Some(card.children(repo))
 }
 

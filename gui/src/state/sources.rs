@@ -270,11 +270,16 @@ impl Board {
         self.sources[src].project.as_deref().map_or_else(Vec::new, |project| self.repos_of(project).collect())
     }
 
+    /// A brain of the project shown, else of the selected entry's project: the one `I` and `E` act on.
+    pub fn project_here(&self) -> Option<usize> {
+        let selected = self.selected.map(|key| key.src).filter(|&src| self.sources[src].project.is_some());
+        self.project_src().or(selected)
+    }
+
     /// Opens the info of the project shown, else of the selected entry's project. With neither, says
     /// how to get one rather than doing nothing, since a key that does nothing reads as broken.
     pub fn open_project_info(&mut self) {
-        let selected = self.selected.map(|key| key.src).filter(|&src| self.sources[src].project.is_some());
-        match self.project_src().or(selected) {
+        match self.project_here() {
             Some(src) => self.mode = Mode::ProjectInfo(src),
             None => self.notify("no project here: select one of its cards, or show it with P"),
         }

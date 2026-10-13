@@ -21,7 +21,8 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | `a` | **add** tasks at the top of To do, one after another (see [Quick add](tasks-and-tags.md#quick-add)) |
 | `e` | **edit** title and tags |
 | `m` | edit the description |
-| `c` | add a **comment** |
+| `c` | add a **comment**; on a task waiting for your answer, **answer** the agent's question |
+| `D` | open the **decision** an agent proposed, which the selected task waits on |
 | `r` | **relate** to other entries: search and pick |
 | `o` | **open** the file in `$EDITOR`; the board reloads when it closes |
 | `x` | **delete** (asks first) |
@@ -35,6 +36,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | `f` | show every done task, or only the latest 20 |
 | `1` `2` `3` `4` `5` / `tab` | Board, Notes, Decisions, Report, Calendar |
 | `I` | **manage the project** shown, or with **All** of the selected card's project: description, repositories with their roles, tasks per status, what's running, this week's time; with buttons to rename, move and remove them and add a repository |
+| `E` | **edit the description** of the project shown, or with **All** of the selected card's project, shared by its repositories |
 | `A` | **add a project**: pick its code folder, then a project from the list or a new name; see [Projects](tasks-and-tags.md#projects) |
 | `P` | choose the project shown: a dropdown of All, Central, each project and each repository of a project with several; type to filter, `↑` `↓` and `enter` to show one, `esc` to close |
 | `u` | **undo** the last change the board made (a delete, a move, an edit…); pressed again, redo it. Refused if another program changed those files since |
@@ -46,7 +48,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 
 ## Report tab
 
-`1`–`5`, `tab`, `/`, `esc`, `A`, `P`, `I`, `u`, `R`, `Q`, `?` and `q` work as above.
+`1`–`5`, `tab`, `/`, `esc`, `A`, `P`, `I`, `E`, `u`, `R`, `Q`, `?` and `q` work as above.
 
 | key | action |
 | --- | --- |
@@ -59,7 +61,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 
 ## Calendar tab
 
-`1`–`5`, `tab`, `/`, `esc`, `A`, `P`, `I`, `u`, `R`, `Q`, `?` and `q` work as above.
+`1`–`5`, `tab`, `/`, `esc`, `A`, `P`, `I`, `E`, `u`, `R`, `Q`, `?` and `q` work as above.
 
 | key | action |
 | --- | --- |

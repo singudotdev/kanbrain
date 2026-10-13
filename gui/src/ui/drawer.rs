@@ -92,10 +92,7 @@ fn asked_block(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView>
     match task.asked()? {
         Asked::Waiting(question) => {
             let answer = small(action("answer", "Answer", Kind::Primary, KeyCode::Char('c'), cx));
-            let proposed = board.related_keys(key).into_iter().filter(|&k| {
-                board.task(k).is_some_and(|d| d.kind == EntryKind::Decision && d.decision == DecisionState::Proposed)
-            });
-            let open = proposed.map(|k| {
+            let open = board.proposed_for(key).into_iter().map(|k| {
                 small(widgets::button(
                     ElementId::Name(format!("open-proposed {}/{}", k.src, k.id).into()),
                     format!("Open decision #{}", k.id),

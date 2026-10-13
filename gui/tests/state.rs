@@ -1111,3 +1111,48 @@ fn the_palette_offers_only_what_works_now() {
     let rows = shown(&f.board);
     assert!(rows.contains(&"Move up and down the list") && !rows.contains(&"Move between cards and columns"));
 }
+
+#[test]
+fn a_task_waiting_on_you_is_answered_and_its_decision_opened_from_the_palette_and_menu() {
+    let mut f = Fixture::new(&["cache", "css"]);
+    let mut agent = kanbrain_core::brain::Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    agent.author = Author::Agent;
+    let new = kanbrain_core::brain::NewEntry { title: "Use Redis".into(), ..Default::default() };
+    let decision = agent.propose(1, new).unwrap();
+    agent.ask(2, "Which colour?").unwrap();
+    f.press(KeyCode::Char('R'));
+    let labels = |board: &Board, id| board.menu_items(k(id)).iter().map(|a| a.label).collect::<Vec<_>>();
+    let rows = |board: &Board| board.commands(&Picker::default()).iter().map(|a| a.does).collect::<Vec<_>>();
+
+    f.board.select(k(2));
+    assert!(labels(&f.board, 2).contains(&"Answer…") && !labels(&f.board, 2).contains(&"Add comment"));
+    assert!(!labels(&f.board, 2).contains(&"Open proposed decision"), "a question, no decision");
+    assert!(rows(&f.board).contains(&"Answer the agent's question"));
+    f.press(KeyCode::Char('c'));
+    assert!(matches!(f.board.mode, Mode::Edit(_)), "c answers it, as it comments");
+    f.press(KeyCode::Esc);
+    f.press(KeyCode::Esc);
+
+    f.board.select(k(1));
+    assert!(labels(&f.board, 1).contains(&"Open proposed decision"), "{:?}", labels(&f.board, 1));
+    assert!(rows(&f.board).contains(&"Open the decision it waits on"));
+    f.press(KeyCode::Char('D'));
+    assert_eq!((f.board.tab, f.board.selected), (Tab::Decisions, Some(k(decision))), "D opens it");
+    assert!(!labels(&f.board, decision).contains(&"Answer…"), "a decision waits on nothing");
+}
+
+#[test]
+fn e_edits_the_description_of_the_project_here() {
+    let (central, _code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    board.selected = None;
+    board.on_key(KeyEvent::new(KeyCode::Char('E'), KeyModifiers::NONE));
+    assert!(matches!(board.mode, Mode::Normal), "with All and nothing selected, no project is here");
+    assert!(!board.commands(&Picker::default()).iter().any(|a| a.shown == "E"), "nor offered");
+    let api = board.sources.iter().position(|s| s.label.as_deref() == Some("shop/api")).unwrap();
+    board.select(Key::new(api, 1));
+    assert!(board.commands(&Picker::default()).iter().any(|a| a.shown == "E"), "a card of shop is selected");
+    board.on_key(KeyEvent::new(KeyCode::Char('E'), KeyModifiers::NONE));
+    let Mode::Edit(edit) = &board.mode else { panic!("E opens the editor: {:?}", board.mode) };
+    assert_eq!(edit.target, Target::Project(api));
+}

@@ -49,7 +49,7 @@ box, so it stays quick with many projects: type part of a name, then click it or
 
 `P` opens the dropdown from the keyboard. Started from inside a project, the app opens on it. With a project shown, the bar also shows
 its description, shared by its repositories, and with one repository shown, that repository's role; **Edit** changes
-them. **Manage project** at the end of the bar (`I`) shows the whole project: its description, each repository with
+them (`E` the description). **Manage project** at the end of the bar (`I`) shows the whole project: its description, each repository with
 its folder, notes, tasks per status and what's running, and the time tracked this week.
 
 It's also where a project is managed:

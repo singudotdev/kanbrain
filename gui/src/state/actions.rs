@@ -379,6 +379,29 @@ impl Board {
         waiting
     }
 
+    /// The decisions an agent proposed about the task `key`, which it waits on until they're accepted or rejected.
+    pub fn proposed_for(&self, key: Key) -> Vec<Key> {
+        let proposed =
+            |k: &Key| self.task(*k).is_some_and(|d| d.kind == Kind::Decision && d.decision == DecisionState::Proposed);
+        self.related_keys(key).into_iter().filter(proposed).collect()
+    }
+
+    /// Opens the first decision the selected task waits on.
+    pub fn open_proposed(&mut self) {
+        match self.selected.and_then(|key| self.proposed_for(key).first().copied()) {
+            Some(decision) => self.open_entry(decision),
+            None => self.notify("it waits on no proposed decision"),
+        }
+    }
+
+    /// Edits the description of the project shown, else the selected entry's, which its repositories share.
+    pub fn edit_project_description(&mut self) {
+        match self.project_here() {
+            Some(src) => self.open_editor(Target::Project(src)),
+            None => self.notify("no project here: select one of its cards, or show it with P"),
+        }
+    }
+
     /// Opens the next task waiting for an answer after the selected one, wrapping around.
     pub fn next_waiting(&mut self) {
         let waiting = self.waiting();

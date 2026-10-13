@@ -6,7 +6,7 @@ use super::nav::Step;
 use super::{Board, Confirm, Key, Mode, Picker, Request, Tab, Target};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
 use kanbrain_core::brain::Group;
-use kanbrain_core::model::{DecisionState, Kind, Status};
+use kanbrain_core::model::{Asked, DecisionState, Kind, Status};
 use kanbrain_core::period::{Period, Unit};
 
 /// One thing a key does.
@@ -83,9 +83,15 @@ pub enum When {
     DecisionNot(DecisionState),
     /// With an entry selected and another brain to move it to.
     OtherBrain,
+    /// With an entry selected that doesn't wait for your answer.
+    NotWaiting,
+    /// With a task selected that waits for your answer to an agent's question.
+    Asks,
+    /// With a task selected that waits on a decision an agent proposed.
+    Proposed,
     /// With a task waiting for your answer somewhere shown.
     Waiting,
-    /// With a project shown, or a card of one selected.
+    /// With a project shown, or an entry of one selected.
     Project,
     /// With a newer release found.
     Update,
@@ -108,8 +114,11 @@ impl When {
             Self::Card => board.tab == Tab::Board && entry.is_some(),
             Self::DecisionNot(state) => entry.is_some_and(|t| t.kind == Kind::Decision && t.decision != state),
             Self::OtherBrain => entry.is_some() && board.sources.len() > 1,
+            Self::NotWaiting => entry.is_some_and(|t| !matches!(t.asked(), Some(Asked::Waiting(_)))),
+            Self::Asks => entry.is_some_and(|t| matches!(t.asked(), Some(Asked::Waiting(_)))),
+            Self::Proposed => key.is_some_and(|k| !board.proposed_for(k).is_empty()),
             Self::Waiting => !board.waiting().is_empty(),
-            Self::Project => board.project_src().is_some(),
+            Self::Project => board.project_here().is_some(),
             Self::Update => board.available.is_some(),
             Self::Drawer => board.drawer,
             Self::Searched => !board.drawer && !board.search.is_empty(),
@@ -120,7 +129,15 @@ impl When {
     fn about_entry(self) -> bool {
         matches!(
             self,
-            Self::Entry | Self::Details(_) | Self::MoveTo(_) | Self::Card | Self::DecisionNot(_) | Self::OtherBrain
+            Self::Entry
+                | Self::Details(_)
+                | Self::MoveTo(_)
+                | Self::Card
+                | Self::DecisionNot(_)
+                | Self::OtherBrain
+                | Self::NotWaiting
+                | Self::Asks
+                | Self::Proposed
         )
     }
 }
@@ -200,6 +217,11 @@ fn move_to(board: &mut Board, status: Status) {
     selected(board, |b, key| b.set_status(key, status));
 }
 
+/// Comments on the selected entry, which answers the question it waits on, if any.
+fn comment(board: &mut Board) {
+    selected(board, |b, key| b.open_editor(Target::NewComment(key)));
+}
+
 /// Shows or hides the selected entry's details.
 fn toggle_details(board: &mut Board) {
     selected(board, |b, _| b.drawer = !b.drawer);
@@ -249,10 +271,10 @@ pub const ACTIONS: &[Action] = &[
         selected(b, |b, key| b.open_editor(Target::Description(key)));
     })
     .menu("Edit description"),
-    letter("c", Tabs::Entries, When::Entry, "Add a comment", |b| {
-        selected(b, |b, key| b.open_editor(Target::NewComment(key)));
-    })
-    .menu("Add comment"),
+    letter("c", Tabs::Entries, When::Asks, "Answer the agent's question", comment).menu("Answer…"),
+    letter("c", Tabs::Entries, When::NotWaiting, "Add a comment", comment).menu("Add comment"),
+    letter("D", Tabs::Entries, When::Proposed, "Open the decision it waits on", Board::open_proposed)
+        .menu("Open proposed decision"),
     letter("r", Tabs::Entries, When::Entry, "Relate to other entries", |b| selected(b, |b, _| b.open_links()))
         .menu("Link…"),
     letter(
@@ -296,6 +318,7 @@ pub const ACTIONS: &[Action] = &[
         "Manage project: rename, move or remove it and its repositories; its description and time",
         Board::open_project_info,
     ),
+    letter("E", Tabs::Every, When::Project, "Edit the project's description", Board::edit_project_description),
     letter("A", Tabs::Every, When::Always, "Add a project: pick a code folder, as `kb init` there", |b| {
         b.request = Some(Request::Folder(None));
     }),
