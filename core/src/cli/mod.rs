@@ -60,9 +60,10 @@ impl Program {
         for line in usage.lines() {
             if let Some(rest) = line.strip_prefix(&header) {
                 let names = rest.split_whitespace().next().unwrap_or_default();
-                // `accept` shares the description under `reject`'s line: a matched line with none yet takes the next.
+                // `accept` shares the description under `reject`'s line: a matched line with none yet, on it or
+                // under it, takes the next.
                 inside = command.is_some_and(|c| names.split('|').any(|n| n == c)) || bare;
-                bare = inside && !bare;
+                bare = inside && !bare && !rest.contains("   ");
             } else if !(inside && line.starts_with("   ")) {
                 inside = false;
             } else {

@@ -74,6 +74,8 @@ fn errors_go_to_stderr_with_a_failing_exit_code() {
     let misused = String::from_utf8(run(&["wait", "6", "--timeout", "x"]).stderr).unwrap();
     assert!(misused.contains("usage:\n  kb wait ID [--timeout MINUTES]\n"), "{misused}");
     assert!(!misused.contains("kb add") && misused.lines().count() < 12, "only the command's usage: {misused}");
+    let show = String::from_utf8(run(&["show", "abc"]).stderr).unwrap();
+    assert!(show.starts_with("Error: `abc` isn't an entry id\n") && !show.contains("kb search"), "{show}");
     assert!(ok(&run(&["--version"])).starts_with("kb "));
     assert_eq!(ok(&run(&["list"])), "nothing to list\n", "said, not left blank");
 }

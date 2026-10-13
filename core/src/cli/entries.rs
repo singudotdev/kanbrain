@@ -9,7 +9,7 @@ use crate::api::text::line;
 use crate::brain::{Brain, NewEntry};
 use crate::model::{Asked, DecisionState, Kind, RepoLink, Status, Task, parse_links, parse_tags};
 use crate::projects::ProjectInfo;
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use serde::Serialize;
 use std::io::Read;
 use std::time::Duration;
@@ -387,7 +387,8 @@ fn first_id(args: &mut Vec<String>) -> Result<u32> {
         bail!("an entry id is needed");
     }
     let arg = args.remove(0);
-    arg.trim_start_matches('#').parse().with_context(|| format!("`{arg}` isn't an entry id"))
+    // The parser's own words ("invalid digit found in string") say nothing more to whoever typed it.
+    arg.trim_start_matches('#').parse().map_err(|_| anyhow!("`{arg}` isn't an entry id"))
 }
 
 /// An id, then the text: the remaining words, or `-` alone for stdin; `needs` says what's missing without it.
