@@ -64,8 +64,10 @@ fn scope_bar(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<Bra
     bar.child(picker)
         .child(project_card(board, cx).unwrap_or_else(div).flex_1().min_w_0().pt_1())
         .children(board.project_src().map(|_| {
-            action("project-info", "Project info", Kind::Ghost, KeyCode::Char('I'), cx)
-                .debug_selector(|| "project-info-button".into())
+            // Named for what it's mostly opened for, and drawn as a button: as "Project info", without a border,
+            // it read as a label, and nothing said the project is managed there.
+            action("manage-project", "Manage project", Kind::Secondary, KeyCode::Char('I'), cx)
+                .debug_selector(|| "manage-project-button".into())
         }))
         .child(add)
 }

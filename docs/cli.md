@@ -87,7 +87,7 @@ Run inside one of the project's repositories (or with `--project`):
 | `kb project move PROJECT…` | moves this repository to another project, created if new; its links to the old project's repositories are dropped, on both sides |
 | `kb project remove [--purge]` | takes every repository of the project out, as `deinit` does each; `--purge` deletes their `.brain/` too |
 
-The kanban app does the same from **Project info** (`I`).
+The kanban app does the same from **Manage project** (`I`).
 
 ### `kb init --all`
 

@@ -302,7 +302,7 @@ fn project_info_draws_every_repository(cx: &mut gpui::TestAppContext) {
     board.set_scope(crate::state::Scope::Project("shop".into()));
     let (view, cx) = cx.add_window_view(|window, cx| BrainView::new(board, window, cx));
     cx.run_until_parked();
-    let info = cx.debug_bounds("project-info-button").expect("the bar has the info button").center();
+    let info = cx.debug_bounds("manage-project-button").expect("the bar has the manage button").center();
     cx.simulate_click(info, gpui::Modifiers::none());
     view.read_with(cx, |view, _| assert!(matches!(view.board.mode, crate::state::Mode::ProjectInfo(1))));
     cx.simulate_keystrokes("escape");

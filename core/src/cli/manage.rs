@@ -1,6 +1,6 @@
 //! Managing projects and their repositories after `init`: renaming a project or a repository, moving a
 //! repository to another project, and taking a repository or a whole project out, keeping their tasks or deleting
-//! them. The kanban app's project info and `kb project` run these. Each returns what it did, one line each.
+//! them. The kanban app's Manage project and `kb project` run these. Each returns what it did, one line each.
 //!
 //! Links between a project's repositories name the other one (`web#3`), so a repository's name and project are
 //! part of its siblings' files: renaming it rewrites them, and moving or removing it drops them, on both sides,

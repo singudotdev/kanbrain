@@ -113,7 +113,12 @@ const EVERYWHERE: &[Command] = &[
     letter("/", '/', "Search titles and tags; #tag matches tags only", Needs::Nothing),
     letter("#", '#', "Filter by tags", Needs::Nothing),
     letter("P", 'P', "Choose the project shown", Needs::Nothing),
-    letter("I", 'I', "Project info: description, repositories, time", Needs::Nothing),
+    letter(
+        "I",
+        'I',
+        "Manage project: rename, move or remove it and its repositories; its description and time",
+        Needs::Nothing,
+    ),
     letter("A", 'A', "Add a project: pick a code folder, as `kb init` there", Needs::Nothing),
     letter("1", '1', "Go to the board", Needs::Nothing),
     letter("2", '2', "Go to the notes", Needs::Nothing),

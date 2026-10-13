@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The kanban app's **Project info** button is now **Manage project**, drawn as a button: renaming, moving and
+  removing projects and repositories is there, with the project's description and time (`I`, as before).
+
 ### Fixed
 
 - Closing a task's details in the kanban app with a double-click on ✕ no longer opens a new task: the second click

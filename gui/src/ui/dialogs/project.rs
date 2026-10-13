@@ -107,5 +107,5 @@ pub(super) fn draw(board: &Board, src: usize, cx: &mut Context<BrainView>) -> Op
     let remove: Stateful<Div> = button("remove-project", "Remove project…", Kind::Danger)
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.ask_remove(src, true))));
     let buttons = vec![remove, action("close-project-info", "Close", Kind::Primary, KeyCode::Esc, cx)];
-    Some(dialog(format!("Project {}", project.name), content, buttons).w(px(WIDE_WIDTH)))
+    Some(dialog(format!("Manage project {}", project.name), content, buttons).w(px(WIDE_WIDTH)))
 }

@@ -226,7 +226,7 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
     │   ├── form.rs     the new / edit form: project, title, tags, related entries, column
     │   ├── editor.rs   the text editor for descriptions, comments and project text
     │   ├── pickers.rs  the link picker, which project, the command palette
-    │   ├── project.rs  project info: description, repositories, the week's time, and the buttons that manage them
+    │   ├── project.rs  Manage project: description, repositories, the week's time, and the buttons that manage them
     │   ├── manage.rs   renaming a project or repository, moving a repository, removing either
     │   └── add_project.rs  adding a project: the folder picked, and the project it joins or starts, from a searchable list
     ├── markdown.rs  descriptions, comments and project text drawn as markdown: parsed into Blocks, then drawn
