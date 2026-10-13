@@ -5,6 +5,67 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-10-13
+
+### Added
+
+- A key for every button of the kanban app: `N` edits the repository's role, `C` lists the entry's comments to edit
+  or delete one, `ctrl+d` discards the editor's changes, `shift+tab` goes back a tab or a form field, and Manage
+  project's buttons have keys, on the repository `↑` `↓` highlight.
+- `kb show --json` lists the other repositories' entries linking to it, in `repo_linked_from`.
+
+### Changed
+
+- The kanban app embeds its fonts, IBM Plex Sans and Lilex: bold and italic now show on Linux, and the editor and
+  code are monospace on every platform.
+- A tag shows in one color all over the app, though several brains color it.
+- Time under a minute shows as `<1m`, not `0m`, which now means none.
+- `kb list` marks a task waiting for an answer and a decision proposed or rejected, as `kb context` does.
+- A command-line error is followed by that command's usage only, not every command's.
+- `--project` takes a name in any case when only one project or repository has it.
+
+### Fixed
+
+- Several `kb init`s at once all keep their repository in the list of projects; before, one could drop another's.
+- `kb project` no longer can freeze with the kanban app open, each waiting for the other's write lock.
+- The kanban app no longer misses a change an agent makes while it reloads, including in a repository just added.
+- A command reading its text from stdin (`kb comment 3 -`) no longer holds up other `kb` commands and the app while
+  it waits for the input.
+- `kb wait` and `kb report` take the brain's write lock while opening it, since opening may fix files.
+- Every write is flushed to disk under a temporary name of its own before taking the file's place; one a crash
+  leaves behind is deleted later, and uninstalling with `--purge` deletes them too.
+- A sync tool's conflict copy of an entry gets the next free id, instead of sharing the original's: commands meant
+  for one reached the other, and saving the copy could overwrite the original.
+- `kb update` and `--project` no longer recreate the `.brain/` folder of a repository deleted by hand:
+  `--project` says to take it out with `kb --project NAME deinit`.
+- `kb status` still shows the other brains when one can't be read, and a `format` file saying `0` is an error
+  rather than a crash.
+- Brains in the temporary folder, as tests make, leave nothing in its cache once they're gone.
+- The kanban app:
+  - the board scrolls sideways to the selected card's column instead of hiding the Done column under the details;
+  - a card's question wraps within the card instead of being cut at its edge;
+  - a dialog left open follows its project when another is added or removed;
+  - a button's tooltip names its key only where the key does the same;
+  - the `#tag` filter matches as `kb search` does;
+  - an empty `$VISUAL` falls back to `$EDITOR`;
+  - running tasks keep their place in the top bar, which wraps alike on every tab;
+  - the notes and decisions lists line up across brains, preview without markdown and say `1 note`;
+  - an empty column says when the search hides its tasks, and saving a form without a title says so under it;
+  - the calendar's month names each entry's project when several are shown;
+  - it redraws only when something on it changes with time, not twice a second while idle.
+- `kb update` and the app's update run the latest release's installer, not the one on `main`.
+- New tags get the same color whatever build of kanbrain picks it.
+- `kb list --json` prints on one line, like every other command's JSON; `kb list` with nothing to show says so, and
+  `kb search` asks for words rather than listing everything.
+- Shell completions offer every `kb project` subcommand, `deinit --purge`, `init --repo` and `wait --timeout`, only
+  the project names `--project` takes, and open tasks' ids first.
+- Errors name their command once (`reject needs why`, `propose needs the decision's title`), `kb wait` on a note
+  gives no status, counts say `1 session` and `1 entry`, `kb update` names agents' tasks as `kb status` does, and
+  moving or removing a repository says what happens to its notes and tasks.
+- `kb --help` names every command that takes `--json`.
+- `install.sh` takes `KANBRAIN_UNINSTALL`, `KANBRAIN_PURGE` and `KANBRAIN_YES` as `install.ps1` does, and cancelling
+  a purge is no longer an error; `install.ps1` installs the second app at the version asked for.
+
 ## [0.3.5] - 2026-10-13
 
 ### Fixed
@@ -141,7 +202,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.3.5...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.3.6...HEAD
+[0.3.6]: https://github.com/singudotdev/kanbrain/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/singudotdev/kanbrain/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/singudotdev/kanbrain/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/singudotdev/kanbrain/compare/v0.3.2...v0.3.3
