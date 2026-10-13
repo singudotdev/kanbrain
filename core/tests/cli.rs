@@ -152,3 +152,14 @@ fn the_status_line_names_running_tasks_and_skips_a_brain_it_cant_read() {
     std::fs::write(blog.join(crate::migrate::FORMAT_FILE), "99\n").unwrap();
     assert!(status_line(central.path(), now()).unwrap().starts_with("shop #1 Fix login"), "blog is newer");
 }
+
+#[test]
+fn an_agents_own_variable_makes_it_the_author_unless_kanbrain_author_says() {
+    let env =
+        |vars: &'static [(&str, &str)]| move |name: &str| vars.iter().find(|(n, _)| *n == name).map(|(_, v)| v.into());
+    assert_eq!(author(env(&[])).unwrap(), Author::Human);
+    assert_eq!(author(env(&[("CLAUDECODE", "1")])).unwrap(), Author::Agent);
+    assert_eq!(author(env(&[("CLAUDECODE", "")])).unwrap(), Author::Human, "an empty one doesn't count");
+    assert_eq!(author(env(&[("CLAUDECODE", "1"), ("KANBRAIN_AUTHOR", "human")])).unwrap(), Author::Human);
+    assert!(author(env(&[("KANBRAIN_AUTHOR", "robot")])).is_err());
+}

@@ -451,13 +451,14 @@ fn init_args(words: Vec<String>) -> Result<Command> {
 
 /// Who this command runs for, recorded on the comments and status changes it makes: `KANBRAIN_AUTHOR`
 /// (`human` or `agent`) if set, else an agent if one of [`AGENT_VARIABLES`] is set, else a person.
-fn author() -> Result<Author> {
-    if let Some(value) = std::env::var_os("KANBRAIN_AUTHOR") {
+/// `var` reads a variable, as `std::env::var_os` does for the command line.
+fn author(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Result<Author> {
+    if let Some(value) = var("KANBRAIN_AUTHOR") {
         let value = value.to_string_lossy();
         return Author::parse(&value)
             .with_context(|| format!("KANBRAIN_AUTHOR must be {}, not `{value}`", Author::names(" or ")));
     }
-    let agent = AGENT_VARIABLES.iter().any(|name| std::env::var_os(name).is_some_and(|v| !v.is_empty()));
+    let agent = AGENT_VARIABLES.iter().any(|name| var(name).is_some_and(|v| !v.is_empty()));
     Ok(if agent { Author::Agent } else { Author::Human })
 }
 
@@ -490,7 +491,7 @@ fn status_line(central: &Path, now: DateTime<Local>) -> Result<String> {
 
 /// Runs one of the entry commands on the brain in `store`.
 fn run_entries(store: Store, central: &Path, mut args: EntryArgs) -> Result<()> {
-    let author = author()?;
+    let author = author(|name| std::env::var_os(name))?;
     // Before the lock: `-` waits for stdin, maybe for someone typing, and every other `kb` and the app would wait
     // meanwhile.
     args.read_stdin()?;
