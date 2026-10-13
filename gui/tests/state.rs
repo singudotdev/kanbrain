@@ -1280,3 +1280,18 @@ fn a_buttons_shortcut_is_named_only_on_the_tabs_its_key_does_the_same() {
         assert_eq!(f.board.shortcut(When::MoveTo(Status::Done)), None, "d picks a day there");
     }
 }
+
+#[test]
+fn the_done_column_shows_the_latest_until_asked_for_all() {
+    let titles: Vec<String> = (1..=DONE_LIMIT + 3).map(|n| format!("task {n}")).collect();
+    let mut f = Fixture::new(&titles.iter().map(String::as_str).collect::<Vec<_>>());
+    for id in 1..=u32::try_from(DONE_LIMIT + 3).unwrap() {
+        f.board.set_status(k(id), Status::Done);
+    }
+    assert_eq!((f.board.column(Status::Done).len(), f.board.hidden_done()), (DONE_LIMIT, 3));
+    assert_eq!(f.board.column(Status::Done)[0].0, k(23), "the latest first");
+    f.press(KeyCode::Char('f'));
+    assert_eq!((f.board.column(Status::Done).len(), f.board.hidden_done()), (DONE_LIMIT + 3, 0));
+    f.press(KeyCode::Char('f'));
+    assert_eq!(f.board.hidden_done(), 3, "f again hides them");
+}
