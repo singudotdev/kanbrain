@@ -53,6 +53,15 @@ fn keys_reach_the_board(cx: &mut gpui::TestAppContext) {
     });
 }
 
+/// Clicks twice at `at`, as a double-click: the first click, then the second counted as such.
+fn double_click(cx: &mut gpui::VisualTestContext, at: gpui::Point<gpui::Pixels>) {
+    for click_count in [1, 2] {
+        let (button, modifiers, first_mouse) = (MouseButton::Left, gpui::Modifiers::none(), false);
+        cx.simulate_event(gpui::MouseDownEvent { position: at, button, modifiers, click_count, first_mouse });
+        cx.simulate_event(gpui::MouseUpEvent { position: at, button, modifiers, click_count });
+    }
+}
+
 #[gpui::test]
 fn cards_select_on_click_and_open_on_double_click(cx: &mut gpui::TestAppContext) {
     let (view, cx, _dir) = window(cx, &["a", "b"]);
@@ -61,19 +70,7 @@ fn cards_select_on_click_and_open_on_double_click(cx: &mut gpui::TestAppContext)
     view.read_with(cx, |view, _| {
         assert_eq!((view.board.selected, view.board.drawer), (Some(crate::state::Key::new(0, 2)), false));
     });
-    cx.simulate_event(gpui::MouseDownEvent {
-        position: card,
-        button: MouseButton::Left,
-        modifiers: gpui::Modifiers::none(),
-        click_count: 2,
-        first_mouse: false,
-    });
-    cx.simulate_event(gpui::MouseUpEvent {
-        position: card,
-        button: MouseButton::Left,
-        modifiers: gpui::Modifiers::none(),
-        click_count: 2,
-    });
+    double_click(cx, card);
     view.read_with(cx, |view, _| assert!(view.board.drawer, "double-click opens the details"));
     let doing = cx.debug_bounds("drawer status doing").expect("the drawer has status buttons").center();
     cx.simulate_click(doing, gpui::Modifiers::none());
@@ -448,11 +445,7 @@ fn closing_the_details_opens_nothing(cx: &mut gpui::TestAppContext) {
     let (view, cx, _dir) = window(cx, &["a", "b"]);
     let open = |cx: &mut gpui::VisualTestContext| {
         let card = cx.debug_bounds("card 0/2").expect("card 2 is drawn").center();
-        for click_count in [1, 2] {
-            let (button, modifiers, first_mouse) = (MouseButton::Left, gpui::Modifiers::none(), false);
-            cx.simulate_event(gpui::MouseDownEvent { position: card, button, modifiers, click_count, first_mouse });
-            cx.simulate_event(gpui::MouseUpEvent { position: card, button, modifiers, click_count });
-        }
+        double_click(cx, card);
     };
     open(cx);
     view.read_with(cx, |view, _| assert!(view.board.drawer, "a double-click opens it"));
@@ -464,11 +457,7 @@ fn closing_the_details_opens_nothing(cx: &mut gpui::TestAppContext) {
     }
     view.read_with(cx, |view, _| assert!(!view.board.drawer && matches!(view.board.mode, crate::state::Mode::Normal)));
     open(cx);
-    for click_count in [1, 2] {
-        let (button, modifiers, first_mouse) = (MouseButton::Left, gpui::Modifiers::none(), false);
-        cx.simulate_event(gpui::MouseDownEvent { position: close, button, modifiers, click_count, first_mouse });
-        cx.simulate_event(gpui::MouseUpEvent { position: close, button, modifiers, click_count });
-    }
+    double_click(cx, close);
     view.read_with(cx, |view, _| {
         assert!(!view.board.drawer, "the close button closes it");
         assert!(matches!(view.board.mode, crate::state::Mode::Normal), "and opens nothing: {:?}", view.board.mode);
