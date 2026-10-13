@@ -121,7 +121,7 @@ fn timeline(board: &Board, report: &Report) -> Div {
                         .child(format!("{}–{end}", slot.start.format("%H:%M"))),
                 )
                 .child(div().w(px(64.)).flex_none().text_right().child(fmt_dur(slot.end.unwrap_or(now) - slot.start)))
-                .child(div().min_w_0().truncate().child(format!("#{} {}", slot.id, slot.title)))
+                .child(div().min_w_0().truncate().child(slot.label()))
                 .child(chips(board, &slot.tags)),
         );
     }

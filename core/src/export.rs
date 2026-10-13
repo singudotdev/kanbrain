@@ -111,7 +111,7 @@ fn write_timeline(out: &mut String, report: &Report, now: DateTime<Local>) -> fm
                 slot.start.format("%H:%M").to_string(),
                 slot.end.map_or_else(|| "running".to_string(), |e| e.format("%H:%M").to_string()),
                 fmt_dur(end - slot.start),
-                escape(&format!("#{} {}", slot.id, slot.title)),
+                escape(&slot.label()),
                 slot.tags.join(", "),
             ],
         )?;

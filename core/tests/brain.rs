@@ -333,7 +333,7 @@ fn the_calendar_lists_each_days_interactions() {
 }
 
 #[test]
-fn reports_and_calendars_of_several_brains_merge() {
+fn reports_and_calendars_of_several_brains_merge_counting_overlaps_once() {
     use crate::period::{Period, Unit};
     use chrono::Duration;
     let t0 = crate::model::parse_ts("2026-09-24 09:00").unwrap();
@@ -344,23 +344,26 @@ fn reports_and_calendars_of_several_brains_merge() {
             vec![Session { start: t0 + Duration::minutes(start), end: Some(t0 + Duration::minutes(start + 30)) }];
         task
     };
-    let (api, web) = (Fixture::new(vec![worked(1, "fix", 0)]), Fixture::new(vec![worked(1, "export", 60)]));
+    // 09:00–09:30 and 09:15–09:45: 45 minutes of the day, though each task has 30.
+    let (api, web) = (Fixture::new(vec![worked(1, "fix", 0)]), Fixture::new(vec![worked(1, "export", 15)]));
     let mut view = ReportView::new(Period::containing(Unit::Day, t0.naive_local()));
     let merged = Report::merge(
         vec![(Some("api".into()), api.brain.report(&view)), (Some("web".into()), web.brain.report(&view))],
-        view.group,
+        &view,
     );
-    let rows: Vec<_> = merged.rows.iter().map(|r| r.label.as_str()).collect();
-    assert_eq!((merged.total, rows), (Duration::minutes(60), vec!["api · #1 fix", "web · #1 export"]));
-    assert_eq!(merged.timeline[1].title, "web · export");
+    let rows: Vec<_> = merged.rows.iter().map(|r| (r.label.as_str(), r.total.num_minutes())).collect();
+    assert_eq!(rows, [("api · #1 fix", 30), ("web · #1 export", 30)], "each task keeps its own time");
+    assert_eq!(merged.total, Duration::minutes(45), "the overlap counts once");
+    assert_eq!(merged.timeline[1].label(), "web · #1 export");
     view.group = Group::Tag;
-    let merged = Report::merge(vec![(None, api.brain.report(&view)), (None, web.brain.report(&view))], view.group);
-    assert_eq!(merged.rows.len(), 1, "one #backend row");
+    let merged = Report::merge(vec![(None, api.brain.report(&view)), (None, web.brain.report(&view))], &view);
+    let rows: Vec<_> = merged.rows.iter().map(|r| (r.label.as_str(), r.total.num_minutes())).collect();
+    assert_eq!(rows, [("#backend", 45)], "one #backend row, by the clock too");
 
     let view = CalendarView::new(Period::containing(Unit::Day, t0.naive_local()));
     let calendar = Calendar::merge(vec![api.brain.calendar(&view), web.brain.calendar(&view)]);
     assert_eq!(calendar.entries(), [(0, 1), (1, 1)]);
-    assert_eq!(calendar.tracked, Duration::minutes(60));
+    assert_eq!(calendar.tracked, Duration::minutes(45));
 }
 
 #[test]

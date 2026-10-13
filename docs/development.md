@@ -155,7 +155,7 @@ core/src/            kanbrain-core: shared by both programs
 ├── brain/           the domain service: every entry in the data folder and the operations on them
 │   ├── mod.rs       Brain: loading (and fixing several running sessions or doing tasks), queries, columns, backlinks, related, tags
 │   ├── actions.rs   status changes with tracking (one task in doing), create, update, delete, links, descriptions, comments, report export
-│   ├── report.rs    time per task or tag for a period, breakdown columns, timeline (ReportView, Group)
+│   ├── report.rs    time per task or tag for a period, breakdown columns, timeline (ReportView, Group); totals by the clock
 │   └── calendar.rs  each day's interactions over a period: sessions, moves, comments, new entries (CalendarView, Show)
 ├── cli/             the command line
 │   ├── mod.rs       Program (the binary's name), Command parsing, `--project`, `list`, `status`, `report`, `path`, usage
@@ -174,7 +174,7 @@ core/src/            kanbrain-core: shared by both programs
 │   ├── mod.rs       Task (any entry), Kind, Status, StatusChange, Session, Comment
 │   ├── markdown.rs  the task file format: writing and parsing
 │   ├── text.rs      tags, slugs, heading rules for user text
-│   └── time.rs      timestamps, ages (`5m`, `3h`, `2d`) and durations (`1h 05m`, `00:42:17`)
+│   └── time.rs      timestamps, ages (`5m`, `3h`, `2d`), durations (`1h 05m`, `00:42:17`), time covered by overlapping spans
 ├── period.rs        report periods: hour, day, ISO week, month
 ├── export.rs        reports as markdown tables
 ├── enums.rs         `named_enum!` / `ordered_enum!`: enums whose variants are listed in one place
@@ -321,7 +321,7 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | `api`, `cli` | agent operations and their refusals, links to other repositories, compact text and JSON, `context`'s caps, command parsing, `--project`, `list` output, usage, completion scripts and candidates, which apps `update` installs |
 | `cli::init` | the agent section written, updated in place and left alone when unclosed; `init --all` updating every registered repository that has it, and no other; registering repositories and joining them into a project; `deinit` taking it all back but `.brain/`; the Claude Code hooks added once beside other settings (one from before `kb` replaced), and removed leaving them as they were; `kb hook` asking with every prompt and holding the turn once while the project or this repository's role isn't described, and silent once they are |
 | `projects` | the registry and its labels, cards, moving a repository between projects, refusing two repositories with one name |
-| `model` | file round trip, what a newer version wrote kept, hand-typed history, missing id, status changes recorded once, search matching, tags, slugs, heading rules, timestamps, ages |
+| `model` | file round trip, what a newer version wrote kept, hand-typed history, missing id, status changes recorded once, search matching, tags, slugs, heading rules, timestamps, ages, overlapping time counted once |
 | `store` | renaming on title change, unreadable files become warnings, `tags.md` isn't a task, whole-file writes |
 | `tags` | no color repeats until the palette is used up, `tags.md` round trip, custom colors |
 | `period`, `export` | period bounds and stepping, report tables |

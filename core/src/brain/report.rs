@@ -2,7 +2,7 @@
 
 use super::Brain;
 use crate::enums::named_enum;
-use crate::model::{Task, now};
+use crate::model::{Task, covered, now};
 use crate::period::Period;
 use chrono::{DateTime, Duration, Local};
 use std::collections::BTreeMap;
@@ -58,6 +58,28 @@ pub struct Slot {
     pub title: String,
     /// Tags of the task.
     pub tags: Vec<String>,
+    /// The brain the task is in, when a report merges several, which number their entries alike.
+    pub project: Option<String>,
+}
+
+impl Slot {
+    /// `#id title`, after its brain when the report merges several: `api · #3 Fix login`.
+    pub fn label(&self) -> String {
+        match &self.project {
+            Some(project) => format!("{project} · #{} {}", self.id, self.title),
+            None => format!("#{} {}", self.id, self.title),
+        }
+    }
+
+    /// Where the slot starts and ends within `[from, to)`, a running one ending `now`.
+    fn span(
+        &self,
+        from: DateTime<Local>,
+        to: DateTime<Local>,
+        now: DateTime<Local>,
+    ) -> (DateTime<Local>, DateTime<Local>) {
+        (self.start.max(from), self.end.unwrap_or(now).min(to))
+    }
 }
 
 /// One row of a report: a task or a tag, with its time per column and in total.
@@ -67,7 +89,7 @@ pub struct ReportRow {
     pub label: String,
     /// The task's tags; empty for tag rows.
     pub tags: Vec<String>,
-    /// Time in the whole period.
+    /// Time in the whole period; for a tag, time two of its tasks ran at once counts once.
     pub total: Duration,
     /// Time per breakdown column, parallel to `Report::columns`.
     pub cells: Vec<Duration>,
@@ -76,13 +98,14 @@ pub struct ReportRow {
 /// A computed report, rendered both in the desktop app and as markdown (`export`).
 #[derive(Debug)]
 pub struct Report {
-    /// Real tracked time; when grouping by tag, rows can add up to more (multi-tag tasks).
+    /// Time worked, by the clock: when tasks ran at once (an agent's subagents, say) that time counts once,
+    /// so task rows can add up to more, and tag rows too (a task with several tags counts under each).
     pub total: Duration,
     /// Tasks (or tags) with tracked time, busiest first.
     pub rows: Vec<ReportRow>,
     /// Breakdown column labels (days of a week, weeks of a month); empty for hour/day.
     pub columns: Vec<String>,
-    /// Sum of each breakdown column over all tasks.
+    /// Time worked in each breakdown column, counted like `total`.
     pub column_totals: Vec<Duration>,
     /// Every session in the period, in start order.
     pub timeline: Vec<Slot>,
@@ -105,75 +128,24 @@ impl Report {
 }
 
 impl Report {
-    /// Several brains' reports for the same view as one. Task rows and timeline entries are named
-    /// after their project (`api · #3 Fix login`), since each brain numbers its entries from 1; tag
-    /// rows of the same tag are added up.
-    pub fn merge(parts: Vec<(Option<String>, Report)>, group: Group) -> Report {
-        let columns = parts.first().map(|(_, r)| r.columns.clone()).unwrap_or_default();
-        let mut total = Duration::zero();
-        let mut column_totals = vec![Duration::zero(); columns.len()];
-        let mut rows: BTreeMap<String, ReportRow> = BTreeMap::new();
-        let mut timeline = Vec::new();
-        for (project, report) in parts {
-            let named = |label: String| project.as_ref().map_or_else(|| label.clone(), |p| format!("{p} · {label}"));
-            total += report.total;
-            add_cells(&mut column_totals, &report.column_totals);
-            for row in report.rows {
-                let label = if group == Group::Task { named(row.label) } else { row.label };
-                match rows.get_mut(&label) {
-                    Some(sum) => {
-                        sum.total += row.total;
-                        add_cells(&mut sum.cells, &row.cells);
-                    }
-                    None => _ = rows.insert(label.clone(), ReportRow { label, ..row }),
-                }
-            }
-            timeline.extend(report.timeline.into_iter().map(|slot| Slot { title: named(slot.title.clone()), ..slot }));
-        }
-        let mut rows: Vec<ReportRow> = rows.into_values().collect();
-        rows.sort_by_key(|r| std::cmp::Reverse(r.total));
-        timeline.sort_by_key(|s| s.start);
-        Report { total, rows, columns, column_totals, timeline }
-    }
-}
-
-/// Accumulates a row's total and per-column cells.
-struct RowSums {
-    /// Time in the whole period.
-    total: Duration,
-    /// Time per breakdown column.
-    cells: Vec<Duration>,
-    /// The task's tags (task rows only).
-    tags: Vec<String>,
-}
-
-impl RowSums {
-    /// An empty row for a report with `columns` breakdown columns.
-    fn new(columns: usize) -> Self {
-        Self { total: Duration::zero(), cells: vec![Duration::zero(); columns], tags: Vec::new() }
+    /// Several brains' reports for the same view as one, worked out again from their sessions so time
+    /// tasks of different brains ran at once counts once too. Task rows and timeline entries are named
+    /// after their brain (`api · #3 Fix login`), since each brain numbers its entries from 1.
+    pub fn merge(parts: Vec<(Option<String>, Report)>, view: &ReportView) -> Report {
+        let timeline = parts
+            .into_iter()
+            .flat_map(|(project, report)| {
+                report.timeline.into_iter().map(move |slot| Slot { project: project.clone(), ..slot })
+            })
+            .collect();
+        Report::from_timeline(timeline, view, now())
     }
 
-    /// Adds one task's time to the row.
-    fn add(&mut self, total: Duration, cells: &[Duration]) {
-        self.total += total;
-        add_cells(&mut self.cells, cells);
-    }
-}
-
-/// Adds `cells` to `sums`, column by column.
-fn add_cells(sums: &mut [Duration], cells: &[Duration]) {
-    for (sum, cell) in sums.iter_mut().zip(cells) {
-        *sum += *cell;
-    }
-}
-
-impl Brain {
-    /// Computes the report for `view`: rows, breakdown columns, totals and the timeline.
-    pub fn report(&self, view: &ReportView) -> Report {
-        let now = now();
+    /// The report of `timeline`, every session in `view`'s period: rows, breakdown columns and totals.
+    fn from_timeline(mut timeline: Vec<Slot>, view: &ReportView, now: DateTime<Local>) -> Report {
         let (from, to) = view.period.bounds();
         // Breakdown columns, clipped to the period (a month's first and last weeks).
-        let (labels, ranges): (Vec<String>, Vec<_>) = view
+        let (columns, ranges): (Vec<String>, Vec<_>) = view
             .period
             .columns()
             .into_iter()
@@ -182,52 +154,63 @@ impl Brain {
                 (label, (a.max(from), b.min(to)))
             })
             .unzip();
-
-        let mut total = Duration::zero();
-        let mut column_totals = vec![Duration::zero(); labels.len()];
+        timeline.sort_by_key(|s| s.start);
+        let time = |slots: &[&Slot], (a, b): (DateTime<Local>, DateTime<Local>)| {
+            covered(slots.iter().map(|s| s.span(a, b, now)))
+        };
+        let all: Vec<&Slot> = timeline.iter().collect();
         // Keyed by label; BTreeMap keeps rows with equal time in a stable order.
-        let mut rows: BTreeMap<String, RowSums> = BTreeMap::new();
-        let mut timeline = Vec::new();
-
-        let tasks = self
-            .tasks
-            .iter()
-            .filter(|t| view.tag.as_ref().is_none_or(|tag| t.tags.contains(tag)) && t.matches(&view.query));
-        for task in tasks {
-            let task_total = task.time_between(from, to, now);
-            if task_total.is_zero() {
-                continue;
-            }
-            let cells: Vec<Duration> = ranges.iter().map(|&(a, b)| task.time_between(a, b, now)).collect();
-            total += task_total;
-            add_cells(&mut column_totals, &cells);
-
-            for label in row_labels(task, view.group) {
-                let row = rows.entry(label).or_insert_with(|| RowSums::new(ranges.len()));
+        let mut groups: BTreeMap<String, (Vec<&Slot>, Vec<String>)> = BTreeMap::new();
+        for slot in &timeline {
+            for label in row_labels(slot, view.group) {
+                let group = groups.entry(label).or_default();
+                group.0.push(slot);
                 if view.group == Group::Task {
-                    row.tags.clone_from(&task.tags);
+                    group.1.clone_from(&slot.tags);
                 }
-                row.add(task_total, &cells);
             }
-            timeline.extend(slots(task, from, to, now));
         }
-
-        let mut rows: Vec<ReportRow> = rows
+        let mut rows: Vec<ReportRow> = groups
             .into_iter()
-            .map(|(label, sums)| ReportRow { label, tags: sums.tags, total: sums.total, cells: sums.cells })
+            .map(|(label, (slots, tags))| ReportRow {
+                label,
+                tags,
+                total: time(&slots, (from, to)),
+                cells: ranges.iter().map(|&range| time(&slots, range)).collect(),
+            })
             .collect();
         rows.sort_by_key(|r| std::cmp::Reverse(r.total));
-        timeline.sort_by_key(|s| s.start);
-        Report { total, rows, columns: labels, column_totals, timeline }
+        Report {
+            total: time(&all, (from, to)),
+            column_totals: ranges.iter().map(|&range| time(&all, range)).collect(),
+            rows,
+            columns,
+            timeline,
+        }
     }
 }
 
-/// The rows a task counts toward: itself, or each of its tags.
-fn row_labels(task: &Task, group: Group) -> Vec<String> {
+impl Brain {
+    /// Computes the report for `view`: rows, breakdown columns, totals and the timeline.
+    pub fn report(&self, view: &ReportView) -> Report {
+        let now = now();
+        let (from, to) = view.period.bounds();
+        let timeline = self
+            .tasks
+            .iter()
+            .filter(|t| view.tag.as_ref().is_none_or(|tag| t.tags.contains(tag)) && t.matches(&view.query))
+            .flat_map(|task| slots(task, from, to, now))
+            .collect();
+        Report::from_timeline(timeline, view, now)
+    }
+}
+
+/// The rows a session counts toward: its task, or each of its task's tags.
+fn row_labels(slot: &Slot, group: Group) -> Vec<String> {
     match group {
-        Group::Task => vec![format!("#{} {}", task.id, task.title)],
-        Group::Tag if task.tags.is_empty() => vec![UNTAGGED.to_string()],
-        Group::Tag => task.tags.iter().map(|tag| format!("#{tag}")).collect(),
+        Group::Task => vec![slot.label()],
+        Group::Tag if slot.tags.is_empty() => vec![UNTAGGED.to_string()],
+        Group::Tag => slot.tags.iter().map(|tag| format!("#{tag}")).collect(),
     }
 }
 
@@ -244,5 +227,6 @@ fn slots(
         id: task.id,
         title: task.title.clone(),
         tags: task.tags.clone(),
+        project: None,
     })
 }

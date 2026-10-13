@@ -12,7 +12,7 @@ use gpui::{
     ClickEvent, Context, Div, ElementId, FontWeight, Image, ImageFormat, ScrollHandle, Stateful, div, img, prelude::*,
     px, rgb,
 };
-use kanbrain_core::model::{Kind as EntryKind, Status, Task, fmt_clock, fmt_dur, now};
+use kanbrain_core::model::{Kind as EntryKind, Status, Task, fmt_clock, fmt_dur, now, worked};
 use kanbrain_core::period::{Period, Unit};
 
 /// Width of the project dropdown.
@@ -222,8 +222,8 @@ fn layout_switch(board: &Board, cx: &mut Context<BrainView>) -> Div {
 fn running_bar(board: &Board, cx: &mut Context<BrainView>) -> Div {
     let now = now();
     let (from, to) = Period::current(Unit::Day).bounds();
-    let today: chrono::Duration =
-        board.sources.iter().flat_map(|s| &s.brain.tasks).map(|t| t.time_between(from, to, now)).sum();
+    // By the clock: tasks that ran at once (yours beside an agent's) count that time once.
+    let today = worked(board.sources.iter().flat_map(|s| &s.brain.tasks), from, to, now);
     let bar = div()
         .flex()
         .flex_none()

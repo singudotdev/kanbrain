@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Report totals, tag rows, the calendar's days and the app's Today count by the clock: time several tasks ran at
+  once counts once. Task rows keep each task's own time.
+
 ### Fixed
 
 - `kb` commands run at the same time, as an agent's parallel calls do, no longer overwrite each other's changes or

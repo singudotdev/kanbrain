@@ -8,7 +8,7 @@ use crate::ui::theme::{self};
 use crate::ui::widgets::{Kind, button, dim, dim_small, section, small};
 use crate::ui::{BrainView, action};
 use gpui::{ClickEvent, Context, Div, ElementId, div, prelude::*, px, rgb};
-use kanbrain_core::model::{fmt_clock, fmt_dur, now};
+use kanbrain_core::model::{fmt_clock, fmt_dur, now, worked};
 use kanbrain_core::period::{Period, Unit};
 
 /// A project at a glance: its description, shared by its repositories; each repository with where
@@ -25,8 +25,7 @@ pub(super) fn draw(board: &Board, src: usize, cx: &mut Context<BrainView>) -> Op
     let now = now();
     let (from, to) = Period::current(Unit::Week).bounds();
     let repos = board.project_repos(src);
-    let week: chrono::Duration =
-        repos.iter().flat_map(|&r| &board.brain(r).tasks).map(|t| t.time_between(from, to, now)).sum();
+    let week = worked(repos.iter().flat_map(|&r| &board.brain(r).tasks), from, to, now);
     let repo_blocks: Vec<Div> = repos
         .iter()
         .map(|&repo| {

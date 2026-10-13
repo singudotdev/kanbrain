@@ -23,3 +23,12 @@ fn durations() {
     assert_eq!(fmt_dur(Duration::minutes(-5)), "0m");
     assert_eq!(fmt_clock(Duration::seconds(3723)), "01:02:03");
 }
+
+#[test]
+fn covered_time_counts_overlaps_once() {
+    let at = |minute: i64| parse_ts("2026-09-24 09:00").unwrap() + Duration::minutes(minute);
+    // 1h and 2h that share 30 minutes, a span inside another, one apart, and an empty one.
+    let spans = [(at(0), at(60)), (at(30), at(150)), (at(40), at(50)), (at(200), at(210)), (at(300), at(300))];
+    assert_eq!(covered(spans), Duration::minutes(160));
+    assert_eq!(covered([]), Duration::zero());
+}

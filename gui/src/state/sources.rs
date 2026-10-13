@@ -432,7 +432,7 @@ impl Board {
             .scoped()
             .map(|(src, brain)| (self.source_label(src).map(str::to_string), brain.report(&view)))
             .collect();
-        Report::merge(parts, view.group)
+        Report::merge(parts, &view)
     }
 
     /// The calendar of every brain in scope, merged, and which brain each part came from: an event's

@@ -6,7 +6,7 @@
 
 use super::Brain;
 use crate::enums::named_enum;
-use crate::model::{Kind, Status, Task, now};
+use crate::model::{Kind, Status, Task, covered, now};
 use crate::period::{Period, Unit};
 use chrono::{DateTime, Duration, Local, NaiveDate, NaiveTime};
 
@@ -117,10 +117,13 @@ pub struct Day {
     /// Whether it's in the period. A month's grid starts on a Monday and ends on a Sunday, so its
     /// first and last weeks have days of the months around it, which stay empty.
     pub in_period: bool,
-    /// Time worked that day on the entries the tag filter keeps.
+    /// Time worked that day on the entries the tag filter keeps, by the clock: tasks that ran at once
+    /// count that time once.
     pub tracked: Duration,
     /// One summary per entry with interactions shown, in time order.
     pub events: Vec<Event>,
+    /// The day's sessions, clipped to it, from which `tracked` is worked out again when calendars merge.
+    worked: Vec<(DateTime<Local>, DateTime<Local>)>,
 }
 
 /// A computed calendar: whole weeks for a month, otherwise the period's days.
@@ -128,7 +131,7 @@ pub struct Day {
 pub struct Calendar {
     /// Every day of the grid, in order.
     pub days: Vec<Day>,
-    /// Time worked in the period.
+    /// Time worked in the period, counted like each day's.
     pub tracked: Duration,
 }
 
@@ -146,13 +149,14 @@ impl Calendar {
             return Calendar { days: Vec::new(), tracked: Duration::zero() };
         };
         for (source, calendar) in parts {
-            merged.tracked += calendar.tracked;
             for (day, other) in merged.days.iter_mut().zip(calendar.days) {
-                day.tracked += other.tracked;
+                day.worked.extend(other.worked);
+                day.tracked = covered(day.worked.iter().copied());
                 day.events.extend(other.events.into_iter().map(|e| Event { source, ..e }));
                 day.events.sort_by_key(|e| (e.at, e.source, e.id));
             }
         }
+        merged.tracked = merged.days.iter().map(|d| d.tracked).sum();
         merged
     }
 
@@ -190,14 +194,15 @@ impl Brain {
                 let day = Period::containing(Unit::Day, date.and_time(NaiveTime::MIN));
                 let in_period = view.period.contains(day.start) || day.contains(view.period.start);
                 if !in_period {
-                    return Day { date, in_period, tracked: Duration::zero(), events: Vec::new() };
+                    return Day { date, in_period, tracked: Duration::zero(), events: Vec::new(), worked: Vec::new() };
                 }
                 let (from, to) = day.bounds();
-                let tracked = tasks.iter().map(|t| t.time_between(from, to, now)).sum();
+                let worked: Vec<_> = tasks.iter().flat_map(|t| &t.sessions).map(|s| s.span(from, to, now)).collect();
+                let tracked = covered(worked.iter().copied());
                 let mut events: Vec<Event> =
                     tasks.iter().filter_map(|task| summary(task, from, to, now, view.show)).collect();
                 events.sort_by_key(|e| (e.at, e.id));
-                Day { date, in_period, tracked, events }
+                Day { date, in_period, tracked, events, worked }
             })
             .collect();
         let tracked = days.iter().map(|d| d.tracked).sum();

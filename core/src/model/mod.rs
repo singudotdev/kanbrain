@@ -12,7 +12,7 @@ pub use markdown::parse_links;
 pub use text::{parse_tags, sanitize_comment, sanitize_description, slugify};
 #[cfg(test)]
 pub use time::parse_ts;
-pub use time::{fmt_age, fmt_clock, fmt_dur, fmt_ts, now};
+pub use time::{covered, fmt_age, fmt_clock, fmt_dur, fmt_ts, now};
 
 use crate::enums::named_enum;
 use chrono::{DateTime, Duration, Local};
@@ -107,9 +107,19 @@ impl Session {
 
     /// Part of this session that falls inside `[from, to)`.
     pub fn overlap(&self, from: DateTime<Local>, to: DateTime<Local>, now: DateTime<Local>) -> Duration {
-        let start = self.start.max(from);
-        let end = self.end.unwrap_or(now).min(to);
+        let (start, end) = self.span(from, to, now);
         (end - start).max(Duration::zero())
+    }
+
+    /// Where this session starts and ends within `[from, to)`, a running one ending `now`; the end is
+    /// before the start when it falls outside.
+    pub fn span(
+        &self,
+        from: DateTime<Local>,
+        to: DateTime<Local>,
+        now: DateTime<Local>,
+    ) -> (DateTime<Local>, DateTime<Local>) {
+        (self.start.max(from), self.end.unwrap_or(now).min(to))
     }
 }
 
@@ -277,7 +287,7 @@ impl Task {
         self.sessions.iter().map(|s| s.duration(now)).sum()
     }
 
-    /// Time tracked inside `[from, to)`: sessions are clipped to the range.
+    /// Time tracked inside `[from, to)`: sessions are clipped to the range. For several tasks, see [`worked`].
     pub fn time_between(&self, from: DateTime<Local>, to: DateTime<Local>, now: DateTime<Local>) -> Duration {
         self.sessions.iter().map(|s| s.overlap(from, to, now)).sum()
     }
@@ -324,6 +334,17 @@ impl Task {
             }
         })
     }
+}
+
+/// Time worked on any of `tasks` inside `[from, to)`: time two of them ran at once counts once (see
+/// [`covered`]), so agents' tasks running in parallel don't make a day longer than it was.
+pub fn worked<'a>(
+    tasks: impl IntoIterator<Item = &'a Task>,
+    from: DateTime<Local>,
+    to: DateTime<Local>,
+    now: DateTime<Local>,
+) -> Duration {
+    covered(tasks.into_iter().flat_map(|t| &t.sessions).map(|s| s.span(from, to, now)))
 }
 
 #[cfg(test)]

@@ -69,8 +69,12 @@ The **Report** tab (`4`) shows the tracked time of the **current week**, **group
 
 - The report and the calendar follow the window's [filters](tasks-and-tags.md#filters): project, tag (`#`) and
   text.
+- **Totals count by the clock.** Each task row shows that task's own time, but time several tasks ran at once
+  (yours beside an agent's, or an agent's subagents) counts **once** in the total, the column totals, each tag's
+  row, the calendar's days and the top bar's **Today**: a task of 1 h and one of 2 h that overlapped for 30
+  minutes took 2 h 30 m. So task rows can add up to more than the total.
 - A task with several tags counts under **each** of them when grouping by tag, so tag rows can add up to more than
-  the real total. The **total** line is always the real tracked time.
+  the total too.
 - In the day and hour views, gaps of **5 minutes or more** between sessions are shown as `untracked`.
 - Durations are rounded down to whole minutes; a session crossing a period boundary counts in each period only for its own part.
 - Export file names follow the view: `report-2026-W39.md`, `report-2026-09-24-by-tag.md`, `report-2026-09-prod.md`.

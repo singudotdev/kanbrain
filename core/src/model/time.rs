@@ -54,6 +54,26 @@ pub fn fmt_clock(d: Duration) -> String {
     format!("{:02}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60)
 }
 
+/// The time `spans` (start, end) cover, counting once what several cover at the same moment: two tasks
+/// worked on in parallel for an hour took an hour of the day, not two. Empty or reversed spans count nothing.
+pub fn covered(spans: impl IntoIterator<Item = (DateTime<Local>, DateTime<Local>)>) -> Duration {
+    let mut spans: Vec<_> = spans.into_iter().filter(|(start, end)| end > start).collect();
+    spans.sort_unstable();
+    let mut total = Duration::zero();
+    let mut open: Option<(DateTime<Local>, DateTime<Local>)> = None;
+    for (start, end) in spans {
+        match &mut open {
+            Some((_, until)) if start <= *until => *until = (*until).max(end),
+            _ => {
+                if let Some((from, until)) = open.replace((start, end)) {
+                    total += until - from;
+                }
+            }
+        }
+    }
+    total + open.map_or_else(Duration::zero, |(from, until)| until - from)
+}
+
 #[cfg(test)]
 #[path = "../../tests/model/time.rs"]
 mod tests;
