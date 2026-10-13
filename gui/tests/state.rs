@@ -697,6 +697,24 @@ fn project_info_opens_for_a_shown_project() {
 }
 
 #[test]
+fn an_open_dialog_follows_its_project_when_another_goes() {
+    use kanbrain_core::projects;
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    let src_of = |board: &Board, project: &str| {
+        board.sources.iter().position(|s| s.project.as_deref() == Some(project)).unwrap()
+    };
+    let blog = src_of(&board, "blog");
+    board.mode = Mode::ProjectInfo(blog);
+    projects::unregister(central.path(), &code.path().join("api/.brain")).unwrap();
+    board.reload().unwrap();
+    assert!(matches!(board.mode, Mode::ProjectInfo(src) if src == blog - 1 && src == src_of(&board, "blog")));
+    projects::unregister(central.path(), &code.path().join("blog/.brain")).unwrap();
+    board.reload().unwrap();
+    assert!(matches!(board.mode, Mode::Normal), "closed with its project");
+}
+
+#[test]
 fn the_tag_dropdown_offers_only_the_shown_projects_tags() {
     let (central, _code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();

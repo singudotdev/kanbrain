@@ -220,15 +220,21 @@ impl Board {
     }
 
     /// Re-reads every brain, and the list of projects, which may have gained or lost one. The
-    /// selection and a one-repository scope stay on the same folder, wherever it now is in the list.
+    /// selection, a one-repository scope and an open dialog stay on the same folders, wherever they now are in
+    /// the list; a dialog on a folder no longer there closes.
     pub fn reload(&mut self) -> Result<()> {
-        let dir_of = |board: &Self, src: usize| board.sources.get(src).map(|s| s.brain.store.dir().to_path_buf());
-        let selected = self.selected.and_then(|k| Some((dir_of(self, k.src)?, k.id)));
-        let repo = if let Scope::Repo(src) = self.scope { dir_of(self, src) } else { None };
+        let before: Vec<PathBuf> = self.sources.iter().map(|s| s.brain.store.dir().to_path_buf()).collect();
         self.sources = sources::load(&self.central, self.opened_in.as_deref())?;
-        self.selected = selected.and_then(|(dir, id)| Some(Key::new(self.src_at(&dir)?, id)));
-        if let Some(dir) = repo {
-            self.scope = self.src_at(&dir).map_or(Scope::All, Scope::Repo);
+        let now_at: Vec<Option<usize>> = before.iter().map(|dir| self.src_at(dir)).collect();
+        let to = |src: usize| now_at.get(src).copied().flatten();
+        self.selected = self.selected.and_then(|k| Some(Key::new(to(k.src)?, k.id)));
+        if let Scope::Repo(src) = self.scope {
+            self.scope = to(src).map_or(Scope::All, Scope::Repo);
+        }
+        let open = !matches!(self.mode, Mode::Normal);
+        self.mode = std::mem::replace(&mut self.mode, Mode::Normal).remap(to).unwrap_or(Mode::Normal);
+        if open && matches!(self.mode, Mode::Normal) {
+            self.notify("closed: its project is gone");
         }
         self.after_load();
         Ok(())

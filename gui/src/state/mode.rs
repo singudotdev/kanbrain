@@ -43,6 +43,61 @@ pub enum Mode {
     Manage(Manage),
 }
 
+impl Mode {
+    /// Points every brain the mode names, by index, at where `to` says it now is, after the list of brains
+    /// changed; `None` if one is gone, and the mode with it.
+    pub fn remap(self, to: impl Fn(usize) -> Option<usize>) -> Option<Self> {
+        let key = |key: Key| Some(Key::new(to(key.src)?, key.id));
+        Some(match self {
+            Self::Form(mut form) => {
+                form.target = match form.target {
+                    FormTarget::New(src, kind, status) => FormTarget::New(to(src)?, kind, status),
+                    FormTarget::Edit(k) => FormTarget::Edit(key(k)?),
+                };
+                form.links = form.links.into_iter().filter_map(key).collect();
+                Self::Form(form)
+            }
+            Self::QuickAdd(add) => Self::QuickAdd(QuickAdd { src: to(add.src)?, ..add }),
+            Self::Edit(edit) => {
+                let target = match edit.target {
+                    Target::Description(k) => Target::Description(key(k)?),
+                    Target::NewComment(k) => Target::NewComment(key(k)?),
+                    Target::Comment(k, at) => Target::Comment(key(k)?, at),
+                    Target::Reject(k) => Target::Reject(key(k)?),
+                    Target::Accept(k) => Target::Accept(key(k)?),
+                    Target::Project(src) => Target::Project(to(src)?),
+                    Target::RepoNotes(src) => Target::RepoNotes(to(src)?),
+                };
+                Self::Edit(Edit { target, ..edit })
+            }
+            Self::Confirm(confirm) => Self::Confirm(match confirm {
+                Confirm::Delete(k) => Confirm::Delete(key(k)?),
+                Confirm::DeleteComment(k, at) => Confirm::DeleteComment(key(k)?, at),
+                Confirm::Update => Confirm::Update,
+            }),
+            Self::Links(links) => Self::Links(LinkPicker { key: key(links.key)?, ..links }),
+            Self::Where(WherePicker { picker, then: WhereFor::Move(k) }) => {
+                Self::Where(WherePicker { picker, then: WhereFor::Move(key(k)?) })
+            }
+            Self::Menu(menu) => Self::Menu(super::MenuPicker { key: key(menu.key)?, ..menu }),
+            Self::ProjectInfo(src) => Self::ProjectInfo(to(src)?),
+            Self::Manage(manage) => Self::Manage(match manage {
+                Manage::RenameProject { src, name } => Manage::RenameProject { src: to(src)?, name },
+                Manage::RenameRepo { src, name } => Manage::RenameRepo { src: to(src)?, name },
+                Manage::MoveRepo { src, picker } => Manage::MoveRepo { src: to(src)?, picker },
+                Manage::Remove { src, whole } => Manage::Remove { src: to(src)?, whole },
+            }),
+            other @ (Self::Normal
+            | Self::Search
+            | Self::Where(_)
+            | Self::Scopes(_)
+            | Self::Tags(_)
+            | Self::Palette(_)
+            | Self::AddProject(_)) => other,
+        })
+    }
+}
+
 /// The new / edit dialog.
 #[derive(Debug)]
 pub struct Form {
