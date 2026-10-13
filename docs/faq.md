@@ -104,7 +104,7 @@ The same applies to the installer. On Windows, run the installer from a normal (
 ### Can I install it for all users on a machine?
 
 No, on purpose. Each user runs the installer themselves and gets their own copy and their own tasks.
-It's about 1 MB, so the duplication doesn't matter.
+`kb` is about 1 MB and the kanban app about 30 MB, so the duplication doesn't matter.
 
 ### How do I uninstall, or remove all my data?
 

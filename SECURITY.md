@@ -8,5 +8,5 @@ version (`kb --version`), your platform, and the steps that show the problem.
 
 ## Supported versions
 
-Only the latest release gets fixes. Upgrade by running the installer again (see
+Only the latest release gets fixes. Upgrade with `kb update`, or the kanban app's **Update** (see
 [Getting started](docs/getting-started.md#updating)).

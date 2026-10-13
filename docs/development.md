@@ -429,7 +429,8 @@ The kanban app's look is checked by running it (`KANBRAIN_DIR=/tmp/t cargo run -
    which isn't meant for other crates, needs none.
 2. Push `main` alone and wait for CI on Linux, macOS and Windows: a tag is a release.
 3. Write the version's release notes in `tag-changelog/vX.Y.Z.md` (terse bullets anchored in the code, naming each
-   breaking change's migration) and its section in `CHANGELOG.md`, and commit them. `core/build.rs` stops a version
+   breaking change's migration) and its section in `CHANGELOG.md`, with its compare link at the end of the file, and
+   commit them. `core/build.rs` stops a version
    without them from compiling in the repository.
 4. Update `version` under `[workspace.package]` in `Cargo.toml`, and `kanbrain-core`'s `version` under
    `[workspace.dependencies]` to the same, run `cargo build` so `Cargo.lock` follows, and commit it on its own. Every

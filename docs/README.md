@@ -13,7 +13,8 @@ remember when they moved, and track the time spent on them.
 3. [Time tracking](time-tracking.md): sessions, one task of yours at a time, and reports
 4. [For coding agents](agents.md): `.brain/` per project, what goes where, the agent commands, JSON
 5. [Keybindings](keybindings.md): every key and mouse action in the kanban app
-6. [Command line](cli.md): `list`, `status`, `report`, `init`, `deinit`, `hook`, `path`, and the agent commands
+6. [Command line](cli.md): `list`, `status`, `report`, `init`, `deinit`, `update`, `hook`, `path`, `completions`, and the
+   agent commands
 7. [Data format](data-format.md): task files, `tags.md`, editing by hand
 8. [Integrations](integrations.md): status bars, syncing between machines, notes apps
 9. [FAQ & troubleshooting](faq.md)
