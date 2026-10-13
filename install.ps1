@@ -246,9 +246,10 @@ function Install-Kanbrain {
             Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
         }
 
+        # Not into $version, which names the release the next app comes from.
         $installed = $bin
-        $version = Get-Output $exe @('--version')
-        if ($version) { $installed = $version }
+        $said = Get-Output $exe @('--version')
+        if ($said) { $installed = $said }
         Say "installed $installed to $exe"
 
         # The desktop app goes in the Start Menu.
