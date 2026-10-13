@@ -4,6 +4,8 @@
 //!
 //! - [`mode`]: the dialogs and fields that take the keys.
 //! - [`actions`]: changes to entries, through the brain, with a message for the status bar.
+//! - [`form`]: the new / edit form and the quick-add field.
+//! - [`decisions`]: the questions and decisions waiting on you, and answering them.
 //! - [`input`]: what each key does in each dialog, and typing into fields.
 //! - [`keys`]: the keys outside dialogs, which the palette and the right-click menu offer too.
 //! - [`manage`]: renaming, moving and removing projects and repositories.
@@ -13,6 +15,8 @@
 //! - [`sources`]: the central brain and every project repository, and the scope that filters them.
 
 mod actions;
+mod decisions;
+mod form;
 mod input;
 pub(crate) mod keys;
 mod manage;

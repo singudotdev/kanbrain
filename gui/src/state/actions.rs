@@ -1,15 +1,13 @@
 //! Changes to entries, through the brain: each one says in the status bar what it did, or why not.
 
 use super::{
-    Board, Confirm, Edit, Field, Form, FormTarget, Key, LinkPicker, Mode, Picker, QuickAdd, Request, Tab, Target,
-    WhereFor, WherePicker,
+    Board, Confirm, Edit, Form, Key, LinkPicker, Mode, Picker, QuickAdd, Request, Tab, Target, WhereFor, WherePicker,
 };
 use crate::text::editor::{LineInput, TextEditor};
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveTime};
-use kanbrain_core::brain::NewEntry;
 use kanbrain_core::cli::update;
-use kanbrain_core::model::{Asked, DecisionState, Kind, Status, Task, parse_tags};
+use kanbrain_core::model::{DecisionState, Kind, Status};
 use kanbrain_core::period::{Period, Unit};
 use kanbrain_core::store::{self, Change};
 
@@ -71,7 +69,7 @@ impl Board {
     /// Opens `then` in the brain the scope shows, or, when it shows several, asks which one first: a
     /// new entry goes where the filter points, never somewhere the window doesn't say. The selected
     /// entry's brain is highlighted, as the likeliest.
-    fn ask_where(&mut self, then: WhereFor) {
+    pub(super) fn ask_where(&mut self, then: WhereFor) {
         let picker = Picker::default();
         let candidates = self.where_candidates(&picker, then);
         if let [(src, _)] = candidates[..] {
@@ -135,155 +133,6 @@ impl Board {
             self.keep_selection();
         }
         self.notify(format!("moved #{} to {} as #{id}", key.id, self.brain_name(to)));
-    }
-
-    /// The kind of entry the form makes or changes, and the tags entries of that kind already use in
-    /// its brain, to reuse: a task's form suggests task tags, not those of notes or decisions.
-    pub fn form_tags(&self, form: &Form) -> (Kind, Vec<String>) {
-        let (src, kind) = match form.target {
-            FormTarget::New(src, kind, _) => (src, kind),
-            FormTarget::Edit(key) => (key.src, self.task(key).map_or(Kind::Task, |t| t.kind)),
-        };
-        let mut tags: Vec<String> =
-            self.brain(src).tasks.iter().filter(|t| t.kind == kind).flat_map(|t| t.tags.iter().cloned()).collect();
-        tags.sort();
-        tags.dedup();
-        (kind, tags)
-    }
-
-    /// Opens the form for changing the selected entry's title and tags.
-    pub fn edit_selected(&mut self) {
-        if let (Some(key), Some(task)) = (self.selected, self.selected_task()) {
-            let related = self.related_keys(key);
-            self.mode = Mode::Form(Box::new(Form::edit(key, task, related)));
-        }
-    }
-
-    /// Saves the form: creates the entry and selects it, or changes the one being edited.
-    /// An empty title keeps the form open.
-    pub(super) fn submit_form(&mut self, mut form: Box<Form>) {
-        let title = form.title.text().trim().to_string();
-        if title.is_empty() {
-            self.notify("the title is empty");
-            form.field = Field::Title;
-            self.mode = Mode::Form(form);
-            return;
-        }
-        let tags = parse_tags(form.tags.text());
-        match form.target {
-            FormTarget::New(src, kind, status) => self.create(src, kind, title, tags, form.links, status),
-            FormTarget::Edit(key) => {
-                let result = self.brain_mut(key.src).update(key.id, &title, tags);
-                self.report_error(result);
-                let result = self.relate_only(key, &form.links);
-                self.report_error(result);
-            }
-        }
-    }
-
-    /// Makes `key`'s related entries exactly `links`: links what isn't related yet, unlinks what's
-    /// no longer checked, whichever side stores the link.
-    fn relate_only(&mut self, key: Key, links: &[Key]) -> Result<()> {
-        let related = self.related_keys(key);
-        let unchecked = related.iter().filter(|k| !links.contains(k));
-        for &other in unchecked.chain(links.iter().filter(|k| !related.contains(k))) {
-            self.toggle_link_between(key, other)?;
-        }
-        Ok(())
-    }
-
-    /// The entries the form can relate its entry to: the others of its brain and of its project's
-    /// other repositories matching the related field's search (see `Task::matches`), the checked ones
-    /// first, then its brain's, then the newest.
-    pub fn form_link_options(&self, form: &Form) -> Vec<(Key, &Task)> {
-        let own = match form.target {
-            FormTarget::Edit(key) => Some(key),
-            FormTarget::New(..) => None,
-        };
-        self.link_options(form.src(), own, form.related.search.text(), &form.links)
-    }
-
-    /// Checks or unchecks the related field's option at `index`.
-    pub fn toggle_form_link(&mut self, index: usize) {
-        let Mode::Form(form) = &self.mode else { return };
-        let Some(other) = self.form_link_options(form).get(index).map(|&(key, _)| key) else { return };
-        let Mode::Form(form) = &mut self.mode else { return };
-        form.related.sel = index;
-        if let Some(at) = form.links.iter().position(|&l| l == other) {
-            form.links.remove(at);
-        } else {
-            form.links.push(other);
-        }
-    }
-
-    /// Puts the form's new task in `status`, from a click on the column picker.
-    pub fn set_form_status(&mut self, status: Status) {
-        if let Mode::Form(form) = &mut self.mode {
-            form.set_status(status);
-            form.field = Field::Status;
-        }
-    }
-
-    /// Puts the form's new entry in the project field's option at `index`, and goes back to its title.
-    pub fn choose_form_project(&mut self, index: usize) {
-        let Mode::Form(form) = &self.mode else { return };
-        let Some(&(src, _)) = self.form_projects(form).get(index) else { return };
-        let Mode::Form(form) = &mut self.mode else { return };
-        form.set_src(src);
-        form.go_to(Field::Title);
-    }
-
-    /// Unchecks a related entry, from the × on its chip.
-    pub fn unlink_in_form(&mut self, other: Key) {
-        if let Mode::Form(form) = &mut self.mode {
-            form.links.retain(|&l| l != other);
-        }
-    }
-
-    /// Saves the form, from its Save button: `enter` checks a related entry while that field has
-    /// the keys, so the button doesn't go through it.
-    pub fn save_form(&mut self) {
-        if let Mode::Form(form) = std::mem::replace(&mut self.mode, Mode::Normal) {
-            self.submit_form(form);
-        }
-    }
-
-    /// Creates an entry in the brain at `src`, related to `links` (there, or in the project's other
-    /// repositories), puts a task in `status`, and selects it.
-    fn create(&mut self, src: usize, kind: Kind, title: String, tags: Vec<String>, links: Vec<Key>, status: Status) {
-        let (here, elsewhere): (Vec<Key>, Vec<Key>) = links.into_iter().partition(|k| k.src == src);
-        let links = here.into_iter().map(|k| k.id).collect();
-        let repo_links = elsewhere.into_iter().map(|k| self.repo_link(k)).collect();
-        let new = NewEntry { kind, title, tags, links, repo_links, ..NewEntry::default() };
-        let id = match self.brain_mut(src).add(new) {
-            Ok(id) => id,
-            Err(e) => return self.notify_error(&e),
-        };
-        let key = Key::new(src, id);
-        if kind == Kind::Task && status != Status::Todo {
-            self.set_status(key, status);
-        }
-        self.open_entry(key);
-        self.drawer = false;
-        let place = self.source_label(src).map(|l| format!(" in {l}")).unwrap_or_default();
-        self.notify(format!("created #{id}{place}"));
-    }
-
-    /// Starts typing a new task at the top of a column, in the brain the scope shows (see
-    /// [`Self::ask_where`]).
-    pub fn quick_add(&mut self, status: Status) {
-        self.show_tab(Tab::Board);
-        self.ask_where(WhereFor::QuickAdd(status));
-    }
-
-    /// Creates the task typed at the top of a column, and keeps the field open for the next one.
-    pub(super) fn submit_quick_add(&mut self, add: &QuickAdd) {
-        let title = add.title.text().trim().to_string();
-        if title.is_empty() {
-            return;
-        }
-        self.create(add.src, Kind::Task, title, Vec::new(), Vec::new(), add.status);
-        self.mode = Mode::QuickAdd(QuickAdd { src: add.src, status: add.status, title: LineInput::default() });
     }
 
     /// Opens the text editor on a description or comment of an existing entry, or a project's card.
@@ -351,110 +200,10 @@ impl Board {
         }
     }
 
-    /// Whether saving `target` answers a question the task waits on.
-    pub fn answers(&self, target: Target) -> bool {
-        let Target::NewComment(key) = target else { return false };
-        self.task(key).is_some_and(|t| matches!(t.asked(), Some(Asked::Waiting(_))))
-    }
-
-    /// The decision `y`, `Y` and `j` act on for the entry `key`: itself if it's a decision, else the first one an
-    /// agent proposed about it, which it waits on.
-    pub fn decision_for(&self, key: Key) -> Option<Key> {
-        match self.task(key)?.kind {
-            Kind::Decision => Some(key),
-            _ => self.proposed_for(key).first().copied(),
-        }
-    }
-
-    /// The selected entry's decision (see [`Self::decision_for`]), or why there's none.
-    fn selected_decision(&mut self) -> Option<Key> {
-        let decision = self.selected.and_then(|key| self.decision_for(key));
-        if decision.is_none() && self.selected.is_some() {
-            self.notify("only decisions are accepted or rejected");
-        }
-        decision
-    }
-
-    /// Accepts the selected decision, or the one the selected task waits on, which answers the tasks waiting on
-    /// it; accepting with a comment and rejecting ask for the text first, in the editor.
-    pub fn accept_selected(&mut self) {
-        let Some(key) = self.selected_decision() else { return };
-        match self.brain_mut(key.src).resolve(key.id, DecisionState::Accepted, "") {
-            Ok(true) => self.notify(format!("#{} accepted", key.id)),
-            Ok(false) => self.notify(format!("#{} is already accepted", key.id)),
-            Err(e) => self.notify_error(&e),
-        }
-    }
-
-    /// Opens the editor for a comment on accepting the selected decision, or the one the selected task waits on.
-    pub fn accept_with_comment(&mut self) {
-        let Some(key) = self.selected_decision() else { return };
-        match self.task(key).map(|t| t.decision) {
-            Some(DecisionState::Accepted) => self.notify(format!("#{} is already accepted", key.id)),
-            Some(_) => self.open_editor(Target::Accept(key)),
-            None => {}
-        }
-    }
-
-    /// Opens the editor for why the selected decision, or the one the selected task waits on, is rejected.
-    pub fn reject_selected(&mut self) {
-        let Some(key) = self.selected_decision() else { return };
-        match self.task(key).map(|t| t.decision) {
-            Some(DecisionState::Rejected) => self.notify(format!("#{} is already rejected", key.id)),
-            Some(_) => self.open_editor(Target::Reject(key)),
-            None => {}
-        }
-    }
-
-    /// Tasks waiting for an answer to an agent's question, in every brain shown, in board order.
-    pub fn waiting(&self) -> Vec<Key> {
-        let mut waiting: Vec<Key> = self
-            .sources
-            .iter()
-            .enumerate()
-            .filter(|&(src, _)| self.in_scope(src))
-            .flat_map(|(src, source)| {
-                source
-                    .brain
-                    .tasks
-                    .iter()
-                    .filter(|t| matches!(t.asked(), Some(Asked::Waiting(_))))
-                    .map(move |t| Key::new(src, t.id))
-            })
-            .collect();
-        waiting.sort_by_key(|k| (k.src, k.id));
-        waiting
-    }
-
-    /// The decisions an agent proposed about the task `key`, which it waits on until they're accepted or rejected.
-    pub fn proposed_for(&self, key: Key) -> Vec<Key> {
-        let proposed =
-            |k: &Key| self.task(*k).is_some_and(|d| d.kind == Kind::Decision && d.decision == DecisionState::Proposed);
-        self.related_keys(key).into_iter().filter(proposed).collect()
-    }
-
-    /// Opens the first decision the selected task waits on.
-    pub fn open_proposed(&mut self) {
-        match self.selected.and_then(|key| self.proposed_for(key).first().copied()) {
-            Some(decision) => self.open_entry(decision),
-            None => self.notify("it waits on no proposed decision"),
-        }
-    }
-
     /// Edits the description of the project shown, else the selected entry's, which its repositories share.
     pub fn edit_project_description(&mut self) {
         if let Some(src) = self.project_to_act_on() {
             self.open_editor(Target::Project(src));
-        }
-    }
-
-    /// Opens the next task waiting for an answer after the selected one, wrapping around.
-    pub fn next_waiting(&mut self) {
-        let waiting = self.waiting();
-        let after = |k: &&Key| self.selected.is_none_or(|s| (k.src, k.id) > (s.src, s.id));
-        match waiting.iter().find(after).or_else(|| waiting.first()) {
-            Some(&key) => self.open_entry(key),
-            None => self.notify("nothing waits for an answer"),
         }
     }
 
