@@ -174,7 +174,6 @@ line, writes nothing there.
 Other `.md` files in the folder that aren't tasks (such as a README) are reported as skipped and otherwise ignored.
 `last-id` holds the highest id given so far, so ids aren't reused; without it (a folder from an older version),
 the highest id among the entries is used.
-`config.md`, which older versions wrote to switch time tracking on or off, is ignored: tracking is always on.
 
 ## Format versions and migrations
 

@@ -15,10 +15,6 @@ const TAGS_FILE: &str = "tags.md";
 /// A project's own data folder, found by walking up from the current directory like `.git`.
 pub const PROJECT_DIR: &str = ".brain";
 
-/// Settings file of older versions (`- track: on|off`); time is always tracked now, so it's only
-/// kept out of the task files.
-const CONFIG_FILE: &str = "config.md";
-
 /// The highest id the folder has given an entry, so ids are never handed out twice: a link to a deleted
 /// entry, left in a file edited by hand or in a copy that was offline, would otherwise point at the
 /// unrelated entry that took its number. Not markdown, so it's never read as an entry.
@@ -353,10 +349,10 @@ pub fn find_project(start: &Path) -> Option<PathBuf> {
     start.ancestors().map(|dir| dir.join(PROJECT_DIR)).find(|dir| dir.is_dir())
 }
 
-/// Task files are the `.md` files in the folder, except the tag colors, the project's card, the
-/// central brain's list of projects and the old settings.
+/// Task files are the `.md` files in the folder, except the tag colors, the project's card and the
+/// central brain's list of projects.
 fn is_task_file(path: &Path) -> bool {
-    let other = [TAGS_FILE, CONFIG_FILE, projects::PROJECT_FILE, projects::REGISTRY_FILE];
+    let other = [TAGS_FILE, projects::PROJECT_FILE, projects::REGISTRY_FILE];
     path.extension().is_some_and(|e| e == "md") && path.file_name().is_some_and(|n| !other.iter().any(|o| n == *o))
 }
 

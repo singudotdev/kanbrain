@@ -514,7 +514,7 @@ Lint the shell installer with `shellcheck install.sh` (it's kept clean).
 
 The purge logic in both scripts must stay in sync with what the app writes in the central brain: entry files named
 `NNNN-slug.md` (`store::Store::save`), `tags.md`, `projects.md` and `projects/*.md` (`projects`), `reports/*.md`
-(`Brain::write_report`), older versions' `config.md`, and `.NNNN-slug.md.tmp` temp files. Both find the central brain
+(`Brain::write_report`) and `.NNNN-slug.md.tmp` temp files. Both find the central brain
 with `kb --project central path`, never plain `path`, which inside a project names its `.brain/`. If you add
 a new kind of file to the data folder, add it to `owned_files` in `install.sh` and to the matching filter in
 `install.ps1`.

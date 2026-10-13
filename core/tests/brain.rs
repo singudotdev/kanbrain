@@ -117,7 +117,7 @@ fn parking_for_the_day_stops_peoples_clocks_and_leaves_agents_running() {
 }
 
 #[test]
-fn loading_keeps_one_task_doing_and_ignores_the_old_tracking_setting() {
+fn loading_keeps_one_task_doing() {
     let t0 = now() - chrono::Duration::hours(2);
     let doing = |id: u32, minutes: i64| {
         let mut task = Task::new(id, format!("task {id}"), t0);
@@ -125,13 +125,11 @@ fn loading_keeps_one_task_doing_and_ignores_the_old_tracking_setting() {
         task
     };
     let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("config.md"), "# kanbrain settings\n\n- track: off\n").unwrap();
     let store = Store::at(dir.path()).unwrap();
     for mut task in [doing(1, 30), doing(2, 10)] {
         store.save(&mut task).unwrap();
     }
     let brain = Brain::open(store).unwrap();
-    assert!(brain.warnings.is_empty(), "config.md isn't a task: {:?}", brain.warnings);
     let status = |id| brain.task(id).unwrap().status;
     assert_eq!((status(1), status(2)), (Status::Doing, Status::Parked));
 }
