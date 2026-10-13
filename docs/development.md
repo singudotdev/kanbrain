@@ -309,6 +309,12 @@ file moved or renamed, a meaning changed) is a new data format:
 Brains migrate when opened to be changed and on `kb update`; one in a newer format than the running version is
 refused, so an older `kb` never rewrites what it doesn't know.
 
+Steps chain: a brain several formats behind, from a user skipping versions, runs every step it lacks in order, so:
+
+- a step is never removed, however old: someone may update from the first version;
+- a step works on the files' text, not through today's types (`Task`, `Store::load`): those change with later
+  formats, and a step written through them would misread or drop what its format had.
+
 ## Tests
 
 Five layers: unit tests of `core` and `gui` (below), the kanban app in a real test window (`ui`), the `kb` binary run

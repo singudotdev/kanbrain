@@ -7,7 +7,8 @@
 //! know, and rewriting it would lose it.
 //!
 //! To change the format: add the step to [`MIGRATIONS`], bump [`FORMAT`], add a fixture of the old format to the
-//! tests, and say so in the release notes.
+//! tests, and say so in the release notes. A step is never removed, since a brain may skip versions, and works on
+//! the files' text rather than today's types, which later formats change.
 
 use crate::store::{self, Store};
 use anyhow::{Context, Result};
