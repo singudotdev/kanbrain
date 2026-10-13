@@ -93,12 +93,16 @@ pub fn candidates(what: Candidates, store: Store, central: &Path) -> Result<Vec<
     })
 }
 
+/// What `project` takes after it.
+const PROJECT: &str = "describe notes rename repo move remove";
+
 /// The script for `shell`, completing `program`.
 pub fn script(shell: Shell, program: &str) -> String {
     let commands = COMMANDS.join(" ");
     let (statuses, units, groups, shells) =
         (Status::names(" "), Unit::names(" "), Group::names(" "), Shell::names(" "));
     let function = format!("_{}", program.replace('-', "_"));
+    let project = PROJECT;
     let bash = format!(
         r#"{function}() {{
     local cur=${{COMP_WORDS[COMP_CWORD]}} prev=${{COMP_WORDS[COMP_CWORD-1]}}
@@ -123,8 +127,9 @@ pub fn script(shell: Shell, program: &str) -> String {
                 add) reply="--note --decision --tag --link --body --start --json" ;;
                 list) reply="{statuses} all notes decisions --tag --json" ;;
                 report) reply="{units} --group --tag --save" ;;
-                project) reply="describe notes" ;;
-                init) reply="--all" ;;
+                project) reply="{project}" ;;
+                init) reply="--all --repo" ;;
+                deinit) reply="--purge" ;;
                 completions) reply="{shells}" ;;
             esac
             ;;
@@ -150,8 +155,12 @@ complete -c {program} -n '__fish_seen_subcommand_from add' -l note -l decision -
 complete -c {program} -n '__fish_seen_subcommand_from list' -a '{statuses} all notes decisions'
 complete -c {program} -n '__fish_seen_subcommand_from report' -a '{units}' -l save
 complete -c {program} -n '__fish_seen_subcommand_from report' -l group -x -a '{groups}'
-complete -c {program} -n '__fish_seen_subcommand_from project' -a 'describe notes'
+complete -c {program} -n '__fish_seen_subcommand_from project' -a '{project}'
+complete -c {program} -n '__fish_seen_subcommand_from project' -l purge
 complete -c {program} -n '__fish_seen_subcommand_from init' -l all -d 'in every registered project'
+complete -c {program} -n '__fish_seen_subcommand_from init' -l repo -x
+complete -c {program} -n '__fish_seen_subcommand_from deinit' -l purge
+complete -c {program} -n '__fish_seen_subcommand_from wait' -l timeout -x
 complete -c {program} -n '__fish_seen_subcommand_from completions' -a '{shells}'
 "
         ),

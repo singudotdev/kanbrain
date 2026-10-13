@@ -42,3 +42,15 @@ fn scripts_name_the_program() {
     }
     assert!(script(Shell::Bash, "kanbrain").contains("complete -F _kanbrain kanbrain"));
 }
+
+#[test]
+fn every_word_project_takes_is_offered() {
+    for word in PROJECT.split(' ') {
+        // `remove` takes no name, the others one.
+        let args = [word, "x"].into_iter().take(if word == "remove" { 1 } else { 2 }).map(String::from);
+        let parsed = crate::cli::EntryArgs::parse("project", args).unwrap().unwrap();
+        assert!(matches!(parsed.command, crate::cli::EntryCommand::Project(Some(_))), "{word}");
+    }
+    let script = script(Shell::Bash, "kb");
+    assert!(script.contains(PROJECT) && script.contains("deinit) reply=\"--purge\""), "{script}");
+}
