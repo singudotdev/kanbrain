@@ -156,13 +156,15 @@ impl Store {
             .open(&path)
             .with_context(|| format!("opening {}", path.display()))?;
         fs4::FileExt::lock(&file).with_context(|| format!("locking {}", path.display()))?;
-        HELD.with(|held| held.borrow_mut().push(path.clone()));
         // Which brain it's for, in one write ending in a newline, so the cache can be tidied once the brain is gone.
         if file.metadata().is_ok_and(|m| m.len() == 0) {
             let brain = self.dir.canonicalize().with_context(|| format!("reading {}", self.dir.display()))?;
             file.write_all(format!("{}\n", brain.display()).as_bytes())
                 .with_context(|| format!("writing {}", path.display()))?;
         }
+        // Only once nothing can fail: an error drops `file`, releasing the lock, and a path left in `HELD` would
+        // have every later `lock` on this thread hand back a guard that holds nothing.
+        HELD.with(|held| held.borrow_mut().push(path.clone()));
         forget_gone_temp_brains(&path);
         Ok(BrainLock { file: Some(file), path })
     }
