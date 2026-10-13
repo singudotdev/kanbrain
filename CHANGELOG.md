@@ -3,6 +3,13 @@
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-10-13
+
+### Fixed
+
+- Moving a repository to another project (Project info's **Move…**, `kb project move`, `kb init NAME`) no longer
+  leaves it listed in its old project too on macOS and Windows.
+
 ## [0.3.0] - 2026-10-13
 
 ### Added
