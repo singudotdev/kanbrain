@@ -272,10 +272,9 @@ impl Board {
 
     /// Reports skipped files and puts the selection somewhere visible.
     fn after_load(&mut self) {
-        let warnings: Vec<&String> = self.sources.iter().flat_map(|s| &s.brain.warnings).collect();
+        let warnings: Vec<&str> = self.sources.iter().flat_map(|s| &s.brain.warnings).map(String::as_str).collect();
         if !warnings.is_empty() {
-            let list = warnings.iter().map(|w| w.as_str()).collect::<Vec<_>>().join("; ");
-            self.notify(format!("skipped: {list}"));
+            self.notify(format!("skipped: {}", warnings.join("; ")));
         }
         self.keep_selection();
     }
@@ -324,7 +323,8 @@ impl Board {
 
     /// Done tasks matching the search that the Done column leaves out.
     pub fn hidden_done(&self) -> usize {
-        self.all_in_column(Status::Done).len() - self.column(Status::Done).len()
+        let all = self.all_in_column(Status::Done).len();
+        if self.all_done { 0 } else { all.saturating_sub(DONE_LIMIT) }
     }
 
     /// The notes or decisions of the current tab, filtered by the scope and the search, newest first.
