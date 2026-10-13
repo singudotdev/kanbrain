@@ -5,10 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-10-13
+
 ### Removed
 
 - The kanban app's "What's next?" dialog: stopping your running task (Park, Done, To do, deleting it) asks nothing;
   the board shows what's parked and to do.
+
+### Changed
+
+- The agent section `kb init` writes in `CLAUDE.md` / `AGENTS.md` has its two long lines wrapped like the rest; the
+  words are the same. Updating rewrites it in every project.
 
 ## [0.3.2] - 2026-10-13
 
