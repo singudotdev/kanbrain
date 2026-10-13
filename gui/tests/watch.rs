@@ -49,3 +49,13 @@ fn sync_takes_own_writes_as_seen() {
     watcher.sync(vec![dir.path().to_path_buf()]);
     assert_eq!(changed(&mut watcher), 0);
 }
+
+#[test]
+fn a_folder_new_to_sync_is_read_again() {
+    let (a, b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let mut watcher = Watcher::new(vec![a.path().to_path_buf()]);
+    fs::write(b.path().join("0001-a.md"), "# a").unwrap();
+    watcher.sync(vec![a.path().to_path_buf(), b.path().to_path_buf()]);
+    assert_eq!(watcher.changed(), [b.path()], "read before its lock was held");
+    assert_eq!(changed(&mut watcher), 0);
+}

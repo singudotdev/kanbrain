@@ -46,11 +46,13 @@ impl Watcher {
         changed
     }
 
-    /// Watches `dirs` from now on, taking their state as seen without asking: after the board wrote
-    /// to them itself, so its own saves don't read as outside changes and reload it for nothing, and
-    /// after a reload, which may have found projects added or gone.
+    /// Watches `dirs` from now on, taking the state of those already watched as seen without asking: after the
+    /// board wrote to them itself, so its own saves don't read as outside changes and reload it for nothing, and
+    /// after a reload, which may have found projects added or gone. A folder new to it reads as changed unless
+    /// empty, since the board read it without holding its lock: it's read again, under the locks, next time.
     pub fn sync(&mut self, dirs: Vec<PathBuf>) {
-        *self = Self::new(dirs);
+        let last = dirs.iter().map(|d| if self.dirs.contains(d) { snapshot(d) } else { Snapshot::new() }).collect();
+        *self = Self { dirs, last };
     }
 }
 

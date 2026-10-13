@@ -368,14 +368,13 @@ impl BrainView {
         }
     }
 
-    /// Re-reads the files if another program changed them since they were last looked at, and says
-    /// whether it did. Every input calls it before acting, not only the timer: the board saves whole
+    /// Re-reads the files if another program changed them since they were last looked at. Every input calls it before acting, not only the timer: the board saves whole
     /// entries from memory, so acting on a copy up to a second old would undo a comment or move an
     /// agent made in that second, and the save would then mark that change as seen.
-    fn catch_up(&mut self) -> bool {
+    fn catch_up(&mut self) {
         let changed = self.watcher.changed();
         if changed.is_empty() {
-            return false;
+            return;
         }
         if let Err(e) = self.board.reload_changed(&changed) {
             self.board.notify_error(&e);
@@ -383,7 +382,6 @@ impl BrainView {
         // Loading may have written files itself, when it fixed several tasks left running, and may
         // have found projects added or gone.
         self.watcher.sync(self.board.watched_dirs());
-        true
     }
 
     /// Quits when the board asked to, runs a requested `$EDITOR`, shares the selected text, and redraws.
