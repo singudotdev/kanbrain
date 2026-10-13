@@ -81,10 +81,10 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | search box | type to filter; `enter` or `esc` stop typing and keep the filter |
 | quick add | `enter` adds the task and keeps the field open for the next; `esc` closes it |
 | new / edit form | `tab` moves between project (new entries), title, tags, related and, for a new task, its column; `enter` saves; `esc` cancels. In **Project**: type to search, `↑` `↓` move, `enter` picks it. In **Related**: type to search, `↑` `↓` move, `enter` checks or unchecks; the Save button saves. On **Column**: `←` `→` pick it |
-| text editor (description, comments) | `enter` new line; `esc` or `ctrl+enter` **save** (the button says what: **Answer**, **Add comment**, **Reject**, **Save**); **Discard changes** throws the edit away; with nothing typed, `esc` or **Close** closes it |
+| text editor (descriptions, comments, answers, a decision's reason, a project's description and notes) | `enter` new line; `esc` or `ctrl+enter` **save** (the button says what: **Answer**, **Add comment**, **Accept**, **Reject**, **Save**); **Discard changes** throws the edit away; with nothing typed, `esc` or **Close** closes it |
 | link picker | type to search; `↑` `↓` move; `enter` links or unlinks; `esc` closes |
 | "which project?" (quick add, or move) | type to filter; `↑` `↓` move; `enter` opens the quick-add field there, or moves the entry; `esc` does nothing |
-| delete confirmation | `y` or `enter` deletes; `n` or `esc` cancels |
+| confirmation (delete, update) | `y` or `enter` goes ahead; `n` or `esc` cancels |
 | right-click menu | `↑` `↓` move; `enter` or an item's own key chooses it; `esc` or a click outside closes it |
 | command palette | type to filter by what it does or its key; `↑` `↓` move; `enter` runs it; `esc` closes |
 
@@ -101,7 +101,7 @@ replaces the selection.
 | --- | --- |
 | click a card or entry | select it |
 | double-click a card or entry | open its details |
-| right-click a card or entry | its menu: details, the status moves, edit, description, comment, link, move, open file, delete; each item names its key |
+| right-click a card or entry | its menu: details, the status moves, edit, description, comment or answer, the proposed decision, link, accept or reject (a decision, or a task waiting on one), move, open file, delete; each item names its key |
 | drag a card onto a column | move it there; the column lights up while the card is over it |
 | drag a row onto a section's header (list) | move it there; the header lights up while the row is over it |
 | **Kanban** / **List** next to the tabs | lay the board out as columns or as a list |

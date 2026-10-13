@@ -82,7 +82,7 @@ Yes. Open the task with `o` and change the time in its `## History` line. See [D
 
 ### How do I rename a tag everywhere?
 
-There's no button for it yet. Search for `#ops` to see every entry with the tag, and change each with `e` (**Edit**).
+There's no button for it yet. Search for `#ops` to see every entry with the tag, and change each with `e` (**Edit title and tags**).
 Renaming the tag's line in `tags.md` too keeps its color.
 
 ### Does it work on Windows?

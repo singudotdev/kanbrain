@@ -87,14 +87,14 @@ has its own Doing, so different projects run side by side.
 | select | click a card | arrows |
 | move to another column | drag the card there, or a status button in the details | `shift+←/→` (next column), `s` doing, `p` parked, `d` done, `t` to do |
 | open the details | double-click | `enter` or `space` |
-| edit title and tags | **Edit** in the details | `e` |
+| edit title and tags | **Edit title and tags** in the details | `e` |
 | edit the description | **Edit** next to Description | `m` |
 | add a comment | **Add** next to Comments | `c` |
 | relate to other entries | **Link…** | `r` |
 | open the file in your editor | **Open file** | `o` |
-| move to another project | **Move…**, then pick one | `M` |
-| delete | **Delete**, then confirm | `x`, then `y` (`u` undoes it) |
-| answer an agent's question | **Answer** in the details | `c` |
+| move to another project | **Move to project…**, then pick one | `M` |
+| delete | **Delete…**, then confirm | `x`, then `y` (`u` undoes it) |
+| answer an agent's question | **Answer…** in the details | `c` |
 | go to the next task waiting for you | **N waiting for you** in the top bar | `w` |
 
 Any status can move to any other, e.g. straight from To do to Done. A right click on a card (or on an entry in the
@@ -108,7 +108,7 @@ the next one. `esc` closes it.
 
 ### Moving to another project
 
-**Move…** in the details (`M`) moves an entry to another brain: a list of every other one (the central brain, each
+**Move to project…** in the details (`M`) moves an entry to another brain: a list of every other one (the central brain, each
 project and each repository of a project with several), whatever the filter shows, with a search box. The entry gets
 a new number there and keeps its status, history, tracked time, description, comments and tags. Its links
 are dropped, on both sides (links from other repositories too), since they name it by its old number. A task running its clock keeps it, unless
@@ -116,7 +116,7 @@ one of yours already runs there: then the move is refused. The button only shows
 
 ### The new / edit form
 
-**+ New task** (`n`) and **Edit** (`e`) open a form with three fields: the **title**, the **tags** (separated by
+**+ New task** (`n`) and **Edit title and tags** (`e`) open a form with three fields: the **title**, the **tags** (separated by
 commas or spaces), and **Related**, the entries to link it to, which can stay empty. A new task also has a
 **Column**, To do unless you pick another: a column's `+` opens the form with that column picked, and **+ New task**
 and `n` with To do. A task created in Doing starts its clock. `tab` moves between the fields, `←` `→` pick the
@@ -141,7 +141,8 @@ so with the details open, the arrows go through cards and the details change wit
 They show, top to bottom:
 
 - the title, id, when it was created and its tags;
-- for a task an agent asked about, the question, with **Answer** and, for a proposed decision, **Open decision #N**;
+- for a task an agent asked about, the question with **Answer…**; for one waiting on a proposed decision, **Accept**,
+  **Accept with a comment…**, **Reject…** and **Open decision #N** instead;
 - the status buttons (To do · Doing · Parked · Done), and the tracked time: today, this week and in total;
 - **Description**, what the task is about, like an issue's body;
 - **Comments**, timestamped entries you add as work goes on ("found the cause", "waiting for review"), oldest first.
@@ -149,13 +150,14 @@ They show, top to bottom:
   buttons. An agent's say **Agent comment** or **Agent question**;
 - **Related**: linked notes, decisions and tasks. Click one to go there;
 - **History**: every status change, `· agent` on those an agent made;
-- Edit, Link…, Accept and Reject… (on a decision), Open file, Move… (with more than one brain) and Delete.
+- Edit title and tags, Link…, Accept, Accept with a comment… and Reject… (on a decision), Open file, Move to
+  project… (with more than one brain) and Delete….
 
 ### Questions from agents
 
 When an agent needs your answer (`kb ask`) or proposes a decision (`kb propose`), its task goes to Parked with a
 **Waiting for you** badge and the question on the card, and the top bar counts them: **2 waiting for you** (`w`)
-opens each in turn. Answer with a comment (`c`, or **Answer** in the details); the card then says **Answered**
+opens each in turn. Answer with a comment (`c`, or **Answer…** in the details); the card then says **Answered**
 until the agent starts it again. An agent that waits for it (`kb wait`) picks the answer up as soon as you save it.
 
 A proposal is answered by deciding, from the waiting task or from the decision itself (**Open proposed decision**,
@@ -209,7 +211,7 @@ Tags group related work, e.g. `prod`, `support`, `meeting`, `feature`, or a clie
 - An entry can have any number of tags, or none.
 - Tags are shown wherever an entry appears: cards, lists, the details, dialogs and `kb list`.
 
-To change an entry's tags, select it and press `e` (or **Edit**).
+To change an entry's tags, select it and press `e` (or **Edit title and tags**).
 
 ### Tag colors
 
