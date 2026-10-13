@@ -36,6 +36,7 @@ impl Board {
         if title.is_empty() {
             self.notify("the title is empty");
             form.field = Field::Title;
+            form.title_missed = true;
             self.mode = Mode::Form(form);
             return;
         }

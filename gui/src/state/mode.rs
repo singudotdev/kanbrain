@@ -120,6 +120,8 @@ pub struct Form {
     pub project: Option<Picker>,
     /// The field being typed into.
     pub field: Field,
+    /// Saving was tried without a title: the form says, under the field, while it's still empty.
+    pub title_missed: bool,
 }
 
 impl Form {
@@ -146,6 +148,7 @@ impl Form {
             links,
             project: None,
             field: Field::Title,
+            title_missed: false,
         }
     }
 

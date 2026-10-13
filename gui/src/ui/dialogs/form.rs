@@ -35,6 +35,9 @@ pub(super) fn draw(board: &Board, form: &Form, scroll: &Scrolls, follow: bool, c
             labeled("Project", project_field(board, form, picker, search, (&scroll.form_projects, follow), cx))
         }))
         .child(labeled("Title", field(Field::Title, &form.title, TextBox::Title, "What is it about?", cx)))
+        .when(form.title_missed && form.title.text().trim().is_empty(), |d| {
+            d.child(div().text_size(px(12.)).text_color(rgb(theme::RED)).child("A title is needed to save."))
+        })
         .child(labeled("Tags", field(Field::Tags, &form.tags, TextBox::Tags, "e.g. prod, support", cx)))
         .child(dim_small("Separate tags with commas or spaces. Tab switches fields."))
         .when(!known.is_empty(), |d| {

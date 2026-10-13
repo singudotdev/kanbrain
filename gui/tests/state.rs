@@ -295,6 +295,11 @@ fn the_form_creates_a_tagged_task_and_edits_it() {
     f.press(KeyCode::Enter);
     assert_eq!(f.on_disk(1).title, "Fix SSO");
 
+    f.press(KeyCode::Char('n'));
+    f.press(KeyCode::Enter);
+    assert!(matches!(&f.board.mode, Mode::Form(form) if form.title_missed), "said under the field, kept open");
+    f.press(KeyCode::Esc);
+
     // Tab into a field selects its text, so typing replaces it; shift+tab goes back.
     f.press(KeyCode::Char('e'));
     f.press(KeyCode::Tab);
