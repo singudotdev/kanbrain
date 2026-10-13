@@ -61,8 +61,6 @@ fn repositories_share_the_project_card_and_keep_their_own_notes() {
     assert!(ensure_description(central.path(), "shop").unwrap());
     assert!(!ensure_description(central.path(), "shop").unwrap(), "only once");
     assert_eq!(read_description(central.path(), "shop"), "", "the placeholder reads as no description");
-    write_description(central.path(), "shop", OLD_DESCRIPTION_TEMPLATE).unwrap();
-    assert_eq!(read_description(central.path(), "shop"), "", "so does an older version's");
     write_description(central.path(), "shop", "An online shop.").unwrap();
     write_repo_card(&web, &RepoCard { project: "shop".into(), repo: None, notes: "The React front end.".into() })
         .unwrap();

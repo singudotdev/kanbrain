@@ -47,9 +47,6 @@ pub const CENTRAL: &str = "central";
 /// What a new project's card says until someone describes the project.
 const DESCRIPTION_TEMPLATE: &str = "What the application is, its services and how they connect, and the \
 conventions they share: what an agent should know before touching any of its repositories.";
-/// The placeholder of cards made by earlier versions, still read as no description.
-const OLD_DESCRIPTION_TEMPLATE: &str = "What this project is for, its stack and its conventions: \
-what an agent should know before touching any of its repositories.";
 
 /// A registered repository of a project.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -294,7 +291,7 @@ pub fn read_description(central: &Path, project: &str) -> String {
     let text = fs::read_to_string(card_path(central, project)).unwrap_or_default();
     let body = text.lines().skip_while(|l| !l.starts_with("# ")).skip(1).collect::<Vec<_>>().join("\n");
     match body.trim() {
-        DESCRIPTION_TEMPLATE | OLD_DESCRIPTION_TEMPLATE => String::new(),
+        DESCRIPTION_TEMPLATE => String::new(),
         described => described.to_string(),
     }
 }
