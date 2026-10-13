@@ -10,11 +10,12 @@ use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-/// The installer for Linux and macOS.
-const INSTALL_SH: &str = "https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.sh";
+/// The installer for Linux and macOS, as the latest release has it: `main`'s may already expect a release that
+/// isn't out.
+const INSTALL_SH: &str = "https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh";
 
-/// The installer for Windows.
-pub const INSTALL_PS1: &str = "https://raw.githubusercontent.com/singudotdev/kanbrain/main/install.ps1";
+/// The installer for Windows, likewise.
+pub const INSTALL_PS1: &str = "https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1";
 
 /// Redirects to the latest release's page, whose address ends in its tag. A redirect, not GitHub's API, which
 /// limits how often an address may ask.
