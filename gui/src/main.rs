@@ -18,8 +18,7 @@ use kanbrain_core::{projects, store};
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    // With arguments it's the command line: agent sections and hooks written as `kanbrain …` before the
-    // command line was `kb` keep working wherever the app is installed.
+    // With arguments it's the command line, so `kanbrain` takes `kb`'s commands where only the app is installed.
     if !args.is_empty() {
         return Program { name: "kanbrain" }.main(args);
     }

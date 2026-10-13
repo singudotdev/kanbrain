@@ -93,7 +93,7 @@ pub fn run(board: Board) {
         let opened = cx.open_window(options, |window, cx| {
             let title = match &board.scope {
                 Scope::Project(name) => format!("{name} · kanbrain"),
-                Scope::Repo(src) => format!("{} · kanbrain", board.sources[*src].label.clone().unwrap_or_default()),
+                Scope::Repo(src) => format!("{} · kanbrain", board.sources[*src].label.as_deref().unwrap_or_default()),
                 Scope::All | Scope::Central => "kanbrain".to_string(),
             };
             window.set_window_title(&title);

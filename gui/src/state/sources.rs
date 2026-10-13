@@ -326,9 +326,8 @@ impl Board {
         let mut related = Vec::new();
         for (src, source) in self.sources.iter().enumerate().filter(|&(src, _)| src != key.src) {
             let Some(there) = source.brain.project.as_ref().filter(|p| p.name == here.name) else { continue };
-            let linked = |t: &&Task| {
-                links.contains(&RepoLink { repo: there.repo.clone(), id: t.id }) || t.repo_links.contains(&back)
-            };
+            let linked =
+                |t: &&Task| links.iter().any(|l| l.repo == there.repo && l.id == t.id) || t.repo_links.contains(&back);
             related.extend(source.brain.tasks.iter().filter(linked).map(|t| Key::new(src, t.id)));
         }
         related
