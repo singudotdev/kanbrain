@@ -90,8 +90,13 @@ fn removing_keeps_or_deletes_the_tasks() {
 
     let done = remove_repo(central.path(), &web, false).unwrap();
     assert!(web.is_dir() && done.iter().any(|l| l.starts_with("kept ")), "{done:?}");
+    drop(Store::at(&blog).unwrap().lock().unwrap());
+    let [lock, backups] = store::cache_of(&blog).unwrap();
+    std::fs::create_dir_all(&backups).unwrap();
+    assert!(lock.is_file(), "the lock leaves its file");
     let done = remove_repo(central.path(), &blog, true).unwrap();
     assert!(!blog.exists() && done.iter().any(|l| l.starts_with("deleted ")), "{done:?}");
+    assert!(!lock.exists() && !backups.exists(), "nor anything about it in the cache");
     assert_eq!(names(central.path()), ["shop"]);
 
     remove_project(central.path(), "shop", true).unwrap();

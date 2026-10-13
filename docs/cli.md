@@ -113,7 +113,8 @@ Undoes `init` for the repository of the current folder, or for the one `--projec
 It also drops the links the project's other repositories have to it, since it's no longer one of them.
 
 **`.brain/` is kept**, with its tasks, notes and decisions: commands run in the folder still use it. `--purge` deletes
-it too; otherwise run `init` again to register it again. A repository whose folder is already gone can still be taken
+it too, with what your cache folder kept about it (its write lock, its migration backups); otherwise run `init` again
+to register it again. A repository whose folder is already gone can still be taken
 out with `--project`.
 
 ## `kb list`

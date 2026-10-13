@@ -57,6 +57,9 @@ fn an_old_brain_is_backed_up_then_migrated_step_by_step_once() {
     assert_eq!(title_in(&store), "FIX LOGIN");
     let backup = PathBuf::from(done[0].split(" to ").nth(1).unwrap().trim_end_matches(" before migrating it"));
     assert!(fs::read_dir(&backup).unwrap().count() >= 1, "the files as they were, at {}", backup.display());
+    let tmp = std::env::temp_dir().canonicalize().unwrap();
+    let root = if cfg!(unix) && tmp.starts_with("/tmp") { PathBuf::from("/tmp") } else { tmp };
+    assert!(backup.starts_with(root.join("kanbrain-cache")), "a brain in the temporary folder keeps its cache there");
     assert!(!backup.join(FORMAT_FILE).exists() && !backup.join("marked").exists(), "from before any step");
 
     assert!(migrate_with(&store, STEPS, 3).unwrap().is_empty(), "already there: nothing to do");

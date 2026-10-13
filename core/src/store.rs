@@ -307,7 +307,9 @@ fn lock_path(dir: &Path) -> Result<PathBuf> {
 
 /// `<cache>/kanbrain/<kind>/<key>`, where the user's cache keeps something about the brain in `dir` (its lock, its
 /// backups) out of `.brain/`, which is often committed. The key is FNV-1a of the folder's canonical path rather
-/// than std's hasher, whose output may change between Rust versions: two `kb` builds must agree on it.
+/// than std's hasher, whose output may change between Rust versions: two `kb` builds must agree on it. A brain in
+/// the system's temporary folder (a test's, a try-out) keeps it in `<tmp>/kanbrain-cache/<kind>/<key>` instead, so
+/// a throwaway brain leaves nothing in the user's cache; under `/tmp`, in `/tmp/kanbrain-cache`.
 pub(crate) fn cache_dir_of(dir: &Path, kind: &str) -> Result<PathBuf> {
     let dir = dir.canonicalize().with_context(|| format!("reading {}", dir.display()))?;
     let hash = dir
@@ -315,8 +317,23 @@ pub(crate) fn cache_dir_of(dir: &Path, kind: &str) -> Result<PathBuf> {
         .as_encoded_bytes()
         .iter()
         .fold(0xcbf2_9ce4_8422_2325_u64, |hash, &byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3));
-    let cache = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
-    Ok(cache.join("kanbrain").join(kind).join(format!("{hash:016x}")))
+    // `/tmp` first, whatever `TMPDIR` says: two processes on one brain must agree on its lock, and some set
+    // `TMPDIR` to a folder inside `/tmp` (Claude Code does) while others don't.
+    let tmp = std::env::temp_dir();
+    let roots = [cfg!(unix).then(|| PathBuf::from("/tmp")), Some(tmp.clone())];
+    let cache = roots
+        .into_iter()
+        .flatten()
+        .filter_map(|root| root.canonicalize().ok())
+        .find(|root| dir.starts_with(root))
+        .map_or_else(|| dirs::cache_dir().unwrap_or(tmp).join("kanbrain"), |root| root.join("kanbrain-cache"));
+    Ok(cache.join(kind).join(format!("{hash:016x}")))
+}
+
+/// What the cache keeps about the brain in `dir`, its lock file and its backups, to delete once the brain is: nothing
+/// asks for them after. Found while the brain is still there, since the key comes from its canonical path.
+pub(crate) fn cache_of(dir: &Path) -> Result<[PathBuf; 2]> {
+    Ok([lock_path(dir)?, cache_dir_of(dir, "backups")?])
 }
 
 /// Writes `text` to `path`, creating its folder if missing. It goes to a hidden temporary file beside it

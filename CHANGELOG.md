@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- Deleting a repository's brain with `--purge` (`kb deinit --purge`, `kb project remove --purge`, the app's Remove…)
+  also deletes what the cache folder kept about it: its write lock file and its migration backups.
+- A brain in the system's temporary folder keeps its write lock and backups there (`<tmp>/kanbrain-cache/`), not in
+  the user's cache folder, so tests and throwaway brains leave nothing behind.
+
 ## [0.3.4] - 2026-10-13
 
 ### Added

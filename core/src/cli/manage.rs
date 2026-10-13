@@ -9,7 +9,7 @@
 use super::init;
 use crate::model::Task;
 use crate::projects::{self, Repo, RepoCard};
-use crate::store::{PROJECT_DIR, Store};
+use crate::store::{self, PROJECT_DIR, Store};
 use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::Path;
@@ -99,8 +99,13 @@ pub fn remove_repo(central: &Path, dir: &Path, purge: bool) -> Result<Vec<String
     if repo.dir.file_name().is_none_or(|n| n != PROJECT_DIR) {
         bail!("{} isn't a `.brain/` folder: deleted nothing", repo.dir.display());
     }
+    let cache = store::cache_of(&repo.dir)?;
     fs::remove_dir_all(&repo.dir).with_context(|| format!("deleting {}", repo.dir.display()))?;
     done.push(format!("deleted {}: its tasks, notes and decisions are gone", repo.dir.display()));
+    // Best effort: it's the cache, and on Windows a lock this process holds open can't be deleted yet.
+    for path in cache {
+        let _ = if path.is_dir() { fs::remove_dir_all(&path) } else { fs::remove_file(&path) };
+    }
     Ok(done)
 }
 
