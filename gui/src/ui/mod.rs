@@ -164,6 +164,8 @@ pub struct BrainView {
 struct Scrolls {
     /// Each board column, in `COLUMNS` order.
     columns: [ScrollHandle; COLUMNS.len()],
+    /// The board's columns, sideways when the window (with the details open) is too narrow for them.
+    board: ScrollHandle,
     /// The notes or decisions list.
     list: ScrollHandle,
     /// The board's tasks in its list layout.
@@ -485,7 +487,7 @@ impl Render for BrainView {
         let board = &self.board;
         let content = match board.tab {
             Tab::Board => match board.layout {
-                Layout::Kanban => board::draw(board, &self.scroll.columns, follow, cx),
+                Layout::Kanban => board::draw(board, &self.scroll.columns, &self.scroll.board, follow, cx),
                 Layout::List => list::draw(board, &self.scroll.tasks, follow, cx),
             },
             Tab::Notes | Tab::Decisions => entries::draw(board, &self.scroll.list, follow, cx),

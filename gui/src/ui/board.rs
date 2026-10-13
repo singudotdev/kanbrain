@@ -47,10 +47,21 @@ impl Render for DragPreview {
 }
 
 /// The four columns side by side.
-pub fn draw(board: &Board, scrolls: &[ScrollHandle; COLUMNS.len()], follow: bool, cx: &mut Context<BrainView>) -> Div {
+pub fn draw(
+    board: &Board,
+    scrolls: &[ScrollHandle; COLUMNS.len()],
+    sideways: &ScrollHandle,
+    follow: bool,
+    cx: &mut Context<BrainView>,
+) -> Div {
+    // The selected card's column comes into view, as its card does in the column.
+    if follow && let Some(at) = board.selected_task().and_then(|t| COLUMNS.iter().position(|&s| s == t.status)) {
+        sideways.scroll_to_item(at);
+    }
     let columns = COLUMNS.iter().zip(scrolls).map(|(&status, scroll)| column(board, status, scroll, follow, cx));
     let columns: Vec<_> = columns.collect();
-    div().flex_1().min_h_0().flex().gap_3().children(columns)
+    let row = div().id("board").size_full().overflow_x_scroll().track_scroll(sideways).flex().gap_3().children(columns);
+    div().flex_1().min_h_0().min_w_0().flex().child(row)
 }
 
 /// A column's or a list section's header: the status, how many of its tasks are shown, and `+` to add one there.
