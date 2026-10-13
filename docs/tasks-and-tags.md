@@ -49,7 +49,7 @@ box, so it stays quick with many projects: type part of a name, then click it or
 
 `P` opens the dropdown from the keyboard. Started from inside a project, the app opens on it. With a project shown, the bar also shows
 its description, shared by its repositories, and with one repository shown, that repository's role; **Edit** changes
-them (`E` the description). **Manage project** at the end of the bar (`I`) shows the whole project: its description, each repository with
+them (`E` the description). **Manage project**, before **+ Add project** at the end of the bar (`I`), shows the whole project: its description, each repository with
 its folder, notes, tasks per status and what's running, and the time tracked this week.
 
 It's also where a project is managed:
@@ -130,8 +130,8 @@ used by entries of the same kind (task tags for a task, note tags for a note), s
 
 ### Status history
 
-Every move is recorded with its date and time, e.g. `Mon 28 Sep 2026 10:12  todo → doing`. The details show the
-whole history, and it's stored in the task file's `## History` section; see [Data format](data-format.md).
+Every move is recorded with its date and time, e.g. `Mon 28 Sep 2026 10:12  To do → Doing`. The details show the
+whole history, newest first, and it's stored in the task file's `## History` section; see [Data format](data-format.md).
 
 ## The details
 
@@ -144,14 +144,14 @@ They show, top to bottom:
 - for a task an agent asked about, the question with **Answer…**; for one waiting on a proposed decision, **Accept**,
   **Accept with a comment…**, **Reject…** and **Open decision #N** instead;
 - the status buttons (To do · Doing · Parked · Done), and the tracked time: today, this week and in total;
+- Edit title and tags, Link…, Accept, Accept with a comment… and Reject… (on a decision), Open file, Move to
+  project… (with more than one brain) and Delete…;
 - **Description**, what the task is about, like an issue's body;
+- **Related**: linked notes, decisions and tasks. Click one to go there;
 - **Comments**, timestamped entries you add as work goes on ("found the cause", "waiting for review"), oldest first.
   Each records when it was written and, if changed later, when it was **edited**, and has its own Edit and Delete
   buttons. An agent's say **Agent comment** or **Agent question**;
-- **Related**: linked notes, decisions and tasks. Click one to go there;
-- **History**: every status change, `· agent` on those an agent made;
-- Edit title and tags, Link…, Accept, Accept with a comment… and Reject… (on a decision), Open file, Move to
-  project… (with more than one brain) and Delete….
+- **History**: every status change, `· agent` on those an agent made.
 
 ### Questions from agents
 
@@ -165,7 +165,8 @@ A proposal is answered by deciding, from the waiting task or from the decision i
 waiting tasks get the verdict, with your comment, as your answer. Proposed and rejected decisions carry a badge in
 the decisions list too.
 
-Descriptions and comments are written in the text editor: `esc` or **Save** saves (`ctrl+enter` too),
+Descriptions and comments are written in the text editor: `esc` or **Save** saves (`ctrl+enter` too; the button
+says **Add comment**, **Answer**, **Accept** or **Reject** when that's what saving does),
 **Discard changes** throws the edit away; until something's typed, the button is **Close**. An empty comment or
 answer adds nothing, and the status bar says so (an answer never written leaves the question waiting); to remove a
 comment, delete it.
