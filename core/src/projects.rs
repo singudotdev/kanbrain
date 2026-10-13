@@ -146,10 +146,12 @@ pub fn register(central: &Path, project: &str, dir: &Path) -> Result<()> {
     check_name(project)?;
     let mut repos = load(central)?;
     let new = Repo { project: project.to_string(), dir: dir.to_path_buf() };
-    if repos.contains(&new) {
+    // By folder, not path: `init` registers the canonical one, which another registration's may not be (`/var`
+    // is `/private/var` on macOS, Windows prefixes `\\?\`), and a move must replace it, not add a second.
+    if repos.iter().any(|r| r.project == project && same_dir(&r.dir, dir)) {
         return Ok(());
     }
-    repos.retain(|r| r.dir != dir);
+    repos.retain(|r| !same_dir(&r.dir, dir));
     if let Some(twin) = repos.iter().find(|r| r.project == project && r.name() == new.name() && r.dir.is_dir()) {
         bail!(
             "project `{project}` already has a repository named `{}`, at {}; name this one with `kb init --repo NAME`, \

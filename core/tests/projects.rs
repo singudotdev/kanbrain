@@ -75,3 +75,18 @@ fn repositories_share_the_project_card_and_keep_their_own_notes() {
     assert_eq!(super::info(&api, None).unwrap().description, "", "without the central brain, only its own card");
     assert!(super::info(central.path(), Some(central.path())).is_none(), "the central brain isn't a project");
 }
+
+#[cfg(unix)]
+#[test]
+fn a_repository_registered_by_another_path_to_its_folder_moves_rather_than_doubles() {
+    let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let api = repo_dir(code.path(), "api");
+    // Through a symlink, as macOS's `/var` is to `/private/var`.
+    let link = code.path().join("link");
+    std::os::unix::fs::symlink(code.path(), &link).unwrap();
+    register(central.path(), "shop", &link.join("api/.brain")).unwrap();
+    register(central.path(), "shop", &api).unwrap();
+    assert_eq!(load(central.path()).unwrap().len(), 1, "already registered, by another path");
+    register(central.path(), "store", &api).unwrap();
+    assert_eq!(load(central.path()).unwrap(), [Repo { project: "store".into(), dir: api.clone() }], "moved, once");
+}

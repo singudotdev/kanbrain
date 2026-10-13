@@ -114,9 +114,13 @@ pub fn init(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path)
         ));
     }
     let repos = projects::load(central)?;
-    let here = repos.iter().find(|r| r.dir == dir).map_or_else(|| project.clone(), |r| r.label(&repos));
-    let others: Vec<String> =
-        repos.iter().filter(|r| r.project == project && r.dir != dir).map(projects::Repo::name).collect();
+    let here =
+        repos.iter().find(|r| projects::same_dir(&r.dir, &dir)).map_or_else(|| project.clone(), |r| r.label(&repos));
+    let others: Vec<String> = repos
+        .iter()
+        .filter(|r| r.project == project && !projects::same_dir(&r.dir, &dir))
+        .map(projects::Repo::name)
+        .collect();
     if others.is_empty() {
         done.push(format!(
             "registered as project `{here}`: the kanban app shows it, and `--project {here}` reaches it"
