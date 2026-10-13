@@ -163,3 +163,14 @@ fn an_agents_own_variable_makes_it_the_author_unless_kanbrain_author_says() {
     assert_eq!(author(env(&[("CLAUDECODE", "1"), ("KANBRAIN_AUTHOR", "human")])).unwrap(), Author::Human);
     assert!(author(env(&[("KANBRAIN_AUTHOR", "robot")])).is_err());
 }
+
+#[test]
+fn the_docs_name_every_variable_that_marks_an_agent() {
+    for (doc, text) in
+        [("cli.md", include_str!("../../docs/cli.md")), ("agents.md", include_str!("../../docs/agents.md"))]
+    {
+        for name in AGENT_VARIABLES {
+            assert!(text.contains(&format!("`{name}`")), "docs/{doc} names {name}");
+        }
+    }
+}
