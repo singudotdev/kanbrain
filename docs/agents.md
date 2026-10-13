@@ -225,8 +225,8 @@ Errors go to stderr with a non-zero exit code and say what's wrong: `no entry #1
 
 ## JSON
 
-For scripts, `show`, `add`, `start`… and `comment`/`describe`/`link` print the entry as one line of JSON with `--json`
-(shown here spread out):
+For scripts, `show`, `add`, the status moves, `comment`, `describe`, `link`, `ask`, `propose`, `accept` and
+`reject` print the entry as one line of JSON with `--json` (shown here spread out):
 
 ```json
 {
@@ -248,5 +248,5 @@ Fields without a value are left out: `status` for notes and decisions, `links`, 
 `comments` when empty, `tracked_minutes` for tasks never in doing, `running` unless the clock runs, and `edited` on
 comments never edited. Decisions have `decision` (`accepted`, `proposed` or `rejected`); a parked task with a
 question has `asked` (`waiting for an answer` or `answered`); a comment has `"author": "agent"` when an agent wrote
-it and `"question": true` when it's one. `search --json` prints every match as
-`{ id, kind, title, status, decision, asked, tags }`.
+it and `"question": true` when it's one. `search --json` and `list --json` print every match as
+`{ id, kind, title, status, decision, asked, tags }`, all on one line.

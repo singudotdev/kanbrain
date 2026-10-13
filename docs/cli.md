@@ -139,7 +139,7 @@ $ kb list
 | `doing` / `todo` / `parked` / `done` | only these statuses; give several to combine them | all but `done` |
 | `all` | every status, done included | |
 | `notes` / `decisions` | also list notes and/or decisions after the tasks, newest first; given alone, only those | |
-| `--json` | a JSON array of `{ id, kind, title, status, tags }` in the same order | markdown |
+| `--json` | a JSON array of `{ id, kind, title, status, decision, asked, tags }` in the same order, on one line | markdown |
 | `--tag TAG` | only tasks with this tag (`prod` or `#prod`) | all |
 
 Examples:

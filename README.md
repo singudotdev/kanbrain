@@ -150,7 +150,7 @@ The output is kept small so it doesn't waste the agent's context, and the CLI co
 | `kb completions bash\|zsh\|fish` | tab completion of commands, ids, projects and tags |
 | `kanbrain` | open the kanban board (`?` opens the command palette, with every key; `u` undoes) |
 
-`add`, `show`, `search`, `list`, the status moves and `comment`/`describe`/`link` accept `--json`.
+The entry commands and `list` accept `--json` (all but `wait`, `context` and `project`).
 `--project NAME`, given anywhere on the line, runs the command on another registered project from any folder
 (`central` for the central brain). Full reference: [Command line](docs/cli.md).
 

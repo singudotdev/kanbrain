@@ -64,7 +64,7 @@ context: write commands reply with one line, like `#4 Fix login 500 (doing) #aut
 | `kb report [hour\|day\|week\|month] [--group task\|tag] [--save]` | tracked time as markdown |
 | `kb completions bash\|zsh\|fish` | tab completion of commands, ids, projects and tags |
 
-`add`, `show`, `search`, `list`, the moves and `comment`/`describe`/`link` accept `--json`. `--project NAME` runs a
+The entry commands and `list` accept `--json` (all but `wait`, `context` and `project`). `--project NAME` runs a
 command on another registered project from any folder. Outside any project, entries go to the central folder
 (`~/.local/share/kanbrain` on Linux, or `$KANBRAIN_DIR`).
 
