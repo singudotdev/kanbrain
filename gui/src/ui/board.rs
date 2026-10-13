@@ -222,6 +222,7 @@ fn draw_card(
             div()
                 .text_size(px(13.))
                 .line_clamp(3)
+                .text_ellipsis()
                 .text_color(rgb(if task.status == Status::Done { DIM } else { TEXT }))
                 .child(task.title.clone()),
         )
@@ -244,8 +245,17 @@ fn asked(task: &Task) -> Option<Div> {
             .items_start()
             .gap_1()
             .children(state_pill(task))
-            // As wide as the card: at the text's own width it ran past the card's edge, cut mid-word.
-            .child(div().w_full().text_size(px(12.)).text_color(rgb(DIM)).line_clamp(2).child(first.to_string())),
+            // As wide as the card, and an ellipsis where it's cut: at the text's own width it ran past the card's
+            // edge, and a clamped line ends mid-word without one.
+            .child(
+                div()
+                    .w_full()
+                    .text_size(px(12.))
+                    .text_color(rgb(DIM))
+                    .line_clamp(2)
+                    .text_ellipsis()
+                    .child(first.to_string()),
+            ),
     )
 }
 
