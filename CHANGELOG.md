@@ -22,6 +22,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   started task, Accept and Reject only on a decision, Move to project only with another one), the tab's, then
   every tab's (Manage project only with a project shown, Update only with a newer release); `esc` is there when it
   closes the details or clears the search, and the notes and decisions tabs say their arrows move up and down.
+- A task's details name their buttons as the right-click menu does (**Edit title and tags**, **Move to
+  project…**, **Delete…**, **Answer…**), from the same table, so the two can't drift apart.
 - Closing a task's details in the kanban app with a double-click on ✕ no longer opens a new task: the second click
   landed on the last column's **+**, which closing the details brings under the pointer.
 

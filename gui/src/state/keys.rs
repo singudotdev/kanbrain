@@ -439,6 +439,14 @@ impl Board {
         rows
     }
 
+    /// What the right-click menu calls what `code` does to the selected entry now, for a button that does it.
+    pub fn label_of(&self, code: KeyCode) -> &'static str {
+        ACTIONS
+            .iter()
+            .find(|a| a.key.code == code && !a.label.is_empty() && a.when.holds(self, self.selected))
+            .map_or("", |a| a.label)
+    }
+
     /// What the right-click menu offers on the entry `key`.
     pub fn menu_items(&self, key: Key) -> Vec<&'static Action> {
         ACTIONS

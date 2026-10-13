@@ -8,7 +8,7 @@ use super::widgets::{
 use super::{BrainView, action, markdown, when};
 use crate::state::{Board, COLUMNS, Confirm, Key, Mode, Target};
 use crate::text::event::KeyCode;
-use gpui::{ClickEvent, Context, Div, ElementId, FontWeight, ScrollHandle, div, prelude::*, px, rgb};
+use gpui::{ClickEvent, Context, Div, ElementId, FontWeight, ScrollHandle, Stateful, div, prelude::*, px, rgb};
 use kanbrain_core::model::{
     Asked, Author, Comment, DecisionState, Kind as EntryKind, Status, StatusChange, Task, fmt_age, fmt_clock, fmt_dur,
     now,
@@ -36,19 +36,17 @@ pub fn draw(board: &Board, key: Key, task: &Task, scroll: &ScrollHandle, cx: &mu
                 .flex()
                 .flex_wrap()
                 .gap_2()
-                .child(action("edit", "Edit", Kind::Secondary, KeyCode::Char('e'), cx))
-                .child(action("relate", "Link…", Kind::Secondary, KeyCode::Char('r'), cx))
+                .child(named(board, "edit", 'e', Kind::Secondary, cx))
+                .child(named(board, "relate", 'r', Kind::Secondary, cx))
                 .when(task.kind == EntryKind::Decision && task.decision != DecisionState::Accepted, |d| {
-                    d.child(action("accept", "Accept", Kind::Primary, KeyCode::Char('y'), cx))
+                    d.child(named(board, "accept", 'y', Kind::Primary, cx))
                 })
                 .when(task.kind == EntryKind::Decision && task.decision != DecisionState::Rejected, |d| {
-                    d.child(action("reject", "Reject…", Kind::Secondary, KeyCode::Char('j'), cx))
+                    d.child(named(board, "reject", 'j', Kind::Secondary, cx))
                 })
-                .child(action("open-file", "Open file", Kind::Secondary, KeyCode::Char('o'), cx))
-                .when(board.sources.len() > 1, |d| {
-                    d.child(action("move", "Move…", Kind::Secondary, KeyCode::Char('M'), cx))
-                })
-                .child(action("delete", "Delete", Kind::Danger, KeyCode::Char('x'), cx)),
+                .child(named(board, "open-file", 'o', Kind::Secondary, cx))
+                .when(board.sources.len() > 1, |d| d.child(named(board, "move", 'M', Kind::Secondary, cx)))
+                .child(named(board, "delete", 'x', Kind::Danger, cx)),
         )
         .child(divider())
         .child(description_block(task, cx))
@@ -56,6 +54,11 @@ pub fn draw(board: &Board, key: Key, task: &Task, scroll: &ScrollHandle, cx: &mu
         .child(comments_block(key, task, cx))
         .children(task.is_task().then(|| history_block(task)));
     card().child(content)
+}
+
+/// A button for what `key` does to the selected entry, named as the right-click menu names it, from the same table.
+fn named(board: &Board, id: &'static str, key: char, kind: Kind, cx: &mut Context<BrainView>) -> Stateful<Div> {
+    action(id, board.label_of(KeyCode::Char(key)), kind, KeyCode::Char(key), cx)
 }
 
 /// Kind or status, the project it's in, id, a close button; the title, when it was created, and the tags.
@@ -91,7 +94,8 @@ fn asked_block(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView>
     let callout = div().flex().flex_col().gap_2().p_3().rounded_md().border_1();
     match task.asked()? {
         Asked::Waiting(question) => {
-            let answer = small(action("answer", "Answer", Kind::Primary, KeyCode::Char('c'), cx));
+            let answer =
+                small(action("answer", board.label_of(KeyCode::Char('c')), Kind::Primary, KeyCode::Char('c'), cx));
             let open = board.proposed_for(key).into_iter().map(|k| {
                 small(widgets::button(
                     ElementId::Name(format!("open-proposed {}/{}", k.src, k.id).into()),
