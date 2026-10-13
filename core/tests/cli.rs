@@ -92,17 +92,20 @@ fn list_notes_and_decisions() {
     note.tags = vec!["auth".into()];
     let mut decision = Task::new(3, "Refresh server-side".into(), now());
     decision.kind = Kind::Decision;
-    let tasks = [task, note, decision];
+    let mut rejected = Task::new(4, "Refresh client-side".into(), now());
+    rejected.kind = Kind::Decision;
+    rejected.decision = crate::model::DecisionState::Rejected;
+    let tasks = [task, note, decision, rejected];
     let docs = ListArgs { statuses: vec![], kinds: vec![Kind::Note, Kind::Decision], tag: None, json: false };
     assert_eq!(
         list_markdown(&tasks, &docs),
-        "## notes\n\n- #2 Token TTL #auth\n\n## decisions\n\n- #3 Refresh server-side\n"
+        "## notes\n\n- #2 Token TTL #auth\n\n## decisions\n\n- #4 Refresh client-side · rejected\n- #3 Refresh server-side\n"
     );
     let line = list_json(&tasks, &docs).unwrap();
     assert_eq!(line.lines().count(), 1, "{line}");
     let json: serde_json::Value = serde_json::from_str(&line).unwrap();
     assert_eq!(json[0]["kind"], "note");
-    assert_eq!(json[1]["id"], 3);
+    assert_eq!((&json[1]["id"], &json[1]["decision"]), (&4.into(), &"rejected".into()));
 }
 
 #[test]

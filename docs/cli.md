@@ -120,7 +120,8 @@ out with `--project`.
 ## `kb list`
 
 Prints tasks as a markdown list, one `## status` section per status, most recently changed first. Sections without
-tasks are left out.
+tasks are left out. An entry its section doesn't say everything about ends in ` · ` and the rest, as in `kb context`:
+a parked task `· waiting for an answer` or `· answered`, a decision `· proposed` or `· rejected`.
 
 ```
 $ kb list

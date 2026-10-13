@@ -551,7 +551,8 @@ fn kind_heading(kind: Kind) -> &'static str {
     }
 }
 
-/// One `## heading` section per non-empty section, each entry as `- #id title #tag …`.
+/// One `## heading` section per non-empty section, each entry as `- #id title #tag …`, then ` · ` what its section
+/// doesn't say (`waiting for an answer`, `proposed`…).
 fn list_markdown(tasks: &[Task], args: &ListArgs) -> String {
     let mut out = String::new();
     for (heading, entries) in list_sections(tasks, args) {
@@ -562,6 +563,10 @@ fn list_markdown(tasks: &[Task], args: &ListArgs) -> String {
         for task in entries {
             out.push_str("- ");
             crate::api::text::head(&mut out, task).expect("writing to a String cannot fail");
+            // As `context` says it: a parked task's question, a decision not in force.
+            if let Some(note) = crate::api::text::state_note(task) {
+                write!(out, " · {note}").expect("writing to a String cannot fail");
+            }
             out.push('\n');
         }
     }
