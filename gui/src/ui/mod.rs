@@ -187,6 +187,8 @@ struct Scrolls {
     editor: ScrollHandle,
     /// The open dropdown of the top bar: projects or tags (one at a time).
     dropdown: ScrollHandle,
+    /// The form's tags field.
+    form_tags: ScrollHandle,
     /// The form's related field.
     form_links: ScrollHandle,
     /// The form's project field.

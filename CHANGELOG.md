@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- The kanban app's form picks tags from a list: in the tags field, the tags in use by entries of its kind drop down
+  with how many use each (`Board::form_tags`), those it holds left out, filtered by the tag being typed
+  (`Form::typed_tag`) as the dropdowns filter, the first starting with it highlighted. A click, or `↓` `↑` and
+  `enter`, puts one in its place (`Form::put_tag`); with none highlighted, `enter` saves; a line says when none
+  matches: the tag will be a new one. It replaces the chips of the tags in use under the field.
+
 ### Changed
 
 - The kanban app's buttons and menu entries drop the trailing ellipsis: **Rename**, **Move**, **Remove**, **Remove

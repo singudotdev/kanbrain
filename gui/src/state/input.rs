@@ -236,6 +236,11 @@ impl Board {
 
     /// The new / edit dialog: `tab` switches fields, `enter` saves, `esc` cancels.
     fn key_form(&mut self, mut form: Box<Form>, key: KeyEvent) {
+        // In the tags field, with tags to pick: the arrows move in its list, enter picks the highlighted one.
+        if form.field == Field::Tags && self.key_form_tags(&mut form, key) {
+            self.mode = Mode::Form(form);
+            return;
+        }
         let links = form.field == Field::Links;
         let picking = form.field == Field::Status;
         match key.code {
@@ -275,11 +280,48 @@ impl Board {
                 self.mode = Mode::Form(form);
             }
             _ => {
-                if let Some(input) = form.active_mut() {
-                    input.on_key(key);
+                let changed = form.active_mut().is_some_and(|input| input.on_key(key));
+                // Typing the start of a tag highlights it, for enter to pick. One only containing what's typed isn't
+                // highlighted, nor a whole one typed, nor anything as the cursor merely moves: enter then saves, as a
+                // new tag typed must.
+                if changed && form.field == Field::Tags {
+                    let typed = form.typed_tag();
+                    let tags = self.form_tags(&form).1;
+                    let partial = !typed.is_empty() && !tags.iter().any(|(tag, _)| *tag == typed);
+                    form.tag_sel =
+                        partial.then(|| tags.iter().position(|(tag, _)| tag.starts_with(typed.as_str()))).flatten();
                 }
                 self.mode = Mode::Form(form);
             }
+        }
+    }
+
+    /// The tags field's list: `↓` and `↑` move its highlight (`↑` off the first leaves it, so enter saves again),
+    /// `enter` picks the highlighted tag. Returns whether the list took `key`; it doesn't when there's nothing to
+    /// pick, or nothing highlighted for `↑` and `enter`, which then switch fields and save as elsewhere.
+    fn key_form_tags(&mut self, form: &mut Form, key: KeyEvent) -> bool {
+        let (_, tags) = self.form_tags(form);
+        let count = tags.len();
+        match (key.code, form.tag_sel) {
+            (_, _) if count == 0 => false,
+            (KeyCode::Down, None) => {
+                form.tag_sel = Some(0);
+                true
+            }
+            (KeyCode::Down, Some(sel)) => {
+                form.tag_sel = Some((sel + 1).min(count - 1));
+                true
+            }
+            (KeyCode::Up, Some(sel)) => {
+                form.tag_sel = sel.checked_sub(1);
+                true
+            }
+            // A highlight past the list (pasted text or a reload shortened it) is none: enter saves.
+            (KeyCode::Enter, Some(sel)) if sel < count => {
+                form.put_tag(&tags[sel].0);
+                true
+            }
+            _ => false,
         }
     }
 

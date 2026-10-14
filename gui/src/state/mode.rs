@@ -1,7 +1,7 @@
 //! What the window is asking for besides the board: a dialog, or a field being typed into.
 
 use super::Key;
-use crate::text::editor::{LineInput, TextEditor};
+use crate::text::editor::{LineInput, Pointer, TextEditor};
 use crate::text::event::{KeyCode, KeyEvent};
 use kanbrain_core::model::{Kind, Status, Task};
 use std::path::PathBuf;
@@ -125,6 +125,9 @@ pub struct Form {
     pub title: LineInput,
     /// The tags field: comma or space separated.
     pub tags: LineInput,
+    /// The highlighted row of the tags field's list: `None` until a tag is typed or `↓` moves to one, so `enter`
+    /// saves the form rather than picking a tag nobody pointed at.
+    pub tag_sel: Option<usize>,
     /// The related field's search box, what's typed filtering the entries to link, and the highlighted row of its
     /// dropdown.
     pub related: Picker,
@@ -159,6 +162,7 @@ impl Form {
             target,
             title: LineInput::new(title),
             tags: LineInput::new(tags),
+            tag_sel: None,
             related: Picker::default(),
             links,
             project: None,
@@ -173,6 +177,43 @@ impl Form {
             FormTarget::New(src, ..) => src,
             FormTarget::Edit(key) => key.src,
         }
+    }
+
+    /// The tag being typed: while the tags field has the keys, the word the cursor ends, as it's saved (lowercase,
+    /// without `#`); empty after a separator, with text selected (which typing replaces), or in another field.
+    pub fn typed_tag(&self) -> String {
+        if self.field != Field::Tags || self.tags.selection().is_some() {
+            return String::new();
+        }
+        let (start, _) = self.tag_span();
+        let word: String = self.tags.text().chars().skip(start).take(self.tags.cursor() - start).collect();
+        word.trim_start_matches('#').to_lowercase()
+    }
+
+    /// The tag the cursor is in, as a range of characters: from the separator before it to the one after.
+    fn tag_span(&self) -> (usize, usize) {
+        let text = self.tags.text();
+        let cursor = self.tags.cursor();
+        let start =
+            text.chars().take(cursor).enumerate().filter(|&(_, c)| separates(c)).last().map_or(0, |(i, _)| i + 1);
+        let end = text.chars().skip(cursor).position(separates).map_or(text.chars().count(), |i| cursor + i);
+        (start, end)
+    }
+
+    /// Puts `tag` in place of the one the cursor is in (after the others, with text selected), then a separator and
+    /// the cursor, to type or pick the next.
+    pub fn put_tag(&mut self, tag: &str) {
+        let len = self.tags.text().chars().count();
+        let (start, end) = if self.tags.selection().is_some() { (len, len) } else { self.tag_span() };
+        let text = self.tags.text();
+        let before: String = text.chars().take(start).collect();
+        let after: String = text.chars().skip(end).collect();
+        let before = before.trim_end_matches(separates);
+        let head = if before.is_empty() { format!("{tag}, ") } else { format!("{before}, {tag}, ") };
+        let at = head.chars().count();
+        self.tags = LineInput::new(&format!("{head}{}", after.trim_start_matches(separates)));
+        self.tags.point(at, Pointer::Place);
+        self.tag_sel = None;
     }
 
     /// The field being typed into; `None` on the column picker, which takes no text.
@@ -233,6 +274,7 @@ impl Form {
             *picker = Picker { sel: src, ..Picker::default() };
         }
         self.field = field;
+        self.tag_sel = None;
     }
 
     /// Goes to `field` from the keyboard, its text selected, so typing replaces it rather than adding to it.
@@ -262,6 +304,11 @@ impl Form {
         let previous = self.fields().take_while(|&f| f != self.field).last();
         previous.or_else(|| self.fields().last()).unwrap_or(Field::Title)
     }
+}
+
+/// Whether `c` separates tags, as `parse_tags` splits them.
+fn separates(c: char) -> bool {
+    c == ',' || c.is_whitespace()
 }
 
 /// What the form's Save does.

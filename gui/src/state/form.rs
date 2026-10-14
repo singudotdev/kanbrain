@@ -5,20 +5,38 @@ use crate::text::editor::LineInput;
 use anyhow::Result;
 use kanbrain_core::brain::NewEntry;
 use kanbrain_core::model::{Kind, Status, Task, parse_tags};
+use std::collections::BTreeMap;
 
 impl Board {
     /// The kind of entry the form makes or changes, and the tags entries of that kind already use in
-    /// its brain, to reuse: a task's form suggests task tags, not those of notes or decisions.
-    pub fn form_tags(&self, form: &Form) -> (Kind, Vec<String>) {
+    /// its brain, each with how many use it, to pick from: a task's form offers task tags, not those of notes or
+    /// decisions. Those the field holds are left out but the one being typed, and while one is typed, only those
+    /// containing it ([`Form::typed_tag`]), as the dropdowns filter.
+    pub fn form_tags(&self, form: &Form) -> (Kind, Vec<(String, usize)>) {
         let (src, kind) = match form.target {
             FormTarget::New(src, kind, _) => (src, kind),
             FormTarget::Edit(key) => (key.src, self.task(key).map_or(Kind::Task, |t| t.kind)),
         };
-        let mut tags: Vec<String> =
-            self.brain(src).tasks.iter().filter(|t| t.kind == kind).flat_map(|t| t.tags.iter().cloned()).collect();
-        tags.sort();
-        tags.dedup();
+        let typed = form.typed_tag();
+        let held = parse_tags(form.tags.text());
+        let mut uses = BTreeMap::new();
+        for tag in self.brain(src).tasks.iter().filter(|t| t.kind == kind).flat_map(|t| &t.tags) {
+            *uses.entry(tag.as_str()).or_insert(0) += 1;
+        }
+        let tags = uses
+            .into_iter()
+            .filter(|&(tag, _)| tag.contains(typed.as_str()) && (tag == typed || !held.iter().any(|h| h == tag)))
+            .map(|(tag, n)| (tag.to_string(), n))
+            .collect();
         (kind, tags)
+    }
+
+    /// Puts the tags field's option at `index` in place of the tag being typed.
+    pub fn choose_form_tag(&mut self, index: usize) {
+        let Mode::Form(form) = &self.mode else { return };
+        let Some((tag, _)) = self.form_tags(form).1.into_iter().nth(index) else { return };
+        let Mode::Form(form) = &mut self.mode else { return };
+        form.put_tag(&tag);
     }
 
     /// Opens the form for changing the selected entry's title and tags.
