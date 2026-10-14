@@ -15,6 +15,8 @@ The shared logic is in `core/`, the command line in `cli/` and the kanban app in
 `cargo test` skips the kanban app (it needs GPUI and, on Linux, some graphics libraries: see
 [docs/development.md](docs/development.md)).
 
+- Branch from `develop` and open pull requests against it: `main` only takes tested releases (see
+  [Branches](docs/development.md#branches)).
 - Keep pull requests focused, and describe the behavior change in the description.
 - Add tests to the crate's `tests/` folder (see [Tests](docs/development.md#tests)): one that fails without the
   change, and for every behavior the change could affect. CI's mutation testing fails on a changed line no test
