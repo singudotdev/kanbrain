@@ -41,7 +41,7 @@ jobs:
             echo "::error::tag $GITHUB_REF_NAME doesn't match Cargo.toml version $version"
             exit 1
           fi
-      # A tag is a release: only of a commit CI passed on every platform (main fast-forwarded to it, then tag).
+      # A tag is a release: only of a commit CI passed on every platform (the release squashed into main, then tag).
       - name: CI passed on the commit
         env:
           GH_TOKEN: ${{ github.token }}
@@ -50,7 +50,7 @@ jobs:
             passed=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --commit "$GITHUB_SHA" \
               --json conclusion --jq '[.[] | select(.conclusion == "success")] | length')
             if [ "$passed" = 0 ]; then
-              echo "::error::no passing $workflow run on $GITHUB_SHA: fast-forward main to a commit whose runs passed, then tag"
+              echo "::error::no passing $workflow run on $GITHUB_SHA: tag the commit on main once its runs pass"
               exit 1
             fi
           done
