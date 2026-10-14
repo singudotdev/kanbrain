@@ -296,6 +296,27 @@ fn init_all_renames_a_project_a_version_before_0_4_0_named_as_no_project_can_be_
 }
 
 #[test]
+fn init_all_renames_a_lone_central_project_and_one_with_a_slash() {
+    use std::fmt::Write;
+    for name in ["Central", "shop/web", ":"] {
+        let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let root = code.path().join("api");
+        fs::create_dir(&root).unwrap();
+        init(&root, None, None, central.path()).unwrap();
+        let dir = root.join(".brain").canonicalize().unwrap();
+        let mut registry = String::from("# Projects\n\n");
+        writeln!(registry, "- {name}: {}", dir.display()).unwrap();
+        fs::write(central.path().join(projects::REGISTRY_FILE), registry).unwrap();
+        let card = projects::read_repo_card(&dir).unwrap();
+        projects::write_repo_card(&dir, &projects::RepoCard { project: name.into(), ..card }).unwrap();
+
+        let done = init_all(central.path()).expect("the only project's name refused is no panic");
+        let renamed = &projects::load(central.path()).unwrap()[0].project;
+        projects::check_name(renamed).unwrap_or_else(|e| panic!("{name} became {renamed}: {e}, {done:?}"));
+    }
+}
+
+#[test]
 fn a_repository_whose_folder_is_gone_keeps_its_name_from_a_new_one() {
     let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let (front, back) = (code.path().join("front/app"), code.path().join("back/app"));

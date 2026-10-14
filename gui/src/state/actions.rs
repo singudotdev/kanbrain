@@ -11,6 +11,7 @@ use kanbrain_core::cli::update;
 use kanbrain_core::model::{DecisionState, Kind, Status};
 use kanbrain_core::period::{Period, Unit};
 use kanbrain_core::store::{self, Change};
+use std::path::Path;
 
 impl Board {
     /// Shows `result`'s error in the status bar, if it failed.
@@ -37,6 +38,14 @@ impl Board {
             }
         }
         self.keep_selection();
+    }
+
+    /// A card dragged from the brain in `dir` dropped on `status`'s column, as [`Board::drop_card`]: its brain found
+    /// by its folder, wherever a reload while it was dragged put it in the list; nothing if it's gone.
+    pub fn drop_dragged(&mut self, dir: &Path, id: u32, status: Status) {
+        if let Some(src) = self.src_at(dir) {
+            self.drop_card(Key::new(src, id), status);
+        }
     }
 
     /// A card dropped on `status`'s column: it moves there and is selected. Dropping it back on its own

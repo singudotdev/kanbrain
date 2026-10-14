@@ -259,6 +259,17 @@ fn dropping_a_card_moves_it_unless_it_is_its_own_column() {
 }
 
 #[test]
+fn a_dragged_card_is_found_by_its_brains_folder() {
+    let mut f = Fixture::new(&["feature", "bug"]);
+    let gone = f.dir.path().join("gone");
+    f.board.drop_dragged(&gone, 2, Status::Done);
+    assert_eq!(f.status(2), Status::Todo, "its brain gone from the list meanwhile: nothing moves");
+    let dir = f.dir.path().to_path_buf();
+    f.board.drop_dragged(&dir, 2, Status::Done);
+    assert_eq!((f.status(2), f.board.selected), (Status::Done, Some(k(2))));
+}
+
+#[test]
 fn arrows_move_between_columns_and_cards() {
     let mut f = Fixture::new(&["a", "b", "c"]);
     f.board.set_status(k(3), Status::Parked);
@@ -476,6 +487,21 @@ fn selection_survives_a_reload_by_id() {
     f.board.reload().unwrap();
     assert_eq!(f.board.selected, Some(k(2)));
     assert_eq!(f.status(1), Status::Done);
+}
+
+#[test]
+fn a_dialog_on_an_entry_deleted_meanwhile_closes() {
+    for open in ['x', 'r', 'e', 'm'] {
+        let mut f = Fixture::new(&["feature", "bug"]);
+        f.board.select(k(2));
+        f.press(KeyCode::Char(open));
+        assert!(!matches!(f.board.mode, Mode::Normal), "{open} opens a dialog on #2");
+        let store = Store::at(f.dir.path()).unwrap();
+        store.delete(&f.on_disk(2)).unwrap();
+        f.board.reload_changed(&[f.dir.path().to_path_buf()]).unwrap();
+        assert!(matches!(f.board.mode, Mode::Normal), "{open}: closed, not left taking the keys unseen");
+        assert_eq!(f.board.message(), Some("closed: #2 was deleted meanwhile"));
+    }
 }
 
 #[test]
@@ -1035,6 +1061,23 @@ fn picking_tags_adds_them_to_the_search_and_takes_them_out() {
     f.press(KeyCode::Esc);
     assert!(matches!(f.board.mode, Mode::Normal), "esc closes it");
     assert_eq!(f.board.search.text(), "login");
+}
+
+#[test]
+fn a_ctrl_letter_does_nothing_but_in_the_editor() {
+    let mut f = Fixture::new(&["a"]);
+    let ctrl = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL);
+    for c in ['d', 's', 'p', 'n', 'x', 'q'] {
+        f.board.on_key(ctrl(c));
+    }
+    assert_eq!(f.status(1), Status::Todo, "ctrl+d, ctrl+s and ctrl+p aren't d, s and p");
+    assert!(matches!(f.board.mode, Mode::Normal), "nor ctrl+n n, nor ctrl+x x");
+    f.press(KeyCode::Char('m'));
+    f.type_text("text");
+    f.board.on_key(ctrl('d'));
+    assert_eq!(f.board.message(), Some("changes discarded"), "in the editor, ctrl+d discards");
+    f.board.on_key(ctrl('d'));
+    assert_eq!(f.status(1), Status::Todo, "and a second one, on the board, is nothing");
 }
 
 #[test]

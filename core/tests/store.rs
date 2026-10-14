@@ -20,6 +20,25 @@ fn save_renames_on_title_change_and_loads_back() {
 }
 
 #[test]
+fn saving_never_writes_over_a_file_that_didnt_parse() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let mut task = Task::new(1, "Fix".into(), now());
+    store.save(&mut task).unwrap();
+    // A sync conflict: the entry's file broken, a readable copy beside it.
+    let copy = dir.path().join("0001-fix (conflicted copy).md");
+    fs::rename(dir.path().join("0001-fix.md"), &copy).unwrap();
+    fs::write(dir.path().join("0001-fix.md"), "not an entry").unwrap();
+    let (mut tasks, warnings) = store.load().unwrap();
+    assert_eq!((tasks.len(), warnings.len()), (1, 1), "{warnings:?}");
+    tasks[0].description = "mine".into();
+    let refused = store.save(&mut tasks[0]).unwrap_err().to_string();
+    assert!(refused.contains("couldn't be read as #1"), "{refused}");
+    assert_eq!(fs::read_to_string(dir.path().join("0001-fix.md")).unwrap(), "not an entry", "kept");
+    assert!(copy.exists(), "and the copy too");
+}
+
+#[test]
 fn a_file_renamed_only_in_case_keeps_its_name_and_its_content() {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::at(dir.path()).unwrap();

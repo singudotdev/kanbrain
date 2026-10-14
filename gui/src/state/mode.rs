@@ -46,6 +46,33 @@ pub enum Mode {
 }
 
 impl Mode {
+    /// The entry the mode acts on, if it's one: its form, editor, confirmation, pickers or menu.
+    pub fn entry(&self) -> Option<Key> {
+        match self {
+            Self::Form(form) => match form.target {
+                FormTarget::Edit(key) => Some(key),
+                FormTarget::New(..) => None,
+            },
+            Self::Edit(edit) => edit.target.key(),
+            Self::Confirm(Confirm::Delete(key) | Confirm::DeleteComment(key, _))
+            | Self::Links(LinkPicker { key, .. })
+            | Self::Comments(CommentPicker { key, .. })
+            | Self::Where(WherePicker { then: WhereFor::Move(key), .. })
+            | Self::Menu(super::MenuPicker { key, .. }) => Some(*key),
+            Self::Normal
+            | Self::Search
+            | Self::QuickAdd(_)
+            | Self::Confirm(Confirm::Update)
+            | Self::Where(_)
+            | Self::Scopes(_)
+            | Self::Tags(_)
+            | Self::ManageProject(_)
+            | Self::Palette(_)
+            | Self::AddProject(_)
+            | Self::Manage(_) => None,
+        }
+    }
+
     /// Points every brain the mode names, by index, at where `to` says it now is, after the list of brains
     /// changed; `None` if one is gone, and the mode with it.
     pub fn remap(self, to: impl Fn(usize) -> Option<usize>) -> Option<Self> {

@@ -26,6 +26,15 @@ impl Board {
 
     /// A key, without recording what it changes.
     fn key(&mut self, key: KeyEvent) {
+        // A ctrl+letter is a key only in the editor (`ctrl+d`; the clipboard's are the window's). Anywhere else it'd be
+        // taken for the letter alone: a second ctrl+d after discarding an edit would move the selected task to Done,
+        // and one in the remove dialog would delete its tasks.
+        if key.modifiers.contains(KeyModifiers::CONTROL)
+            && matches!(key.code, KeyCode::Char(_))
+            && !matches!(self.mode, Mode::Edit(_))
+        {
+            return;
+        }
         // Each handler puts back the mode it continues in; the default is the board.
         match std::mem::replace(&mut self.mode, Mode::Normal) {
             Mode::Normal => self.key_normal(key),

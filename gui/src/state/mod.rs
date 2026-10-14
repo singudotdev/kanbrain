@@ -327,6 +327,13 @@ impl Board {
     /// Only what wasn't said already: an agent's every write reads a brain again, and the window reads everything
     /// once more a second after it opens.
     fn after_load(&mut self) {
+        // A dialog on an entry another program deleted: drawn as nothing, it would still take every key.
+        if let Some(key) = self.mode.entry()
+            && self.task(key).is_none()
+        {
+            self.mode = Mode::Normal;
+            self.notify(format!("closed: #{} was deleted meanwhile", key.id));
+        }
         let left_out = self.skipped.iter().map(|s| s.said.clone());
         // Named with their brain: two repositories may skip files of one name.
         let files = self.sources.iter().flat_map(|s| {

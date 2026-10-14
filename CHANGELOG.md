@@ -22,6 +22,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   (`dropdown::list`, `menu::draw`), and a dialog's list sits in a bordered box (`dialogs::list_box`): the link
   picker, comments, which project and the command palette now too.
 
+
+### Fixed
+
+- `kb init --all` (run by the installer and `kb update`) renames a registry's only project named `Central`, or one
+  with `:` or `/`, instead of panicking (`rename_unreachable_projects`).
+- An entry file that doesn't parse (a sync conflict's, a hand edit's) is no longer lost: saving another entry over
+  its name is refused (`Store::save`), and a new entry never takes its id (`Brain::take_id` counts the files there).
+- The kanban app: a ctrl+letter does nothing outside the editor, where `ctrl+d` discarded the edit and a second one
+  moved the selected task to Done (`Board::key`); a dialog on an entry another program deleted closes, saying so,
+  instead of taking the keys unseen (`Mode::entry`, `after_load`); a dragged card is dropped on its own brain, found
+  by folder, though a reload reordered the brains meanwhile (`Board::drop_dragged`).
+- `kb init`'s message and `docs/agents.md` say the `Stop` hook reminds an agent to describe the project, as it does,
+  rather than holding the turn.
 ## [0.4.0] - 2026-10-14
 
 ### Added
