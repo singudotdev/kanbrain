@@ -73,11 +73,11 @@ fn the_menu_offers_what_the_keys_do_and_presses_them() {
             "Edit title and tags",
             "Edit description",
             "Add comment",
-            "Link…",
+            "Link",
             "Open file",
-            "Delete…"
+            "Delete"
         ],
-        "no move to its own status, and no Move… with one brain"
+        "no move to its own status, and no Move to project with one brain"
     );
     f.press(KeyCode::Down);
     f.press(KeyCode::Enter);
@@ -1215,7 +1215,7 @@ fn the_user_answers_questions_and_decides_on_proposals() {
 
     f.board.open_entry(k(decision));
     let labels: Vec<&str> = f.board.menu_items(k(decision)).iter().map(|i| i.label).collect();
-    assert!(labels.contains(&"Accept") && labels.contains(&"Reject…"), "{labels:?}");
+    assert!(labels.contains(&"Accept") && labels.contains(&"Reject"), "{labels:?}");
     f.press(KeyCode::Char('j'));
     f.type_text("too costly");
     f.board.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL));
@@ -1432,7 +1432,7 @@ fn a_task_waiting_on_you_is_answered_and_its_decision_opened_from_the_palette_an
     let rows = |board: &Board| board.commands(&Picker::default()).iter().map(|a| a.does).collect::<Vec<_>>();
 
     f.board.select(k(2));
-    assert!(labels(&f.board, 2).contains(&"Answer…") && !labels(&f.board, 2).contains(&"Add comment"));
+    assert!(labels(&f.board, 2).contains(&"Answer") && !labels(&f.board, 2).contains(&"Add comment"));
     assert!(!labels(&f.board, 2).contains(&"Open proposed decision"), "a question, no decision");
     assert!(rows(&f.board).contains(&"Answer the agent's question"));
     f.press(KeyCode::Char('c'));
@@ -1445,7 +1445,7 @@ fn a_task_waiting_on_you_is_answered_and_its_decision_opened_from_the_palette_an
     assert!(rows(&f.board).contains(&"Open the decision it waits on"));
     f.press(KeyCode::Char('D'));
     assert_eq!((f.board.tab, f.board.selected), (Tab::Decisions, Some(k(decision))), "D opens it");
-    assert!(!labels(&f.board, decision).contains(&"Answer…"), "a decision waits on nothing");
+    assert!(!labels(&f.board, decision).contains(&"Answer"), "a decision waits on nothing");
 }
 
 #[test]
@@ -1507,10 +1507,10 @@ fn a_task_waiting_on_a_decision_is_answered_by_deciding_with_or_without_a_commen
 
     f.board.select(k(1));
     let menu = labels(&f.board, 1);
-    for offered in ["Accept", "Accept with a comment…", "Reject…", "Open proposed decision"] {
+    for offered in ["Accept", "Accept with a comment", "Reject", "Open proposed decision"] {
         assert!(menu.contains(&offered), "{offered}: {menu:?}");
     }
-    assert!(!menu.contains(&"Answer…"), "it's answered by deciding");
+    assert!(!menu.contains(&"Answer"), "it's answered by deciding");
     f.press(KeyCode::Char('Y'));
     f.press(KeyCode::Esc);
     assert_eq!(f.on_disk(redis).decision, DecisionState::Proposed, "a comment never written accepts nothing");

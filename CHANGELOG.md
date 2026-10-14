@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The kanban app's buttons and menu entries drop the trailing ellipsis: **Rename**, **Move**, **Remove**, **Remove
+  project**, **Link**, **Answer**, **Accept with a comment**, **Reject**, **Move to project**, **Delete**, **Edit or
+  delete a comment**.
+
 ## [0.4.0] - 2026-10-14
 
 ### Added

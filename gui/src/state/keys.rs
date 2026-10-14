@@ -284,16 +284,16 @@ pub const ACTIONS: &[Action] = &[
         selected(b, |b, key| b.open_editor(Target::Description(key)));
     })
     .menu("Edit description"),
-    letter("c", Tabs::Entries, When::Asks, "Answer the agent's question", comment).menu("Answer…"),
+    letter("c", Tabs::Entries, When::Asks, "Answer the agent's question", comment).menu("Answer"),
     letter("c", Tabs::Entries, When::NotWaiting, "Add a comment", comment).menu("Add comment"),
     letter("C", Tabs::Entries, When::Commented(true), "Edit or delete one of its comments", Board::open_comments)
-        .menu("Edit or delete a comment…"),
+        .menu("Edit or delete a comment"),
     // Not on the menu: there, an entry without comments has nothing to offer.
     letter("C", Tabs::Entries, When::Commented(false), "Edit or delete one of its comments", Board::open_comments),
     letter("D", Tabs::Entries, When::Proposed, "Open the decision it waits on", Board::open_proposed)
         .menu("Open proposed decision"),
     letter("r", Tabs::Entries, When::Entry, "Relate to other entries", |b| selected(b, |b, _| b.open_links()))
-        .menu("Link…"),
+        .menu("Link"),
     letter(
         "y",
         Tabs::Entries,
@@ -307,7 +307,7 @@ pub const ACTIONS: &[Action] = &[
     letter("Y", Tabs::Entries, When::DecisionNot(DecisionState::Accepted), "Accept the decision with a comment", |b| {
         selected(b, |b, _| b.accept_with_comment());
     })
-    .menu("Accept with a comment…"),
+    .menu("Accept with a comment"),
     letter(
         "j",
         Tabs::Entries,
@@ -317,17 +317,17 @@ pub const ACTIONS: &[Action] = &[
             selected(b, |b, _| b.reject_selected());
         },
     )
-    .menu("Reject…"),
+    .menu("Reject"),
     letter("M", Tabs::Entries, When::OtherBrain, "Move to another project (renumbered there, links dropped)", |b| {
         selected(b, |b, _| b.ask_move());
     })
-    .menu("Move to project…"),
+    .menu("Move to project"),
     letter("o", Tabs::Entries, When::Entry, "Open the file in $EDITOR", |b| selected(b, |b, _| b.open_file()))
         .menu("Open file"),
     letter("x", Tabs::Entries, When::Entry, "Delete (asks first)", |b| {
         selected(b, |b, key| b.mode = Mode::Confirm(Confirm::Delete(key)));
     })
-    .menu("Delete…")
+    .menu("Delete")
     .danger(),
     // Every tab.
     letter("n", Tabs::Every, When::Always, "New task (a note or decision on their tabs)", |b| {

@@ -56,10 +56,10 @@ It's also where a project is managed:
 
 | button | does |
 | --- | --- |
-| **Rename…** by About | renames the project |
-| **Rename…** on a repository | renames it in the project (one word); the other repositories' links to it follow |
-| **Move…** on a repository | moves it to another project, found with a search or named new; its links to this project's repositories are dropped |
-| **Remove…** on a repository, **Remove project…** | takes it (or every repository of the project) out: **Unlink** keeps its `.brain/` and tasks, to add it again later; **Unlink and delete tasks** deletes them too |
+| **Rename** by About | renames the project |
+| **Rename** on a repository | renames it in the project (one word); the other repositories' links to it follow |
+| **Move** on a repository | moves it to another project, found with a search or named new; its links to this project's repositories are dropped |
+| **Remove** on a repository, **Remove project** | takes it (or every repository of the project) out: **Unlink** keeps its `.brain/` and tasks, to add it again later; **Unlink and delete tasks** deletes them too |
 | **+ Add repository** | picks another folder for this project, as **+ Add project** does with the project already chosen |
 
 Each repository of a project has its own name, its folder's unless another repository has it: then the folder above
@@ -90,11 +90,11 @@ has its own Doing, so different projects run side by side.
 | edit title and tags | **Edit title and tags** in the details | `e` |
 | edit the description | **Edit** next to Description | `m` |
 | add a comment | **Add** next to Comments | `c` |
-| relate to other entries | **Link…** | `r` |
+| relate to other entries | **Link** | `r` |
 | open the file in your editor | **Open file** | `o` |
-| move to another project | **Move to project…**, then pick one | `M` |
-| delete | **Delete…**, then confirm | `x`, then `y` (`u` undoes it) |
-| answer an agent's question | **Answer…** in the details | `c` |
+| move to another project | **Move to project**, then pick one | `M` |
+| delete | **Delete**, then confirm | `x`, then `y` (`u` undoes it) |
+| answer an agent's question | **Answer** in the details | `c` |
 | go to the next task waiting for you | **N waiting for you** in the top bar | `w` |
 
 Any status can move to any other, e.g. straight from To do to Done. A right click on a card (or on an entry in the
@@ -109,7 +109,7 @@ form (`n`), or with `e` afterwards.
 
 ### Moving to another project
 
-**Move to project…** in the details (`M`) moves an entry to another brain: a list of every other one (the central brain, each
+**Move to project** in the details (`M`) moves an entry to another brain: a list of every other one (the central brain, each
 project and each repository of a project with several), whatever the filter shows, with a search box. The entry gets
 a new number there and keeps its status, history, tracked time, description, comments and tags. Its links
 are dropped, on both sides (links from other repositories too), since they name it by its old number. A task running its clock keeps it, unless
@@ -144,11 +144,11 @@ so with the details open, the arrows go through cards and the details change wit
 They show, top to bottom:
 
 - the title, id, when it was created and its tags;
-- for a task an agent asked about, the question with **Answer…**; for one waiting on a proposed decision, **Accept**,
-  **Accept with a comment…**, **Reject…** and **Open decision #N** instead;
+- for a task an agent asked about, the question with **Answer**; for one waiting on a proposed decision, **Accept**,
+  **Accept with a comment**, **Reject** and **Open decision #N** instead;
 - the status buttons (To do · Doing · Parked · Done), and the tracked time: today, this week and in total;
-- Edit title and tags, Link…, Accept, Accept with a comment… and Reject… (on a decision), Open file, Move to
-  project… (with more than one brain) and Delete…;
+- Edit title and tags, Link, Accept, Accept with a comment and Reject (on a decision), Open file, Move to
+  project (with more than one brain) and Delete;
 - **Description**, what the task is about, like an issue's body;
 - **Related**: linked notes, decisions and tasks. Click one to go there;
 - **Comments**, timestamped entries you add as work goes on ("found the cause", "waiting for review"), oldest first.
@@ -160,11 +160,11 @@ They show, top to bottom:
 
 When an agent needs your answer (`kb ask`) or proposes a decision (`kb propose`), its task goes to Parked with a
 **Waiting for you** badge and the question on the card, and the top bar counts them: **2 waiting for you** (`w`)
-opens each in turn. Answer with a comment (`c`, or **Answer…** in the details); the card then says **Answered**
+opens each in turn. Answer with a comment (`c`, or **Answer** in the details); the card then says **Answered**
 until the agent starts it again. An agent that waits for it (`kb wait`) picks the answer up as soon as you save it.
 
 A proposal is answered by deciding, from the waiting task or from the decision itself (**Open proposed decision**,
-`D`): **Accept** it (`y`), **Accept with a comment…** (`Y`), or **Reject…** it (`j`), which always says why. The
+`D`): **Accept** it (`y`), **Accept with a comment** (`Y`), or **Reject** it (`j`), which always says why. The
 waiting tasks get the verdict, with your comment, as your answer. Proposed and rejected decisions carry a badge in
 the decisions list too.
 
@@ -194,14 +194,14 @@ or **+ New decision** (`n`) creates one.
 
 ### Related entries
 
-**Link…** (`r`) opens a picker of every other entry, filtered as you type (`#tag` matches tags only). The entries
+**Link** (`r`) opens a picker of every other entry, filtered as you type (`#tag` matches tags only). The entries
 already related are checked and listed first. Click one (or `enter`) to link or unlink it. Links go both ways: each
 entry shows the other under **Related**, whichever one you linked from. Agents link entries with
 `kb link` or `add --link`.
 
 In a project of several repositories, an entry can also be related to one in another of its repositories:
 `kb link 1 shop-api#3` links this repository's #1 to #3 of `shop-api`, e.g. a front-end task to the API task it waits
-for. Both show it under **Related**, named by repository (`shop/shop-api #3 …`); a click opens it. **Link…** and the
+for. Both show it under **Related**, named by repository (`shop/shop-api #3 …`); a click opens it. **Link** and the
 form's **Related** field list the project's other repositories' entries too, after the entry's own repository's.
 Deleting an entry, or moving it to another project, removes the links to it everywhere, other repositories
 included; so does deleting its file by hand, once the app or `kb` next loads the repositories that link to it.
