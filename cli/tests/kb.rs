@@ -228,6 +228,19 @@ fn the_hooks_hold_an_agent_to_describing_the_project() {
 }
 
 #[test]
+fn the_edit_hook_sends_an_agent_writing_the_brain_to_kb() {
+    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    ok(&kb(repo.path(), central.path(), &["init", "demo"], ""));
+    let cwd = format!("{:?}", repo.path().display().to_string());
+    let input = |file: &str| {
+        format!("{{\"cwd\": {cwd}, \"tool_name\": \"Write\", \"tool_input\": {{\"file_path\": {file:?}}}}}")
+    };
+    let refused = ok(&kb(repo.path(), central.path(), &["hook", "edit"], &input(".brain/0001-plan.md")));
+    assert!(refused.contains("\"permissionDecision\":\"deny\""), "{refused}");
+    assert_eq!(ok(&kb(repo.path(), central.path(), &["hook", "edit"], &input("src/lib.rs"))), "", "the code is fine");
+}
+
+#[test]
 fn a_command_waiting_for_its_stdin_holds_up_no_other() {
     let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     ok(&kb(repo.path(), central.path(), &["init", "demo"], ""));

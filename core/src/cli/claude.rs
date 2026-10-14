@@ -7,7 +7,9 @@
 //! - with every prompt, and when the agent would end its turn, `kb hook prompt` and `kb hook stop`
 //!   check that the project is described (see [`super::hook`]). Agents skipped describing it when only
 //!   asked to, so until it's done the prompt carries the request and the turn's end repeats it.
-//!   `stop` also reminds an agent of each task it started and hasn't commented on since.
+//!   `stop` also reminds an agent of each task it started and hasn't commented on since;
+//! - before the agent writes a file with Claude Code's tools, `kb hook edit` refuses one in a brain's folder
+//!   and sends it to `kb`, which the section already asks for.
 //!
 //! They go in `.claude/settings.local.json`, the repository's personal settings, since `init` runs on
 //! each machine anyway and a teammate without kanbrain installed shouldn't get failing hooks.
@@ -32,11 +34,13 @@ struct Hook {
 }
 
 /// The hooks, in the order they're written.
-const HOOKS: [Hook; 3] = [
+const HOOKS: [Hook; 4] = [
     // A new session, a resumed one, after `/clear`, and after compaction.
     Hook { event: "SessionStart", matcher: Some("startup|resume|clear|compact"), command: "kb context" },
     Hook { event: "UserPromptSubmit", matcher: None, command: "kb hook prompt" },
     Hook { event: "Stop", matcher: None, command: "kb hook stop" },
+    // The tools that write files; a shell command's writes aren't seen.
+    Hook { event: "PreToolUse", matcher: Some("Edit|Write|MultiEdit"), command: "kb hook edit" },
 ];
 
 /// What adding or removing the hooks did.
