@@ -402,9 +402,11 @@ locally they need cargo and Python.
 brains in a throwaway home: the central one, a project of two repositories and one of one, with tasks in every status
 and their sessions, notes, decisions accepted, rejected and proposed, questions answered and not, agents' comments,
 links within a brain and across repositories, unicode and markdown. This build then reads a copy without changing a
-file, shows every entry as the old version did, field by field (it may add fields), and runs `init --all` and
-writes. A tag whose release isn't published yet is skipped. CI runs it on every push; locally it needs curl, git,
-python3 and the tags.
+file, shows every entry as the old version did, field by field (it may add fields), and runs `init --all` and writes.
+Releases that took the names v0.4.0 refuses also write a project named `-dash`, one named `Central` and a repository
+named `-docs`, which `init --all` must rename to `dash`, `Central-project` and `docs` with their tasks; at least one
+release must have written each. A tag whose release isn't published yet is skipped. CI runs it on every push; locally it
+needs curl, git, python3 and the tags.
 
 ### The app, started
 

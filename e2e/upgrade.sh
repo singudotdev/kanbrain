@@ -9,7 +9,8 @@
 #
 # - reads every brain (`list`, `show`, `context`, `status`, `report`) without changing a file;
 # - shows every entry as the old version did, field by field (new fields may be added);
-# - runs `init --all` and writes (comments, status changes) without an error.
+# - runs `init --all`, which renames the names v0.4.0 stopped taking, and writes (comments, status changes)
+#   without an error.
 #
 # CI runs it on every push (the `upgrade` job). It needs cargo, curl, git, python3 and the repository's tags, and
 # touches nothing outside a temporary folder.
@@ -90,10 +91,43 @@ build() {
     a comment "$w1" "agent progress: page scaffolded" >/dev/null
     p start "$w1" >/dev/null
     a start "$w2" >/dev/null 2>&1 || true
+    # Names v0.4.0 stopped taking, which `kb init --all` renames: a project starting with `-`, one named as the
+    # central brain in other case, and a repository starting with `-`. A release that refuses them writes none.
+    mkdir -p "$w/src/dash" "$w/src/upper" "$w/src/docs"
+    for d in dash upper docs; do git -C "$w/src/$d" init -q; done
+    cd "$w/src/dash" && p init -dash >/dev/null 2>&1 && p add "Dash task" >/dev/null
+    cd "$w/src/upper" && p init Central >/dev/null 2>&1 && p add "Upper task" >/dev/null
+    cd "$w/src/docs" && p init docs >/dev/null && p add "Docs task" >/dev/null
+    p project repo -docs >/dev/null 2>&1
     cd "$w/src/solo" && p init solo >/dev/null
     p project describe "A side project" >/dev/null
     p add --tag misc "Solo todo" >/dev/null
     p "done" "$(p add "Solo done" | id_of)" >/dev/null
+}
+
+# After `init --all`, the copy at $2 has renamed the names the old version's data at $1 had, and reaches their tasks.
+# Each rename checked counts in `dashes`, `uppers` and `repos`, so that a setup writing none fails below.
+renamed() {
+    local old=$1 w=$2 reg=$2/home/central/projects.md
+    h() { person "$head_kb" "$w/home" "$@"; }
+    if grep -q '^- -dash: ' "$old/home/central/projects.md"; then
+        grep -q "^- dash: $w/src/dash/.brain$" "$reg" || fail "$tag: project \`-dash\` not renamed to \`dash\`"
+        (cd "$w/home" && h --project dash list | grep 'Dash task' >/dev/null) || fail "$tag: \`dash\` lost its task"
+        dashes=$((dashes + 1))
+    fi
+    if grep -q '^- Central: ' "$old/home/central/projects.md"; then
+        grep -q "^- Central-project: $w/src/upper/.brain$" "$reg" || fail "$tag: project \`Central\` not renamed"
+        (cd "$w/src/upper" && h list | grep 'Upper task' >/dev/null) || fail "$tag: \`Central-project\` lost its task"
+        uppers=$((uppers + 1))
+    fi
+    if grep -qs '^- repo: -docs$' "$old/src/docs/.brain/project.md"; then
+        # The folder's name, `docs`, is a repository's name without a `- repo:` line.
+        if grep '^- repo: ' "$w/src/docs/.brain/project.md" | grep -v '^- repo: docs$' >/dev/null; then
+            fail "$tag: repository \`-docs\` not renamed to \`docs\`"
+        fi
+        (cd "$w/src/docs" && h list | grep 'Docs task' >/dev/null) || fail "$tag: repository \`docs\` lost its task"
+        repos=$((repos + 1))
+    fi
 }
 
 # Every brain's entries as `kb` $1 shows them, under $3: one JSON file each.
@@ -157,7 +191,7 @@ EOF
 
 tags=$(git -C "$repo" tag -l 'v*' --sort=version:refname)
 [ -n "$tags" ] || fail "no release tags: fetch them (git fetch --tags)"
-tested=0
+tested=0 dashes=0 uppers=0 repos=0
 for tag in $tags; do
     # A tag whose release isn't out (being built, or its run failed) has nothing to download: not a failure here.
     status=$(curl -sSL -o /dev/null -w '%{http_code}' "$releases/$tag/$asset.sha256") || fail "$tag: no answer"
@@ -194,6 +228,7 @@ for tag in $tags; do
     compare "$dir/old" "$dir/new" || fail "$tag: entries read differently (above)"
 
     (cd "$dir/head/home" && person "$head_kb" "$dir/head/home" init --all >/dev/null) || fail "$tag: init --all failed"
+    renamed "$dir/data" "$dir/head"
     (cd "$dir/head/src/shop/api" && person "$head_kb" "$dir/head/home" comment 2 "from this build ✓" >/dev/null &&
         agent "$head_kb" "$dir/head/home" comment 1 "an agent, from this build" >/dev/null &&
         person "$head_kb" "$dir/head/home" start 3 >/dev/null && person "$head_kb" "$dir/head/home" park 3 >/dev/null) ||
@@ -202,4 +237,8 @@ for tag in $tags; do
     tested=$((tested + 1))
 done
 [ "$tested" -gt 0 ] || fail "no release to upgrade from"
+# Releases before v0.4.0 took these names and are never deleted, so some always wrote them.
+if [ "$dashes" -eq 0 ] || [ "$uppers" -eq 0 ] || [ "$repos" -eq 0 ]; then
+    fail "no release wrote the names v0.4.0 refuses (renamed: $dashes \`-dash\`, $uppers \`Central\`, $repos \`-docs\`)"
+fi
 echo "PASS upgrade.sh"
