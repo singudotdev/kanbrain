@@ -1433,6 +1433,41 @@ fn while_the_board_acts_a_kb_run_meanwhile_waits() {
 }
 
 #[test]
+fn a_brain_found_while_the_board_acts_is_locked_and_read_under_its_lock() {
+    use kanbrain_core::{brain::Brain, projects};
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    let mut locks = board.lock_brains();
+    // Catching up finds a project registered meanwhile, read before its lock was taken.
+    let shop = code.path().join("shop/.brain");
+    std::fs::create_dir_all(&shop).unwrap();
+    projects::register(central.path(), "shop", &shop).unwrap();
+    board.reload_changed(&[board.sources[0].brain.store.dir().to_path_buf()]).unwrap();
+    let src = board.src_at(&shop).expect("found");
+    // A `kb` writing to it between that read and the lock.
+    let new = |title: &str| kanbrain_core::brain::NewEntry { title: title.into(), ..Default::default() };
+    Brain::open(Store::at(&shop).unwrap()).unwrap().add(new("Ship it")).unwrap();
+    assert!(board.brain(src).task(1).is_none(), "not read yet");
+
+    board.lock_found_brains(&mut locks);
+    assert_eq!(locks.iter().filter(|l| l.taken()).count(), board.sources.len(), "its lock too");
+    let src = board.src_at(&shop).unwrap();
+    assert_eq!(board.brain(src).task(1).unwrap().title, "Ship it", "read again under it");
+    let mut again = Vec::new();
+    board.lock_found_brains(&mut again);
+    assert!(again.is_empty(), "none found since: nothing more to take");
+    let (taken, waiting) = std::sync::mpsc::channel();
+    let other = std::thread::spawn(move || {
+        let _lock = Store::at(&shop).unwrap().lock().unwrap();
+        taken.send(()).unwrap();
+    });
+    assert!(waiting.recv_timeout(std::time::Duration::from_millis(200)).is_err(), "a kb run waits for the board");
+    drop(locks);
+    assert!(waiting.recv_timeout(std::time::Duration::from_secs(5)).is_ok());
+    other.join().unwrap();
+}
+
+#[test]
 fn projects_and_repositories_are_managed_from_the_projects_info() {
     let (central, code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();

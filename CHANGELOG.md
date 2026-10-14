@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- The kanban app holds the lock of a brain it finds while it acts, as of every other: a project registered
+  meanwhile was read, and could be written to, without it, so a `kb` run then could write over it or be written
+  over. Its lock is taken after catching up, and every brain read again under the locks
+  (`Board::lock_found_brains`, `BrainLock::taken`).
+
 ## [0.4.1] - 2026-10-14
 
 ### Added

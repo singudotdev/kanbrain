@@ -337,6 +337,14 @@ pub struct BrainLock {
     path: PathBuf,
 }
 
+impl BrainLock {
+    /// Whether this guard took the lock, rather than finding the thread already held it: dropping it releases
+    /// the lock only then.
+    pub fn taken(&self) -> bool {
+        self.file.is_some()
+    }
+}
+
 impl Drop for BrainLock {
     fn drop(&mut self) {
         // The handle closes after this, releasing the lock.
