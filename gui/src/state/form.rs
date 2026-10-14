@@ -44,10 +44,22 @@ impl Board {
         match form.target {
             FormTarget::New(src, kind, status) => self.create(src, kind, title, tags, form.links, status),
             FormTarget::Edit(key) => {
+                // Saved as it was, it's no change, as in the editors: nothing written, nothing said.
+                let related = self.related_keys(key);
+                let same_links = related.len() == form.links.len() && related.iter().all(|k| form.links.contains(k));
+                if self.task(key).is_some_and(|t| t.title == title && t.tags == tags) && same_links {
+                    return;
+                }
                 let result = self.brain_mut(key.src).update(key.id, &title, tags);
+                let saved = result.is_ok();
                 self.report_error(result);
                 let result = self.relate_only(key, &form.links);
+                let related = result.is_ok();
                 self.report_error(result);
+                // As every other edit says it was saved.
+                if saved && related {
+                    self.notify(format!("{} saved", self.entry_name(key)));
+                }
             }
         }
     }
@@ -131,13 +143,17 @@ impl Board {
             Err(e) => return self.notify_error(&e),
         };
         let key = Key::new(src, id);
-        if kind == Kind::Task && status != Status::Todo {
-            self.set_status(key, status);
-        }
+        // A column the task can't start in (one of yours already runs there) leaves it in To do, and says why.
+        let refused = (kind == Kind::Task && status != Status::Todo)
+            .then(|| self.brain_mut(src).set_status(id, status).err())
+            .flatten();
         self.open_entry(key);
         self.drawer = false;
-        let place = self.source_label(src).map(|l| format!(" in {l}")).unwrap_or_default();
-        self.notify(format!("created #{id}{place}"));
+        let name = self.entry_name(key);
+        self.notify(match refused {
+            Some(e) => format!("created {name}, in To do: {e:#}"),
+            None => format!("created {name}"),
+        });
     }
 
     /// Starts typing a new task at the top of a column, in the brain the scope shows (see

@@ -25,7 +25,7 @@ use crate::model::{Author, Kind, RepoLink, Status, Task, now};
 use crate::projects::{self, ProjectInfo};
 use crate::store::{self, Store};
 use crate::tags::TagColors;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
 /// Every entry in the data folder, with the tag colors.
@@ -202,14 +202,18 @@ impl Brain {
     /// It's recorded before the entry is written, so a failure in between leaves a gap, never a reused id.
     fn take_id(&self) -> Result<u32> {
         let highest = self.tasks.iter().map(|t| t.id).max().unwrap_or(0);
-        let id = highest.max(self.store.last_id()) + 1;
+        // A hand-edited `- id:` or `last-id` can be the largest id there is; wrapping to 0 would hand it out again
+        // and again, each new entry over the last's file.
+        let id = highest.max(self.store.last_id()).checked_add(1).context("no ids left: the highest id is taken")?;
         self.store.save_last_id(id)?;
         Ok(id)
     }
 
     /// Links to entries of the project's other repositories that were deleted there (by hand, or by an
     /// older version) are removed, as deleting in the app does. Only where that repository can be read:
-    /// one whose folder is missing for now, an unmounted disk say, keeps the links to it.
+    /// one whose folder is missing for now, an unmounted disk say, keeps the links to it. So does an entry whose
+    /// file is there but doesn't parse, and one newer than the repository's `last-id`, as on a branch checked out
+    /// from before it was added: neither was deleted.
     fn drop_dangling_repo_links(&mut self) -> Result<()> {
         let mut repos: Vec<&str> = self.tasks.iter().flat_map(|t| &t.repo_links).map(|l| l.repo.as_str()).collect();
         repos.sort_unstable();
@@ -217,8 +221,12 @@ impl Brain {
         let mut gone: Vec<RepoLink> = Vec::new();
         for repo in repos {
             let Some(other) = self.sibling(repo) else { continue };
+            // An older brain may have no `last-id`: the highest id of its files stands in.
+            let files = other.store.file_ids();
+            let last = other.store.last_id().max(files.iter().copied().max().unwrap_or(0));
             for link in self.tasks.iter().flat_map(|t| &t.repo_links).filter(|l| l.repo == repo) {
-                if other.task(link.id).is_none() && !gone.contains(link) {
+                let deleted = other.task(link.id).is_none() && !files.contains(&link.id) && link.id <= last;
+                if deleted && !gone.contains(link) {
                     gone.push(link.clone());
                 }
             }
@@ -236,10 +244,11 @@ impl Brain {
         let own_name =
             |t: &Task| t.path.as_ref().and_then(|p| p.file_name()).is_some_and(|n| *n == *store::file_name(t));
         let mut order: Vec<usize> = (0..self.tasks.len()).collect();
-        order.sort_by_key(|&i| {
+        let key = |i: usize| {
             let t = &self.tasks[i];
-            (t.id, !own_name(t), t.created, t.path.clone())
-        });
+            (t.id, !own_name(t), t.created, t.path.as_ref())
+        };
+        order.sort_by(|&a, &b| key(a).cmp(&key(b)));
         let mut seen = std::collections::HashSet::new();
         for i in order {
             if !seen.insert(self.tasks[i].id) {
@@ -281,9 +290,10 @@ impl Brain {
     }
 
     /// Entries deleted outside kanbrain (by hand, `rm`, a sync) leave links to them behind; they're
-    /// removed so nothing points at an entry that's gone.
+    /// removed so nothing points at an entry that's gone. One whose file is there but doesn't parse isn't gone.
     fn drop_dangling_links(&mut self) -> Result<()> {
-        let ids: std::collections::HashSet<u32> = self.tasks.iter().map(|t| t.id).collect();
+        let mut ids = self.store.file_ids();
+        ids.extend(self.tasks.iter().map(|t| t.id));
         for task in &mut self.tasks {
             let before = task.links.len();
             task.links.retain(|link| ids.contains(link));

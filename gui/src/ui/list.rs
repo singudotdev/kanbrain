@@ -3,6 +3,7 @@
 //! Rows are dragged onto a section to change their status, as cards are onto a column.
 
 use super::board::{clock, draggable, drop_target, empty_hint, meta, quick_add, show_all_done, status_header};
+use super::entries::LABEL_WIDTH;
 use super::theme::{self, DIM, TEXT};
 use super::widgets::{self, card, dim, dim_small, tag_chips};
 use super::{BrainView, menu};
@@ -86,15 +87,26 @@ fn row(
         .cursor_pointer()
         .when(selected, |d| d.bg(rgb(theme::SELECTED)))
         .when(!selected, |d| d.hover(|s| s.bg(rgb(theme::HOVER))))
-        .when(running.is_some(), |d| d.border_l_4().border_color(rgb(theme::running_color(task))))
+        // Over the row rather than a border of it, which would push this row's columns right of the others'.
+        .relative()
+        .children(
+            running
+                .is_some()
+                .then(|| div().absolute().left_0().top_0().bottom_0().w(px(4.)).bg(rgb(theme::running_color(task)))),
+        )
         .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
             this.act(cx, |b| b.click_entry(key, event.click_count()));
         }))
-        .children(
-            board
-                .source_label(key.src)
-                .map(|l| div().flex_none().text_size(px(12.)).text_color(rgb(theme::ACCENT)).child(l.to_string())),
-        )
+        // In a column of one width, so the titles line up whichever brain each row is in.
+        .children(board.source_label(key.src).map(|l| {
+            div()
+                .w(px(LABEL_WIDTH))
+                .flex_none()
+                .truncate()
+                .text_size(px(12.))
+                .text_color(rgb(theme::ACCENT))
+                .child(l.to_string())
+        }))
         .child(dim_small(format!("#{id}")).w(px(40.)).flex_none())
         .child(
             div()

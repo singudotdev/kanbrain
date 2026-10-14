@@ -117,8 +117,10 @@ one of yours already runs there: then the move is refused. The button only shows
 
 ### The new / edit form
 
-**+ New task** (`n`) and **Edit title and tags** (`e`) open a form with three fields: the **title**, the **tags** (separated by
-commas or spaces), and **Related**, the entries to link it to, which can stay empty. A new task also has a
+**+ New task** (`n`) and **Edit title and tags** (`e`) open a form with the **title**, the **tags** (separated by
+commas or spaces), and **Related**, the entries to link it to, which can stay empty. With several brains shown, a new
+entry also has **Project**, the brain it goes to: the one the filter or the selected card points at, to begin with.
+A new task also has a
 **Column**, To do unless you pick another: a column's `+` opens the form with that column picked, and **+ New task**
 and `n` with To do. A task created in Doing starts its clock. `tab` moves between the fields, `←` `→` pick the
 column, `enter` saves (or **Create** / **Save**), `esc` cancels.

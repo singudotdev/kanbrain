@@ -27,6 +27,8 @@ jobs:
   check-version:
     name: tag matches Cargo.toml, CI passed
     runs-on: ubuntu-latest
+    # As every job in ci.yml: a hung step would otherwise hold a runner for six hours.
+    timeout-minutes: 30
     permissions:
       contents: read
       actions: read
@@ -44,18 +46,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          passed=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$GITHUB_SHA" \
-            --json conclusion --jq '[.[] | select(.conclusion == "success")] | length')
-          if [ "$passed" = 0 ]; then
-            echo "::error::no passing CI run on $GITHUB_SHA: push main, wait for CI, then tag"
-            exit 1
-          fi
+          for workflow in ci.yml mutants.yml; do
+            passed=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --commit "$GITHUB_SHA" \
+              --json conclusion --jq '[.[] | select(.conclusion == "success")] | length')
+            if [ "$passed" = 0 ]; then
+              echo "::error::no passing $workflow run on $GITHUB_SHA: push main, wait for it, then tag"
+              exit 1
+            fi
+          done
 
   # The licenses of everything compiled into each program, once for all its archives (see xtask/src/main.rs).
   notices:
     name: third-party licenses
     needs: check-version
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -174,6 +179,7 @@ jobs:
     name: publish release
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       # Signing the provenance: a short-lived certificate from GitHub's OIDC token, stored as the repo's attestations.

@@ -1,0 +1,74 @@
+# Mutation testing of each change: every line a push or pull request changes is altered (`==` for `!=`, a body for
+# `Ok(())`…) and the tests run again; a change no test notices is a behavior nothing guards. `.cargo/mutants.toml`
+# lists what's left out, and why.
+name: Mutants
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  # To find the last run that passed (`gh run list`).
+  actions: read
+
+# Queued, not cancelled as ci.yml's runs are. A push waiting may still be replaced by a newer one: each run tests the
+# lines changed since the last commit whose run passed, so none go untested.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # As in ci.yml: what the kanban app (GPUI) needs to build on Linux.
+  GUI_LINUX_DEPS: libfontconfig-dev libwayland-dev libx11-xcb-dev libxkbcommon-x11-dev libvulkan1
+
+jobs:
+  mutants:
+    name: mutation testing of the change (${{ matrix.shard }}/8)
+    runs-on: ubuntu-latest
+    # Each shard takes an eighth of the mutants: minutes for a usual push, under the limit for a release's many
+    # commits, which one runner alone could take more than six hours over.
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: |
+          # shellcheck disable=SC2086 # one package per word
+          sudo apt-get update && sudo apt-get install -y $GUI_LINUX_DEPS
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants@27.1.0
+      - name: Mutants of the changed lines
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          BASE=$PR_BASE
+          if [ -z "$BASE" ]; then
+            # From the last commit on main whose run passed, else the push before this one.
+            BASE=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow mutants.yml --branch main --event push \
+              --status success --limit 1 --json headSha --jq '.[0].headSha // empty')
+            if [ -z "$BASE" ] || ! git merge-base --is-ancestor "$BASE" HEAD 2>/dev/null; then BASE=$BEFORE; fi
+          fi
+          # A branch's first push has no commit before it: its parent stands in.
+          if ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then BASE=HEAD~1; fi
+          echo "testing the lines changed since $BASE"
+          git diff "$BASE" HEAD -- '*.rs' > change.diff
+          if [ ! -s change.diff ]; then echo "no Rust changed"; exit 0; fi
+          cargo mutants --in-diff change.diff --workspace --no-shuffle -j 2 --shard "$SHARD/8"
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutants-${{ matrix.shard }}
+          path: mutants.out

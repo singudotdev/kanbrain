@@ -108,7 +108,7 @@ pub fn central_dir() -> Result<PathBuf> {
 /// The registered repositories, in the order they were registered. No registry means none yet.
 pub fn load(central: &Path) -> Result<Vec<Repo>> {
     let path = central.join(REGISTRY_FILE);
-    let text = match fs::read_to_string(&path) {
+    let text = match store::read_text(&path) {
         Ok(text) => text,
         Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
         Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
@@ -137,8 +137,12 @@ pub fn find(central: &Path, label: &str) -> Result<Repo> {
         bail!("no project `{label}`: none is registered yet (see `kb init`)");
     }
     let labels: Vec<String> = repos.iter().map(|r| r.label(&repos)).collect();
-    let hint = if repos.iter().any(|r| r.project == label) { " (it has several repositories: name one)" } else { "" };
-    bail!("no project `{label}`{hint}; there are {}, and `{CENTRAL}`", labels.join(", "))
+    // A project of several repositories exists, but `--project` takes one of them.
+    let several: Vec<String> = repos.iter().filter(|r| r.project == label).map(|r| r.label(&repos)).collect();
+    if !several.is_empty() {
+        bail!("project `{label}` has several repositories: name one, {}", several.join(", "));
+    }
+    bail!("no project `{label}`; there are {}, and `{CENTRAL}`", labels.join(", "))
 }
 
 /// Registers the repository in `dir` as part of `project`, moving it if it was registered under
@@ -186,24 +190,33 @@ pub fn unregister(central: &Path, dir: &Path) -> Result<Option<Repo>> {
 /// above goes before it (`backend-app`), then a number: two repositories of a project can't share a name, as
 /// `--project` and links (`app#3`) tell them apart by it.
 pub fn repo_name(central: &Path, project: &str, dir: &Path, wanted: Option<&str>) -> Result<String> {
-    let taken: Vec<String> = load(central)?
-        .into_iter()
-        .filter(|r| r.project == project && !same_dir(&r.dir, dir) && r.dir.is_dir())
-        .map(|r| r.name())
-        .collect();
+    // One whose folder is gone keeps its name while it's registered, for its folder may come back (an unmounted
+    // disk): taken, two repositories would answer to it.
+    let others: Vec<Repo> =
+        load(central)?.into_iter().filter(|r| r.project == project && !same_dir(&r.dir, dir)).collect();
+    let taken: Vec<String> = others.iter().map(Repo::name).collect();
     if let Some(wanted) = wanted {
         check_repo_name(wanted)?;
-        if taken.iter().any(|t| t == wanted) {
+        if others.iter().any(|r| r.dir.is_dir() && r.name() == wanted) {
             bail!("project `{project}` already has a repository named `{wanted}`; pick another");
+        }
+        if taken.iter().any(|t| t == wanted) {
+            bail!(
+                "project `{project}` has a repository named `{wanted}` whose folder is gone: take it out with \
+                 `kb --project {project}/{wanted} deinit`, or pick another name"
+            );
         }
         return Ok(wanted.to_string());
     }
     let here = Repo { project: project.to_string(), dir: dir.to_path_buf() };
     let card = read_repo_card(dir).filter(|card| card.project == project).and_then(|card| card.repo);
+    // A folder named `My App` makes a name links can hold (`My-App#3`), kept on the card as it isn't the folder's;
+    // so does a name a card kept from before 0.4.0 that links can't hold (`My Work-app`, `-app`).
     let own = card.unwrap_or_else(|| here.folder());
+    let own = if check_repo_name(&own).is_ok() { own } else { repo_name_of_folder(&own) };
     let above = dir.parent().and_then(Path::parent).and_then(Path::file_name).map(|n| n.to_string_lossy());
     let candidates = std::iter::once(own.clone())
-        .chain(above.map(|above| format!("{above}-{own}")))
+        .chain(above.map(|above| format!("{}-{own}", repo_name_of_folder(&above))))
         .chain((2..).map(|n| format!("{own}-{n}")));
     Ok(candidates.into_iter().find(|name| !taken.contains(name)).expect("the numbered names never run out"))
 }
@@ -211,10 +224,15 @@ pub fn repo_name(central: &Path, project: &str, dir: &Path, wanted: Option<&str>
 /// Names are written as `- name: path` lines and typed after `--project`, where `/` separates the
 /// repository, so they're one line without `:` or `/`, and not the central brain's name.
 pub fn check_name(name: &str) -> Result<()> {
-    if name.trim().is_empty() || name.contains([':', '/', '\n']) || name.trim() != name {
-        bail!("`{name}` can't be a project name: it needs to be one line, without `:`, `/` or surrounding spaces");
+    // Nor start with `-`: typed after `project rename` or `move`, it's an option mistyped, not a name.
+    if name.trim().is_empty() || name.contains([':', '/', '\n']) || name.trim() != name || name.starts_with('-') {
+        bail!(
+            "`{name}` can't be a project name: it needs to be one line, without `:`, `/`, surrounding spaces or a \
+             leading `-`"
+        );
     }
-    if name == CENTRAL {
+    // In any case: `--project Central` reaches the central brain, and a project `Central` would sit beside it.
+    if name.eq_ignore_ascii_case(CENTRAL) {
         bail!("`{CENTRAL}` is the name of the central brain; pick another: `kb init NAME`");
     }
     Ok(())
@@ -260,7 +278,7 @@ pub struct RepoCard {
 
 /// A `.brain/` folder's card; `None` if it has none (not a project's repository).
 pub fn read_repo_card(dir: &Path) -> Option<RepoCard> {
-    let text = fs::read_to_string(dir.join(PROJECT_FILE)).ok()?;
+    let text = store::read_text(&dir.join(PROJECT_FILE)).ok()?;
     let mut lines = text.lines();
     let project = lines.by_ref().find_map(|l| l.strip_prefix("# "))?.trim().to_string();
     let rest: Vec<&str> = lines.collect();
@@ -288,10 +306,24 @@ pub fn write_repo_card(dir: &Path, card: &RepoCard) -> Result<()> {
 /// Repository names are typed after `--project NAME/` and written in links as `REPO#ID`, which a space, `,` or `#`
 /// would split, so they're one word without those or `:` and `/`.
 pub fn check_repo_name(name: &str) -> Result<()> {
-    if name.is_empty() || name.contains(|c: char| c.is_whitespace() || matches!(c, ',' | '#' | ':' | '/')) {
-        bail!("`{name}` can't be a repository name: it needs to be one word, without `,`, `#`, `:` or `/`");
+    if name.is_empty() || name.contains(not_in_repo_name) || name.starts_with('-') {
+        bail!(
+            "`{name}` can't be a repository name: it needs to be one word, without `,`, `#`, `:`, `/` or a leading `-`"
+        );
     }
     Ok(())
+}
+
+/// A character a repository name can't hold (see [`check_repo_name`]).
+fn not_in_repo_name(c: char) -> bool {
+    c.is_whitespace() || matches!(c, ',' | '#' | ':' | '/')
+}
+
+/// A folder's name made a repository name: the characters one can't hold become `-` (`My App` is `My-App`).
+pub(crate) fn repo_name_of_folder(folder: &str) -> String {
+    let name: String = folder.chars().map(|c| if not_in_repo_name(c) { '-' } else { c }).collect();
+    let name = name.trim_matches('-');
+    if name.is_empty() { "repo".to_string() } else { name.to_string() }
 }
 
 /// The folder of the projects' shared cards in the central brain.
@@ -299,15 +331,40 @@ pub fn cards_dir(central: &Path) -> PathBuf {
     central.join(CARDS_DIR)
 }
 
-/// Where a project's shared card is in the central brain.
+/// Where a project's shared card is in the central brain: `projects/shop.md` for a name that is its own slug, as
+/// every card was before 0.4.0. Any other name (`My_App`, `Shop`, `日記`) adds a hash of itself, since names that
+/// slug alike (`my_app` and `my-app`; every name in another script slugs to `task`) shared one card, each
+/// overwriting the other's description.
 fn card_path(central: &Path, project: &str) -> PathBuf {
-    cards_dir(central).join(format!("{}.md", slugify(project)))
+    let slug = slugify(project);
+    let name =
+        if slug == project { slug } else { format!("{slug}-{:08x}", store::fnv1a(project.as_bytes()) & 0xffff_ffff) };
+    cards_dir(central).join(format!("{name}.md"))
+}
+
+/// The project a card is titled with (`# shop`), which is whose it is.
+fn card_owner(path: &Path) -> Option<String> {
+    let text = store::read_text(path).ok()?;
+    text.lines().find_map(|l| l.strip_prefix("# ")).map(|name| name.trim().to_string())
+}
+
+/// The card a project kept before 0.4.0 under its slug alone, when it has one there that is its own.
+fn legacy_card(central: &Path, project: &str) -> Option<PathBuf> {
+    let path = cards_dir(central).join(format!("{}.md", slugify(project)));
+    (path != card_path(central, project) && card_owner(&path).as_deref() == Some(project)).then_some(path)
+}
+
+/// The card holding the project's description: its own, else the one it kept before 0.4.0. One titled with
+/// another project, which a name slugging alike overwrote, isn't it.
+fn current_card(central: &Path, project: &str) -> Option<PathBuf> {
+    let path = card_path(central, project);
+    if card_owner(&path).as_deref() == Some(project) { Some(path) } else { legacy_card(central, project) }
 }
 
 /// The project's shared description; empty if it has no card, or only the placeholder `init` wrote,
 /// so nobody reads the placeholder as a description (an agent pays for it in every `context`).
 pub fn read_description(central: &Path, project: &str) -> String {
-    let text = fs::read_to_string(card_path(central, project)).unwrap_or_default();
+    let text = current_card(central, project).and_then(|path| store::read_text(&path).ok()).unwrap_or_default();
     let body = card_body(&text);
     if body == DESCRIPTION_TEMPLATE { String::new() } else { body }
 }
@@ -317,14 +374,30 @@ fn card_body(text: &str) -> String {
     text.lines().skip_while(|l| !l.starts_with("# ")).skip(1).collect::<Vec<_>>().join("\n").trim().to_string()
 }
 
-/// Writes the project's shared card.
+/// Writes the project's shared card. Another project's card where it goes, one whose name slugs alike from before
+/// 0.4.0, moves to its own place first rather than be overwritten; the project's own card from then goes.
 pub fn write_description(central: &Path, project: &str, description: &str) -> Result<()> {
-    store::write_file(&card_path(central, project), &format!("# {project}\n\n{}\n", description.trim()))
+    // Under the lock, as the registry: whose card is where is read, then written.
+    let _lock = lock(central)?;
+    let path = card_path(central, project);
+    if let Some(owner) = card_owner(&path).filter(|owner| owner != project) {
+        let theirs = card_path(central, &owner);
+        if theirs != path && !theirs.exists() {
+            fs::rename(&path, &theirs).with_context(|| format!("moving {} to {}", path.display(), theirs.display()))?;
+        }
+    }
+    let legacy = legacy_card(central, project);
+    store::write_file(&path, &format!("# {project}\n\n{}\n", description.trim()))?;
+    if let Some(legacy) = legacy {
+        fs::remove_file(&legacy).with_context(|| format!("removing {}", legacy.display()))?;
+    }
+    Ok(())
 }
 
 /// Creates the project's shared card with a placeholder if it has none yet; returns whether it did.
 pub fn ensure_description(central: &Path, project: &str) -> Result<bool> {
-    if card_path(central, project).is_file() {
+    let _lock = lock(central)?;
+    if current_card(central, project).is_some() {
         return Ok(false);
     }
     write_description(central, project, DESCRIPTION_TEMPLATE)?;
@@ -340,47 +413,48 @@ pub fn rename(central: &Path, old: &str, new: &str) -> Result<()> {
         new.clone_into(&mut repo.project);
     }
     save(central, &repos)?;
-    let from = card_path(central, old);
-    match fs::read_to_string(&from) {
-        Ok(text) => {
-            write_description(central, new, &card_body(&text))?;
-            if card_path(central, new) != from {
-                fs::remove_file(&from).with_context(|| format!("removing {}", from.display()))?;
-            }
-            Ok(())
-        }
-        Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e).with_context(|| format!("reading {}", from.display())),
+    let Some(from) = current_card(central, old) else { return Ok(()) };
+    let text = store::read_text(&from).with_context(|| format!("reading {}", from.display()))?;
+    let body = card_body(&text);
+    // The old card already where the new one goes (`Shop`'s from before 0.4.0, renamed `shop`): rewritten there,
+    // not moved aside as another project's would be.
+    if card_path(central, new) == from {
+        return store::write_file(&from, &format!("# {new}\n\n{}\n", body.trim()));
     }
+    write_description(central, new, &body)?;
+    fs::remove_file(&from).with_context(|| format!("removing {}", from.display()))?;
+    Ok(())
 }
 
-/// Deletes the project's shared card; returns whether there was one.
+/// Deletes the project's shared card; returns whether there was one. Only its own: one a name slugging alike
+/// wrote over it before 0.4.0 is that project's.
 pub fn remove_description(central: &Path, project: &str) -> Result<bool> {
-    let path = card_path(central, project);
-    match fs::remove_file(&path) {
-        Ok(()) => Ok(true),
-        Err(e) if e.kind() == ErrorKind::NotFound => Ok(false),
-        Err(e) => Err(e).with_context(|| format!("removing {}", path.display())),
-    }
+    let _lock = lock(central)?;
+    let Some(path) = current_card(central, project) else { return Ok(false) };
+    fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
+    Ok(true)
 }
 
 /// What the repository in `dir` knows of its project: `None` outside a project. Without `central`,
 /// only what its own card says.
 pub fn info(dir: &Path, central: Option<&Path>) -> Option<ProjectInfo> {
     let RepoCard { project: name, notes, .. } = read_repo_card(dir)?;
-    let repo = Repo { project: name.clone(), dir: dir.to_path_buf() }.name();
-    let (description, siblings) = match central {
+    let (name, description, siblings) = match central {
         Some(central) => {
-            let siblings = load(central)
-                .unwrap_or_default()
+            let repos = load(central).unwrap_or_default();
+            // The registry's name over the card's: a rename while this folder was away (an unmounted disk) left
+            // the card on the old one, which `kb init --all` then fixes.
+            let name = repos.iter().find(|r| same_dir(&r.dir, dir)).map_or(name, |r| r.project.clone());
+            let siblings = repos
                 .into_iter()
                 .filter(|r| r.project == name && !same_dir(&r.dir, dir))
                 .map(|r| (r.name(), r.dir))
                 .collect();
-            (read_description(central, &name), siblings)
+            (name.clone(), read_description(central, &name), siblings)
         }
-        None => (String::new(), Vec::new()),
+        None => (name, String::new(), Vec::new()),
     };
+    let repo = Repo { project: name.clone(), dir: dir.to_path_buf() }.name();
     Some(ProjectInfo { name, description, repo, notes, siblings })
 }
 

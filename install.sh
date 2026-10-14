@@ -146,14 +146,42 @@ cache_dir() {
     fi
 }
 
-# Files kanbrain creates in the central brain: NNNN-slug.md entries, tags.md, last-id, format, the project registry
-# (projects.md) and cards (projects/*.md), exported reports, leftover temp files.
+# Whether file $2 in the central brain $1 is one kanbrain made, by its name and what it holds, so a purge of a data
+# folder shared with other notes (an Obsidian vault, say) never takes theirs: an entry carries `- id: N` matching
+# its name (`2024-01-15.md` doesn't), tags.md and projects.md their headers, last-id and format a number, a card
+# the name of a registered project, a report its header; leftover temp files are `.NAME.PID-N.tmp`.
+is_owned() {
+    name=${2##*/}
+    case "$name" in
+        .*.[0-9]*-[0-9]*.tmp) return 0 ;;
+    esac
+    case "$2" in
+        "$1/projects/"*.md) registered "$1" "$(sed -n '1s/^# //p' "$2")" ;;
+        "$1/reports/"*.md) head -n 1 "$2" | grep -q '^# Time report · ' ;;
+        *)
+            case "$name" in
+                [0-9][0-9][0-9][0-9]*-*.md) grep -qx -- "- id: $(printf '%s\n' "${name%%-*}" | sed 's/^0*\(.\)/\1/')" "$2" ;;
+                tags.md) head -n 1 "$2" | grep -qx '# Tag colors' ;;
+                projects.md) head -n 1 "$2" | grep -qx '# Projects' ;;
+                last-id | format) grep -qx '[0-9][0-9]*' "$2" ;;
+                *) return 1 ;;
+            esac
+            ;;
+    esac
+}
+
+# Whether project $2 is in the central brain $1's registry (`- shop: /path/.brain`).
+registered() {
+    [ -n "$2" ] && [ -f "$1/projects.md" ] && grep -q -F -- "- $2: " "$1/projects.md"
+}
+
+# The files of the central brain $1 that kanbrain made (see is_owned): its own, its cards' and its reports'.
 owned_files() {
-    find "$1" -maxdepth 1 -type f \( -name '[0-9][0-9][0-9][0-9]*-*.md' -o -name 'tags.md' -o -name 'projects.md' \
-        -o -name 'last-id' -o -name 'format' -o -name '.*.md*.tmp' -o -name '.last-id*.tmp' \
-        -o -name '.format*.tmp' \)
-    for sub in projects reports; do
-        if [ -d "$1/$sub" ]; then find "$1/$sub" -maxdepth 1 -type f \( -name '*.md' -o -name '.*.md*.tmp' \); fi
+    for sub in "" /projects /reports; do
+        [ -d "$1$sub" ] || continue
+        find "$1$sub/" -maxdepth 1 -type f | while IFS= read -r f; do
+            if is_owned "$1" "$f"; then printf '%s\n' "$f"; fi
+        done
     done
 }
 
@@ -172,11 +200,18 @@ confirm() {
 if [ "$UNINSTALL" = 1 ]; then
     if [ "$PURGE" = 1 ]; then
         data=$(data_dir)
+        # As the file system has it, links and `..` resolved: `$HOME//` or a link to it is the home folder too.
+        if [ -d "$data" ]; then data=$(cd "$data" && pwd -P); fi
+        home=$(cd "$HOME" && pwd -P)
         case "$data" in
-            "" | / | "$HOME" | "$HOME/") die "refusing to delete data in '$data'" ;;
+            "" | / | "$home") die "refusing to delete data in '$data'" ;;
+        esac
+        case "$home/" in
+            "$data"/*) die "refusing to delete data in '$data': it holds your home folder" ;;
         esac
         if [ -d "$data" ]; then
-            entries=$(find "$data" -maxdepth 1 -type f -name '[0-9][0-9][0-9][0-9]*-*.md' | wc -l | tr -d ' ')
+            # `grep -c` counts 0 with a failing status, which `set -e` would take for an error.
+            entries=$(owned_files "$data" | grep -c '/[0-9][0-9][0-9][0-9][^/]*-[^/]*\.md$' || true)
             say "data folder: $data"
             say "this permanently deletes $entries entry file(s), tags.md, the project registry and cards, exported reports, and the backups taken before migrations"
             say "projects' own .brain/ folders are kept"
@@ -212,7 +247,9 @@ if [ "$UNINSTALL" = 1 ]; then
     done
 
     if [ "$PURGE" = 1 ] && [ -n "$data" ]; then
-        owned_files "$data" | while IFS= read -r f; do rm -f "$f"; done
+        # Listed whole before deleting any: whose cards they are is read from the registry, which goes too.
+        owned=$(owned_files "$data")
+        printf '%s\n' "$owned" | while IFS= read -r f; do if [ -n "$f" ]; then rm -f "$f"; fi; done
         rmdir "$data/projects" "$data/reports" 2>/dev/null || true
         if rmdir "$data" 2>/dev/null; then
             say "removed $data"
@@ -297,8 +334,24 @@ trap 'rm -rf "$tmp"' EXIT INT TERM
 mkdir -p "$INSTALL_DIR" || die "cannot create $INSTALL_DIR (try --dir)"
 [ -w "$INSTALL_DIR" ] || die "$INSTALL_DIR is not writable (choose another folder in your home with --dir)"
 
-# Downloads, verifies and installs one app.
-install_app() {
+# The latest release's tag, asked once: two downloads each following `latest` could straddle a release and
+# install a command line and an app of different versions. Empty when it can't be told; `latest` then stands.
+latest_tag() {
+    command -v curl >/dev/null 2>&1 || return 0
+    curl -fsSI --max-time 20 "https://github.com/$REPO/releases/latest" 2>/dev/null |
+        sed -n 's|^[Ll]ocation: .*/tag/\(v[^[:space:]]*\).*|\1|p' | head -n 1
+}
+if [ -z "${KANBRAIN_BASE_URL:-}" ] && [ "$HOST" = github ] && [ "$VERSION" = latest ]; then
+    tag=$(latest_tag)
+    if [ -n "$tag" ]; then
+        VERSION=$tag
+        base="https://github.com/$REPO/releases/download/$VERSION"
+    fi
+fi
+
+# Downloads, verifies and extracts one app into $tmp/<app>/, touching nothing installed: every app is fetched
+# before any is put in place, so a failed download leaves the installed ones as they were, of one version.
+fetch_app() {
     bin=$1
     asset=$(asset_for "$bin")
     say "downloading $asset ($VERSION)"
@@ -318,25 +371,43 @@ install_app() {
     [ "$actual" = "$expected" ] || die "checksum mismatch for $asset (expected $expected, got $actual)"
     say "checksum ok"
 
-    # ---- install ----
+    mkdir -p "$tmp/$bin"
+    tar -xzf "$tmp/$asset" -C "$tmp/$bin" || die "could not extract $asset"
+    [ -f "$tmp/$bin/$bin" ] || die "archive does not contain a '$bin' binary"
+}
+
+# $1 inside a desktop entry's quoted Exec argument: `"`, backquote and `$` escaped, then every backslash doubled, as the
+# Desktop Entry spec reads such a value twice; `%` doubled, as a field code would otherwise start.
+desktop_quoted() {
+    printf '%s' "$1" | sed -e 's/\\/\\\\\\\\/g' -e 's/["`$]/\\\\&/g' -e 's/%/%%/g'
+}
+
+# Puts one fetched app in place (see fetch_app).
+install_app() {
+    bin=$1
     remove_old "$bin"
-    tar -xzf "$tmp/$asset" -C "$tmp" || die "could not extract $asset"
-    [ -f "$tmp/$bin" ] || die "archive does not contain a '$bin' binary"
-    # Replace atomically so a running copy isn't disturbed.
-    cp "$tmp/$bin" "$INSTALL_DIR/$bin.new"
+    # Replace atomically so a running copy isn't disturbed; a `.new` left by an install cut short goes first, or
+    # the copy would land inside it.
+    rm -rf -- "$INSTALL_DIR/$bin.new"
+    cp "$tmp/$bin/$bin" "$INSTALL_DIR/$bin.new"
     chmod 755 "$INSTALL_DIR/$bin.new"
     mv -f "$INSTALL_DIR/$bin.new" "$INSTALL_DIR/$bin"
     if [ "$os" = Darwin ]; then
         xattr -d com.apple.quarantine "$INSTALL_DIR/$bin" 2>/dev/null || true
     fi
-    say "installed $("$INSTALL_DIR/$bin" --version 2>/dev/null || echo "$bin") to $INSTALL_DIR/$bin"
+    if version=$("$INSTALL_DIR/$bin" --version 2>&1); then
+        say "installed $version to $INSTALL_DIR/$bin"
+    else
+        # The app links the system's graphics libraries (glibc 2.35 or later, libxkbcommon-x11, libxcb).
+        say "warning: installed $INSTALL_DIR/$bin, but it doesn't start here: $version"
+    fi
 
     # On macOS, an app bundle with the app's icon (in its release archive), launching the installed binary. Its
     # executable is a hard link to it, not a copy or a script: the Dock shows the bundle's icon only for the
     # bundle's own executable, and the link costs no space. A copy where they can't link.
-    if [ "$bin" = kanbrain ] && [ "$os" = Darwin ] && [ -f "$tmp/kanbrain.icns" ]; then
+    if [ "$bin" = kanbrain ] && [ "$os" = Darwin ] && [ -f "$tmp/kanbrain/kanbrain.icns" ]; then
         mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
-        cp "$tmp/kanbrain.icns" "$APP_BUNDLE/Contents/Resources/kanbrain.icns"
+        cp "$tmp/kanbrain/kanbrain.icns" "$APP_BUNDLE/Contents/Resources/kanbrain.icns"
         # Where the binaries are, for the app's update: it runs as the bundle's link, not from this folder.
         printf '%s\n' "$INSTALL_DIR" >"$APP_BUNDLE/Contents/Resources/install-dir"
         rm -f "$APP_BUNDLE/Contents/MacOS/kanbrain"
@@ -397,7 +468,7 @@ Type=Application
 Name=kanbrain
 GenericName=Kanban board
 Comment=Tasks in To do, Doing, Parked and Done columns, with time tracking, stored as markdown files
-Exec="$INSTALL_DIR/kanbrain"
+Exec="$(desktop_quoted "$INSTALL_DIR/kanbrain")"
 Icon=kanbrain
 Terminal=false
 Categories=Office;ProjectManagement;
@@ -406,6 +477,9 @@ EOF_DESKTOP
     fi
 }
 
+for bin in $BINS; do
+    fetch_app "$bin"
+done
 for bin in $BINS; do
     install_app "$bin"
 done
@@ -426,11 +500,18 @@ case ":$PATH:" in
     *":$INSTALL_DIR:"*) say "run: $(printf '%s\n' "$BINS" | sed 's/ / or /')" ;;
     *)
         say "$INSTALL_DIR is not in your PATH. Add it with:"
-        # shellcheck disable=SC2016 # $PATH is meant literally in the printed hint
-        case "${SHELL:-sh}" in
-            */fish | fish) printf '    fish_add_path %s\n' "$INSTALL_DIR" ;;
-            */zsh | zsh) printf '    echo '\''export PATH="%s:$PATH"'\'' >> ~/.zshrc && exec zsh\n' "$INSTALL_DIR" ;;
-            *) printf '    echo '\''export PATH="%s:$PATH"'\'' >> ~/.bashrc && exec bash\n' "$INSTALL_DIR" ;;
+        # The folder inside quotes in a printed command; one holding a quote, `$`, a backquote or a backslash is
+        # left to the user, as no quoting here would survive being pasted into every shell.
+        case "$INSTALL_DIR" in
+            *[\'\"\$\`\\]*) say "add it to PATH in your shell's startup file" ;;
+            *)
+                # shellcheck disable=SC2016 # $PATH is meant literally in the printed hint
+                case "${SHELL:-sh}" in
+                    */fish | fish) printf "    fish_add_path '%s'\n" "$INSTALL_DIR" ;;
+                    */zsh | zsh) printf '    echo '\''export PATH="%s:$PATH"'\'' >> ~/.zshrc && exec zsh\n' "$INSTALL_DIR" ;;
+                    *) printf '    echo '\''export PATH="%s:$PATH"'\'' >> ~/.bashrc && exec bash\n' "$INSTALL_DIR" ;;
+                esac
+                ;;
         esac
         ;;
 esac

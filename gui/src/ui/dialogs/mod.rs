@@ -67,7 +67,11 @@ fn modal(dialog: Div) -> Div {
 
 /// A dialog box: title, content, and buttons at the bottom right.
 fn dialog(title: impl Into<String>, content: impl IntoElement, buttons: Vec<Stateful<Div>>) -> Div {
+    let title = title.into();
+    // `dialog TITLE` for the window tests, which find a dialog by what its title says; nothing outside them.
+    let selector = format!("dialog {title}");
     div()
+        .debug_selector(|| selector)
         .flex()
         .flex_col()
         .gap_4()
@@ -77,7 +81,7 @@ fn dialog(title: impl Into<String>, content: impl IntoElement, buttons: Vec<Stat
         .border_color(rgb(BORDER))
         .bg(rgb(theme::POPUP))
         .shadow_lg()
-        .child(div().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).child(title.into()))
+        .child(div().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).child(title))
         .child(content)
         .child(div().flex().justify_end().gap_2().children(buttons))
 }
@@ -103,7 +107,8 @@ fn draw_confirm(board: &Board, confirm: Confirm, cx: &mut Context<BrainView>) ->
         Confirm::Delete(key) => {
             let task = board.task(key)?;
             let consequence = "Its markdown file, with description, comments and history, will be removed.";
-            (format!("Delete {}?", task.kind.as_str()), vec![question(task), Line::styled(consequence, DIM_STYLE)])
+            let what = question(&board.entry_name(key), task);
+            (format!("Delete {}?", task.kind.as_str()), vec![what, Line::styled(consequence, DIM_STYLE)])
         }
         Confirm::DeleteComment(key, index) => {
             let comment = board.task(key).and_then(|t| t.comments.get(index))?;
@@ -136,7 +141,12 @@ fn draw_confirm(board: &Board, confirm: Confirm, cx: &mut Context<BrainView>) ->
     Some(dialog(title, content, buttons).w(px(DIALOG_WIDTH)))
 }
 
-/// `#id title` in bold: the entry about to be deleted.
-fn question(task: &Task) -> Line {
-    Line::from(vec![Span::styled(format!("#{} {}", task.id, task.title), Style::new().bold())])
+/// `#id title` in bold (`shop/api #id title` with several brains shown, as `name` is): the entry about to be
+/// deleted.
+fn question(name: &str, task: &Task) -> Line {
+    Line::from(vec![Span::styled(format!("{name} {}", task.title), Style::new().bold())])
 }
+
+#[cfg(test)]
+#[path = "../../../tests/dialogs.rs"]
+mod tests;

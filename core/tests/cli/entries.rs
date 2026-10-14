@@ -35,6 +35,11 @@ fn ids_text_and_stdin() {
     assert!(parse(&["show", "4", "5"]).is_err());
     assert!(parse(&["comment", "4"]).is_err());
     assert!(parse(&["search", " "]).is_err(), "everything would match");
+    assert_eq!(parse(&["search", "--", "--", "x"]).unwrap().command, EntryCommand::Search("-- x".into()), "the first");
+    // A word that isn't a link is said, not left out.
+    let error = |args: &[&str]| parse(args).unwrap_err().to_string();
+    assert!(error(&["link", "2", "abc", "3"]).contains("`abc` isn't an entry id"));
+    assert!(error(&["add", "--link", "foo", "title"]).contains("`foo` isn't an entry id"));
 }
 
 #[test]
@@ -65,7 +70,7 @@ fn project_shows_or_replaces_a_part() {
     let change = |args: &[&str]| parse(args).unwrap().command;
     assert_eq!(
         change(&["project", "rename", "Web", "shop"]),
-        EntryCommand::Project(Some(ProjectChange::Rename("Web shop".into())))
+        EntryCommand::Project(Some(ProjectChange::Rename("Web shop".into(), false)))
     );
     assert_eq!(change(&["project", "repo", "api"]), EntryCommand::Project(Some(ProjectChange::Repo("api".into()))));
     assert_eq!(change(&["project", "move", "blog"]), EntryCommand::Project(Some(ProjectChange::Move("blog".into()))));
@@ -142,7 +147,7 @@ fn wait_ends_on_a_persons_answer_or_verdict() {
     let mut brain = Brain { author: crate::model::Author::Agent, ..open };
     let new = |title: &str| NewEntry { title: title.into(), ..NewEntry::default() };
     let task = brain.add(new("Rate-limit login")).unwrap();
-    let settled_on = |brain: &Brain, id| settled(brain.entry(id).unwrap());
+    let settled_on = |brain: &Brain, id| settled(brain.entry(id).unwrap(), None);
     let head = format!("#{task} Rate-limit login");
     assert_eq!(settled_on(&brain, task).unwrap(), format!("{head}: not waiting for an answer (todo)"));
     wait(&brain, task, None).expect("nothing to wait for: it returns at once");
@@ -151,7 +156,9 @@ fn wait_ends_on_a_persons_answer_or_verdict() {
         settled_on(&brain, note).unwrap(),
         format!("#{note} Webhooks repeat: a note, not waiting for an answer")
     );
-    assert!(wait(&brain, 99, None).is_err(), "no such entry");
+    // At once, not when the time is up.
+    let missing = wait(&brain, 99, Some(Duration::from_secs(5))).unwrap_err();
+    assert_eq!(missing.downcast::<ApiError>().unwrap(), ApiError::NotFound(99));
 
     brain.ask(task, "Per IP or per account?").unwrap();
     assert_eq!(settled_on(&brain, task), None);
@@ -162,6 +169,14 @@ fn wait_ends_on_a_persons_answer_or_verdict() {
     brain.author = crate::model::Author::Human;
     brain.add_comment(task, "Per account").unwrap();
     assert_eq!(settled_on(&brain, task).unwrap(), format!("{head}: answered\n\nPer account"));
+    // Answered and moved on before `wait` looked again: the answer to the question it found is still said.
+    let asked_at = brain.entry(task).unwrap().comments.iter().rev().find(|c| c.question).unwrap().created;
+    brain.change_status(task, Status::Todo).unwrap();
+    assert_eq!(
+        settled(brain.entry(task).unwrap(), Some(asked_at)).unwrap(),
+        format!("{head}: answered, now todo\n\nPer account")
+    );
+    brain.change_status(task, Status::Parked).unwrap();
 
     brain.author = crate::model::Author::Agent;
     let decision = brain.propose(task, new("Use Redis")).unwrap();
@@ -176,4 +191,110 @@ fn wait_ends_on_a_persons_answer_or_verdict() {
     assert!(
         settled_on(&brain, task).unwrap().ends_with(&format!("Rejected decision #{decision}, Use Redis: too heavy"))
     );
+}
+
+#[test]
+fn a_wait_longer_than_any_is_refused_rather_than_cut_short() {
+    let error = minutes("999999999999999999").unwrap_err().to_string();
+    assert!(error.contains("longer than any wait"), "{error}");
+    assert_eq!(minutes("2").unwrap(), Some(Duration::from_secs(120)));
+}
+
+#[test]
+fn waiting_on_an_entry_deleted_meanwhile_says_its_gone_at_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut brain = Brain::open(crate::store::Store::at(dir.path()).unwrap()).unwrap();
+    let task = brain.add(NewEntry { title: "Rate-limit login".into(), ..NewEntry::default() }).unwrap();
+    brain.ask(task, "Per IP or per account?").unwrap();
+    let file = brain.entry(task).unwrap().path.clone().unwrap();
+    let deleter = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(1500));
+        std::fs::remove_file(file).unwrap();
+    });
+    let started = std::time::Instant::now();
+    let error = wait(&brain, task, Some(Duration::from_secs(60))).unwrap_err();
+    deleter.join().unwrap();
+    assert_eq!(error.downcast::<ApiError>().unwrap(), ApiError::NotFound(task));
+    assert!(started.elapsed() < Duration::from_secs(10), "not after the time limit");
+}
+
+#[test]
+fn waiting_on_an_entry_missing_from_one_look_carries_on() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut brain = Brain::open(crate::store::Store::at(dir.path()).unwrap()).unwrap();
+    let task = brain.add(NewEntry { title: "Rate-limit login".into(), ..NewEntry::default() }).unwrap();
+    brain.ask(task, "Per IP or per account?").unwrap();
+    let file = brain.entry(task).unwrap().path.clone().unwrap();
+    let text = std::fs::read(&file).unwrap();
+    let store = dir.path().to_path_buf();
+    // Gone across the look at 2 s, as a file renamed for a new title is gone between listing and reading it.
+    let mover = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(1400));
+        std::fs::remove_file(&file).unwrap();
+        std::thread::sleep(Duration::from_millis(1200));
+        std::fs::write(&file, text).unwrap();
+        std::thread::sleep(Duration::from_millis(500));
+        let mut brain = Brain::open(crate::store::Store::at(&store).unwrap()).unwrap();
+        brain.author = crate::model::Author::Human;
+        brain.add_comment(task, "Per account").unwrap();
+    });
+    wait(&brain, task, Some(Duration::from_secs(60))).expect("still there: the answer");
+    mover.join().unwrap();
+}
+
+#[test]
+fn a_task_moved_on_unanswered_says_so_rather_than_quote_an_older_comment_or_its_question() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut brain = Brain::open(crate::store::Store::at(dir.path()).unwrap()).unwrap();
+    let task = brain.add(NewEntry { title: "Rate-limit login".into(), ..NewEntry::default() }).unwrap();
+    brain.add_comment(task, "Login is slow on mobile.").unwrap();
+    // Times are whole seconds: the person's comment is from before the question, not the same second.
+    std::thread::sleep(Duration::from_millis(1100));
+    brain.author = crate::model::Author::Agent;
+    brain.ask(task, "Per IP or per account?").unwrap();
+    let asked_at = brain.entry(task).unwrap().comments.iter().rev().find(|c| c.question).unwrap().created;
+    brain.change_status(task, Status::Todo).unwrap();
+    assert_eq!(
+        settled(brain.entry(task).unwrap(), Some(asked_at)).unwrap(),
+        format!("#{task} Rate-limit login: not waiting for an answer (todo)")
+    );
+}
+
+#[test]
+fn a_wait_fails_at_once_on_a_folder_it_cant_read_but_looks_again_after_its_first_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("brain");
+    let mut brain = Brain::open(crate::store::Store::at(&path).unwrap()).unwrap();
+    let task = brain.add(NewEntry { title: "Rate-limit login".into(), ..NewEntry::default() }).unwrap();
+    brain.author = crate::model::Author::Agent;
+    brain.ask(task, "Per IP or per account?").unwrap();
+
+    // The folder caught mid-change after the first look: looked at again, until the answer is there.
+    let away = dir.path().join("away");
+    let (from, to) = (path.clone(), away.clone());
+    // On Windows a folder `wait` is reading that moment can't be renamed: tried again.
+    let rename = |from: &std::path::Path, to: &std::path::Path| {
+        let mut tries = 0;
+        while let Err(e) = std::fs::rename(from, to) {
+            tries += 1;
+            assert!(tries < 500, "{e}");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    };
+    let mover = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(1500));
+        rename(&from, &to);
+        std::thread::sleep(Duration::from_millis(2500));
+        rename(&to, &from);
+        let mut brain = Brain::open(crate::store::Store::at(&from).unwrap()).unwrap();
+        brain.add_comment(task, "Per account").unwrap();
+    });
+    wait(&brain, task, Some(Duration::from_secs(60))).expect("the answer, once the folder is back");
+    mover.join().unwrap();
+
+    std::fs::rename(&path, &away).unwrap();
+    let started = std::time::Instant::now();
+    let error = wait(&brain, task, Some(Duration::from_secs(60))).unwrap_err().to_string();
+    assert!(!error.starts_with("no answer"), "{error}");
+    assert!(started.elapsed() < Duration::from_secs(10), "not after the time limit");
 }

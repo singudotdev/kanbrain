@@ -9,16 +9,19 @@ per project repository. You can read them, edit them, grep them and version them
 ├── 0002-fix-login-500.md
 ├── tags.md                        ← tag colors
 ├── last-id                        ← the highest id given so far
-├── format                         ← the data format's version (only once a migration ran)
+├── format                         ← the data format's version (a brain made before 0.4.0 gets it once migrated)
 ├── projects.md                    ← the registered repositories, by project
 ├── projects/
-│   └── shop.md                    ← project shop's card, shared by its repositories (named after the project's
-│                                    name as a slug: `acme-corp.md` for Acme Corp)
+│   └── shop.md                    ← project shop's card, shared by its repositories (named after the project:
+│                                    a name other than its own slug adds a hash of itself, `acme-corp-1a2b3c4d.md`
+│                                    for Acme Corp, so names that slug alike don't share one)
 └── reports/                       ← markdown report exports (never read back)
 
 ~/code/shop-api/.brain/            ← a repository of project shop, made by `kb init shop`
 ├── 0001-rate-limit-login.md       ← its own entries, numbered from 1
 ├── tags.md
+├── last-id
+├── format
 ├── project.md                     ← which project it belongs to, and this repository's role in it
 └── reports/                       ← `kb report --save` run in the repository (committed with `.brain/` unless
                                      ignored)
@@ -38,7 +41,9 @@ the repository's `.brain/`. Several lines with the same name are one project's r
 ```
 
 A project's card, `projects/<name>.md` in the central brain, holds the application's horizontal context: what it is,
-its services and how they connect, the conventions they share. Every repository of the project shares it:
+its services and how they connect, the conventions they share. A name that isn't its own slug (`My_App`, `日記`) adds
+a hash of itself (`projects/my-app-1a2b3c4d.md`), so names that slug alike keep a card each; its `# name` title says
+whose it is. Every repository of the project shares it:
 
 ```markdown
 # shop
@@ -117,7 +122,7 @@ Raised to 30s, monitoring.
 | `- links:` | ids of related entries, e.g. `3, 12`; only written when there are links. Ids are shared by tasks, notes and decisions. `shop-api#3` is entry 3 of the project's `shop-api` repository |
 | `- created:` | creation time |
 | `## Description` | free text about the task, kept as is. Edit it with `m` in the kanban app |
-| `## Comments` | one `### <created>` heading per comment, then the comment's text, oldest first. After the time, in parentheses and separated by commas: `agent` when an agent wrote it, `question` when it's a question to the user, `edited <time>` if it was changed later. A person's plain comment has none. A parked task whose latest question has no person's comment after it waits for an answer |
+| `## Comments` | one `### <created>` heading per comment, then the comment's text, oldest first. After the time, in parentheses and separated by commas: `agent` when an agent wrote it, `question` when it's a question to the user, `answer` when it's a verdict on the decision a question asked about (which an agent may give on the user's word), `edited <time>` if it was changed later. A person's plain comment has none. A parked task whose latest question has no person's comment, nor an answer, after it waits for an answer |
 | `## History` | one line per status change: `- TIME FROM -> TO`, with ` (agent)` when an agent made it. Oldest first. The latest `-> doing` line says who runs the task: a person runs one at a time, and the board shows it in cyan; an agent, any number, in green |
 | `## Sessions` | tracked time, one line per session: `- START -> END (duration)`, or `- START -> running` for the open one. Only written once the task has been in doing; the duration is informational |
 
@@ -138,6 +143,7 @@ When typing times by hand, all of these are accepted:
 2026-09-24T10:12:00+02:00      (RFC 3339)
 2026-09-24 10:12:00
 2026-09-24 10:12
+2026-09-24T10:12:00
 2026-09-24T10:12
 ```
 
@@ -168,6 +174,9 @@ The `- status:` line decides where the task stands; the history is only the reco
 | several tasks a person started in `doing` (e.g. from a sync) | the most recently started stays; the others are moved to `parked`, with a history line. Tasks an agent started stay |
 | missing `created` | the time of the first history line, or now |
 | other `- key:` lines, `- links:` words or `##` sections (e.g. written by a newer version, or by you) | kept and written back as they are; other sections move to the end of the file |
+| two entries with one id (a sync tool's conflict copy, or one added on two machines at once) | all but one get the next free ids: the one under its own file name keeps it, else the oldest |
+| a title on several lines (as versions before 0.4.0 wrote a title typed with line breaks) | read as one line, the lines right under it joined to it |
+| a byte-order mark at the start of a file (some Windows editors write one) | skipped |
 | a file that can't be read (e.g. no `id`, or a history line it can't parse) | skipped, with a warning in the status bar. **The file is not touched** |
 
 These fixes are made by whatever works in the folder: the app, which shows every brain, and `kb` run in it or
@@ -181,8 +190,8 @@ the highest id among the entries is used.
 ## Format versions and migrations
 
 Every brain (the central one, each repository's `.brain/`) is in a numbered data format, written in its `format`
-file; a brain without one is format 1. A kanbrain version that changes the format brings older brains to it with a
-**migration**:
+file, written when the brain is made; a brain without one is format 1. A kanbrain version that changes the format
+brings older brains to it with a **migration**:
 
 - it runs when a brain is opened to be changed (a `kb` command, the kanban app), and for every registered brain on
   `kb update` (through `kb init --all`), under the brain's write lock;

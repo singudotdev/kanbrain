@@ -5,7 +5,8 @@
 # - the download is checked against its checksum, and refused when that doesn't match;
 # - the installed `kb` runs, and `init --all` has brought a registered project's agent section up to date;
 # - `--uninstall` takes it out again; `--purge` deletes the central brain's files and kanbrain's locks and backups in
-#   the cache, keeping a file it didn't create;
+#   the cache, keeping files it didn't create though named like its own, through a linked data folder, and refusing
+#   the home folder however it's written;
 # - the kanban app gets its launcher with the logo: an application menu entry and icon on Linux, an app bundle on
 #   macOS. `kb` stands in for the app, which takes the same commands, so GPUI needn't be built.
 #
@@ -90,6 +91,19 @@ case "$out" in *"checksum ok"*) ;; *) fail "the checksum wasn't checked" ;; esac
 case "$out" in *"demo: updated CLAUDE.md"*) ;; *) fail "init --all didn't run" ;; esac
 grep -q "## Project memory: kanbrain" "$claude" || fail "the project's section wasn't updated"
 
+# Both apps are fetched before either is put in place: the app's download failing leaves the installed kb as it
+# was (the same file, not replaced), so the two never end up at different versions.
+touch -t 200001010000 "$installed"
+: >"$work/stamp"
+mv "$work/dist/$app_asset" "$work/app-asset.away"
+if sh "$repo/install.sh" --app both >/dev/null 2>&1; then fail "an install missing the app's download succeeded"; fi
+[ "$installed" -ot "$work/stamp" ] || fail "a failed install replaced kb before fetching the app"
+mv "$work/app-asset.away" "$work/dist/$app_asset"
+# A `kb.new` left by an install cut short doesn't swallow the next one.
+mkdir "$installed.new"
+sh "$repo/install.sh" --app cli >/dev/null || fail "installing over a leftover kb.new failed"
+[ -f "$installed" ] || fail "kb isn't a file after installing over a leftover kb.new"
+
 # A download that doesn't match its checksum is refused, and the installed kb is left as it was.
 cp "$work/dist/$asset.sha256" "$work/good.sha256"
 printf '%064d  %s\n' 0 "$asset" >"$work/dist/$asset.sha256"
@@ -109,6 +123,14 @@ case "$(uname -s)" in
         desktop="$HOME/.local/share/applications/kanbrain.desktop"
         icon="$HOME/.local/share/icons/hicolor/scalable/apps/kanbrain.svg"
         grep -q "^Icon=kanbrain$" "$desktop" || fail "the menu entry names no icon"
+        # A folder whose name the menu entry's Exec has to escape.
+        odd="$HOME/odd dir\$x%y"
+        sh "$repo/install.sh" --app gui --dir "$odd" >/dev/null || fail "installing the app into $odd failed"
+        grep -qxF "Exec=\"$HOME/odd dir\\\\\$x%%y/kanbrain\"" "$desktop" || fail "Exec isn't escaped: $(grep Exec "$desktop")"
+        if command -v desktop-file-validate >/dev/null; then
+            desktop-file-validate "$desktop" || fail "the menu entry isn't valid"
+        fi
+        sh "$repo/install.sh" --app gui >/dev/null || fail "installing the app back failed"
         cmp -s "$icon" "$repo/docs/images/logo.svg" || fail "the installed icon isn't the logo"
         ;;
     Darwin)
@@ -138,15 +160,43 @@ esac
 mkdir -p "$cache/locks" "$cache/backups/0123456789abcdef/20261013T120000-format-1-to-2"
 : >"$cache/locks/0123456789abcdef.lock"
 [ -d "$KANBRAIN_DIR" ] || fail "the central brain wasn't there to purge"
-: >"$KANBRAIN_DIR/notes-of-mine.txt"
-: >"$KANBRAIN_DIR/.0001-left-by-a-crash.md.4242-0.tmp"
-: >"$KANBRAIN_DIR/projects/.demo.md.4242-1.tmp"
+# The data folder kept in a synced folder through a link, and shared with notes of the user's own, as in an
+# Obsidian vault: purge takes only what kanbrain made, by what each file holds, not by its name.
+mkdir -p "$HOME/Sync"
+mv "$KANBRAIN_DIR" "$HOME/Sync/central"
+ln -s "$HOME/Sync/central" "$KANBRAIN_DIR"
+data="$HOME/Sync/central"
+printf '# Mine\n\n- id: 7\n- status: todo\n- tags: \n' >"$data/0007-mine.md"
+: >"$data/notes-of-mine.txt"
+printf '# Daily\n' >"$data/2024-01-15.md"
+printf '# Meeting\n' >"$data/2024-01-15-meeting.md"
+printf 'my own format notes\n' >"$data/format"
+mkdir -p "$data/reports"
+printf '# Website redesign\n' >"$data/projects/website-redesign.md"
+printf '# Q3\n' >"$data/reports/q3.md"
+printf '# Time report · week 42\n' >"$data/reports/kanbrain-week.md"
+: >"$data/.0001-left-by-a-crash.md.4242-0.tmp"
+: >"$data/projects/.demo.md.4242-1.tmp"
+# A data folder with no entry, as kanbrain makes it before the first: purged and the apps uninstalled all the same.
+sh "$repo/install.sh" --app cli >/dev/null || fail "installing again failed"
+empty="$HOME/empty-central"
+mkdir -p "$empty"
+printf '1\n' >"$empty/format"
+KANBRAIN_DIR="$empty" sh "$repo/install.sh" --purge --yes --app cli >/dev/null || fail "purging a brain with no entry failed"
+[ ! -e "$installed" ] || fail "purging a brain with no entry left kb installed"
+[ ! -e "$empty" ] || fail "purging a brain with no entry kept it"
+# A data folder that's the home folder, however it's written, is refused before anything is deleted.
+if KANBRAIN_DIR="$HOME//" sh "$repo/install.sh" --purge --yes >/dev/null 2>&1; then fail "purge took \$HOME// as data"; fi
+[ -e "$data/0007-mine.md" ] || fail "a refused purge deleted something"
 sh "$repo/install.sh" --purge --yes >/dev/null || fail "purging failed"
 [ ! -e "$cache" ] || fail "purge left kanbrain's cache"
-[ -e "$KANBRAIN_DIR/notes-of-mine.txt" ] || fail "purge deleted a file it didn't create"
-[ ! -e "$KANBRAIN_DIR/projects.md" ] || fail "purge kept the project registry"
-[ ! -e "$KANBRAIN_DIR/.0001-left-by-a-crash.md.4242-0.tmp" ] || fail "purge kept a leftover temporary file"
-[ ! -e "$KANBRAIN_DIR/projects" ] || fail "purge kept the project cards' folder"
+for gone in 0007-mine.md projects.md tags.md .0001-left-by-a-crash.md.4242-0.tmp projects/demo.md \
+    projects/.demo.md.4242-1.tmp reports/kanbrain-week.md; do
+    [ ! -e "$data/$gone" ] || fail "purge kept kanbrain's $gone"
+done
+for kept in notes-of-mine.txt 2024-01-15.md 2024-01-15-meeting.md format projects/website-redesign.md reports/q3.md; do
+    [ -e "$data/$kept" ] || fail "purge deleted $kept, which kanbrain didn't make"
+done
 grep -q "## Project memory: kanbrain" "$claude" || fail "purge touched the project"
 
 echo "PASS install.sh"

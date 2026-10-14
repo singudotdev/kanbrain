@@ -8,8 +8,8 @@ use crate::text::event::KeyCode;
 use gpui::{ClickEvent, Context, Div, FontWeight, ScrollHandle, div, prelude::*, px, rgb};
 use kanbrain_core::model::counted;
 
-/// Width of the column of a row's brain, when several are shown.
-const LABEL_WIDTH: f32 = 110.;
+/// Width of the column of a row's brain, when several are shown, here and in the board's list.
+pub(super) const LABEL_WIDTH: f32 = 110.;
 /// Width of the column of a row's id.
 const ID_WIDTH: f32 = 40.;
 

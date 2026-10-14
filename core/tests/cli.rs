@@ -63,6 +63,7 @@ fn list_options() {
     assert_eq!(list(&["list", "all"]).statuses, Status::ALL);
     assert!(parse(&["list", "paused"]).is_err());
     assert!(parse(&["list", "--tag"]).is_err());
+    assert!(parse(&["list", "--tag", "a b"]).is_err(), "one tag, not the first of several");
 }
 
 #[test]
@@ -165,6 +166,9 @@ fn an_agents_own_variable_makes_it_the_author_unless_kanbrain_author_says() {
     assert_eq!(author(env(&[("CLAUDECODE", "")])).unwrap(), Author::Human, "an empty one doesn't count");
     assert_eq!(author(env(&[("CLAUDECODE", "1"), ("KANBRAIN_AUTHOR", "human")])).unwrap(), Author::Human);
     assert!(author(env(&[("KANBRAIN_AUTHOR", "robot")])).is_err());
+    assert_eq!(author(env(&[("KANBRAIN_AUTHOR", "Agent")])).unwrap(), Author::Agent, "in any case");
+    let unset = env(&[("CLAUDECODE", "1"), ("KANBRAIN_AUTHOR", "")]);
+    assert_eq!(author(unset).unwrap(), Author::Agent, "an empty one is unset, as the agents' are");
 }
 
 #[test]

@@ -126,7 +126,9 @@ hand the choice to you and leave it visible on the board:
 An agent that can run a command in the background and be woken when it exits, as Claude Code does, then runs
 `kb wait ID` that way and ends its turn. `wait` reads the task's file every second and exits with your answer as
 soon as you give it (from the app, or `kb comment ID TEXT`): the agent picks the task up by itself, with no need to
-tell it to go on. Waiting calls no model, so it costs nothing until you answer. Answering in the chat works too: the
+tell it to go on. Inside Claude Code (its `!` prompt) or an editor's terminal where its extension runs, `kb` sees
+`CLAUDECODE` and takes you for an agent, whose comment answers nothing: answer there with
+`KANBRAIN_AUTHOR=human kb comment ID TEXT`. Waiting calls no model, so it costs nothing until you answer. Answering in the chat works too: the
 agent starts the task, which ends the wait. After 8 minutes without an answer `wait` gives up and the agent stops
 there: Claude Code run headless (`claude -p`) doesn't exit while a background command runs, and an answer that
 late is picked up just as well by the next session.
@@ -136,8 +138,8 @@ answer. Starting it clears the mark.
 
 Comments and status changes record who made them: `kb` writes `agent` when a coding agent runs it, which it finds
 from the environment (`AGENT`, `AI_AGENT`, `CLAUDECODE`, `CODEX_SANDBOX`, `CODEX_CI`, `CODEX_THREAD_ID`,
-`GEMINI_CLI`); `KANBRAIN_AUTHOR=human` or `agent` overrides it. Only a person's comment answers a question, and the
-app always writes as a person.
+`GEMINI_CLI`); `KANBRAIN_AUTHOR=human` or `agent` overrides it. A person's comment answers a question, and so does
+a verdict on the decision it names (`#ID`), whoever gives it; the app always writes as a person.
 
 ### Working in parallel
 
@@ -212,16 +214,18 @@ hand.
 | `ask ID TEXT…\|-` | asks the user a question on a task and parks it until a person comments |
 | `wait ID [--timeout MINUTES]` | blocks until task `ID` no longer waits for an answer (or decision `ID` is accepted or rejected), reading the files every second; prints the answer, or that the task waits on nothing (never asked, or picked up since). Fails after 8 minutes without one (`--timeout`, or `KANBRAIN_WAIT_TIMEOUT`, in minutes; 0: never). No `--json` |
 | `propose ID [--tag T]… [--link ID]… [--body TEXT\|-] TITLE…` | creates a proposed decision linked to task `ID`, which asks about it and is parked; prints both |
-| `accept ID [TEXT…\|-]` / `reject ID TEXT…\|-` | accepts or rejects a decision, with why (needed to reject), and answers the tasks waiting on it |
+| `accept ID [TEXT…\|-]` / `reject ID TEXT…\|-` | accepts or rejects a decision, with why (needed to reject), and answers a question that names it (`#ID`) |
 | `describe ID TEXT…\|-` | replaces the description |
 | `link ID OTHER…` | links an entry to others: an id here, or `REPO#ID` in another repository of the project |
 | `project [describe\|notes TEXT…\|-]` | shows the project's description (shared by its repositories) and this repository's role, or replaces one |
 | `project rename NAME…` / `repo NAME` / `move PROJECT…` / `remove [--purge]` | renames the project or this repository, moves this repository to another project, or takes the project out (see [Managing a project](cli.md#managing-a-project)); only when the user asks |
 
-`-` reads the text from stdin, for multi-line markdown. Ids may be written `12` or `#12`.
+`-` reads the text from stdin, for multi-line markdown; nothing there is refused rather than saved as empty. Ids may be written `12` or `#12`.
 
 Errors go to stderr with a non-zero exit code and say what's wrong: `no entry #12`,
-`#3 is a note: only tasks have a status`, `the comment is empty`, `the reason is empty`.
+`#3 is a note: only tasks have a status`, `the comment is empty`, `the reason is empty`. A status move or a verdict
+that changes nothing (`kb done 3` on a done task, `kb accept 5` on an accepted decision) succeeds and says so on
+stderr: `#3 was already done: nothing changed`.
 
 ## JSON
 

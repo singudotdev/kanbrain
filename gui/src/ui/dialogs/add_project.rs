@@ -83,5 +83,10 @@ pub(super) fn draw(
         action("cancel", "Cancel", Kind::Secondary, KeyCode::Esc, cx),
         action("add-project", "Add", Kind::Primary, KeyCode::Enter, cx),
     ];
-    dialog("Add a project", content, buttons).w(px(DIALOG_WIDTH))
+    // From Manage project, it adds a repository to that project, though the name can still take it elsewhere.
+    let title = match add.back.and_then(|src| board.sources.get(src)?.project.as_deref()) {
+        Some(project) => format!("Add a repository to {project}"),
+        None => "Add a project".to_string(),
+    };
+    dialog(title, content, buttons).w(px(DIALOG_WIDTH))
 }

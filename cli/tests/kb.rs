@@ -86,10 +86,110 @@ fn errors_go_to_stderr_with_a_failing_exit_code() {
     let misused = String::from_utf8(run(&["wait", "6", "--timeout", "x"]).stderr).unwrap();
     assert!(misused.contains("usage:\n  kb wait ID [--timeout MINUTES]\n"), "{misused}");
     assert!(!misused.contains("kb add") && misused.lines().count() < 12, "only the command's usage: {misused}");
+    ok(&run(&["add", "--decision", "Use", "markdown"]));
+    let again = run(&["accept", "1"]);
+    assert_eq!(String::from_utf8_lossy(&again.stderr), "#1 was already accepted: nothing changed\n");
+    assert!(ok(&again).starts_with("#1 Use markdown"), "stdout keeps the entry's line");
+    let help = ok(&run(&["list", "--help"]));
+    assert!(help.starts_with("usage:\n  kb list ") && !help.contains("kb add"), "{help}");
+    assert_eq!(ok(&run(&["help", "list"])), help);
+    assert!(ok(&run(&["help"])).contains("kb add"), "the whole usage");
     let show = String::from_utf8(run(&["show", "abc"]).stderr).unwrap();
     assert!(show.starts_with("Error: `abc` isn't an entry id\n") && !show.contains("kb search"), "{show}");
     assert!(ok(&run(&["--version"])).starts_with("kb "));
     assert_eq!(ok(&run(&["list"])), "nothing to list\n", "said, not left blank");
+    ok(&run(&["add", "Ship"]));
+    let started = run(&["start", "2"]);
+    assert!(ok(&started).starts_with("#2 Ship") && started.stderr.is_empty(), "a change says nothing more");
+    assert_eq!(String::from_utf8_lossy(&run(&["start", "2"]).stderr), "#2 was already doing: nothing changed\n");
+    let json = run(&["wait", "2", "--json"]);
+    assert!(String::from_utf8_lossy(&json.stderr).contains("wait prints the answer as text only"), "{json:?}");
+    assert!(
+        ok(&run(&["wait", "2", "--timeout", "1"])).contains("not waiting for an answer"),
+        "nothing asked: it returns at once"
+    );
+    let proposed = ok(&run(&["propose", "2", "Use", "Redis"]));
+    assert!(proposed.starts_with("#3 Use Redis") && proposed.contains(" · #2 Ship"), "both lines: {proposed}");
+    let json = ok(&run(&["propose", "2", "Use", "Kafka", "--json"]));
+    assert!(json.starts_with('{') && json.contains("Use Kafka") && !json.contains(" · "), "the decision: {json}");
+    for (args, said) in
+        [(["context", "--json"], "context is markdown only"), (["project", "--json"], "project is markdown only")]
+    {
+        let json = run(&args);
+        assert!(String::from_utf8_lossy(&json.stderr).contains(said), "{json:?}");
+    }
+}
+
+#[test]
+fn an_empty_stdin_for_a_dash_is_refused_and_overwrites_nothing() {
+    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let run = |args: &[&str], stdin: &str| kb(repo.path(), central.path(), args, stdin);
+    ok(&run(&["init", "demo"], ""));
+    ok(&run(&["add", "--body", "keep me", "Fix login"], ""));
+    ok(&run(&["project", "describe", "An online shop."], ""));
+    // As an agent's shell tool runs it with the heredoc left out.
+    for args in [&["describe", "1", "-"][..], &["project", "describe", "-"], &["project", "notes", "-"]] {
+        let out = run(args, " \n");
+        assert!(!out.status.success(), "{args:?} succeeded");
+        assert!(String::from_utf8_lossy(&out.stderr).contains("nothing came on stdin"), "{args:?}");
+    }
+    assert!(ok(&run(&["show", "1"], "")).contains("keep me"));
+    assert!(ok(&run(&["project"], "")).contains("An online shop."));
+}
+
+#[test]
+fn words_that_look_like_options_are_text_after_a_double_dash_or_inside_it() {
+    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let run = |args: &[&str], stdin: &str| kb(repo.path(), central.path(), args, stdin);
+    ok(&run(&["init", "demo"], ""));
+    assert_eq!(
+        ok(&run(&["add", "--", "--verbose", "flag", "breaks", "it"], "")),
+        "#1 --verbose flag breaks it (todo)\n"
+    );
+    ok(&run(&["comment", "1", "--", "use", "--json", "and", "--project", "x"], ""));
+    // `-h` inside the words is text too; only right after the command is it asking for help.
+    ok(&run(&["comment", "1", "pass", "-h", "to", "the", "tool"], ""));
+    let shown = ok(&run(&["show", "1"], ""));
+    assert!(shown.contains("use --json and --project x"), "{shown}");
+    assert!(shown.contains("pass -h to the tool"), "{shown}");
+    assert!(ok(&run(&["search", "--", "--verbose"], "")).contains("#1"));
+    assert!(ok(&run(&["add", "--help"], "")).starts_with("usage:"));
+    // A `project` change asked for help shows it, rather than take `--help` for a name or a text.
+    ok(&run(&["project", "describe", "An online shop."], ""));
+    for sub in ["describe", "notes", "rename", "repo", "move"] {
+        assert!(ok(&run(&["project", sub, "--help"], "")).starts_with("usage:"), "{sub}");
+    }
+    assert!(ok(&run(&["project"], "")).contains("An online shop."), "unchanged");
+}
+
+#[test]
+fn files_that_dont_read_as_entries_are_named_on_stderr() {
+    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let run = |args: &[&str]| kb(repo.path(), central.path(), args, "");
+    ok(&run(&["init", "demo"]));
+    std::fs::write(repo.path().join(".brain/0007-broken.md"), "# Broken\n\nno id line\n").unwrap();
+    // A note of the user's own, as a brain kept in a vault holds: not kanbrain's to mention.
+    std::fs::write(repo.path().join(".brain/2024-01-15.md"), "# Daily\n").unwrap();
+    for args in [&["list"][..], &["show", "7"]] {
+        let stderr = String::from_utf8(run(args).stderr).unwrap();
+        assert!(stderr.contains("kb: skipped 0007-broken.md"), "{args:?}: {stderr}");
+        assert!(!stderr.contains("2024-01-15"), "{args:?}: {stderr}");
+    }
+}
+
+#[test]
+fn renaming_a_project_takes_the_new_name_only_and_central_is_no_project() {
+    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let run = |args: &[&str]| kb(repo.path(), central.path(), args, "");
+    ok(&run(&["init", "shop"]));
+    let out = run(&["project", "rename", "shop", "store"]);
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("`kb project rename store`"));
+    ok(&run(&["project", "rename", "--", "shop", "v2"]));
+    assert!(ok(&run(&["project"])).contains("shop v2"), "a name starting with the old one, asked for with --");
+    ok(&run(&["project", "rename", "store"]));
+    let out = run(&["project", "rename", "Central"]);
+    assert!(String::from_utf8_lossy(&out.stderr).contains("is the name of the central brain"), "{out:?}");
 }
 
 #[test]
@@ -246,4 +346,18 @@ fn the_crates_readme_lists_the_same_commands_as_the_repositorys() {
         readme.lines().filter(|l| l.starts_with("| `kb ")).map(str::to_string).collect()
     };
     assert_eq!(commands(read("README.md")), commands(read("../README.md")));
+}
+
+#[test]
+fn init_says_so_when_kb_isnt_on_the_path() {
+    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let init = |path: &std::ffi::OsStr| {
+        let mut init = Command::new(env!("CARGO_BIN_EXE_kb"));
+        init.args(["init", "demo"]).current_dir(repo.path()).env("KANBRAIN_DIR", central.path()).env("PATH", path);
+        ok(&init.output().unwrap())
+    };
+    let said = "`kb` isn't on your PATH";
+    assert!(init("".as_ref()).contains(said), "agents and the hooks run it");
+    let bin = Path::new(env!("CARGO_BIN_EXE_kb")).parent().unwrap();
+    assert!(!init(bin.as_os_str()).contains(said));
 }

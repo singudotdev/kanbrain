@@ -246,6 +246,28 @@ fn loading_drops_links_to_entries_deleted_by_hand() {
 }
 
 #[test]
+fn titles_typed_with_line_breaks_are_kept_on_one_line() {
+    let mut f = Fixture::with_titles(&[]);
+    let id = f.brain.add(NewEntry { title: "Plan\n## Steps\r\n".into(), ..NewEntry::default() }).unwrap();
+    assert_eq!(f.brain.task(id).unwrap().title, "Plan ## Steps");
+    f.brain.update(id, "Plan\n\nmore", Vec::new()).unwrap();
+    let decision = f.brain.propose(id, NewEntry { title: "Use\nSQLite".into(), ..NewEntry::default() }).unwrap();
+    let titles: Vec<_> = f.reloaded().into_iter().map(|t| t.title).collect();
+    assert_eq!(titles, ["Plan more", "Use SQLite"], "and read back so: {decision}");
+}
+
+#[test]
+fn loading_keeps_links_to_entries_whose_files_dont_parse() {
+    let mut feature = Task::new(1, "feature".into(), now());
+    feature.links = vec![3];
+    let dir = tempfile::tempdir().unwrap();
+    Store::at(dir.path()).unwrap().save(&mut feature).unwrap();
+    std::fs::write(dir.path().join("0003-broken.md"), "# broken\n\nno id line\n").unwrap();
+    let brain = Brain::open(Store::at(dir.path()).unwrap()).unwrap();
+    assert_eq!(brain.task(1).unwrap().links, [3], "#3 is there, unreadable for now, not deleted");
+}
+
+#[test]
 fn reading_only_leaves_the_files_as_they_are() {
     let dir = tempfile::tempdir().unwrap();
     let mut feature = Task::new(1, "feature".into(), now());
@@ -427,9 +449,9 @@ fn reports_and_calendars_of_several_brains_merge_counting_overlaps_once() {
         &view,
     );
     let rows: Vec<_> = merged.rows.iter().map(|r| (r.label.as_str(), r.total.num_minutes())).collect();
-    assert_eq!(rows, [("api · #1 fix", 30), ("web · #1 export", 30)], "each task keeps its own time");
+    assert_eq!(rows, [("api #1 fix", 30), ("web #1 export", 30)], "each task keeps its own time");
     assert_eq!(merged.total, Duration::minutes(45), "the overlap counts once");
-    assert_eq!(merged.timeline[1].label(), "web · #1 export");
+    assert_eq!(merged.timeline[1].label(), "web #1 export");
     view.group = Group::Tag;
     let merged = Report::merge(vec![(None, api.brain.report(&view)), (None, web.brain.report(&view))], &view);
     let rows: Vec<_> = merged.rows.iter().map(|r| (r.label.as_str(), r.total.num_minutes())).collect();
@@ -459,4 +481,12 @@ fn a_new_decision_starts_from_the_adr_sections() {
     let id = f.brain.add(NewEntry { kind: Kind::Decision, title: "Use markdown".into(), ..NewEntry::default() });
     let decision = f.brain.task(id.unwrap()).unwrap();
     assert!(decision.description.starts_with("### Context"));
+}
+
+#[test]
+fn the_largest_id_there_is_is_never_followed_by_a_reused_one() {
+    let mut f = Fixture::new(vec![Task::new(u32::MAX, "hand-edited".into(), now())]);
+    let error = f.brain.add(NewEntry { title: "next".into(), ..NewEntry::default() }).unwrap_err().to_string();
+    assert!(error.contains("no ids left"), "{error}");
+    assert_eq!(f.reloaded().len(), 1, "nothing written over");
 }

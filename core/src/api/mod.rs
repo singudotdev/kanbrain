@@ -11,7 +11,7 @@ pub mod json;
 pub mod text;
 
 use crate::brain::{Brain, NewEntry};
-use crate::model::{Kind, RepoLink, Status, Task};
+use crate::model::{Kind, RepoLink, Status, Task, one_line};
 use anyhow::Result;
 use std::fmt;
 
@@ -75,7 +75,7 @@ impl Brain {
             self.entry(link)?;
         }
         self.check_repo_links(&new.repo_links)?;
-        let new = NewEntry { title: new.title.trim().to_string(), ..new };
+        let new = NewEntry { title: one_line(&new.title), ..new };
         self.create(new)
     }
 

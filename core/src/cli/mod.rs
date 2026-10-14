@@ -46,6 +46,24 @@ impl Program {
     pub fn main(self, args: impl IntoIterator<Item = String>) -> Result<()> {
         let (project, args) = take_project(args.into_iter().collect()).map_err(|e| self.misused(&e, None))?;
         let name = args.first().cloned();
+        // `kb add --help` and `kb help add`: that command's usage, as an error after it would show.
+        // Right after the command, or `project`'s subcommand, only: in a comment's words (`kb comment 2 pass -h to
+        // it`), it's text.
+        let help = |flag: &String| flag == "--help" || flag == "-h";
+        let asked = match args.as_slice() {
+            [word, command] if word == "help" => Some(command.as_str()),
+            [command, flag, ..] if help(flag) => Some(command.as_str()),
+            [command, _, flag, ..] if command == "project" && help(flag) => Some(command.as_str()),
+            _ => None,
+        };
+        if let Some(command) = asked {
+            let lines = self.usage_of(command);
+            if lines.is_empty() {
+                bail!("unknown command `{command}`\n\n`{} --help` lists every command", self.name);
+            }
+            println!("usage:\n{}", lines.join("\n"));
+            return Ok(());
+        }
         let command = Command::parse(args).map_err(|e| self.misused(&e, name.as_deref()))?;
         command.run(self, project.as_deref())
     }
@@ -53,6 +71,17 @@ impl Program {
     /// `error`, then the usage lines of `command` (when it's one), and where the rest is: the whole usage would bury
     /// the one line that matters.
     fn misused(self, error: &anyhow::Error, command: Option<&str>) -> anyhow::Error {
+        let lines = command.map(|c| self.usage_of(c)).unwrap_or_default();
+        let help = format!("`{} --help` lists every command", self.name);
+        if lines.is_empty() {
+            anyhow!("{error:#}\n\n{help}")
+        } else {
+            anyhow!("{error:#}\n\nusage:\n{}\n\n{help}", lines.join("\n"))
+        }
+    }
+
+    /// The usage lines of `command`, from the whole usage; none for what isn't one.
+    fn usage_of(self, command: &str) -> Vec<String> {
         let usage = usage(self);
         let header = format!("  {} ", self.name);
         let mut lines = Vec::new();
@@ -62,7 +91,7 @@ impl Program {
                 let names = rest.split_whitespace().next().unwrap_or_default();
                 // `accept` shares the description under `reject`'s line: a matched line with none yet, on it or
                 // under it, takes the next.
-                inside = command.is_some_and(|c| names.split('|').any(|n| n == c)) || bare;
+                inside = names.split('|').any(|n| n == command) || bare;
                 bare = inside && !bare && !rest.contains("   ");
             } else if !(inside && line.starts_with("   ")) {
                 inside = false;
@@ -70,27 +99,29 @@ impl Program {
                 bare = false;
             }
             if inside {
-                lines.push(line);
+                lines.push(line.to_string());
             }
         }
-        let help = format!("`{} --help` lists every command", self.name);
-        if lines.is_empty() {
-            anyhow!("{error:#}\n\n{help}")
-        } else {
-            anyhow!("{error:#}\n\nusage:\n{}\n\n{help}", lines.join("\n"))
-        }
+        lines
     }
 }
 
-/// Takes `--project NAME` out of the arguments, wherever it is: it picks the brain for any command.
+/// Takes `--project NAME` out of the arguments, wherever it is before a `--` (see [`options`]): it picks the brain for
+/// any command.
 fn take_project(mut args: Vec<String>) -> Result<(Option<String>, Vec<String>)> {
-    let Some(at) = args.iter().position(|a| a == "--project") else { return Ok((None, args)) };
+    let Some(at) = options(&args).iter().position(|a| a == "--project") else { return Ok((None, args)) };
     if at + 1 >= args.len() {
         bail!("--project needs a project name (or `{}`)", projects::CENTRAL);
     }
     let name = args.remove(at + 1);
     args.remove(at);
     Ok((Some(name), args))
+}
+
+/// The arguments that may be options: those before a `--`, after which every word is text (`kb comment 3 -- use
+/// --json`), as most command lines have it.
+pub(crate) fn options(args: &[String]) -> &[String] {
+    args.iter().position(|a| a == "--").map_or(args, |at| &args[..at])
 }
 
 /// Printed by `--help` and after a command-line error. The status, period and group names come
@@ -137,6 +168,7 @@ usage:
 --project NAME, anywhere on the line, runs a command on a registered project's brain (or `central`).
 --json prints JSON instead, for list, add, show, search, start|park|done|todo, comment, ask, propose, accept,
 reject, describe and link.
+-- ends a text's options: every word after it is the text (`{name} comment 3 -- use --json`).
 Data lives in the nearest .brain/ folder here or above (see init); else in the central brain:
 $KANBRAIN_DIR, else the platform data dir (e.g. ~/.local/share/kanbrain).
 The kanban board, `kanbrain` without arguments, shows the same data.
@@ -280,7 +312,7 @@ impl Command {
                 Command::Complete(what)
             }
             Some("-V" | "--version") => Command::Version,
-            None | Some("-h" | "--help") => Command::Help,
+            None | Some("-h" | "--help" | "help") => Command::Help,
             Some(other) => match EntryArgs::parse(other, args.by_ref())? {
                 Some(entries) => Command::Entries(entries),
                 None => bail!("unknown command `{other}`"),
@@ -357,6 +389,7 @@ impl Command {
                 // a sync conflict copy listed under its original's id would be ambiguous.
                 let _lock = store.lock()?;
                 let brain = Brain::open_in(store, &central)?;
+                say_skipped(&brain);
                 let tasks = &brain.tasks;
                 if args.json {
                     println!("{}", list_json(tasks, &args)?);
@@ -410,7 +443,12 @@ impl ListArgs {
                 "decisions" | "decision" => kinds.push(Kind::Decision),
                 "--tag" => {
                     let value = args.next().context("--tag needs a value")?;
-                    tag = parse_tags(&value).into_iter().next();
+                    // One tag: a second would be dropped without a word.
+                    let mut tags = parse_tags(&value).into_iter();
+                    tag = tags.next();
+                    if tags.next().is_some() {
+                        bail!("--tag takes one tag, not `{value}`");
+                    }
                 }
                 "all" => statuses.extend(Status::ALL),
                 // Anything else must be a status name.
@@ -481,10 +519,11 @@ fn init_args(words: Vec<String>) -> Result<Command> {
 }
 
 /// Who this command runs for, recorded on the comments and status changes it makes: `KANBRAIN_AUTHOR`
-/// (`human` or `agent`) if set, else an agent if one of [`AGENT_VARIABLES`] is set, else a person.
-/// `var` reads a variable, as `std::env::var_os` does for the command line.
+/// (`human` or `agent`, in any case) if set and not empty, as the agents' variables are read, else an agent if one
+/// of [`AGENT_VARIABLES`] is set, else a person. `var` reads a variable, as `std::env::var_os` does for the command
+/// line.
 fn author(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Result<Author> {
-    if let Some(value) = var("KANBRAIN_AUTHOR") {
+    if let Some(value) = var("KANBRAIN_AUTHOR").filter(|v| !v.is_empty()) {
         let value = value.to_string_lossy();
         return Author::parse(&value)
             .with_context(|| format!("KANBRAIN_AUTHOR must be {}, not `{value}`", Author::names(" or ")));
@@ -555,8 +594,27 @@ fn run_entries(store: Store, central: &Path, mut args: EntryArgs) -> Result<()> 
     // write too, as it repairs. `wait` lets go once open, not to hold it while it waits.
     let lock = store.lock()?;
     let brain = Brain { author, ..Brain::open_in(store, central)? };
+    say_skipped(&brain);
     let _lock = (!matches!(args.command, EntryCommand::Wait(..))).then_some(lock);
     args.run(brain)
+}
+
+/// Says on stderr which entries' files couldn't be read: left out silently, an agent told `no entry #7` would add
+/// the task again, though its file is there. A file is an entry's when it's broken as only one is (a bad history
+/// line, say), or named as one (`0007-title.md`); markdown of other names, or dated (`2024-01-15.md`), with no id is
+/// left unsaid: a central brain kept in a notes vault holds many.
+fn say_skipped(brain: &Brain) {
+    let entry_file = |warning: &&String| {
+        let digits = warning.chars().take_while(char::is_ascii_digit).count();
+        let named = digits >= 4
+            && warning[digits..]
+                .strip_prefix('-')
+                .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_lowercase()));
+        named || !warning.contains("missing `- id:` line")
+    };
+    for warning in brain.warnings.iter().filter(entry_file) {
+        eprintln!("kb: skipped {warning}; fix the file or remove it");
+    }
 }
 
 /// Prints the current period's report as markdown, and saves it with `--save`.

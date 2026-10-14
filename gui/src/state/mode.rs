@@ -57,6 +57,11 @@ impl Mode {
                     FormTarget::Edit(k) => FormTarget::Edit(key(k)?),
                 };
                 form.links = form.links.into_iter().filter_map(key).collect();
+                // With nothing searched its rows are the brains in order, so the row follows its brain; a search's
+                // rows shift in ways only the board knows, so it goes back to the first.
+                if let Some(picker) = &mut form.project {
+                    picker.sel = if picker.search.text().trim().is_empty() { to(picker.sel).unwrap_or(0) } else { 0 };
+                }
                 Self::Form(form)
             }
             Self::QuickAdd(add) => Self::QuickAdd(QuickAdd { src: to(add.src)?, ..add }),
@@ -99,8 +104,14 @@ impl Mode {
             | Self::Where(_)
             | Self::Scopes(_)
             | Self::Tags(_)
-            | Self::Palette(_)
-            | Self::AddProject(_)) => other,
+            | Self::Palette(_)) => other,
+            Self::AddProject(add) => {
+                let back = match add.back {
+                    Some(src) => Some(to(src)?),
+                    None => None,
+                };
+                Self::AddProject(AddProject { back, ..add })
+            }
         })
     }
 }
@@ -296,6 +307,9 @@ pub struct AddProject {
     /// The name typed, which also searches the projects there are, and the highlighted row of
     /// [`Board::add_project_options`](super::Board::add_project_options).
     pub picker: Picker,
+    /// The repository (by brain) whose Manage project it was added from: its project is the one joined, and Manage
+    /// project, on it, is where cancelling goes back to.
+    pub back: Option<usize>,
 }
 
 /// A change to a project or one of its repositories, asked from Manage project. Each `src` is one of the

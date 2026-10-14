@@ -98,14 +98,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # Static checks first: shellcheck is on Ubuntu's runners.
       - if: runner.os == 'Linux'
-        run: shellcheck install.sh e2e/install.sh e2e/agent.sh gui/icons/make.sh
+        run: shellcheck install.sh e2e/install.sh e2e/agent.sh e2e/upgrade.sh e2e/smoke-app.sh gui/icons/make.sh
       # PowerShell's own analyzer, failing on what it rates an error.
       - if: runner.os == 'Windows'
         shell: pwsh
         run: |
           Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
           # -Path takes one file, and -EnableExit would stop after the first: gather them, then fail on any.
-          $found = 'install.ps1', 'e2e/install.ps1' | ForEach-Object { Invoke-ScriptAnalyzer -Path $_ -Severity Error }
+          $found = 'install.ps1', 'e2e/install.ps1', 'e2e/smoke-app.ps1' | ForEach-Object { Invoke-ScriptAnalyzer -Path $_ -Severity Error }
           $found
           if ($found) { exit 1 }
       # This build installed by the installer users run, from a local copy of a release: checksum, a refused bad
@@ -116,6 +116,57 @@ jobs:
       - if: runner.os == 'Windows'
         shell: pwsh
         run: ./e2e/install.ps1
+      # Again in Windows PowerShell 5.1, which install.ps1 supports and which reads files and output differently.
+      - if: runner.os == 'Windows'
+        shell: powershell
+        run: ./e2e/install.ps1
+
+  # Brains written by every released `kb` open with this build and lose nothing (see the script's header).
+  upgrade:
+    name: upgrade from released versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The release tags it downloads each `kb` of.
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: e2e/upgrade.sh
+
+  # The kanban app as released starts, stays up and idles on each system; the screenshot is kept to look at.
+  app-smoke:
+    name: app smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # A display with no GPU: Xvfb, with Mesa's software Vulkan; ImageMagick for the screenshot.
+      - if: runner.os == 'Linux'
+        run: |
+          # shellcheck disable=SC2086 # one package per word
+          sudo apt-get update && sudo apt-get install -y $GUI_LINUX_DEPS xvfb mesa-vulkan-drivers imagemagick
+      - run: cargo build --release --locked -p kanbrain-app
+      - if: runner.os == 'Linux'
+        run: xvfb-run -a -s "-screen 0 1280x800x24" e2e/smoke-app.sh
+      - if: runner.os == 'macOS'
+        run: e2e/smoke-app.sh
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./e2e/smoke-app.ps1
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-smoke-${{ runner.os }}
+          path: target/smoke
+          if-no-files-found: ignore
 
   msrv:
     name: minimum Rust version

@@ -6,8 +6,8 @@
 # - uninstalling takes it out again, and out of the user PATH;
 # - both apps install together (KANBRAIN_APP=both), the kanban app with its Start Menu shortcut, and uninstall
 #   together; `kb` stands in for the app, which takes the same commands, so GPUI needn't be built;
-# - purging deletes the central brain's files and kanbrain's locks and backups in the cache, keeping a file it
-#   didn't create.
+# - purging deletes the central brain's files and kanbrain's locks and backups in the cache, keeping files it
+#   didn't create though named like its own, and refusing the user profile however it's written.
 #
 # CI runs it on every push (the `installers` job), as an administrator: hence KANBRAIN_ALLOW_ADMIN. It needs
 # cargo and python.
@@ -17,8 +17,10 @@ cargo build -q --release --manifest-path "$repo/Cargo.toml" --bin kb
 if ($LASTEXITCODE -ne 0) { throw 'build failed' }
 $built = Join-Path $repo 'target/release/kb.exe'
 
-# Inside the user profile, since the installer only installs there.
-$work = Join-Path $env:USERPROFILE "kb-install-$(Get-Random)"
+# Inside the user profile, since the installer only installs there; with an accented letter in its name, as a
+# profile like Jose's with its accent has, which the installer reads back from `kb` (written as its code point: this
+# file is ASCII, for Windows PowerShell 5.1).
+$work = Join-Path $env:USERPROFILE "kb-install-$([char]0xE9)-$(Get-Random)"
 $dist = Join-Path $work 'dist'
 New-Item -ItemType Directory -Force -Path $dist, (Join-Path $work 'pkg') | Out-Null
 $server = $null
@@ -42,7 +44,8 @@ try {
     Set-Content -NoNewline -Path (Join-Path $dist "$appAsset.sha256") -Value "$appHash  $appAsset`n"
 
     # A free port, as another program may hold any fixed one.
-    $port = python -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])'
+    # Single quotes inside: Windows PowerShell 5.1 drops double quotes from a native program's argument.
+    $port = python -c 'import socket; s = socket.socket(); s.bind((''127.0.0.1'', 0)); print(s.getsockname()[1])'
     $server = Start-Process python -ArgumentList '-m', 'http.server', "$port", '--bind', '127.0.0.1', '--directory', $dist `
         -PassThru -WindowStyle Hidden
     $up = $false
@@ -58,6 +61,9 @@ try {
     $env:KANBRAIN_INSTALL_DIR = Join-Path $work 'bin'
     $env:KANBRAIN_APP = 'cli'
     $env:KANBRAIN_ALLOW_ADMIN = '1'
+    # The installer downloads into the temporary folder, under the user profile: one with `[` `]` in its name, which
+    # PowerShell reads as wildcards wherever a path isn't taken literally.
+    $env:TMP = $env:TEMP = [IO.Directory]::CreateDirectory((Join-Path $work 't[1]')).FullName
 
     # A project registered by an older version: its agent section is out of date.
     $project = Join-Path $work 'code/demo'
@@ -84,6 +90,18 @@ try {
     & $installed --version | Out-Null
     Set-Content -NoNewline -Path $sum -Value $good
 
+    # Both apps are fetched before either is put in place: the app's download failing leaves kb as it was.
+    (Get-Item $installed).LastWriteTime = [datetime]'2000-01-01'
+    $away = Join-Path $work 'app-asset.away'
+    Move-Item (Join-Path $dist $appAsset) $away
+    $env:KANBRAIN_APP = 'both'
+    $refused = $false
+    try { & (Join-Path $repo 'install.ps1') *>&1 | Out-Null } catch { $refused = $true }
+    Remove-Item Env:KANBRAIN_APP
+    Move-Item $away (Join-Path $dist $appAsset)
+    if (-not $refused) { Fail "an install missing the app's download succeeded" }
+    if ((Get-Item $installed).LastWriteTime.Year -ne 2000) { Fail 'a failed install replaced kb before fetching the app' }
+
     $env:KANBRAIN_UNINSTALL = '1'
     & (Join-Path $repo 'install.ps1') *>&1 | Out-Null
     if (Test-Path $installed) { Fail "uninstall left $installed" }
@@ -109,17 +127,39 @@ try {
     $cache = Join-Path $env:LOCALAPPDATA 'kanbrain'
     New-Item -ItemType Directory -Force -Path (Join-Path $cache 'locks'), (Join-Path $cache 'backups\0123456789abcdef') | Out-Null
     Set-Content -Path (Join-Path $cache 'locks\0123456789abcdef.lock') -Value ''
-    Set-Content -Path (Join-Path $env:KANBRAIN_DIR 'notes-of-mine.txt') -Value 'mine'
-    Set-Content -Path (Join-Path $env:KANBRAIN_DIR '.0001-left-by-a-crash.md.4242-0.tmp') -Value ''
-    Set-Content -Path (Join-Path $env:KANBRAIN_DIR 'projects\.demo.md.4242-1.tmp') -Value ''
+    # Shared with notes of the user's own, as in an Obsidian vault: purge takes only what kanbrain made, by what each
+    # file holds, not by its name.
+    $data = $env:KANBRAIN_DIR
+    New-Item -ItemType Directory -Force -Path (Join-Path $data 'reports') | Out-Null
+    $files = @{
+        '0007-mine.md' = "# Mine`n`n- id: 7`n- status: todo`n- tags: `n"; 'notes-of-mine.txt' = 'mine'
+        '2024-01-15.md' = "# Daily`n"; '2024-01-15-meeting.md' = "# Meeting`n"; 'format' = "my own format notes`n"
+        'projects\website-redesign.md' = "# Website redesign`n"; 'reports\q3.md' = "# Q3`n"
+        'reports\kanbrain-week.md' = "# Time report $([char]0xB7) week 42`n"; '.0001-left-by-a-crash.md.4242-0.tmp' = ''
+        'projects\.demo.md.4242-1.tmp' = ''
+    }
+    foreach ($name in $files.Keys) {
+        [IO.File]::WriteAllText((Join-Path $data $name), $files[$name], [Text.UTF8Encoding]::new($false))
+    }
     $env:KANBRAIN_PURGE = '1'
     $env:KANBRAIN_YES = '1'
+    # A data folder that's the user profile, however it's written, is refused before anything is deleted.
+    $env:KANBRAIN_DIR = "$env:USERPROFILE\."
+    $refused = $false
+    try { & (Join-Path $repo 'install.ps1') *>&1 | Out-Null } catch { $refused = $true }
+    $env:KANBRAIN_DIR = $data
+    if (-not $refused) { Fail 'purge took the user profile as data' }
+    if (-not (Test-Path (Join-Path $data '0007-mine.md'))) { Fail 'a refused purge deleted something' }
     & (Join-Path $repo 'install.ps1') *>&1 | Out-Null
     if (Test-Path $cache) { Fail "purge left kanbrain's cache" }
-    if (-not (Test-Path (Join-Path $env:KANBRAIN_DIR 'notes-of-mine.txt'))) { Fail "purge deleted a file it didn't create" }
-    if (Test-Path (Join-Path $env:KANBRAIN_DIR 'projects.md')) { Fail 'purge kept the project registry' }
-    if (Test-Path (Join-Path $env:KANBRAIN_DIR '.0001-left-by-a-crash.md.4242-0.tmp')) { Fail 'purge kept a leftover temporary file' }
-    if (Test-Path (Join-Path $env:KANBRAIN_DIR 'projects')) { Fail "purge kept the project cards' folder" }
+    foreach ($gone in '0007-mine.md', 'projects.md', '.0001-left-by-a-crash.md.4242-0.tmp', 'projects\demo.md',
+        'projects\.demo.md.4242-1.tmp', 'reports\kanbrain-week.md') {
+        if (Test-Path (Join-Path $data $gone)) { Fail "purge kept kanbrain's $gone" }
+    }
+    foreach ($kept in 'notes-of-mine.txt', '2024-01-15.md', '2024-01-15-meeting.md', 'format', 'projects\website-redesign.md',
+        'reports\q3.md') {
+        if (-not (Test-Path (Join-Path $data $kept))) { Fail "purge deleted $kept, which kanbrain didn't make" }
+    }
     if ((Get-Content $claude -Raw) -notmatch '## Project memory: kanbrain') { Fail 'purge touched the project' }
 
     Write-Host 'PASS install.ps1'

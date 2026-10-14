@@ -1,8 +1,8 @@
 //! Changes to entries, through the brain: each one says in the status bar what it did, or why not.
 
 use super::{
-    Board, CommentPicker, Confirm, Edit, Form, Key, LinkPicker, Mode, Picker, QuickAdd, Request, Tab, Target, WhereFor,
-    WherePicker,
+    Board, CommentPicker, Confirm, Edit, Form, Key, LinkPicker, Mode, NextUndo, Picker, QuickAdd, Request, Tab, Target,
+    WhereFor, WherePicker,
 };
 use crate::text::editor::{LineInput, TextEditor};
 use anyhow::Result;
@@ -23,13 +23,18 @@ impl Board {
     /// Moves a task to `status`. Starting one while the brain already runs a task you started is refused,
     /// saying which: nothing is parked for it. Agents' tasks don't count.
     pub fn set_status(&mut self, key: Key, status: Status) {
+        let name = self.entry_name(key);
         match self.brain_mut(key.src).set_status(key.id, status) {
             Ok(true) => {
                 let title = self.task(key).map(|t| t.title.clone()).unwrap_or_default();
-                self.notify(format!("#{} {title} → {}", key.id, status.as_str()));
+                self.notify(format!("{name} {title} → {}", status.as_str()));
             }
-            Ok(false) => self.notify(format!("#{} is already {}", key.id, status.as_str())),
-            Err(e) => self.notify_error(&e),
+            Ok(false) => self.notify(format!("{name} is already {}", status.as_str())),
+            // The refusal names the task already running (`#2 is in doing`), in the same brain.
+            Err(e) => {
+                let at = self.source_label(key.src).map(|label| format!("{label} ")).unwrap_or_default();
+                self.notify(format!("{at}{e:#}"));
+            }
         }
         self.keep_selection();
     }
@@ -113,6 +118,7 @@ impl Board {
     /// Moves `key`'s entry to the brain at `to`. It stays selected if the scope shows it there; else the
     /// selection goes to what's shown, and the status bar says where it went.
     fn move_entry(&mut self, key: Key, to: usize) {
+        let from = self.entry_name(key);
         // Two brains of `sources` at once, one to take from and one to give to.
         let moved = if key.src < to {
             let (left, right) = self.sources.split_at_mut(to);
@@ -133,7 +139,7 @@ impl Board {
         } else {
             self.keep_selection();
         }
-        self.notify(format!("moved #{} to {} as #{id}", key.id, self.brain_name(to)));
+        self.notify(format!("moved {from} to {} as #{id}", self.brain_name(to)));
     }
 
     /// Opens the text editor on a description or comment of an existing entry, or a project's card.
@@ -143,7 +149,19 @@ impl Board {
 
     /// Opens the editor on `target` from Manage project on `back`, which closing it goes back to.
     pub fn open_editor_from(&mut self, target: Target, back: Option<usize>) {
-        let text = match target {
+        let Some(text) = self.text_of(target) else { return };
+        self.mode = Mode::Edit(Edit { editor: TextEditor::new(text), target, back });
+    }
+
+    /// Whether the editor's text differs from what its target holds: typed and put back as it was is no change, to
+    /// save, to say was saved, or to mark in its title.
+    pub fn changed(&self, edit: &Edit) -> bool {
+        edit.editor.modified && self.text_of(edit.target) != Some(edit.editor.text().as_str())
+    }
+
+    /// What `target` holds now: the text the editor starts from, and saving the same is no change.
+    fn text_of(&self, target: Target) -> Option<&str> {
+        match target {
             Target::Description(key) => self.task(key).map(|t| t.description.as_str()),
             Target::NewComment(key) | Target::Reject(key) | Target::Accept(key) => self.task(key).map(|_| ""),
             Target::Comment(key, index) => {
@@ -151,9 +169,7 @@ impl Board {
             }
             Target::Project(src) => self.brain(src).project.as_ref().map(|p| p.description.as_str()),
             Target::RepoNotes(src) => self.brain(src).project.as_ref().map(|p| p.notes.as_str()),
-        };
-        let Some(text) = text else { return };
-        self.mode = Mode::Edit(Edit { editor: TextEditor::new(text), target, back });
+        }
     }
 
     /// Writes the editor's text to its target, if it changed.
@@ -169,29 +185,34 @@ impl Board {
                 Target::Reject(_) => self.notify("not rejected: say why it's rejected"),
                 Target::Accept(_) => self.notify("not accepted: write the comment, or accept without one (y)"),
                 _ if answers => self.notify("nothing answered: the question still waits"),
-                _ if edit.editor.modified => self.notify("nothing added: the comment was empty"),
+                // Only blank text left typed; typed and taken back again is no comment tried. The text is trimmed, so
+                // it's the lines that tell them apart.
+                _ if edit.editor.lines().iter().any(|line| !line.is_empty()) => {
+                    self.notify("nothing added: the comment was empty");
+                }
                 _ => {}
             };
         }
-        if !edit.editor.modified {
+        if !self.changed(edit) {
             return;
         }
         let saved = match edit.target {
             Target::Description(key) => {
                 self.brain_mut(key.src).set_description(key.id, &text).map(|d| (d, "description saved"))
             }
-            Target::NewComment(key) => self.brain_mut(key.src).add_comment(key.id, &text).map(|d| (d, "comment added")),
+            Target::NewComment(key) => {
+                let said = if answers { "answer sent: the agent picks it up" } else { "comment added" };
+                self.brain_mut(key.src).add_comment(key.id, &text).map(|d| (d, said))
+            }
             Target::Comment(key, index) => {
                 self.brain_mut(key.src).update_comment(key.id, index, &text).map(|d| (d, "comment saved"))
             }
-            Target::Reject(key) => self
-                .brain_mut(key.src)
-                .resolve(key.id, DecisionState::Rejected, &text)
-                .map(|_| (false, "decision rejected")),
-            Target::Accept(key) => self
-                .brain_mut(key.src)
-                .resolve(key.id, DecisionState::Accepted, &text)
-                .map(|_| (false, "decision accepted")),
+            Target::Reject(key) => {
+                self.brain_mut(key.src).resolve(key.id, DecisionState::Rejected, &text).map(|_| (false, "rejected"))
+            }
+            Target::Accept(key) => {
+                self.brain_mut(key.src).resolve(key.id, DecisionState::Accepted, &text).map(|_| (false, "accepted"))
+            }
             Target::Project(src) => {
                 self.save_project_description(src, &text).map(|()| (false, "project description saved"))
             }
@@ -199,9 +220,14 @@ impl Board {
                 self.brain_mut(src).set_repo_notes(&text).map(|()| (false, "repository role saved"))
             }
         };
+        // A verdict names its decision, as `y` does: "shop/api #11 accepted".
+        let what = |what: &str| match edit.target {
+            Target::Accept(key) | Target::Reject(key) => format!("{} {what}", self.entry_name(key)),
+            _ => what.to_string(),
+        };
         match saved {
-            Ok((true, what)) => self.notify(format!("{what} (headings were made smaller)")),
-            Ok((false, what)) => self.notify(what),
+            Ok((true, said)) => self.notify(format!("{} (headings were made smaller)", what(said))),
+            Ok((false, said)) => self.notify(what(said)),
             Err(e) => self.notify_error(&e),
         }
     }
@@ -216,8 +242,11 @@ impl Board {
     /// Lists the selected entry's comments to edit or delete one, the latest highlighted.
     pub fn open_comments(&mut self) {
         let Some(key) = self.selected else { return };
-        if let Some(last) = self.task(key).and_then(|t| t.comments.len().checked_sub(1)) {
-            self.mode = Mode::Comments(CommentPicker { key, sel: last });
+        match self.task(key).map(|t| t.comments.len().checked_sub(1)) {
+            Some(Some(last)) => self.mode = Mode::Comments(CommentPicker { key, sel: last }),
+            // Rather than nothing, which reads as a key that doesn't work.
+            Some(None) => self.notify("no comments yet: c adds one"),
+            None => {}
         }
     }
 
@@ -246,11 +275,13 @@ impl Board {
     /// Runs a confirmed delete, or asks the window for the update.
     pub(super) fn confirm(&mut self, confirm: Confirm) {
         let result = match confirm {
-            Confirm::Delete(key) => self
-                .brain_mut(key.src)
-                .delete(key.id)
-                .and_then(|()| self.drop_links_from_other_repos(key))
-                .map(|()| format!("deleted #{}", key.id)),
+            Confirm::Delete(key) => {
+                let name = self.entry_name(key);
+                self.brain_mut(key.src)
+                    .delete(key.id)
+                    .and_then(|()| self.drop_links_from_other_repos(key))
+                    .map(|()| format!("deleted {name}"))
+            }
             Confirm::DeleteComment(key, index) => {
                 self.brain_mut(key.src).delete_comment(key.id, index).map(|()| "comment deleted".into())
             }
@@ -287,6 +318,13 @@ impl Board {
             Ok(false) => self.notify(format!("unlinked {name}")),
             Err(e) => self.notify_error(&e),
         }
+        // Linked entries list first, so the row moves: the highlight goes with it rather than onto another.
+        let Mode::Links(picker) = &self.mode else { return };
+        if let Some(at) = self.link_candidates(picker).iter().position(|&(k, _)| k == other)
+            && let Mode::Links(picker) = &mut self.mode
+        {
+            picker.rows.sel = at;
+        }
     }
 
     /// Asks the window to open the selected entry's file in `$EDITOR`.
@@ -297,6 +335,8 @@ impl Board {
     /// Re-reads every file and says so.
     pub fn reload_from_disk(&mut self) {
         self.message = None;
+        // Asked for, it says again what's still skipped.
+        self.warned.clear();
         let result = self.reload();
         self.report_error(result);
         if self.message.is_none() {
@@ -323,6 +363,7 @@ impl Board {
         let changes: Vec<_> = self.sources.iter().flat_map(|s| s.brain.store.recorded()).collect();
         if !changes.is_empty() {
             self.last_change = changes;
+            self.next_undo = NextUndo::Undo;
         }
     }
 
@@ -338,7 +379,12 @@ impl Board {
             Ok(()) => {
                 let result = self.reload();
                 self.report_error(result);
-                self.notify("undone; u again redoes");
+                let (said, next) = match self.next_undo {
+                    NextUndo::Undo => ("undone; u again redoes", NextUndo::Redo),
+                    NextUndo::Redo => ("redone; u again undoes", NextUndo::Undo),
+                };
+                self.notify(said);
+                self.next_undo = next;
                 self.last_change =
                     changes.into_iter().map(|c| Change { before: c.after, after: c.before, ..c }).collect();
             }

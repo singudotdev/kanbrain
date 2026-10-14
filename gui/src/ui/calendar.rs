@@ -103,10 +103,11 @@ fn month(board: &Board, days: &[Day], now: DateTime<Local>, cx: &mut Context<Bra
                 .child(day_heading(d, "%d"))
                 .children(d.events.iter().take(MONTH_EVENTS).map(|e| {
                     div().flex().gap_1().child(marker(e, true)).child(
-                        div().min_w_0().truncate().text_color(rgb(TEXT)).child(match board.source_label(e.source) {
-                            Some(label) => format!("{label} #{}", e.id),
-                            None => format!("#{}", e.id),
-                        }),
+                        div()
+                            .min_w_0()
+                            .truncate()
+                            .text_color(rgb(TEXT))
+                            .child(board.entry_name(Key::new(e.source, e.id))),
                     )
                 }))
                 .children((more > 0).then(|| dim(format!("+{more} more"))))
@@ -179,13 +180,12 @@ fn event_row(
         }
         _ => event.at.format("%H:%M").to_string(),
     };
-    let title =
-        div().min_w_0().when(wide, Styled::truncate).when(!wide, |t| t.line_clamp(3)).text_color(rgb(TEXT)).child(
-            match board.source_label(event.source) {
-                Some(label) => format!("{label} #{id} {}", event.title),
-                None => format!("#{id} {}", event.title),
-            },
-        );
+    let title = div()
+        .min_w_0()
+        .when(wide, Styled::truncate)
+        .when(!wide, |t| t.line_clamp(3).text_ellipsis())
+        .text_color(rgb(TEXT))
+        .child(format!("{} {}", board.entry_name(Key::new(event.source, id)), event.title));
     let excerpt = match &event.what {
         What::Commented { excerpt } if wide && !excerpt.is_empty() => Some(dim(excerpt.clone()).min_w_0().truncate()),
         _ => None,
@@ -243,7 +243,8 @@ fn marker(event: &Event, compact: bool) -> Div {
     });
     let comments = (!compact && event.comments > 0 && !matches!(event.what, What::Commented { .. }))
         .then(|| div().text_color(rgb(theme::PURPLE)).child(counted(event.comments, "comment", "comments")));
-    // Each piece stays whole; outside the month, the pieces wrap when the column is narrow.
+    // Each piece stays whole, but for a move outside the month: the pieces wrap when the column is narrow, and a
+    // move as long as `doing → parked` is still wider than a narrow week's column.
     div()
         .flex()
         .gap_x_1p5()
@@ -254,7 +255,8 @@ fn marker(event: &Event, compact: bool) -> Div {
             let (src, id) = (event.source, event.id);
             div()
                 .debug_selector(move || format!("event what {src}/{id}"))
-                .whitespace_nowrap()
+                .min_w_0()
+                .when(compact, Styled::whitespace_nowrap)
                 .text_color(rgb(color))
                 .child(text)
         })

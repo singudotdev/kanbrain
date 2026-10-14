@@ -10,7 +10,8 @@ fn hand_typed_and_stored_formats_agree() {
 #[test]
 fn ages() {
     assert_eq!(fmt_age(Duration::seconds(59)), "<1m");
-    assert_eq!(fmt_age(Duration::minutes(-5)), "0m");
+    assert_eq!(fmt_age(Duration::zero()), "<1m", "read within the second it started");
+    assert_eq!(fmt_age(Duration::minutes(-5)), "<1m");
     assert_eq!(fmt_age(Duration::minutes(65)), "1h");
     assert_eq!(fmt_age(Duration::days(3)), "3d");
     assert_eq!(fmt_age(Duration::days(15)), "2w");

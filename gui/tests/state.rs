@@ -167,6 +167,14 @@ fn the_form_picks_a_new_tasks_column() {
     f.press(KeyCode::Left);
     f.press(KeyCode::Enter);
     assert_eq!(f.status(2), Status::Parked);
+    // Doing, while one of yours runs: it stays in To do, and the status bar says why.
+    f.board.set_status(k(1), Status::Doing);
+    f.board.new_entry(Status::Doing);
+    f.type_text("second");
+    f.press(KeyCode::Enter);
+    assert_eq!(f.status(3), Status::Todo);
+    let said = f.board.message().unwrap();
+    assert!(said.starts_with("created #3, in To do: #1 is in doing"), "{said}");
     f.board.switch_tab(Tab::Notes);
     f.press(KeyCode::Char('n'));
     let Mode::Form(form) = &f.board.mode else { panic!("n opens a note's form") };
@@ -294,6 +302,23 @@ fn the_form_creates_a_tagged_task_and_edits_it() {
     f.type_text("SSO");
     f.press(KeyCode::Enter);
     assert_eq!(f.on_disk(1).title, "Fix SSO");
+    assert_eq!(f.board.message(), Some("#1 saved"));
+    let written = std::fs::read_dir(f.dir.path()).unwrap().map(|e| e.unwrap().metadata().unwrap().modified().unwrap());
+    let written: Vec<_> = written.collect();
+    f.board.message = None;
+    f.press(KeyCode::Char('e'));
+    f.press(KeyCode::Enter);
+    assert!(matches!(f.board.mode, Mode::Normal));
+    assert_eq!(f.board.message(), None, "saved as it was: nothing said");
+    let again = std::fs::read_dir(f.dir.path()).unwrap().map(|e| e.unwrap().metadata().unwrap().modified().unwrap());
+    assert_eq!(again.collect::<Vec<_>>(), written, "nor written");
+    // Tags in another order are another set of tags to show: saved.
+    f.press(KeyCode::Char('e'));
+    f.press(KeyCode::Tab);
+    (0..20).for_each(|_| f.press(KeyCode::Backspace));
+    f.type_text("auth, prod");
+    f.press(KeyCode::Enter);
+    assert_eq!(f.on_disk(1).tags, ["auth", "prod"]);
 
     f.press(KeyCode::Char('n'));
     f.press(KeyCode::Enter);
@@ -324,6 +349,12 @@ fn comments_and_descriptions_are_written_from_the_editor() {
     f.type_text("more notes");
     f.board.on_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL));
     assert!(matches!(f.board.mode, Mode::Normal), "ctrl+d discards too");
+    f.press(KeyCode::Char('m'));
+    f.type_text("x");
+    f.press(KeyCode::Backspace);
+    assert!(matches!(&f.board.mode, Mode::Edit(edit) if !f.board.changed(edit)), "no • in its title, Close not Save");
+    f.press(KeyCode::Esc);
+    assert_eq!(f.board.message(), Some("changes discarded"), "typed and put back: nothing said to be saved");
     let task = f.on_disk(1);
     assert_eq!(task.comments[0].body, "found it");
     assert_eq!(task.description, "", "discarded");
@@ -334,6 +365,7 @@ fn capital_c_picks_a_comment_to_edit_or_delete() {
     let mut f = Fixture::new(&["feature"]);
     f.press(KeyCode::Char('C'));
     assert!(matches!(f.board.mode, Mode::Normal), "no comments: nothing to pick");
+    assert_eq!(f.board.message(), Some("no comments yet: c adds one"), "and said");
     for text in ["first", "second"] {
         f.press(KeyCode::Char('c'));
         f.type_text(text);
@@ -368,6 +400,18 @@ fn running_tasks_keep_their_order_the_longest_running_first() {
     let board = Board::open(dir.path(), None).unwrap();
     let ids: Vec<u32> = board.running().iter().map(|(key, _)| key.id).collect();
     assert_eq!(ids, [2, 3, 1]);
+}
+
+#[test]
+fn the_link_pickers_highlight_follows_the_entry_it_links() {
+    let mut f = Fixture::new(&["a", "b", "c"]);
+    f.board.select(k(1));
+    f.press(KeyCode::Char('r'));
+    f.press(KeyCode::Down);
+    f.press(KeyCode::Enter);
+    let Mode::Links(picker) = &f.board.mode else { panic!("the picker stays open") };
+    let highlighted = f.board.link_candidates(picker)[picker.rows.sel].0;
+    assert_eq!(highlighted, k(2), "#2, now listed first as linked, stays highlighted");
 }
 
 #[test]
@@ -407,8 +451,10 @@ fn u_undoes_the_last_change_and_again_redoes_it() {
     f.type_text("u");
     assert_eq!(f.on_disk(2).title, "bug", "moving the selection wrote nothing, so the delete is undone");
     assert_eq!(f.on_disk(1).links, [2], "with the link to it");
+    assert_eq!(f.board.message(), Some("undone; u again redoes"));
     f.type_text("u");
     assert!(f.board.task(k(2)).is_none(), "and redone");
+    assert_eq!(f.board.message(), Some("redone; u again undoes"));
 
     f.board.select(k(1));
     f.type_text("s");
@@ -551,6 +597,24 @@ fn only_the_brains_that_changed_are_read_again() {
 }
 
 #[test]
+fn a_repository_renamed_by_another_program_reads_with_its_new_name() {
+    use kanbrain_core::projects;
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    let api = code.path().join("api").join(".brain");
+    let src = board.sources.iter().position(|s| s.brain.store.dir() == api).unwrap();
+    assert_eq!(board.sources[src].label.as_deref(), Some("shop/api"));
+    // As `kb project repo backend` there: only its own `project.md` changes.
+    projects::write_repo_card(
+        &api,
+        &projects::RepoCard { project: "shop".into(), repo: Some("backend".into()), notes: String::new() },
+    )
+    .unwrap();
+    board.reload_changed(&[api]).unwrap();
+    assert_eq!(board.sources[src].label.as_deref(), Some("shop/backend"));
+}
+
+#[test]
 fn manage_project_acts_by_key_on_the_highlighted_repository_or_the_project() {
     let (central, _code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
@@ -585,6 +649,18 @@ fn n_edits_the_role_of_the_selected_cards_repository() {
 }
 
 #[test]
+fn a_moves_message_names_the_repository_when_several_are_shown() {
+    let (central, _code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    board.set_status(Key::new(1, 1), Status::Doing);
+    assert_eq!(board.message(), Some("shop/api #1 rate limit → doing"));
+    board.brain_mut(1).add(kanbrain_core::brain::NewEntry { title: "other".into(), ..Default::default() }).unwrap();
+    board.set_status(Key::new(1, 2), Status::Doing);
+    let refused = board.message().unwrap();
+    assert!(refused.starts_with("shop/api #1 is in doing"), "whose #1: {refused}");
+}
+
+#[test]
 fn a_tag_has_one_color_whichever_brain_or_scope_shows_it() {
     let (central, code) = projects();
     let colors = |dir: &std::path::Path, text: &str| std::fs::write(dir.join("tags.md"), text).unwrap();
@@ -596,6 +672,32 @@ fn a_tag_has_one_color_whichever_brain_or_scope_shows_it() {
     board.set_scope(Scope::Repo(2));
     assert_eq!(board.tag_colors("ui"), red, "on web's own cards too");
     assert_eq!(board.tag_colors("nowhere"), None);
+}
+
+#[test]
+fn a_shown_project_taken_out_from_the_command_line_shows_all() {
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    board.set_scope(Scope::Project("blog".into()));
+    kanbrain_core::cli::remove_repo(central.path(), &code.path().join("blog/.brain"), false).unwrap();
+    board.reload().unwrap();
+    assert_eq!(board.scope, Scope::All, "not a blank scope");
+}
+
+#[test]
+fn a_shown_project_renamed_from_the_command_line_stays_shown() {
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    board.set_scope(Scope::Project("shop".into()));
+    kanbrain_core::cli::rename_project(central.path(), "shop", "store").unwrap();
+    board.reload().unwrap();
+    assert_eq!(board.scope, Scope::Project("store".into()), "under its new name");
+
+    // Its last repository joining a project that has others is no rename: all of them.
+    board.set_scope(Scope::Project("blog".into()));
+    kanbrain_core::cli::move_repo(central.path(), &code.path().join("blog/.brain"), "store").unwrap();
+    board.reload().unwrap();
+    assert_eq!(board.scope, Scope::All);
 }
 
 #[test]
@@ -670,6 +772,7 @@ fn a_new_entry_goes_where_the_filter_points_and_its_form_picks_another_project()
     "cart".chars().for_each(|c| press(&mut board, KeyCode::Char(c)));
     press(&mut board, KeyCode::Enter);
     assert_eq!(board.brain(2).task(2).unwrap().title, "cart");
+    assert_eq!(board.message(), Some("created shop/web #2"), "named as everywhere else");
 
     board.set_scope(Scope::Project("blog".into()));
     board.selected = None;
@@ -684,10 +787,12 @@ fn a_new_entry_goes_where_the_filter_points_and_its_form_picks_another_project()
     press(&mut board, KeyCode::Esc);
 
     board.set_scope(Scope::Project("shop".into()));
+    board.selected = Some(Key::new(2, 1));
     press(&mut board, KeyCode::Char('a'));
     let Mode::Where(asked) = &board.mode else { panic!("a asks where: {:?}", board.mode) };
     let names: Vec<String> = board.where_candidates(&asked.picker, asked.then).into_iter().map(|(_, n)| n).collect();
     assert_eq!(names, ["shop/api", "shop/web"], "quick add, with no form, asks among the repositories");
+    assert_eq!(asked.picker.sel, 1, "starting at the selected entry's");
     press(&mut board, KeyCode::Esc);
     assert!(matches!(board.mode, Mode::Normal), "Esc creates nothing");
     board.set_scope(Scope::Central);
@@ -754,7 +859,7 @@ fn an_entry_moves_to_another_project_and_is_renumbered_there() {
     press(&mut board, KeyCode::Enter);
     assert_eq!(board.brain(3).task(2).unwrap().title, "rate limit");
     assert_eq!(board.scope, Scope::Project("shop".into()), "the filter stays as it was");
-    assert!(board.message().unwrap().contains("moved #2 to blog as #2"), "{:?}", board.message());
+    assert!(board.message().unwrap().contains("moved shop/web #2 to blog as #2"), "{:?}", board.message());
 }
 
 #[test]
@@ -822,6 +927,7 @@ fn an_open_dialog_follows_its_project_when_another_goes() {
     projects::unregister(central.path(), &code.path().join("blog/.brain")).unwrap();
     board.reload().unwrap();
     assert!(matches!(board.mode, Mode::Normal), "closed with its project");
+    assert_eq!(board.message(), Some("closed: its project is gone"), "and said");
 }
 
 #[test]
@@ -1047,6 +1153,11 @@ fn a_picked_folder_becomes_a_project_as_kb_init_makes_it() {
     press(&mut board, KeyCode::Enter);
     assert!(matches!(board.mode, Mode::Normal));
     assert_eq!(board.scope, Scope::Project("journal".into()), "the new project is shown");
+    assert_eq!(
+        board.message(),
+        Some("added project journal; its agent instructions tell agents to use kanbrain"),
+        "a new project, not a repository added to one"
+    );
     assert!(notes.join(".brain").is_dir());
     assert!(std::fs::read_to_string(notes.join("CLAUDE.md")).unwrap().contains("kanbrain:start"));
     let repos = projects::load(central.path()).unwrap();
@@ -1067,7 +1178,7 @@ fn a_picked_folder_becomes_a_project_as_kb_init_makes_it() {
     press(&mut board, KeyCode::Down);
     press(&mut board, KeyCode::Enter);
     assert_eq!(board.project_repos(board.project_src().unwrap()).len(), 3, "api, web and admin");
-    assert!(board.message().unwrap().contains("to project `shop`"));
+    assert!(board.message().unwrap().contains("to project shop"));
 }
 
 #[test]
@@ -1090,6 +1201,17 @@ fn the_user_answers_questions_and_decides_on_proposals() {
     f.type_text("#fa0");
     f.board.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL));
     assert!(matches!(f.on_disk(2).asked(), Some(Asked::Answered(a)) if a.author == Author::Human));
+    assert_eq!(f.board.message(), Some("answer sent: the agent picks it up"));
+    f.board.notify("");
+    f.press(KeyCode::Char('c'));
+    f.type_text("x");
+    f.press(KeyCode::Backspace);
+    f.board.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL));
+    assert_eq!(f.board.message(), Some(""), "a comment typed and taken back says nothing");
+    f.press(KeyCode::Char('c'));
+    f.type_text("  ");
+    f.board.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL));
+    assert_eq!(f.board.message(), Some("nothing added: the comment was empty"), "blank, said");
 
     f.board.open_entry(k(decision));
     let labels: Vec<&str> = f.board.menu_items(k(decision)).iter().map(|i| i.label).collect();
@@ -1133,17 +1255,19 @@ fn projects_and_repositories_are_managed_from_the_projects_info() {
     let src =
         |board: &Board, label: &str| board.sources.iter().position(|s| s.label.as_deref() == Some(label)).unwrap();
 
+    board.set_scope(Scope::Project("shop".into()));
     board.ask_rename_project(src(&board, "shop/api"));
     type_in(&mut board, "store");
     press(&mut board, KeyCode::Enter);
     assert_eq!(labels(&board), ["store/api", "store/web", "blog"]);
     assert!(matches!(board.mode, Mode::ManageProject(_)), "back to Manage project");
+    assert_eq!(board.scope, Scope::Project("store".into()), "the board follows the new name");
 
     board.ask_rename_repo(src(&board, "store/api"));
     type_in(&mut board, "web");
     press(&mut board, KeyCode::Enter);
     assert!(matches!(board.mode, Mode::Manage(_)), "a name the project has: the dialog stays, with why");
-    assert!(board.message().unwrap().contains("already has a repository named `web`"), "{:?}", board.message());
+    assert!(board.message().unwrap().contains("already has a repository named web"), "{:?}", board.message());
     press(&mut board, KeyCode::Esc);
     assert!(matches!(board.mode, Mode::ManageProject(_)), "esc goes back to Manage project");
     board.ask_rename_repo(src(&board, "store/api"));
@@ -1162,14 +1286,36 @@ fn projects_and_repositories_are_managed_from_the_projects_info() {
     press(&mut board, KeyCode::Char('y'));
     assert_eq!(labels(&board), ["store", "blog"]);
     assert!(code.path().join("web/.brain").is_dir(), "unlinked, its tasks kept");
+    assert!(matches!(board.mode, Mode::ManageProject(at) if at == src(&board, "blog")), "back on blog's other one");
+    board.mode = Mode::Normal;
 
-    board.add_repo_to(src(&board, "blog"));
-    assert_eq!(board.request.take(), Some(Request::Folder(Some("blog".into()))), "the folder joins this project");
+    let blog = src(&board, "blog");
+    board.add_repo_to(blog);
+    let blog_dir = board.sources[blog].brain.store.dir().to_path_buf();
+    assert_eq!(board.request.take(), Some(Request::Folder(Some(blog_dir.clone()))), "the folder joins this project");
+    let mobile = code.path().join("mobile");
+    std::fs::create_dir(&mobile).unwrap();
+    board.name_project(mobile.clone(), Some(&blog_dir));
+    press(&mut board, KeyCode::Esc);
+    assert!(matches!(board.mode, Mode::ManageProject(at) if at == blog), "cancelled: back to it, on the same one");
+    board.name_project(mobile, Some(&blog_dir));
+    press(&mut board, KeyCode::Enter);
+    assert!(
+        matches!(board.mode, Mode::ManageProject(at) if at == src(&board, "blog/mobile")),
+        "added: back to it, on the new repository: {:?}",
+        board.mode
+    );
+    let said = board.message().unwrap();
+    assert!(said.starts_with("added ") && said.contains("mobile to project blog;"), "{said}");
+    board.mode = Mode::Normal;
+    board.ask_remove(src(&board, "blog/mobile"), false);
+    press(&mut board, KeyCode::Char('y'));
 
     board.ask_remove(src(&board, "store"), true);
     press(&mut board, KeyCode::Char('d'));
     assert_eq!(labels(&board), ["blog"]);
     assert!(!code.path().join("api/.brain").exists(), "its tasks deleted too");
+    assert!(board.message().unwrap().starts_with("deleted "), "and said: {:?}", board.message());
     assert!(matches!(board.mode, Mode::Normal));
 }
 
@@ -1179,10 +1325,46 @@ fn a_repository_a_newer_kanbrain_wrote_is_left_out_and_said() {
     let newer = kanbrain_core::migrate::FORMAT + 1;
     std::fs::write(code.path().join("web/.brain").join(kanbrain_core::migrate::FORMAT_FILE), format!("{newer}\n"))
         .unwrap();
-    let board = Board::open(central.path(), None).unwrap();
+    let mut board = Board::open(central.path(), None).unwrap();
     let labels: Vec<_> = board.sources.iter().filter_map(|s| s.label.clone()).collect();
     assert_eq!(labels, ["shop/api", "blog"], "the rest still opens");
     assert!(board.message().unwrap().contains("written by a newer kanbrain"), "{:?}", board.message());
+
+    // Still left out, it changes nothing: a write elsewhere reads only that brain again, not everything.
+    let blog = code.path().join("blog/.brain");
+    kanbrain_core::brain::Brain::open(Store::at(&blog).unwrap()).unwrap().set_status(1, Status::Done).unwrap();
+    let api = code.path().join("api/.brain");
+    board.reload_changed(&[api]).unwrap();
+    let blog_src = board.sources.iter().position(|s| s.brain.store.dir() == blog).unwrap();
+    assert_eq!(board.brain(blog_src).task(1).unwrap().status, Status::Todo, "blog wasn't read again");
+}
+
+#[test]
+fn a_repository_that_cant_be_read_is_left_out_and_said() {
+    let (central, code) = projects();
+    let web = code.path().join("web/.brain");
+    std::fs::write(web.join(kanbrain_core::migrate::FORMAT_FILE), "abc\n").unwrap();
+    let mut board = Board::open(central.path(), None).expect("the others still open");
+    let labels = |board: &Board| board.sources.iter().filter_map(|s| s.label.clone()).collect::<Vec<_>>();
+    assert_eq!(labels(&board), ["shop/api", "blog"]);
+    assert!(board.message().unwrap().contains("shop/web left out"), "{:?}", board.message());
+
+    // Said once: an agent's write to another brain doesn't say it again.
+    board.message = None;
+    let blog = code.path().join("blog/.brain");
+    kanbrain_core::brain::Brain::open(Store::at(&blog).unwrap()).unwrap().set_status(1, Status::Done).unwrap();
+    board.reload_changed(&[blog]).unwrap();
+    assert_eq!(board.message(), None);
+    // Nor a write to it, which reads everything again, nor the full read a second after the window opens.
+    std::fs::write(web.join("0002-from-a-newer-agent.md"), "# x\n\n- id: 2\n").unwrap();
+    board.reload_changed(std::slice::from_ref(&web)).unwrap();
+    board.reload().unwrap();
+    assert_eq!(board.message(), None);
+    // Watched, it's shown once repaired.
+    assert!(board.watched_dirs().contains(&web), "{:?}", board.watched_dirs());
+    std::fs::write(web.join(kanbrain_core::migrate::FORMAT_FILE), "1\n").unwrap();
+    board.reload_changed(&[web]).unwrap();
+    assert_eq!(labels(&board), ["shop/api", "shop/web", "blog"]);
 }
 
 #[test]
@@ -1332,6 +1514,7 @@ fn a_task_waiting_on_a_decision_is_answered_by_deciding_with_or_without_a_commen
     f.press(KeyCode::Char('Y'));
     f.press(KeyCode::Esc);
     assert_eq!(f.on_disk(redis).decision, DecisionState::Proposed, "a comment never written accepts nothing");
+    assert_eq!(f.board.message(), Some("not accepted: write the comment, or accept without one (y)"));
     f.press(KeyCode::Char('Y'));
     f.type_text("fine for now");
     f.press(KeyCode::Esc);
@@ -1352,6 +1535,7 @@ fn a_task_waiting_on_a_decision_is_answered_by_deciding_with_or_without_a_commen
     f.type_text("too heavy");
     f.press(KeyCode::Esc);
     assert_eq!(f.on_disk(loki).decision, DecisionState::Rejected);
+    assert_eq!(f.board.message(), Some(format!("#{loki} rejected").as_str()), "named, as `y` names it");
     assert_eq!(last(&f, 3), format!("Rejected decision #{loki}, Use Loki: too heavy"));
 }
 
@@ -1421,4 +1605,198 @@ fn a_comment_is_edited_and_deleted_from_the_details() {
     f.board.mode = Mode::Confirm(Confirm::DeleteComment(k(1), 0));
     f.press(KeyCode::Char('y'));
     assert_eq!(bodies(&f), ["second try"]);
+}
+
+#[test]
+fn opening_waits_for_a_brain_another_program_is_writing() {
+    let (central, code) = projects();
+    let api = code.path().join("api/.brain");
+    let (locked, release) = (std::sync::mpsc::channel(), std::sync::mpsc::channel::<()>());
+    // As an agent's `kb` holding api's lock while it writes: on its own thread, as the lock is per thread.
+    let writer = std::thread::spawn(move || {
+        let _lock = Store::at(&api).unwrap().lock().unwrap();
+        locked.0.send(()).unwrap();
+        release.1.recv().unwrap();
+    });
+    locked.1.recv().unwrap();
+    let path = central.path().to_path_buf();
+    let opening = std::thread::spawn(move || Board::open(&path, None).map(|b| b.sources.len()));
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    assert!(!opening.is_finished(), "it waits rather than repair files under the writer");
+    release.0.send(()).unwrap();
+    writer.join().unwrap();
+    assert_eq!(opening.join().unwrap().unwrap(), 4);
+}
+
+#[test]
+fn a_card_changed_by_another_program_reads_again_with_everything() {
+    use kanbrain_core::projects;
+    let (central, _code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    projects::write_description(central.path(), "shop", "A bigger shop.").unwrap();
+    board.reload_changed(&[projects::cards_dir(central.path())]).unwrap();
+    let shop = board.repos_of("shop").next().unwrap();
+    assert_eq!(board.brain(shop).project.as_ref().unwrap().description, "A bigger shop.");
+}
+
+#[test]
+fn a_shown_project_follows_command_line_changes_seen_by_the_watcher() {
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    board.set_scope(Scope::Project("shop".into()));
+    kanbrain_core::cli::rename_project(central.path(), "shop", "store").unwrap();
+    // As the watcher hands it over: the cards' folder changed.
+    board.reload_changed(&[kanbrain_core::projects::cards_dir(central.path())]).unwrap();
+    assert_eq!(board.scope, Scope::Project("store".into()), "renamed");
+
+    // A one-repository project's repository moved to a project of its own is the same project renamed.
+    board.set_scope(Scope::Project("blog".into()));
+    kanbrain_core::cli::move_repo(central.path(), &code.path().join("blog/.brain"), "journal").unwrap();
+    board.reload().unwrap();
+    assert_eq!(board.scope, Scope::Project("journal".into()));
+
+    // Split across two projects before the board looks again: neither is it.
+    board.set_scope(Scope::Project("store".into()));
+    kanbrain_core::cli::move_repo(central.path(), &code.path().join("web/.brain"), "front").unwrap();
+    kanbrain_core::cli::move_repo(central.path(), &code.path().join("api/.brain"), "back").unwrap();
+    board.reload().unwrap();
+    assert_eq!(board.scope, Scope::All, "store is gone, split in two");
+}
+
+#[test]
+fn a_folder_of_another_project_added_to_one_is_said_moved() {
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    board.name_project(code.path().join("web"), None);
+    (0..10).for_each(|_| press(&mut board, KeyCode::Backspace));
+    "blog".chars().for_each(|c| press(&mut board, KeyCode::Char(c)));
+    press(&mut board, KeyCode::Enter);
+    let said = board.message().unwrap();
+    assert!(said.starts_with("moved web from project shop to blog"), "{said}");
+}
+
+#[test]
+fn a_folder_added_from_manage_project_joins_that_project_though_the_board_changed_meanwhile() {
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    let blog = board.sources.iter().position(|s| s.label.as_deref() == Some("blog")).unwrap();
+    board.add_repo_to(blog);
+    let Some(Request::Folder(from)) = board.request.take() else { panic!("asks for the folder") };
+    // While the system's folder dialog is open, `kb deinit` in another shell takes out a repository before it.
+    let api = code.path().join("api/.brain");
+    kanbrain_core::projects::unregister(central.path(), &api).unwrap();
+    board.reload().unwrap();
+    let mobile = code.path().join("mobile");
+    std::fs::create_dir(&mobile).unwrap();
+    board.name_project(mobile, from.as_deref());
+    let Mode::AddProject(add) = &board.mode else { panic!("the dialog is open") };
+    assert_eq!(board.add_project_options(&add.picker), [ProjectOption::Existing("blog".into())]);
+}
+
+#[test]
+fn the_forms_project_list_keeps_its_highlight_on_the_same_brain_when_the_board_is_read_again() {
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    board.selected = Some(Key::new(3, 1));
+    press(&mut board, KeyCode::Char('n'));
+    press(&mut board, KeyCode::Up);
+    // An agent's `kb deinit` takes out a repository listed before blog.
+    kanbrain_core::projects::unregister(central.path(), &code.path().join("api/.brain")).unwrap();
+    board.reload().unwrap();
+    let Mode::Form(form) = &board.mode else { panic!("the form is still open: {:?}", board.mode) };
+    let highlighted = board.form_projects(form)[form.project.as_ref().unwrap().sel].1.clone();
+    assert_eq!(highlighted, "blog");
+}
+
+#[test]
+fn a_decision_already_decided_is_named_with_its_repository() {
+    use kanbrain_core::brain::{Brain, NewEntry};
+    let (central, code) = projects();
+    let api = code.path().join("api/.brain");
+    let mut brain = Brain::open(Store::at(&api).unwrap()).unwrap();
+    let new = |title: &str| NewEntry { kind: Kind::Decision, title: title.into(), ..NewEntry::default() };
+    let rejected = brain.add(new("Use Redis")).unwrap();
+    brain.resolve(rejected, DecisionState::Rejected, "too heavy").unwrap();
+    let accepted = brain.add(new("Use Postgres")).unwrap();
+    brain.resolve(accepted, DecisionState::Accepted, "").unwrap();
+    let mut board = Board::open(central.path(), None).unwrap();
+    // By folder: `/var` is `/private/var` on macOS, and Windows prefixes `\\?\`.
+    let src = board.sources.iter().position(|s| kanbrain_core::projects::same_dir(s.brain.store.dir(), &api)).unwrap();
+    board.selected = Some(Key::new(src, rejected));
+    board.reject_selected();
+    assert_eq!(board.message(), Some(format!("shop/api #{rejected} is already rejected").as_str()));
+    board.selected = Some(Key::new(src, accepted));
+    board.accept_with_comment();
+    assert_eq!(board.message(), Some(format!("shop/api #{accepted} is already accepted").as_str()));
+}
+
+#[test]
+fn whats_skipped_is_said_with_its_repository_with_what_follows_and_again_on_r() {
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    // The same file broken in two repositories: each is said.
+    for repo in ["api", "web"] {
+        std::fs::write(code.path().join(repo).join(".brain/0009-broken.md"), "# no id\n").unwrap();
+    }
+    board.reload().unwrap();
+    // Said beside what the action that read the board says, not replaced by it.
+    board.notify("undone");
+    let said = board.message().unwrap().to_string();
+    assert!(said.starts_with("undone"), "{said}");
+    assert!(said.contains("shop/api: 0009-broken.md") && said.contains("shop/web: 0009-broken.md"), "{said}");
+    board.message = None;
+    board.reload().unwrap();
+    assert_eq!(board.message(), None, "said already");
+    // R lists what's still skipped.
+    board.reload_from_disk();
+    assert!(board.message().unwrap().contains("0009-broken.md"), "{:?}", board.message());
+}
+
+#[test]
+fn an_edit_whose_links_fail_isnt_said_saved() {
+    let mut f = Fixture::new(&["Fix login"]);
+    f.board.select(k(1));
+    f.press(KeyCode::Char('e'));
+    f.type_text(" now");
+    // An entry deleted meanwhile, among the related.
+    let Mode::Form(form) = &mut f.board.mode else { panic!("the form is open") };
+    form.links.push(k(99));
+    f.press(KeyCode::Enter);
+    assert_ne!(f.board.message(), Some("#1 saved"), "the link failed: that's what's said");
+}
+
+#[test]
+fn a_new_note_isnt_started_whatever_column_the_form_was_opened_from() {
+    let mut f = Fixture::new(&[]);
+    f.board.switch_tab(Tab::Notes);
+    f.board.new_entry(Status::Doing);
+    f.type_text("Webhooks repeat");
+    f.press(KeyCode::Enter);
+    assert_eq!(f.board.message(), Some("created #1"), "no status to refuse");
+}
+
+#[test]
+fn removing_one_of_a_projects_repositories_keeps_the_project_shown() {
+    let (central, _code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    board.set_scope(Scope::Project("shop".into()));
+    let web = board.sources.iter().position(|s| s.label.as_deref() == Some("shop/web")).unwrap();
+    board.ask_remove(web, false);
+    press(&mut board, KeyCode::Char('y'));
+    assert_eq!(board.scope, Scope::Project("shop".into()), "shop still has api");
+}
+
+#[test]
+fn the_add_project_dialog_goes_back_to_its_repository_after_a_reload() {
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    let blog = board.sources.iter().position(|s| s.label.as_deref() == Some("blog")).unwrap();
+    let blog_dir = board.sources[blog].brain.store.dir().to_path_buf();
+    let mobile = code.path().join("mobile");
+    std::fs::create_dir(&mobile).unwrap();
+    board.name_project(mobile, Some(&blog_dir));
+    kanbrain_core::projects::unregister(central.path(), &code.path().join("api/.brain")).unwrap();
+    board.reload().unwrap();
+    let Mode::AddProject(add) = &board.mode else { panic!("still open: {:?}", board.mode) };
+    assert_eq!(add.back, board.sources.iter().position(|s| s.brain.store.dir() == blog_dir));
 }

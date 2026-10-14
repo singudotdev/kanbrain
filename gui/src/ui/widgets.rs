@@ -21,20 +21,24 @@ pub enum Kind {
     Secondary,
     /// Deletes something.
     Danger,
-    /// A quiet action: no background until hovered.
+    /// A quiet action: only outlined until hovered, so it still reads as a button rather than as text.
     Ghost,
 }
 
 /// A clickable button; the caller adds what it does with `on_click`.
 pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>, kind: Kind) -> Stateful<Div> {
     let (bg, hover, fg, border) = match kind {
-        Kind::Primary => (rgb(ACCENT).into(), rgb(theme::ACCENT_HOVER), theme::ON_ACCENT, rgb(ACCENT).into()),
-        Kind::Secondary => (rgb(theme::HOVER).into(), rgb(BORDER), TEXT, rgb(BORDER).into()),
-        Kind::Danger => (rgb(theme::RED).into(), rgb(theme::RED_HOVER), theme::ON_ACCENT, rgb(theme::RED).into()),
-        Kind::Ghost => (transparent_black(), rgb(theme::HOVER), TEXT, transparent_black()),
+        Kind::Primary => (rgb(ACCENT).into(), rgb(theme::ACCENT_HOVER), theme::ON_ACCENT, ACCENT),
+        Kind::Secondary => (rgb(theme::HOVER).into(), rgb(BORDER), TEXT, BORDER),
+        Kind::Danger => (rgb(theme::RED).into(), rgb(theme::RED_HOVER), theme::ON_ACCENT, theme::RED),
+        Kind::Ghost => (transparent_black(), rgb(theme::HOVER), TEXT, BORDER),
     };
+    let id = id.into();
+    // `button ID` for the window tests, which click buttons by it; nothing outside them.
+    let selector = format!("button {id}");
     div()
         .id(id)
+        .debug_selector(|| selector)
         .flex()
         .flex_none()
         .items_center()
@@ -43,7 +47,7 @@ pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>, kind: Ki
         .px_3()
         .rounded_md()
         .border_1()
-        .border_color(border)
+        .border_color(rgb(border))
         .bg(bg)
         .text_color(rgb(fg))
         .text_size(px(13.))
@@ -62,8 +66,11 @@ pub fn small(button: Stateful<Div>) -> Stateful<Div> {
 
 /// One option of a segmented control; the selected one stands out.
 pub fn segment(id: impl Into<ElementId>, label: impl Into<SharedString>, selected: bool) -> Stateful<Div> {
+    let id = id.into();
+    let selector = format!("segment {id}");
     div()
         .id(id)
+        .debug_selector(|| selector)
         .flex()
         .items_center()
         .h(px(26.))

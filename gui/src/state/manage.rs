@@ -5,7 +5,6 @@ use super::{Board, Manage, Mode, Picker, PickerKey, ProjectOption, Request, Scop
 use crate::text::event::{KeyCode, KeyEvent};
 use anyhow::Result;
 use kanbrain_core::cli;
-use std::path::Path;
 
 impl Board {
     /// Asks for the project's new name, starting from the one it has.
@@ -59,7 +58,7 @@ impl Board {
     /// Adds another folder to the project of `src`: asks the window for it, then for its project, this one
     /// already named.
     pub fn add_repo_to(&mut self, src: usize) {
-        self.request = Some(Request::Folder(self.sources[src].project.clone()));
+        self.request = Some(Request::Folder(Some(self.sources[src].brain.store.dir().to_path_buf())));
     }
 
     /// The move dialog's rows: as adding a project's, without the repository's own project.
@@ -68,8 +67,8 @@ impl Board {
         self.add_project_options(picker).into_iter().filter(|option| Some(option.name()) != own).collect()
     }
 
-    /// The dialog's keys: typing names or searches, arrows move, `enter` applies, `esc` goes back to the project's
-    /// info. Removing takes `y` (or `enter`) to unlink and keep the tasks, `d` to delete them too.
+    /// The dialog's keys: typing names or searches, arrows move, `enter` applies, `esc` goes back to Manage
+    /// project. Removing takes `y` (or `enter`) to unlink and keep the tasks, `d` to delete them too.
     pub(super) fn key_manage(&mut self, mut manage: Manage, key: KeyEvent) {
         let src = manage.src();
         if let Manage::Remove { whole, .. } = manage {
@@ -123,8 +122,10 @@ impl Board {
             // Removing has its own keys, which `key_manage` runs.
             Manage::Remove { .. } => return,
         };
+        // Asked before reloading, which may take a shown project that's gone to All: a move's project is shown.
+        let shown = matches!(self.scope, Scope::Project(_) | Scope::Repo(_));
         if self.reloaded(done) {
-            if matches!(self.scope, Scope::Project(_) | Scope::Repo(_)) {
+            if shown {
                 self.set_scope(Scope::Project(project));
             }
             self.mode = self.src_at(&dir).map_or(Mode::Normal, Mode::ManageProject);
@@ -141,11 +142,26 @@ impl Board {
         } else {
             cli::remove_repo(&self.central, &dir, purge)
         };
+        // Deleting the tasks is what matters to say, more than the unregistering that leads.
+        let mut deleted: Vec<String> =
+            done.iter().flatten().filter(|line| line.starts_with("deleted ")).cloned().collect();
         if self.reloaded(done) {
+            match deleted.len() {
+                0 => {}
+                1 => self.notify(deleted.remove(0)),
+                several => self.notify(format!(
+                    "deleted {several} repositories' .brain/ folders: their tasks, notes and decisions are gone"
+                )),
+            }
             self.mode = Mode::Normal;
-            let gone = |board: &Self| board.src_at(Path::new(&dir)).is_none() && board.repos_of(&project).count() == 0;
+            let gone = |board: &Self| board.src_at(&dir).is_none() && board.repos_of(&project).count() == 0;
             if matches!(self.scope, Scope::Project(_) | Scope::Repo(_)) && gone(self) {
                 self.set_scope(Scope::All);
+            }
+            // One repository out of several: back to Manage project, on another of its repositories.
+            let other = self.repos_of(&project).next().filter(|_| !whole);
+            if let Some(other) = other {
+                self.mode = Mode::ManageProject(other);
             }
         }
     }

@@ -8,8 +8,8 @@ mod markdown;
 mod text;
 mod time;
 
-pub use markdown::parse_links;
-pub use text::{counted, parse_tags, sanitize_comment, sanitize_description, slugify};
+pub use markdown::{not_a_link, parse_links};
+pub use text::{counted, one_line, parse_tags, sanitize_comment, sanitize_description, slugify};
 #[cfg(test)]
 pub use time::parse_ts;
 pub use time::{covered, fmt_age, fmt_clock, fmt_dur, fmt_ts, now};
@@ -136,6 +136,9 @@ pub struct Comment {
     pub author: Author,
     /// A question to the user: the task waits for a person's answer (see [`Task::asked`]).
     pub question: bool,
+    /// The answer to the question before it, whoever wrote it: a verdict on the decision it asked about, which an
+    /// agent may give on the user's word.
+    pub answer: bool,
     /// Words of the header's parentheses this version doesn't know, written back as they were.
     pub unknown: Vec<String>,
 }
@@ -143,7 +146,7 @@ pub struct Comment {
 impl Comment {
     /// A plain comment by `author`.
     pub fn new(created: DateTime<Local>, body: String, author: Author) -> Self {
-        Self { created, edited: None, body, author, question: false, unknown: Vec::new() }
+        Self { created, edited: None, body, author, question: false, answer: false, unknown: Vec::new() }
     }
 }
 
@@ -314,15 +317,15 @@ impl Task {
     }
 
     /// The question this parked task waits on, or its answer. A question is the latest comment marked as
-    /// one; a person's comment after it answers it. Starting the task after either means it was picked up,
-    /// so it's neither once the task is parked again for another reason.
+    /// one; a person's comment after it answers it, as does a verdict on the decision it asked about. Starting the
+    /// task after either means it was picked up, so it's neither once the task is parked again for another reason.
     pub fn asked(&self) -> Option<Asked<'_>> {
         if !self.is_task() || self.status != Status::Parked {
             return None;
         }
         let at = self.comments.iter().rposition(|c| c.question)?;
         let question = &self.comments[at];
-        let answer = self.comments[at + 1..].iter().rev().find(|c| c.author == Author::Human);
+        let answer = self.comments[at + 1..].iter().rev().find(|c| c.author == Author::Human || c.answer);
         // Strictly after: times are whole seconds, and an agent that starts a task and asks at once does
         // both in the same second, which isn't picking it up again.
         let picked_up = self.history.iter().any(|c| c.to == Status::Doing && c.at > question.created);

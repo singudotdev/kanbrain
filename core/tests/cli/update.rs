@@ -63,11 +63,31 @@ fn an_update_waits_for_the_agents_tasks_in_doing_only() {
 
     let working = brain.add(NewEntry { title: "rate-limit the login".into(), ..NewEntry::default() }).unwrap();
     brain.set_status(working, Status::Doing).unwrap();
-    let err = check_no_agent_working(central.path()).unwrap_err().to_string();
+    // `kb update` itself says so, before it looks for a release.
+    let err = update(central.path()).unwrap_err().to_string();
     assert!(err.contains(&format!("shop #{working} rate-limit the login")), "as kb status names it: {err}");
     assert!(!err.contains("my own work"), "{err}");
 
     std::fs::remove_dir_all(repo.path()).unwrap();
     assert!(check_no_agent_working(central.path()).is_ok(), "a deleted repository has no agent at work");
     assert!(!repo.path().exists(), "nor is it made again");
+}
+
+#[test]
+fn an_update_runs_the_installer_without_the_choices_left_from_an_uninstall() {
+    let sh = installer_shell(Path::new("/home/me/.local/bin"), "both");
+    let removed: Vec<_> = sh.get_envs().filter(|(_, value)| value.is_none()).map(|(name, _)| name).collect();
+    for var in INSTALLER_CHOICES {
+        assert!(removed.contains(&std::ffi::OsStr::new(var)), "{var} is passed on");
+    }
+    let ps1 = clear_installer_choices_ps1();
+    assert!(INSTALLER_CHOICES.iter().all(|var| ps1.contains(&format!("Env:{var}"))), "{ps1}");
+}
+
+#[test]
+fn an_update_to_the_release_already_installed_installs_nothing() {
+    let said = up_to_date(&Ok(None)).expect("nothing newer");
+    assert_eq!(said, format!("kb {} is the latest release: nothing to update", env!("CARGO_PKG_VERSION")));
+    assert_eq!(up_to_date(&Ok(Some("9.0.0".into()))), None, "a newer one is installed");
+    assert_eq!(up_to_date(&Err(anyhow::anyhow!("offline"))), None, "the installer says why it can't download");
 }

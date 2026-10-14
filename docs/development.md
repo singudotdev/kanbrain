@@ -131,6 +131,10 @@ The crates use the **Rust 2024 edition**. Shared versions and lints are in the w
 | [`serde`](https://serde.rs), [`serde_json`](https://docs.rs/serde_json) | 1 | `--json` output; merging Claude Code's settings (`preserve_order` keeps their keys' order) |
 | [`rustix`](https://docs.rs/rustix) | 1 | Unix only: the effective user id for the root check, without `unsafe` |
 | [`pulldown-cmark`](https://docs.rs/pulldown-cmark) | 0.13 | `gui`: parsing descriptions and comments to draw them as markdown; the version Zed uses |
+| [`fs4`](https://docs.rs/fs4) | 1.1 | each brain's write lock, an advisory lock on a file in the cache (`Store::lock`) |
+| `gpui_platform` | Zed 1.23.2 (git) | `gui`: GPUI's window system backends, Wayland and X11 on Linux |
+| [`image`](https://docs.rs/image) | 0.25 | `gui`: decoding the window icon (PNG) |
+| [`winresource`](https://docs.rs/winresource) | 0.1 | `gui`, Windows only, at build time: the program's icon and version in its `.exe` |
 | [`tempfile`](https://docs.rs/tempfile) | 3 | tests only: temporary data folders |
 
 The minimum supported Rust version of the core and the command line is **1.88** (`rust-version` in `core/Cargo.toml` and
@@ -189,6 +193,8 @@ cli/README.md        the `kanbrain` crate's page on crates.io: `kb` only (core/R
 cli/src/main.rs      kb (the crate `kanbrain` on crates.io): runs `cli::Program`
 cli/tests/kb.rs      the binary run from outside: arguments, stdin, output, exit codes
 e2e/install.sh       install.sh end to end, from a local copy of a release (CI; install.ps1 for Windows)
+e2e/upgrade.sh       brains written by every released kb, opened by this build (CI)
+e2e/smoke-app.sh     the release app starts, stays up and idles; a screenshot (CI; smoke-app.ps1 for Windows)
 e2e/agent.sh         a real agent working with kanbrain, scenario by scenario (run by hand)
 xtask/               `cargo xtask notices kb|kanbrain` (the alias is in .cargo/config.toml): THIRD-PARTY-LICENSES.txt,
                      from cargo-about (about.toml) and licenses/ for what's compiled in but isn't a crate
@@ -243,7 +249,7 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
     ├── caret.rs     the text cursor: a thin line drawn over the text, blinking (`Blink`, restarted on every input)
     └── theme.rs     colors, fonts, status colors, styled text
 
-core/tests/, gui/tests/   each crate's tests, laid out like its src/ (see Tests)
+core/tests/, gui/tests/, xtask/tests/   each crate's tests (see Tests)
 ```
 
 ### Data flow
@@ -256,7 +262,8 @@ CLI command ──▶ api ──▶ Brain action ──────────�
                                                                                        ├─▶ Task::set_status (history line, sessions)
                                                                                        └─▶ Store::save ──▶ NNNN-slug.md (atomic write)
 
-every 500 ms / after each input ──▶ ui draws &Board   (ages and clocks are computed from `now`)
+after each input, every 500 ms while a task runs or a message shows, else every minute ──▶ ui draws &Board
+                                                             (ages and clocks are computed from `now`)
 every second / before each input ──▶ Watcher::changed ──▶ Board::reload_changed    (changes made by other programs)
 ```
 
@@ -328,12 +335,14 @@ Steps chain: a brain several formats behind, from a user skipping versions, runs
 
 ## Tests
 
-Five layers: unit tests of `core` and `gui` (below), the kanban app in a real test window (`ui`), the `kb` binary run
+Eight layers: unit tests of `core` and `gui` (below), the kanban app in a real test window (`ui`), the `kb` binary run
 from outside ([below](#the-command-line-from-outside)), the installers end to end
-([below](#installers-end-to-end)), and a real agent end to end ([below](#agents-end-to-end), by hand).
+([below](#installers-end-to-end)), brains of every release opened by this build (`e2e/upgrade.sh`), the release app
+started on each system (`e2e/smoke-app.*`), mutation testing of every change (`mutants.yml`), and a real agent end to
+end ([below](#agents-end-to-end), by hand).
 
-Unit tests live in each crate's `tests/` folder, one file per module, laid out like `src/`: `gui/src/text/editor.rs` is
-tested by `gui/tests/editor.rs`, `core/src/model/mod.rs` by `core/tests/model.rs`. They have access to private items:
+Unit tests live in each crate's `tests/` folder, one file per module, laid out like `src/` in `core` and side by side in
+`gui`: `gui/src/text/editor.rs` is tested by `gui/tests/editor.rs`, `core/src/model/mod.rs` by `core/tests/model.rs`. They have access to private items:
 the module includes its test file with a hook at its end, and the file starts with `use super::*`:
 
 ```rust
@@ -362,6 +371,7 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | `keys` (gui) | no key running two things on one tab; what the menu offers named and described; every key in `docs/keybindings.md` on its tabs |
 | `editor` (gui) | line editing (split/join), unicode, wrapping; one-line cursor editing; selecting, copying and replacing; mouse selection by character, word and line |
 | `markdown` (gui) | inline styles and link ranges, kept line breaks, heading levels, numbered and task lists, nesting, code, quotes, tables, rules |
+| `update` (gui) | a program replaced on disk since it started restarting from the new file |
 | `watch` (gui) | new, changed, renamed and deleted files are noticed once, naming the folder; temporary files aren't; own writes are taken as seen |
 | `xtask` | the notices list each license with the crates under it and leave this workspace's out; each program carries Rust's standard library and what else it embeds (musl, the app's fonts in `gui/fonts/`) |
 | `ui` (gui) | in a real (test) window: GPUI keystrokes to keys, shortcut names, clicks and double-clicks on cards (in every brain), a right click's menu acting on its card, dragging a card onto a column, closing the details (no + under ✕ once they close; a click or a double-click on ✕ opening nothing), reloading after another program's change, acting right after one without undoing it, opening an entry from the calendar, buttons pressed while typing, dropdowns that scroll to the highlighted row and how many rows each shows, clipboard shortcuts, + Add project through the folder dialog |
@@ -385,6 +395,31 @@ install the kanban app (`kb` standing in for it, so GPUI isn't built) and check 
 icon on Linux, the app bundle on macOS, the Start Menu shortcut on Windows, where both apps install at once. CI runs
 them on all three systems, after `shellcheck` on the shell scripts and PSScriptAnalyzer on the PowerShell ones;
 locally they need cargo and Python.
+
+### Upgrades, end to end
+
+`e2e/upgrade.sh` (Linux) downloads the `kb` of every release tag, checksum checked, and has it write a varied set of
+brains in a throwaway home: the central one, a project of two repositories and one of one, with tasks in every status
+and their sessions, notes, decisions accepted, rejected and proposed, questions answered and not, agents' comments,
+links within a brain and across repositories, unicode and markdown. This build then reads a copy without changing a
+file, shows every entry as the old version did, field by field (it may add fields), and runs `init --all` and
+writes. A tag whose release isn't published yet is skipped. CI runs it on every push; locally it needs curl, git,
+python3 and the tags.
+
+### The app, started
+
+`e2e/smoke-app.sh` (Linux, macOS) and `e2e/smoke-app.ps1` (Windows) start the release build of the kanban app on a
+few demo tasks, check that it stays up and idles (at most 3% of a core: with nothing running it redraws once a
+minute), and save a screenshot for a person to look at. CI runs them on all three systems, Linux under Xvfb with
+Mesa's software Vulkan, and keeps the screenshots as the run's artifacts.
+
+### Mutation testing
+
+`cargo mutants --in-diff FILE` alters every changed line (`==` for `!=`, a body for `Ok(())`…) and runs the tests
+again: a change no test notices is behavior nothing guards. CI runs it on each push's and pull request's diff and
+fails on a mutant no test catches. `.cargo/mutants.toml` lists what no test can tell apart (starting the installer,
+a hover style), each with why; anything else missed is a test to write. Locally, run it from a clean checkout
+(`git worktree add`): it copies the working tree as it is when it starts.
 
 ### Agents, end to end
 
@@ -421,13 +456,20 @@ The kanban app's look is checked by running it (`KANBRAIN_DIR=/tmp/t cargo run -
   packaged as they'd be published (`cargo publish --dry-run -p kanbrain-core -p kanbrain`)
 - `cargo deny check`: dependency licenses, sources and security advisories, as `deny.toml` allows them; and the
   third-party notices still generate (`cargo xtask notices`, through cargo-about), with every license accepted
-- the installers end to end on Linux, macOS and Windows (`e2e/install.sh`, `e2e/install.ps1`), after `shellcheck`
-  and PSScriptAnalyzer
+- the installers end to end on Linux, macOS and Windows (`e2e/install.sh`, `e2e/install.ps1`, the latter in
+  PowerShell 7 and Windows PowerShell 5.1, from a folder with an accented name), after `shellcheck` and
+  PSScriptAnalyzer on every script
 - `cargo test --workspace` on Linux, macOS and Windows
 - `cargo test` (core and command line) with the minimum supported Rust version (1.88)
+- mutation testing of the change (`cargo mutants --in-diff`), failing on a mutant no test catches: its own
+  workflow, `mutants.yml`, in eight shards, testing the lines changed since the last commit whose run passed, so
+  every push's lines are tested though a newer push replaces a run still waiting
+- brains written by every released `kb` opened by this build (`e2e/upgrade.sh`)
+- the release app started on Linux, macOS and Windows, idle under 3% of a core, its screenshot kept
+  (`e2e/smoke-app.sh`, `e2e/smoke-app.ps1`)
 
 `.github/workflows/release.yml` refuses a tag that doesn't match the version in `Cargo.toml`, or whose commit has no
-passing CI run.
+passing `ci.yml` and `mutants.yml` run.
 
 ## Releases and installers
 
@@ -444,8 +486,9 @@ passing CI run.
 3. Update `version` under `[workspace.package]` in `Cargo.toml`, and `kanbrain-core`'s `version` under
    `[workspace.dependencies]` to the same, run `cargo build` so `Cargo.lock` follows, and commit it on its own. Every
    crate of the workspace shares it.
-4. Push `main` alone and wait for CI on Linux, macOS and Windows to pass on the version's commit: a tag is a release,
-   and the release workflow refuses a commit without a passing CI run.
+4. Push `main` alone and wait for CI on Linux, macOS and Windows, and for mutation testing, to pass on the version's
+   commit (the latter can take hours after many commits): a tag is a release, and the release workflow refuses a
+   commit without a passing run of each.
 5. Create a signed, annotated tag and push it:
 
    ```sh
@@ -535,14 +578,9 @@ The purge logic in both scripts must stay in sync with what the app writes in th
 (`.NAME.PID-N.tmp`); in the cache folder, `locks/` and `backups/` (`store::cache_dir_of`, mirrored by
 `cache_dir` in `install.sh` and `$cache` in `install.ps1`). Both find the central brain
 with `kb --project central path`, never plain `path`, which inside a project names its `.brain/`. If you add
-a new kind of file to the data folder, add it to `owned_files` in `install.sh` and to the matching filter in
-`install.ps1`.
+a new kind of file to the data folder, add it to `is_owned` in `install.sh` and `Test-Owned` in `install.ps1`.
 
 ## Contributing
 
-1. Open an issue describing the problem or idea.
-2. Keep pull requests focused. Run `cargo fmt --all`, `cargo clippy --workspace --all-targets` (no warnings) and
-   `cargo test --workspace`.
-3. Update the docs in `docs/` when you change behavior or keys. A new action in the kanban app needs a key and a
-   button; see [Adding an action](#adding-an-action).
-4. Don't break existing data folders. See [Changing the file format](#changing-the-file-format).
+See [CONTRIBUTING.md](../CONTRIBUTING.md). A new action in the kanban app needs a key and a button; see
+[Adding an action](#adding-an-action).

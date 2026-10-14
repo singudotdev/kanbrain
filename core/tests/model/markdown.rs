@@ -1,4 +1,5 @@
 use super::*;
+use crate::model::{one_line, sanitize_comment, sanitize_description};
 use chrono::Duration;
 
 #[test]
@@ -30,6 +31,48 @@ fn round_trip() {
     assert_eq!(back.history, task.history);
     assert_eq!(back.sessions, task.sessions);
     assert_eq!(back.total(t0), Duration::minutes(110));
+}
+
+#[test]
+fn a_title_written_over_several_lines_reads_back_as_one() {
+    // As versions before 0.4.0 wrote `kb add $'Plan\n## Steps'`: the id and every key after it were lost.
+    let text = "# Plan\n## Steps\nfirst\n\n- id: 4\n- status: doing\n- tags: api\n";
+    let task = Task::from_markdown(text).unwrap();
+    assert_eq!((task.id, task.title.as_str(), task.status), (4, "Plan ## Steps first", Status::Doing));
+    assert_eq!(task.tags, ["api"]);
+    let again = Task::from_markdown(&task.to_markdown()).unwrap();
+    assert_eq!(again.title, task.title, "saved on one line");
+}
+
+#[test]
+fn hand_edits_keep_what_they_say() {
+    let text = "# Notes\n\n- id: 3\n- kind: Note\n- tags: \n- links: 1\nsee the wiki\n- links: 2, api#4\n\n\
+                ## Description\n\n    indented code\n    more\n";
+    let task = Task::from_markdown(text).unwrap();
+    assert_eq!(task.kind, Kind::Note, "in any case, not a task");
+    assert_eq!(task.links, [1, 2], "both lines' links");
+    assert_eq!(task.repo_links, [RepoLink { repo: "api".into(), id: 4 }]);
+    assert_eq!(task.description, "    indented code\n    more", "its first line keeps its indentation");
+    let again = task.to_markdown();
+    assert!(again.contains("see the wiki"), "a line of its own kept: {again}");
+    assert_eq!(Task::from_markdown(&again).unwrap().description, task.description);
+}
+
+#[test]
+fn keys_before_the_id_stay_keys_and_a_description_never_becomes_the_title() {
+    let reordered = Task::from_markdown("# Reordered\n\n- status: done\n- id: 2\n- tags: \n").unwrap();
+    assert_eq!((reordered.title.as_str(), reordered.status), ("Reordered", Status::Done));
+    let tight = Task::from_markdown("# Tight\n- status: done\n- id: 2\n").unwrap();
+    assert_eq!((tight.title.as_str(), tight.status), ("Tight", Status::Done));
+    let id_first = Task::from_markdown("- id: 5\n# Late title\n- status: done\n").unwrap();
+    assert_eq!((id_first.id, id_first.title.as_str()), (5, "Late title"), "keys before the title too");
+    let note = Task::from_markdown("- id: 5\n# Late title\nmy note\n").unwrap();
+    assert_eq!(note.title, "Late title", "text under a title below the id isn't more title");
+    // No title: a `# ` heading in the description is the description's.
+    let untitled = Task::from_markdown("- id: 1\n- status: todo\n\n## Description\n\n# Heading\nbody\n").unwrap();
+    assert_eq!(untitled.description, "# Heading\nbody");
+    // No id of its own: an id in its description's list doesn't make it an entry.
+    assert!(Task::from_markdown("# No id\n\n- status: todo\n\n## Description\n\n- id: 3\n").is_err());
 }
 
 #[test]
@@ -139,4 +182,167 @@ fn hand_written_headers_and_unknown_authors_still_read() {
     assert_eq!(task.comments[0].edited, parse_ts("2026-09-24 10:05"));
     assert!(task.comments[0].body.contains("### Steps (draft)"));
     assert_eq!(task.history[0].by, Author::Human, "an unknown name doesn't lose the file");
+}
+
+/// Words, and pieces the format gives a meaning to: headings, keys, link words, times, markers.
+const PIECES: [&str; 24] = [
+    "word",
+    "Fix",
+    "login",
+    "## Heading",
+    "### 2026-09-24T10:00:00+02:00",
+    "- id: 9",
+    "- status: done",
+    "#tag",
+    "a, b",
+    "`code`",
+    "    indented",
+    "日本語",
+    "émoji 🚀",
+    "->",
+    "(agent, question)",
+    "- links: 3",
+    "api#2",
+    "[link](http://x)",
+    "**bold**",
+    "> quote",
+    "1. item",
+    "- [ ] box",
+    "|a|b|",
+    "\t tab",
+];
+
+/// A small deterministic random source, so a failing case is the same on every run and every machine.
+struct Rng(u64);
+
+impl Rng {
+    fn next(&mut self) -> u64 {
+        // xorshift64*
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        self.0.wrapping_mul(0x2545_f491_4f6c_dd1d)
+    }
+
+    fn below(&mut self, n: usize) -> usize {
+        usize::try_from(self.next() % n as u64).unwrap()
+    }
+
+    fn pick<'a>(&mut self, from: &[&'a str]) -> &'a str {
+        from[self.below(from.len())]
+    }
+
+    /// One to `most` lines of [`PIECES`].
+    fn text(&mut self, most: usize) -> String {
+        let lines = 1 + self.below(most);
+        (0..lines)
+            .map(|_| (0..=self.below(5)).map(|_| self.pick(&PIECES)).collect::<Vec<_>>().join(" "))
+            .collect::<Vec<_>>()
+            .join(if self.below(2) == 0 { "\n" } else { "\n\n" })
+    }
+
+    fn time(&mut self, base: DateTime<Local>) -> DateTime<Local> {
+        base + Duration::seconds(i64::try_from(self.below(400_000)).unwrap())
+    }
+}
+
+/// An entry as the API makes one: title on one line, tags parsed, description and comments sanitized.
+fn random_task(rng: &mut Rng, id: u32) -> Task {
+    let t0 = parse_ts("2026-01-01 09:00").unwrap();
+    let mut task = Task::new(id, one_line(&rng.text(2)), rng.time(t0));
+    task.kind = [Kind::Task, Kind::Note, Kind::Decision][rng.below(3)];
+    task.tags = parse_tags(&rng.text(1));
+    task.links = (0..rng.below(3)).map(|_| 1 + u32::try_from(rng.below(50)).unwrap()).collect();
+    task.links.dedup();
+    task.repo_links = (0..rng.below(2))
+        .map(|_| RepoLink {
+            repo: rng.pick(&["api", "web", "back-app"]).into(),
+            id: 1 + u32::try_from(rng.below(9)).unwrap(),
+        })
+        .collect();
+    task.repo_links.dedup();
+    if rng.below(4) > 0 {
+        task.description = sanitize_description(&rng.text(5)).0;
+    }
+    if task.kind == Kind::Decision {
+        task.decision = [DecisionState::Accepted, DecisionState::Proposed, DecisionState::Rejected][rng.below(3)];
+    }
+    for _ in 0..rng.below(4) {
+        let body = sanitize_comment(&rng.text(4)).0;
+        if body.is_empty() {
+            continue;
+        }
+        let mut comment = Comment::new(rng.time(t0), body, [Author::Human, Author::Agent][rng.below(2)]);
+        comment.question = rng.below(4) == 0;
+        comment.answer = !comment.question && rng.below(4) == 0;
+        comment.edited = (rng.below(3) == 0).then(|| rng.time(t0));
+        task.comments.push(comment);
+    }
+    if task.is_task() {
+        let mut at = task.created;
+        for _ in 0..rng.below(4) {
+            let to = [Status::Doing, Status::Parked, Status::Done, Status::Todo][rng.below(4)];
+            if to == task.status {
+                continue;
+            }
+            at += Duration::minutes(1 + i64::try_from(rng.below(300)).unwrap());
+            task.set_status(to, at, [Author::Human, Author::Agent][rng.below(2)]);
+        }
+    }
+    task
+}
+
+#[test]
+fn every_entry_the_api_can_make_reads_back_as_written() {
+    let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
+    for id in 1..=2000 {
+        let task = random_task(&mut rng, id);
+        let written = task.to_markdown();
+        let read = Task::from_markdown(&written).unwrap_or_else(|e| panic!("{e}\n---\n{written}"));
+        assert_eq!(read.to_markdown(), written, "written again differently");
+        let fields = |t: &Task| (t.id, t.kind, t.title.clone(), t.status, t.decision, t.tags.clone(), t.links.clone());
+        assert_eq!(fields(&read), fields(&task), "\n{written}");
+        assert_eq!(read.repo_links, task.repo_links, "\n{written}");
+        assert_eq!(read.description, task.description, "\n{written}");
+        assert_eq!(read.comments, task.comments, "\n{written}");
+        assert_eq!(read.history, task.history, "\n{written}");
+        assert_eq!(read.sessions, task.sessions, "\n{written}");
+    }
+}
+
+#[test]
+fn a_hand_edited_file_settles_after_one_save() {
+    // Whatever a hand edit leaves, saving once writes the entry as kanbrain reads it; saving that again changes
+    // nothing: a read that drops or moves something shows up as a second save that differs.
+    let mut rng = Rng(0x0123_4567_89ab_cdef);
+    for _ in 0..3000 {
+        let text = format!(
+            "# {}\n\n- id: 1\n- tags: {}\n{}\n\n## Description\n\n{}\n",
+            rng.text(1),
+            rng.text(1),
+            rng.text(3),
+            rng.text(6)
+        );
+        let Ok(first) = Task::from_markdown(&text) else { continue };
+        let saved = first.to_markdown();
+        let again = Task::from_markdown(&saved).unwrap_or_else(|e| panic!("{e}\n---\n{saved}"));
+        assert_eq!(again.to_markdown(), saved, "\nfrom:\n{text}");
+        assert_eq!(again.description, first.description, "\nfrom:\n{text}");
+    }
+}
+
+#[test]
+fn any_text_reads_as_an_entry_or_an_error_never_a_crash() {
+    let mut rng = Rng(0xdead_beef_cafe_f00d);
+    for _ in 0..3000 {
+        let mut text = rng.text(12);
+        // Cut anywhere, as a crash or a sync cut a file short.
+        let cut = rng.below(text.len() + 1);
+        while !text.is_char_boundary(cut.min(text.len())) {
+            text.pop();
+        }
+        text.truncate(cut.min(text.len()));
+        let _ = Task::from_markdown(&format!("# t\n\n- id: 1\n{text}"));
+        let _ = Task::from_markdown(&text);
+    }
 }

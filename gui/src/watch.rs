@@ -10,7 +10,7 @@ use std::time::{Duration, SystemTime};
 /// How often the folder is listed.
 pub const INTERVAL: Duration = Duration::from_secs(1);
 
-/// The markdown files of a folder by name, with when they last changed and their size.
+/// The markdown files of a folder (and its `format` file) by name, with when they last changed and their size.
 type Snapshot = Vec<(String, Option<SystemTime>, u64)>;
 
 /// Watches data folders by comparing listings of them.
@@ -22,9 +22,10 @@ pub struct Watcher {
 }
 
 impl Watcher {
-    /// Watches `dirs`, taking their current state as seen.
+    /// Watches `dirs`, none of them seen yet: one with files reads as changed at the first look, since the board
+    /// was read before the watcher started (before the window opened), and a write in between would be missed.
     pub fn new(dirs: Vec<PathBuf>) -> Self {
-        let last = dirs.iter().map(|d| snapshot(d)).collect();
+        let last = vec![Snapshot::new(); dirs.len()];
         Self { dirs, last }
     }
 
@@ -56,8 +57,9 @@ impl Watcher {
     }
 }
 
-/// The folder's markdown files, sorted by name. Hidden files are left out since saves write a hidden
-/// temporary file first and rename it. An unreadable folder lists as empty, so it reads as a change
+/// The folder's markdown files and its `format` file, sorted by name: a `format` file repaired lets a repository
+/// left out for it be read again. Hidden files are left out since saves write a hidden temporary file first and
+/// rename it. An unreadable folder lists as empty, so it reads as a change
 /// once it's back.
 fn snapshot(dir: &Path) -> Snapshot {
     let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
@@ -66,7 +68,7 @@ fn snapshot(dir: &Path) -> Snapshot {
         .filter_map(|entry| {
             let name = entry.file_name().into_string().ok()?;
             let markdown = Path::new(&name).extension().is_some_and(|ext| ext.eq_ignore_ascii_case("md"));
-            if name.starts_with('.') || !markdown {
+            if name.starts_with('.') || !(markdown || name == kanbrain_core::migrate::FORMAT_FILE) {
                 return None;
             }
             let meta = entry.metadata().ok()?;

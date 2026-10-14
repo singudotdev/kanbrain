@@ -20,7 +20,7 @@ const FORM_LINK_ROWS: usize = 6;
 pub(super) fn draw(board: &Board, form: &Form, scroll: &Scrolls, follow: bool, cx: &mut Context<BrainView>) -> Div {
     let (title, submit) = match form.target {
         FormTarget::New(_, kind, _) => (format!("New {}", kind.as_str()), "Create"),
-        FormTarget::Edit(key) => (format!("Edit #{}", key.id), "Save"),
+        FormTarget::Edit(key) => (format!("Edit {}", board.entry_name(key)), "Save"),
     };
     let field = |which: Field, input: &LineInput, text_box: TextBox, placeholder: &str, cx: &mut Context<BrainView>| {
         text_field(text_box, input, form.field == which, placeholder, cx)

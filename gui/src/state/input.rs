@@ -58,16 +58,9 @@ impl Board {
                 _ => self.mode = Mode::Confirm(confirm),
             },
             // Choosing a row links or unlinks it, and the picker stays open for the next.
-            Mode::Links(mut picker) => {
+            Mode::Links(picker) => {
                 let count = self.link_candidates(&picker).len();
-                let outcome = picker.rows.key(key, count);
-                let sel = picker.rows.sel;
-                if outcome != PickerKey::Close {
-                    self.mode = Mode::Links(picker);
-                }
-                if outcome == PickerKey::Choose {
-                    self.toggle_link(sel);
-                }
+                self.pick(picker, key, count, |p| &mut p.rows, Mode::Links, Self::toggle_link);
             }
             Mode::Comments(picker) => self.key_comments(picker, key),
             Mode::Scopes(picker) => {
@@ -181,7 +174,7 @@ impl Board {
             Tab::Report => Kind::Task,
             tab => tab.kind().unwrap_or(Kind::Task),
         };
-        uses[Kind::ALL.iter().position(|&k| k == kind).unwrap_or(0)] > 0
+        uses[kind.position()] > 0
     }
 
     /// How many tasks, notes and decisions in the scope carry `tag`, in that order: where a tag

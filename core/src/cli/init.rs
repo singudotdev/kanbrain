@@ -8,6 +8,7 @@
 //! repository's, often committed with it, so deleting them is left to the user.
 
 use super::claude;
+use crate::model::counted;
 use crate::projects;
 use crate::store::{self, PROJECT_DIR, Store};
 use anyhow::{Context, Result, bail};
@@ -75,9 +76,41 @@ The user follows them live on a kanban board: keep it showing what you're doing 
 /// registers it in `central` (joining the project's other repositories if it has some), creates the project's
 /// shared card if it's new, and writes or refreshes the section in each agent file of `root` (creating
 /// `CLAUDE.md` if there's none). Returns what it did, one line each.
+///
+/// A repository of another project, still there, is moved to `name` as `kb project move` moves it: the links
+/// between it and its old project's repositories go, and so does that project's card if it was the last.
 pub fn init(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path) -> Result<Vec<String>> {
+    if let Some(to) = name
+        && let Ok(dir) = root.join(PROJECT_DIR).canonicalize()
+        && projects::load(central)?.iter().any(|r| projects::same_dir(&r.dir, &dir) && r.project != to)
+    {
+        let mut done = super::manage::move_repo(central, &dir, to)?;
+        // Moved already: a name it can't take is said beside the move, not instead of it.
+        if let Some(repo) = repo {
+            match super::manage::rename_repo(central, &dir, repo) {
+                Ok(lines) => done.extend(lines),
+                Err(e) => done.push(format!("kept the name it has: {e:#}")),
+            }
+        }
+        return Ok(done);
+    }
+    join(root, name, repo, central)
+}
+
+/// What [`init`] does for a folder that isn't a repository of another project: [`super::manage::move_repo`] runs
+/// it once the repository has left its old project.
+pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path) -> Result<Vec<String>> {
     let mut done = Vec::new();
     let dir = root.join(PROJECT_DIR);
+    // The registry holds a path a line; one with a line break would read as a second, made-up registration.
+    if root.to_string_lossy().contains(['\n', '\r']) {
+        bail!("{} has a line break in its path: kanbrain can't register it", root.display());
+    }
+    // Registered, its `.brain/` would be both the central brain and a project's, and taking it out with `--purge`
+    // would delete every project's registration and card.
+    if projects::same_dir(&dir, central) {
+        bail!("{} is the central brain, not a project's: run `kb init` in a project's folder", dir.display());
+    }
     if dir.is_dir() {
         done.push(format!("{} already exists", dir.display()));
     } else {
@@ -89,11 +122,25 @@ pub fn init(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path)
     let dir = dir.canonicalize().with_context(|| format!("reading {}", dir.display()))?;
     let folder = root.canonicalize().ok().and_then(|r| Some(r.file_name()?.to_string_lossy().into_owned()));
     let card = projects::read_repo_card(&dir);
-    let project = match (name, &card, folder) {
-        (Some(name), _, _) => name.to_string(),
-        (None, Some(card), _) => card.project.clone(),
-        (None, None, Some(folder)) => folder,
-        (None, None, None) => bail!("this folder has no name to give the project: `kb init NAME`"),
+    // Re-run without a name, it stays in the project the registry has it in, which a rename while its folder was
+    // away left its card behind on.
+    let registered = projects::load(central)?.into_iter().find(|r| projects::same_dir(&r.dir, &dir)).map(|r| r.project);
+    // A name a version before 0.4.0 registered, which `init --all` renames: said, rather than to pick another.
+    if name.is_none()
+        && let Some(old) = registered.as_deref()
+        && projects::check_name(old).is_err()
+    {
+        bail!(
+            "this repository is registered in project `{old}`, a name kanbrain no longer takes: `kb init --all` \
+             renames such projects, keeping their repositories and card"
+        );
+    }
+    let project = match (name, registered, &card, folder) {
+        (Some(name), ..) => name.to_string(),
+        (None, Some(registered), ..) => registered,
+        (None, None, Some(card), _) => card.project.clone(),
+        (None, None, None, Some(folder)) => folder,
+        (None, None, None, None) => bail!("this folder has no name to give the project: `kb init NAME`"),
     };
     projects::check_name(&project)?;
     let named = projects::repo_name(central, &project, &dir, repo)?;
@@ -131,6 +178,18 @@ pub fn init(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path)
             others.join(", ")
         ));
     }
+    // A folder moved or renamed by hand leaves its old place registered: said, since only the user knows if
+    // this is it.
+    for gone in repos.iter().filter(|r| r.project == project && !r.dir.is_dir()) {
+        let name = gone.name();
+        // Its name kept for it, this one took another (`repo_name`): once the old place is out, it can take that one
+        // back.
+        done.push(format!(
+            "`{project}/{name}`'s folder is gone ({}): if this is it, moved here, take the old place out with \
+             `kb --project {project}/{name} deinit`, then `kb project repo {name}` here",
+            gone.dir.display()
+        ));
+    }
     let existing: Vec<&str> = AGENT_FILES.into_iter().filter(|name| root.join(name).is_file()).collect();
     let targets = if existing.is_empty() { vec![DEFAULT_AGENT_FILE] } else { existing };
     done.extend(write_agent_files(root, &targets)?.into_iter().map(|(_, line)| line));
@@ -144,16 +203,63 @@ pub fn init(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path)
     Ok(done)
 }
 
+/// Renames each project a version before 0.4.0 named as none can be now (see [`projects::check_name`]): one
+/// starting with `-`, which `--project` reads as an option, or `Central` in any case, which reaches the central
+/// brain. Without it, `kb init` in its repositories is refused. Returns what it did, one line each.
+fn rename_unreachable_projects(central: &Path) -> Result<Vec<String>> {
+    let mut names: Vec<String> = projects::load(central)?.into_iter().map(|r| r.project).collect();
+    names.sort_unstable();
+    names.dedup();
+    let unreachable: Vec<String> = names.iter().filter(|name| projects::check_name(name).is_err()).cloned().collect();
+    let mut done = Vec::new();
+    for old in unreachable {
+        let base = match old.trim_start_matches('-').trim() {
+            "" => "project",
+            base => base,
+        };
+        // As many names as there are projects: `old` is one of them and none of these, so one is free.
+        let new = (0..names.len())
+            .map(|n| match n {
+                0 => base.to_string(),
+                1 => format!("{base}-project"),
+                n => format!("{base}-project-{n}"),
+            })
+            .find(|name| projects::check_name(name).is_ok() && !names.contains(name))
+            .expect("more names than projects");
+        // One that fails is said, as `init --all` says each repository it couldn't bring up to date.
+        match super::manage::rename_project(central, &old, &new) {
+            Ok(lines) => done.extend(lines),
+            Err(e) => done.push(format!("couldn't rename project `{old}`: {e:#}")),
+        }
+        names.push(new);
+    }
+    Ok(done)
+}
+
 /// Brings every registered repository up to this version: its data format, migrated with the central brain's
 /// (see [`crate::migrate`]), and its agent instructions, the section in each of its agent files that has one
 /// and Claude Code's hooks where `CLAUDE.md` has it. A repository whose files have no section (taken out by
 /// hand) keeps them as they are, and one whose folder is gone is left alone. Returns what changed, one line
 /// each, naming the repository.
 pub fn init_all(central: &Path) -> Result<Vec<String>> {
+    // Migrated first: a brain a newer kanbrain wrote stops it before anything is written.
+    let mut done = migrate_all(central, &projects::load(central)?)?;
+    done.extend(rename_unreachable_projects(central)?);
     let repos = projects::load(central)?;
-    let mut done = migrate_all(central, &repos)?;
     let mut current = 0;
     for repo in repos.iter().filter(|r| r.dir.is_dir()) {
+        // Named after a folder whose name links can't hold (`My App`), by a version before 0.4.0: renamed.
+        let name = repo.name();
+        if projects::check_repo_name(&name).is_err() {
+            let fixed = projects::repo_name(central, &repo.project, &repo.dir, None)?;
+            done.extend(super::manage::rename_repo(central, &repo.dir, &fixed)?);
+        }
+        // A card left on a project's old name, renamed while this folder was away.
+        if let Some(card) = projects::read_repo_card(&repo.dir).filter(|card| card.project != repo.project) {
+            let old = card.project.clone();
+            projects::write_repo_card(&repo.dir, &projects::RepoCard { project: repo.project.clone(), ..card })?;
+            done.push(format!("{}: its card named project `{old}`, now `{}`: fixed", repo.label(&repos), repo.project));
+        }
         let Some(root) = repo.dir.parent() else { continue };
         let targets: Vec<&str> = AGENT_FILES
             .into_iter()
@@ -173,23 +279,34 @@ pub fn init_all(central: &Path) -> Result<Vec<String>> {
         let label = repo.label(&repos);
         done.extend(changes.into_iter().map(|line| format!("{label}: {line}")));
     }
-    if current > 0 {
-        done.push(format!("{current} more already had this version's instructions"));
+    // "More" only after the ones listed: alone, it reads as if some were left out.
+    match (current, done.is_empty()) {
+        (0, _) => {}
+        (_, true) => done.push(format!(
+            "{} already had this version's instructions",
+            counted(current, "repository", "repositories")
+        )),
+        (_, false) => done.push(format!("{current} more already had this version's instructions")),
     }
     Ok(done)
 }
 
 /// Brings the central brain and every registered repository's to this version's data format (see
-/// [`crate::migrate`]), as `kb update` runs it. A repository a newer kanbrain wrote is said and left alone.
+/// [`crate::migrate`]), as `kb update` runs it. A repository a newer kanbrain wrote is said and left alone; one
+/// that fails (a damaged `format` file, a step that can't write) is said too, rather than keep every other
+/// repository from being brought up to date.
 fn migrate_all(central: &Path, repos: &[projects::Repo]) -> Result<Vec<String>> {
     let mut done = crate::migrate::migrate(&Store::at(central)?)?;
     for repo in repos.iter().filter(|r| r.dir.is_dir()) {
-        match crate::migrate::migrate(&Store::at(&repo.dir)?) {
+        match Store::at(&repo.dir).and_then(|store| crate::migrate::migrate(&store)) {
             Ok(lines) => done.extend(lines),
             Err(e) if e.downcast_ref::<crate::migrate::TooNew>().is_some() => {
                 done.push(format!("{}: left alone: {e}", repo.label(repos)));
             }
-            Err(e) => return Err(e),
+            Err(e) => done.push(format!(
+                "{}: not brought up to date: {e:#}; fix it, then run `kb init --all` again",
+                repo.label(repos)
+            )),
         }
     }
     Ok(done)
@@ -207,7 +324,7 @@ fn write_agent_files(root: &Path, targets: &[&str]) -> Result<Vec<(bool, String)
                 true,
                 format!(
                     "added kanbrain's hooks to {}: Claude Code reads `kb context` when a session starts and \
-                     after compaction, and an agent can't end its turn while the project isn't described",
+                     after compaction, and an agent is sent back once a turn to describe the project while it isn't",
                     claude::SETTINGS
                 ),
             ),
@@ -217,7 +334,15 @@ fn write_agent_files(root: &Path, targets: &[&str]) -> Result<Vec<(bool, String)
     }
     for &name in targets {
         let path = root.join(name);
-        let before = fs::read_to_string(&path).unwrap_or_default();
+        // Only a missing file is empty: one it can't read (not UTF-8) would be written over with the section alone.
+        let before = match fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(e) => {
+                done.push((false, format!("left {name} as it is: can't read it ({e}); add the section by hand")));
+                continue;
+            }
+        };
         let after = with_section(&before);
         if after == before {
             done.push((false, format!("{name} already tells agents about kanbrain")));

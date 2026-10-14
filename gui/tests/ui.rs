@@ -1,7 +1,7 @@
 use super::*;
 use crate::state::Board;
 use gpui::MouseButton;
-use kanbrain_core::model::{Status, Task, now};
+use kanbrain_core::model::{Author, Status, Task, now};
 use kanbrain_core::store::Store;
 
 /// A window over a fresh folder holding tasks with these titles (ids from 1).
@@ -299,6 +299,7 @@ fn manage_project_draws_every_repository(cx: &mut gpui::TestAppContext) {
     board.set_scope(crate::state::Scope::Project("shop".into()));
     let (view, cx) = cx.add_window_view(|window, cx| BrainView::new(board, window, cx));
     cx.run_until_parked();
+    assert!(cx.debug_bounds("button edit-project").is_some(), "the bar shows the project's card");
     let info = cx.debug_bounds("manage-project-button").expect("the bar has the manage button").center();
     cx.simulate_click(info, gpui::Modifiers::none());
     view.read_with(cx, |view, _| assert!(matches!(view.board.mode, crate::state::Mode::ManageProject(1))));
@@ -309,14 +310,26 @@ fn manage_project_draws_every_repository(cx: &mut gpui::TestAppContext) {
 #[gpui::test]
 fn calendar_lines_stay_inside_narrow_week_columns(cx: &mut gpui::TestAppContext) {
     let (_view, cx, _dir) = window(cx, &["Stripe test card: 4242 4242 4242 4242"]);
-    // Started, so its line reads `00:00 todo → doing`, too wide for a column of a narrow week.
-    cx.simulate_keystrokes("s 5");
-    cx.simulate_resize(gpui::size(px(760.), px(700.)));
+    // Started and parked, so its line reads `00:00 doing → parked`, too wide for a column of a narrow week.
+    cx.simulate_keystrokes("s p 5");
+    cx.simulate_resize(gpui::size(px(700.), px(700.)));
     cx.run_until_parked();
     let today = chrono::Local::now().date_naive();
     let column = cx.debug_bounds(format!("week day {today}").leak()).expect("the week shows today");
     let what = cx.debug_bounds("event what 0/1").expect("the task's move is drawn");
     assert!(what.right() <= column.right(), "the move wraps under the time, inside the column: {what:?} in {column:?}");
+}
+
+#[gpui::test]
+fn a_long_title_in_a_narrow_week_is_cut_to_a_few_lines(cx: &mut gpui::TestAppContext) {
+    let long = "a long title ".repeat(40);
+    let (_view, cx, _dir) = window(cx, &[long.as_str()]);
+    cx.simulate_keystrokes("5");
+    cx.simulate_resize(gpui::size(px(700.), px(700.)));
+    cx.run_until_parked();
+    let event = cx.debug_bounds("event 0/1").expect("the task's creation is drawn");
+    // Its time, what happened and three lines of title: unclamped, the title alone would take dozens.
+    assert!(event.size.height < px(160.), "{event:?}");
 }
 
 #[gpui::test]
@@ -371,6 +384,18 @@ fn long_lists_say_how_many_more_and_follow_the_highlight(cx: &mut gpui::TestAppC
         "the highlight scrolled into view: {bottom_row:?} in {list:?}"
     );
     assert!(cx.debug_bounds("list more").is_none(), "nothing more below the end");
+    assert!(cx.debug_bounds("list above").is_some(), "but it says the first rows are above");
+}
+
+#[gpui::test]
+fn a_list_that_fits_says_nothing_under_it(cx: &mut gpui::TestAppContext) {
+    let titles: Vec<String> = (0..=super::dropdown::MAX_ROWS).map(|i| format!("task {i}")).collect();
+    let titles: Vec<&str> = titles.iter().map(String::as_str).collect();
+    let (_view, cx, _dir) = window(cx, &titles);
+    // The link picker lists the others: as many as it shows.
+    cx.simulate_keystrokes("r");
+    assert!(cx.debug_bounds("links-list").is_some(), "the list is drawn");
+    assert!(cx.debug_bounds("list more").is_none() && cx.debug_bounds("list above").is_none());
 }
 
 /// How many rows of the list whose first row is `first` show before it scrolls: from that row's top to
@@ -468,4 +493,316 @@ fn closing_the_details_opens_nothing(cx: &mut gpui::TestAppContext) {
         assert!(!view.board.drawer, "esc closes it");
         assert!(matches!(view.board.mode, crate::state::Mode::Normal), "and opens nothing: {:?}", view.board.mode);
     });
+}
+
+/// Clicks the element `selector` names, which must be drawn.
+fn click(cx: &mut gpui::VisualTestContext, selector: &'static str) {
+    let at = cx.debug_bounds(selector).unwrap_or_else(|| panic!("{selector} is drawn")).center();
+    cx.simulate_click(at, gpui::Modifiers::none());
+    cx.run_until_parked();
+}
+
+/// The board's mode, as `{:?}` writes it, to check which dialog is open.
+fn mode(view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext) -> String {
+    view.read_with(cx, |view, _| format!("{:?}", view.board.mode))
+}
+
+#[gpui::test]
+fn the_details_buttons_act_when_clicked(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a", "b"]);
+    let card = cx.debug_bounds("card 0/1").expect("card 1 is drawn").center();
+    double_click(cx, card);
+    click(cx, "drawer status doing");
+    view.read_with(cx, |view, _| assert_eq!(view.board.brain(0).task(1).unwrap().status, Status::Doing));
+    click(cx, "button edit");
+    assert!(mode(&view, cx).starts_with("Form("), "{}", mode(&view, cx));
+    cx.simulate_keystrokes("escape");
+    click(cx, "button relate");
+    assert!(mode(&view, cx).starts_with("Links("));
+    click(cx, "button links-done");
+    assert_eq!(mode(&view, cx), "Normal");
+
+    click(cx, "button edit-description");
+    cx.simulate_keystrokes("x");
+    click(cx, "button discard");
+    assert_eq!(mode(&view, cx), "Normal");
+    click(cx, "button add-comment");
+    cx.simulate_keystrokes("h i");
+    click(cx, "button save");
+    view.read_with(cx, |view, _| {
+        let task = view.board.brain(0).task(1).unwrap();
+        assert_eq!((task.description.as_str(), task.comments[0].body.as_str()), ("", "hi"), "discarded, then added");
+    });
+    click(cx, "button edit-comment-0");
+    assert!(mode(&view, cx).contains("Comment("), "{}", mode(&view, cx));
+    cx.simulate_keystrokes("escape");
+    click(cx, "button delete-comment-0");
+    click(cx, "button confirm");
+    view.read_with(cx, |view, _| assert_eq!(view.board.brain(0).task(1).unwrap().comments, []));
+
+    click(cx, "button delete");
+    assert!(mode(&view, cx).starts_with("Confirm(Delete"));
+    click(cx, "button cancel");
+    view.read_with(cx, |view, _| assert!(view.board.brain(0).task(1).is_some(), "cancelled"));
+    click(cx, "close drawer");
+    view.read_with(cx, |view, _| assert!(!view.board.drawer));
+}
+
+#[gpui::test]
+fn the_top_bar_and_the_running_bar_act_when_clicked(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a", "b"]);
+    click(cx, "segment tab-1");
+    view.read_with(cx, |view, _| assert_eq!(view.board.tab, crate::state::Tab::Notes));
+    click(cx, "segment tab-0");
+    click(cx, "segment layout-1");
+    view.read_with(cx, |view, _| assert_eq!(view.board.layout, crate::state::Layout::List));
+    click(cx, "segment layout-0");
+    click(cx, "button new");
+    assert!(mode(&view, cx).starts_with("Form("));
+    cx.simulate_keystrokes("escape");
+    click(cx, "button commands");
+    assert!(mode(&view, cx).starts_with("Palette("));
+    click(cx, "button palette-close");
+    click(cx, "button reload");
+    assert_eq!(mode(&view, cx), "Normal");
+
+    // An agent's question on #2: the bar's button goes to it.
+    view.update(cx, |view, cx| {
+        let brain = view.board.brain_mut(0);
+        brain.author = kanbrain_core::model::Author::Agent;
+        brain.ask(2, "Which one?").unwrap();
+        cx.notify();
+    });
+    cx.run_until_parked();
+    click(cx, "button waiting");
+    view.read_with(cx, |view, _| assert_eq!(view.board.selected, Some(crate::state::Key::new(0, 2))));
+
+    // #2, selected, started from the keyboard and parked from the running bar.
+    cx.simulate_keystrokes("1 escape s");
+    view.read_with(cx, |view, _| assert_eq!(view.board.brain(0).task(2).unwrap().status, Status::Doing));
+    click(cx, "button park 0/2");
+    view.read_with(cx, |view, _| assert_eq!(view.board.brain(0).task(2).unwrap().status, Status::Parked));
+}
+
+#[gpui::test]
+fn manage_projects_buttons_open_their_dialogs_and_come_back(cx: &mut gpui::TestAppContext) {
+    let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    for repo in ["api", "web"] {
+        let dir = code.path().join(repo).join(".brain");
+        Store::at(&dir).unwrap().save(&mut Task::new(1, format!("{repo} task"), now())).unwrap();
+        kanbrain_core::projects::register(central.path(), "shop", &dir).unwrap();
+        kanbrain_core::projects::write_repo_card(
+            &dir,
+            &kanbrain_core::projects::RepoCard { project: "shop".into(), repo: None, notes: "notes".into() },
+        )
+        .unwrap();
+    }
+    let mut board = Board::open(central.path(), None).unwrap();
+    board.set_scope(crate::state::Scope::Project("shop".into()));
+    let (view, cx) = cx.add_window_view(|window, cx| BrainView::new(board, window, cx));
+    cx.run_until_parked();
+    click(cx, "manage-project-button");
+    // The project's buttons first: coming back from a repository's dialog highlights that repository, whose index
+    // the project's buttons then carry.
+    for (button, opens) in [
+        ("button rename-project 1", "RenameProject"),
+        ("button remove-project", "Remove"),
+        ("button rename-repo 2", "RenameRepo"),
+        ("button move-repo 2", "MoveRepo"),
+        ("button remove-repo 2", "Remove"),
+    ] {
+        click(cx, button);
+        assert!(mode(&view, cx).contains(opens), "{button}: {}", mode(&view, cx));
+        click(cx, "button cancel");
+        assert!(mode(&view, cx).starts_with("ManageProject("), "{button} goes back: {}", mode(&view, cx));
+    }
+    for edit in ["button edit-notes 2", "button edit-project 2"] {
+        click(cx, edit);
+        assert!(mode(&view, cx).starts_with("Edit("), "{edit}");
+        click(cx, "button save");
+        assert!(mode(&view, cx).starts_with("ManageProject("), "{edit}'s editor goes back: {}", mode(&view, cx));
+    }
+    click(cx, "button close-manage-project");
+    assert_eq!(mode(&view, cx), "Normal");
+}
+
+#[gpui::test]
+fn the_report_and_calendar_buttons_act_when_clicked(cx: &mut gpui::TestAppContext) {
+    let (view, cx, dir) = window(cx, &["a"]);
+    cx.simulate_keystrokes("s 4");
+    let period = |view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext| {
+        view.read_with(cx, |view, _| view.board.report.period)
+    };
+    let now = period(&view, cx);
+    click(cx, "button prev");
+    assert_ne!(period(&view, cx), now);
+    click(cx, "button now");
+    assert_eq!(period(&view, cx), now);
+    click(cx, "segment unit-100");
+    view.read_with(cx, |view, _| assert_eq!(view.board.report.period.unit, kanbrain_core::period::Unit::Day));
+    click(cx, "button group");
+    view.read_with(cx, |view, _| assert_eq!(view.board.report.group, kanbrain_core::brain::Group::Tag));
+    click(cx, "button export");
+    assert!(std::fs::read_dir(dir.path().join("reports")).unwrap().next().is_some(), "exported");
+
+    cx.simulate_keystrokes("5");
+    click(cx, "segment unit-109");
+    view.read_with(cx, |view, _| assert_eq!(view.board.calendar.period.unit, kanbrain_core::period::Unit::Month));
+    let show = view.read_with(cx, |view, _| view.board.calendar.show);
+    click(cx, "button show");
+    view.read_with(cx, |view, _| assert_ne!(view.board.calendar.show, show));
+}
+
+#[gpui::test]
+fn the_comment_list_edits_the_comment_clicked(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    cx.simulate_keystrokes("c o n e escape c t w o escape shift-c");
+    assert!(mode(&view, cx).starts_with("Comments("));
+    click(cx, "comment 0");
+    view.read_with(cx, |view, _| {
+        assert!(matches!(&view.board.mode, crate::state::Mode::Edit(edit)
+            if edit.target == crate::state::Target::Comment(crate::state::Key::new(0, 1), 0)));
+    });
+}
+
+#[test]
+fn long_text_is_cut_at_a_words_end() {
+    assert_eq!(truncate_words("short", 10), "short");
+    assert_eq!(truncate_words("accept or reject it, please", 20), "accept or reject…");
+    assert_eq!(truncate_words("Too much ops, for now", 15), "Too much ops…", "no comma before the ellipsis");
+    assert_eq!(truncate_words("unbreakableword", 6), "unbre…", "one word is cut as it can be");
+}
+
+#[gpui::test]
+fn a_comments_buttons_stay_in_the_details_however_long_its_heading(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    view.update(cx, |view, cx| {
+        let brain = view.board.brain_mut(0);
+        brain.author = kanbrain_core::model::Author::Agent;
+        brain.add_comment(1, "first").unwrap();
+        brain.update_comment(1, 0, "first, edited").unwrap();
+        cx.notify();
+    });
+    cx.simulate_resize(gpui::size(px(1000.), px(800.)));
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+    let close = cx.debug_bounds("close drawer").expect("the details are open");
+    let delete = cx.debug_bounds("button delete-comment-0").expect("the comment has Delete");
+    assert!(delete.right() <= close.right() + px(1.), "within the panel: {delete:?}, its edge {close:?}");
+}
+
+#[gpui::test]
+fn the_top_bar_wraps_alike_on_every_tab(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a", "b"]);
+    view.update(cx, |view, cx| {
+        let brain = view.board.brain_mut(0);
+        brain.author = kanbrain_core::model::Author::Agent;
+        brain.ask(2, "Which one?").unwrap();
+        cx.notify();
+    });
+    for width in (90_u16..=160).map(|w| f32::from(w) * 10.) {
+        cx.simulate_resize(gpui::size(px(width), px(800.)));
+        let mut places = Vec::new();
+        for tab in ["1", "2", "3", "4", "5"] {
+            cx.simulate_keystrokes(tab);
+            cx.run_until_parked();
+            places.push(cx.debug_bounds("button new").expect("the New button is drawn").origin.y);
+        }
+        assert!(places.windows(2).all(|p| p[0] == p[1]), "at {width} px the bar moves between tabs: {places:?}");
+    }
+}
+
+#[gpui::test]
+fn dialogs_name_the_entry_with_its_brain_when_several_are_shown(cx: &mut gpui::TestAppContext) {
+    let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let repo = code.path().join("blog/.brain");
+    for (dir, title) in [(central.path(), "renew passport"), (repo.as_path(), "first post")] {
+        let mut task = Task::new(1, title.to_string(), now());
+        task.comments.push(kanbrain_core::model::Comment::new(now(), "draft done".into(), Author::Human));
+        Store::at(dir).unwrap().save(&mut task).unwrap();
+    }
+    kanbrain_core::projects::register(central.path(), "blog", &repo).unwrap();
+    let board = Board::open(central.path(), None).unwrap();
+    let (_view, cx) = cx.add_window_view(|window, cx| BrainView::new(board, window, cx));
+    cx.run_until_parked();
+    let card = cx.debug_bounds("card 1/1").expect("blog's #1 is drawn").center();
+    cx.simulate_click(card, gpui::Modifiers::none());
+    for (keys, title) in [
+        ("e", "dialog Edit blog #1"),
+        ("M", "dialog Move blog #1 first post to which project?"),
+        ("r", "dialog Related to blog #1 first post"),
+        ("C", "dialog Comments on blog #1 first post"),
+    ] {
+        cx.simulate_keystrokes(keys);
+        cx.run_until_parked();
+        assert!(cx.debug_bounds(title).is_some(), "`{keys}` opens `{title}`");
+        cx.simulate_keystrokes("escape");
+        cx.run_until_parked();
+    }
+}
+
+#[test]
+fn the_editor_is_visual_then_editor_skipping_one_set_empty() {
+    let some = |s: &str| Some(s.to_string());
+    assert_eq!(editor_of(some("code -w"), some("nano")), "code -w");
+    assert_eq!(editor_of(some(" "), some("nano")), "nano", "set but empty names none");
+    assert_eq!(editor_of(None, some("nano")), "nano");
+    assert_eq!(editor_of(None, some("")), if cfg!(windows) { "notepad" } else { "vi" });
+}
+
+#[test]
+fn a_done_cards_title_is_dimmed() {
+    assert_eq!(board::title_color(Status::Done), theme::DIM);
+    assert_eq!(board::title_color(Status::Doing), theme::TEXT);
+}
+
+#[gpui::test]
+fn a_card_shows_the_question_its_task_waits_on(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["Rate-limit login"]);
+    assert!(cx.debug_bounds("asked 0/1").is_none(), "nothing asked yet");
+    view.update(cx, |view, cx| {
+        view.board.brain_mut(0).ask(1, "Per IP or per account?").unwrap();
+        cx.notify();
+    });
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("asked 0/1").is_some(), "the question is on its card");
+}
+
+#[gpui::test]
+fn a_card_shows_its_tags_only_when_it_has_some(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["Rate-limit login"]);
+    assert!(cx.debug_bounds("tags 0/1").is_none(), "no tags, no row for them");
+    view.update(cx, |view, cx| {
+        let brain = view.board.brain_mut(0);
+        let mut task = brain.task(1).unwrap().clone();
+        task.tags = vec!["backend".into()];
+        brain.store.save(&mut task).unwrap();
+        view.board.reload().unwrap();
+        cx.notify();
+    });
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("tags 0/1").is_some(), "the tags are on its card");
+}
+
+#[test]
+fn a_tags_uses_name_only_the_kinds_it_is_on() {
+    assert_eq!(topbar::uses([2, 1, 0]), "2 tasks · 1 note");
+    assert_eq!(topbar::uses([0, 0, 1]), "1 decision");
+}
+
+#[test]
+fn the_project_card_shows_a_descriptions_first_line_that_isnt_blank() {
+    assert_eq!(topbar::first_line("\n  \nSells things.\nMore."), "Sells things.");
+    assert_eq!(topbar::first_line(""), "");
+}
+
+#[test]
+fn a_list_counts_the_rows_out_of_view_from_its_scroll_or_the_highlight() {
+    use super::dropdown::{ROW_HEIGHT, hidden};
+    assert_eq!(hidden(12, 0, 8, 0., false), (0, 4));
+    assert_eq!(hidden(12, 0, 8, ROW_HEIGHT * 1.4, false), (1, 3), "a row more than half hidden is out of view");
+    assert_eq!(hidden(12, 0, 8, ROW_HEIGHT * 2.4, false), (2, 2), "one less than half hidden isn't");
+    assert_eq!(hidden(12, 9, 8, 0., true), (2, 2), "the highlight below the view scrolls it just enough");
+    assert_eq!(hidden(12, 1, 8, ROW_HEIGHT * 4., true), (1, 3), "and above it, just enough too");
+    assert_eq!(hidden(12, 11, 8, ROW_HEIGHT * 4., false), (4, 0));
 }

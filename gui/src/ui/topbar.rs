@@ -2,6 +2,7 @@
 //! clock is running (time is always tracked), with today's total.
 
 use super::dropdown::{Dropdown, Row};
+use super::markdown;
 use super::pointer::TextBox;
 use super::theme::{self, BORDER, YELLOW};
 use super::widgets::{self, Kind, dim, dim_small, segment, segmented, small, tag_chips};
@@ -14,6 +15,9 @@ use gpui::{
 };
 use kanbrain_core::model::{Kind as EntryKind, Status, Task, counted, fmt_clock, fmt_dur, now, worked};
 use kanbrain_core::period::{Period, Unit};
+
+/// The New button's longest label, whose width it keeps on every tab.
+const NEW_LONGEST: &str = "+ New decision";
 
 /// Width of the project dropdown.
 const SCOPE_DROPDOWN_WIDTH: f32 = 300.;
@@ -106,7 +110,6 @@ fn scope_dropdown(
 fn project_card(board: &Board, cx: &mut Context<BrainView>) -> Option<Div> {
     let src = board.project_src()?;
     let project = board.brain(src).project.as_ref()?;
-    let first = |text: &str| text.lines().find(|l| !l.trim().is_empty()).unwrap_or_default().to_string();
     let line = |label: String, text: &str, button: Stateful<Div>| {
         div()
             .flex()
@@ -114,7 +117,7 @@ fn project_card(board: &Board, cx: &mut Context<BrainView>) -> Option<Div> {
             .gap_2()
             .text_size(px(12.))
             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).child(label))
-            .child(if text.is_empty() { dim("Not described yet.") } else { dim(first(text)) }.min_w_0().truncate())
+            .child(if text.is_empty() { dim("Not described yet.") } else { dim(first_line(text)) }.min_w_0().truncate())
             .child(small(button))
     };
     let card = div().flex().flex_col().gap_0p5().child(line(
@@ -127,6 +130,11 @@ fn project_card(board: &Board, cx: &mut Context<BrainView>) -> Option<Div> {
         line(project.repo.clone(), &project.notes, edit)
     });
     Some(card.children(repo))
+}
+
+/// A text's first line that isn't blank, as plain text: the markdown shows rendered only in full, in Manage project.
+pub(super) fn first_line(text: &str) -> String {
+    markdown::plain(text.lines().find(|l| !l.trim().is_empty()).unwrap_or_default())
 }
 
 /// The tabs with their counts, the search box, and New / Reload / Shortcuts.
@@ -187,7 +195,16 @@ fn toolbar(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<Brain
                 .gap_2()
                 .ml_auto()
                 .children(waiting_button(board, cx))
-                .child(action("new", new_label, Kind::Primary, KeyCode::Char('n'), cx))
+                // As wide on every tab as its longest label, held by that label unseen under the shown one, so the
+                // bar wraps alike as tabs change, in whatever font.
+                .child(
+                    action("new", "", Kind::Primary, KeyCode::Char('n'), cx).child(
+                        div()
+                            .relative()
+                            .child(div().invisible().child(NEW_LONGEST))
+                            .child(div().absolute().inset_0().flex().justify_center().child(new_label)),
+                    ),
+                )
                 .child(action("reload", "Reload", Kind::Ghost, KeyCode::Char('R'), cx))
                 .child(action("commands", "Commands", Kind::Ghost, KeyCode::Char('?'), cx)),
         )
@@ -350,13 +367,12 @@ fn tag_filter(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<Br
 }
 
 /// Where a tag is used: `2 tasks · 1 note`, so one that isn't on any card can be found.
-fn uses(counts: [usize; 3]) -> String {
-    let names = [("task", "tasks"), ("note", "notes"), ("decision", "decisions")];
+pub(super) fn uses(counts: [usize; kanbrain_core::model::Kind::ALL.len()]) -> String {
     counts
         .iter()
-        .zip(names)
+        .zip(kanbrain_core::model::Kind::ALL)
         .filter(|(n, _)| **n > 0)
-        .map(|(&n, (one, many))| counted(n, one, many))
+        .map(|(&n, kind)| counted(n, kind.as_str(), &format!("{}s", kind.as_str())))
         .collect::<Vec<_>>()
         .join(" · ")
 }

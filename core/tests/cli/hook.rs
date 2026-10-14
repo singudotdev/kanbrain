@@ -90,6 +90,9 @@ fn a_task_an_agent_started_and_never_commented_on_is_reminded_once() {
     let stop = hook(HookEvent::Stop, &input(&root, false), central.path()).expect("a reminder");
     assert!(stop.contains(&format!("`kb comment {task}`")), "{stop}");
     assert!(stop.contains(&format!("`kb comment {other}`")), "each one a subagent runs: {stop}");
+    // Another session's, as far as this one knows: never told to finish what it didn't start.
+    assert!(stop.contains("If you started it") && stop.contains("if you didn't, leave it alone"), "{stop}");
+    assert!(!stop.contains("since you started it"), "{stop}");
     brain.add_comment(other, "expiry set to a day").unwrap();
     assert_eq!(hook(HookEvent::Stop, &input(&root, true), central.path()), None, "once a turn");
     brain.add_comment(task, "sessions cached; next: expiry").unwrap();

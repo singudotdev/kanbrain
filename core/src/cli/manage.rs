@@ -17,6 +17,8 @@ use std::path::Path;
 /// Renames project `old` to `new`: the registry, its shared card, and each of its repositories' cards.
 pub fn rename_project(central: &Path, old: &str, new: &str) -> Result<Vec<String>> {
     projects::check_name(new)?;
+    // From the checks to the cards: a project named `new` meanwhile would take this one's repositories.
+    let _lock = crate::store::Store::at(central)?.lock()?;
     let repos = projects::load(central)?;
     if !repos.iter().any(|r| r.project == old) {
         bail!("no project `{old}`");
@@ -71,8 +73,40 @@ pub fn move_repo(central: &Path, dir: &Path, to: &str) -> Result<Vec<String>> {
     }
     projects::check_name(to)?;
     let root = repo.dir.parent().filter(|_| repo.dir.is_dir()).context("its folder is gone: remove it instead")?;
+    // Its name in the project it leaves: joining another may cost it a name of its own.
+    let name = repo.name();
     let dropped = unlink(central, &repo)?;
-    let mut done = init::init(root, Some(to), None, central)?;
+    // A name of its own (`kb project repo`) goes with it, unless the project it joins has one by that name.
+    let own = projects::read_repo_card(&repo.dir).and_then(|card| card.repo);
+    // Only the name's own trouble (taken there) names it after its folder: anything else is the move's.
+    let refused = own.as_deref().and_then(|name| projects::repo_name(central, to, &repo.dir, Some(name)).err());
+    let keep = own.as_deref().filter(|_| refused.is_none());
+    let joined = init::join(root, Some(to), keep, central)?;
+    // Said as a move, not as the `init` it runs: "… already exists" would lead.
+    let mut done = vec![format!("moved {name} from project `{}` to `{to}`", repo.project)];
+    if let (Some(name), Some(why)) = (&own, refused) {
+        done.push(format!("named after its folder in `{to}`, as `{name}` can't be: {why:#}"));
+    }
+    done.extend(joined.into_iter().filter(|line| !line.ends_with(" already exists")));
+    // Its old project, left with no repository: the description goes to the new project when that has none, rather
+    // than be lost, and the card goes, as `deinit` takes it.
+    if !projects::load(central)?.iter().any(|r| r.project == repo.project) {
+        let description = projects::read_description(central, &repo.project);
+        if !description.is_empty() {
+            if projects::read_description(central, to).is_empty() {
+                projects::write_description(central, to, &description)?;
+                done.push(format!("project `{}`'s description went with it to `{to}`, which had none", repo.project));
+            } else {
+                done.push(format!("project `{}`'s description is dropped: `{to}` keeps its own", repo.project));
+            }
+        }
+        if projects::remove_description(central, &repo.project)? {
+            done.push(format!(
+                "removed project `{}`'s card from the central brain: it had no other repository",
+                repo.project
+            ));
+        }
+    }
     if dropped > 0 {
         let links = counted(dropped, "link", "links");
         done.push(format!("dropped {links} between it and project `{}`'s repositories", repo.project));
@@ -124,7 +158,9 @@ pub fn remove_project(central: &Path, project: &str, purge: bool) -> Result<Vec<
     }
     let mut done = Vec::new();
     for repo in repos {
-        done.extend(remove_repo(central, &repo.dir, purge)?);
+        // Each but the last says the card stays for the others, which go next: untrue once they have.
+        let keeps = format!("project `{project}` keeps its card");
+        done.extend(remove_repo(central, &repo.dir, purge)?.into_iter().filter(|line| !line.starts_with(&keeps)));
     }
     Ok(done)
 }

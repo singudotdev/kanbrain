@@ -244,7 +244,7 @@ fn comments_block(key: Key, task: &Task, cx: &mut Context<BrainView>) -> Div {
             let what = if comment.question { "question" } else { "comment" };
             let by = if comment.author == Author::Agent { format!("Agent {what} · ") } else { String::new() };
             let edit = small(widgets::button(("edit-comment", index), "Edit", Kind::Ghost))
-                .tooltip(widgets::tooltip("Shortcut: C, then enter on it"))
+                .tooltip(widgets::tooltip("Shortcut: C, then Enter on it"))
                 .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
                     this.act(cx, |b| b.open_editor(Target::Comment(key, index)));
                 }));
@@ -265,7 +265,8 @@ fn comments_block(key: Key, task: &Task, cx: &mut Context<BrainView>) -> Div {
                         .flex()
                         .items_center()
                         .gap_1()
-                        .child(dim_small(format!("{by}{}{edited}", when(comment.created))).flex_1())
+                        // It wraps rather than push the buttons past the panel's edge, as an edit's date did.
+                        .child(dim_small(format!("{by}{}{edited}", when(comment.created))).flex_1().min_w_0())
                         .child(edit)
                         .child(delete),
                 )

@@ -20,6 +20,59 @@ fn save_renames_on_title_change_and_loads_back() {
 }
 
 #[test]
+fn a_file_renamed_only_in_case_keeps_its_name_and_its_content() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    store.save(&mut Task::new(5, "Fix login".into(), now())).unwrap();
+    // As a sync tool or a hand rename leaves it; on macOS and Windows it's the same file as 0005-fix-login.md.
+    let renamed = dir.path().join("0005-Fix-Login.md");
+    fs::rename(dir.path().join("0005-fix-login.md"), &renamed).unwrap();
+    let (mut tasks, _) = store.load().unwrap();
+    tasks[0].description = "kept".into();
+    store.save(&mut tasks[0]).unwrap();
+
+    let names: Vec<String> =
+        fs::read_dir(dir.path()).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    assert_eq!(names, ["0005-Fix-Login.md"], "saved where it is, not removed as an old name");
+    assert!(fs::read_to_string(renamed).unwrap().contains("kept"));
+}
+
+#[test]
+fn files_an_editor_saved_with_a_byte_order_mark_read_as_without() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let mut task = Task::new(2, "Fix login".into(), now());
+    store.save(&mut task).unwrap();
+    let path = dir.path().join("0002-fix-login.md");
+    fs::write(&path, format!("\u{feff}{}", fs::read_to_string(&path).unwrap())).unwrap();
+    fs::write(dir.path().join(LAST_ID_FILE), "\u{feff}7\n").unwrap();
+    fs::write(dir.path().join(TAGS_FILE), "\u{feff}- prod: #112233\n").unwrap();
+
+    let (tasks, warnings) = store.load().unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(tasks[0].title, "Fix login", "the title, not untitled");
+    assert_eq!(store.last_id(), 7);
+    assert!(store.load_tag_colors().unwrap().chip("prod").is_some(), "its first color too");
+    let repo = dir.path().join("repo");
+    fs::create_dir(&repo).unwrap();
+    fs::write(repo.join(crate::projects::PROJECT_FILE), "\u{feff}# shop\n").unwrap();
+    assert_eq!(crate::projects::read_repo_card(&repo).unwrap().project, "shop");
+    fs::write(dir.path().join(crate::migrate::FORMAT_FILE), "\u{feff}1\n").unwrap();
+    assert_eq!(crate::migrate::format_of(dir.path()).unwrap(), 1);
+}
+
+#[test]
+fn a_brain_made_now_says_its_format_and_one_already_there_is_left_as_it_is() {
+    let dir = tempfile::tempdir().unwrap();
+    let new = dir.path().join("new");
+    Store::at(&new).unwrap();
+    let format = fs::read_to_string(new.join(crate::migrate::FORMAT_FILE)).unwrap();
+    assert_eq!(format, format!("{}\n", crate::migrate::FORMAT));
+    Store::at(dir.path()).unwrap();
+    assert!(!dir.path().join(crate::migrate::FORMAT_FILE).exists(), "an older brain reads as format 1 until migrated");
+}
+
+#[test]
 fn unreadable_files_become_warnings() {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::at(dir.path()).unwrap();
@@ -109,7 +162,50 @@ fn what_a_crash_left_of_a_write_goes_once_the_lock_is_taken() {
     let crashed = left(".0001-a.md.4242-0.tmp", Duration::from_secs(2 * 60 * 60));
     let in_report = left("reports/.week.md.4242-1.tmp", Duration::from_secs(2 * 60 * 60));
     let writing = left(".0002-b.md.4243-0.tmp", Duration::ZERO);
+    // As versions before 0.4.0 named them.
+    let old_id = left(".last-id.tmp", Duration::from_secs(2 * 60 * 60));
+    // Another program's, in a central brain that is a notes vault.
+    let editors =
+        [".notes.swp.tmp", ".sync.tmp", "reports/.backup.4242-1.tmp", ".notes.md.backup-1.tmp", ".notes.md.4242-x.tmp"]
+            .map(|name| left(name, Duration::from_secs(2 * 60 * 60)));
     drop(Store::at(dir.path()).unwrap().lock().unwrap());
-    assert!(!crashed.exists() && !in_report.exists());
+    assert!(!crashed.exists() && !in_report.exists() && !old_id.exists());
     assert!(writing.exists(), "maybe still being written, by a write made without the lock");
+    assert!(editors.iter().all(|path| path.exists()), "not kanbrain's");
+}
+
+#[test]
+fn a_write_that_fails_leaves_the_file_as_it_was_and_no_temporary() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let mut task = Task::new(1, "Fix login".into(), now());
+    store.save(&mut task).unwrap();
+    let path = dir.path().join("0001-fix-login.md");
+    let before = fs::read_to_string(&path).unwrap();
+    // Its place taken by a folder, as a sync tool's conflict can leave it.
+    let blocked = dir.path().join("0001-blocked.md");
+    fs::create_dir(&blocked).unwrap();
+    assert!(write_file(&blocked, "text").is_err());
+    let leftovers = |dir: &Path| {
+        fs::read_dir(dir)
+            .unwrap()
+            .filter(|e| e.as_ref().unwrap().file_name().to_string_lossy().ends_with(".tmp"))
+            .count()
+    };
+    assert_eq!(leftovers(dir.path()), 0, "no temporary left behind");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        // A folder that can't be written to, as a read-only mount or a permissions slip leaves it.
+        fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o555)).unwrap();
+        task.description = "lost?".into();
+        let failed = store.save(&mut task);
+        fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o755)).unwrap();
+        // Root writes anyway; the rest of the checks still hold.
+        if failed.is_err() {
+            assert_eq!(fs::read_to_string(&path).unwrap(), before, "the file as it was");
+        }
+        assert_eq!(leftovers(dir.path()), 0);
+    }
 }

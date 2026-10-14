@@ -1,0 +1,23 @@
+# cargo-mutants (`cargo mutants --in-diff`, the CI's `mutants` job): mutants no test can tell apart, each with why.
+# A new exclusion needs the same: a missed mutant is otherwise a test to write.
+
+# Every package's tests for every mutant: the core's command line is tested through the `kb` binary, in the
+# `kanbrain` package (cli/tests/kb.rs), which a core-only run wouldn't build.
+test_workspace = true
+# The baseline runs alone, mutants side by side (`-j`): their tests run slower than it did, so a timeout scaled from
+# it alone would cut good runs short and call them timeouts.
+minimum_test_timeout = 300
+exclude_re = [
+    # Starts the installer and the app's processes: run by the installers' end-to-end checks, not by tests.
+    'gui/src/update\.rs:.*replace (install|install_after_exit|install_now) -> Result',
+    # The hover style of a list row: the window tests have no pointer to hover with.
+    'gui/src/ui/list\.rs:.*delete ! in row',
+    # Runs the user's editor and waits for it: the choice of editor (`editor_of`) is what tests check.
+    'gui/src/ui/mod\.rs:.*(replace open_editor -> Result| in open_editor$)',
+    # A leftover exactly CUT_WRITE_AGE old, to the nanosecond, is the only one `>=` would delete too.
+    'core/src/store\.rs:.*replace > with >= in forget_cut_writes',
+    # A message exactly one second after a skipped read's, to the nanosecond, is the only one `<=` would join.
+    'gui/src/state/mod\.rs:.*replace < with <= in Board::notify',
+    # Downloads the installer from GitHub and runs it: the installer is checked by e2e/install.sh, not by tests.
+    'core/src/cli/update\.rs:.*(replace run_installer -> Result| in run_installer$)',
+]

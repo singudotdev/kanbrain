@@ -24,6 +24,21 @@ fn what_the_menu_offers_it_names_and_the_palette_describes() {
 }
 
 #[test]
+fn the_palette_puts_only_the_entrys_own_commands_first() {
+    let section = |shown: &str| ACTIONS.iter().find(|a| a.shown == shown).unwrap().section();
+    assert_eq!(section("e"), Section::Entry);
+    assert_ne!(section("A"), Section::Entry, "adding a project isn't about the entry");
+}
+
+#[test]
+fn the_palettes_rows_are_plain_text() {
+    // Drawn as written, unlike the status bar's messages, which drop markdown's backticks.
+    for action in ACTIONS {
+        assert!(!action.does.contains('`'), "{}", action.does);
+    }
+}
+
+#[test]
 fn every_key_is_documented_on_its_tabs() {
     // On Windows, git may check the docs out with CRLF line endings.
     let docs = include_str!("../../docs/keybindings.md").replace("\r\n", "\n");

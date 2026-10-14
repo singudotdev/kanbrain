@@ -63,7 +63,7 @@ impl std::error::Error for TooNew {}
 /// The format of the brain in `dir`.
 pub fn format_of(dir: &Path) -> Result<u32> {
     let path = dir.join(FORMAT_FILE);
-    match fs::read_to_string(&path) {
+    match store::read_text(&path) {
         // Formats count from 1: a 0 would have migrations start before the first.
         Ok(text) => text
             .trim()

@@ -117,16 +117,29 @@ impl Tab {
     }
 }
 
+/// How a message saying what a read skipped starts.
+const SKIPPED: &str = "skipped: ";
+
 /// What the board asks of the window, which can run programs and open the system's dialogs.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Request {
     /// Open the file in `$EDITOR`, and re-read the files when it exits.
     Edit(PathBuf),
     /// Open the system's folder dialog, for a project to add, and hand the folder to [`Board::name_project`],
-    /// with the project it joins when it's added from Manage project.
-    Folder(Option<String>),
+    /// with the repository (its `.brain/`) whose Manage project it's added from, whose project it joins: by folder,
+    /// as the board may be read again while the dialog is open, which can shift every brain's place.
+    Folder(Option<PathBuf>),
     /// Install the newer release and start it in place of this app; see `crate::update`.
     Update,
+}
+
+/// What `u` does next: undo the last change, or redo it, having just undone it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NextUndo {
+    /// Put the files back as they were before it.
+    Undo,
+    /// Write them again as it left them.
+    Redo,
 }
 
 /// Everything the window shows and remembers.
@@ -138,6 +151,10 @@ pub struct Board {
     pub central: PathBuf,
     /// The `.brain/` the window was opened in, shown even if it isn't registered.
     opened_in: Option<PathBuf>,
+    /// Registered repositories left out because they couldn't be read (see [`sources::load`]).
+    skipped: Vec<sources::Skipped>,
+    /// What was skipped when last said, so each read says only what's newly skipped.
+    warned: Vec<String>,
     /// Which brains are shown.
     pub scope: Scope,
     /// The tab shown.
@@ -171,6 +188,8 @@ pub struct Board {
     message: Option<(String, Instant)>,
     /// The files the last change wrote, as they were before and after, for `u` to put back.
     last_change: Vec<Change>,
+    /// What `u` does next to `last_change`.
+    next_undo: NextUndo,
 }
 
 impl Board {
@@ -178,9 +197,11 @@ impl Board {
     /// Opened in a project's `.brain/` (`opened_in`), it shows that project, or that repository of a
     /// project with several.
     pub fn open(central: &Path, opened_in: Option<PathBuf>) -> Result<Self> {
-        let sources = sources::load(central, opened_in.as_deref())?;
+        let (sources, skipped) = sources::load(central, opened_in.as_deref())?;
         let mut board = Self {
             sources,
+            skipped,
+            warned: Vec::new(),
             central: central.to_path_buf(),
             opened_in,
             scope: Scope::All,
@@ -199,6 +220,7 @@ impl Board {
             available: None,
             message: None,
             last_change: Vec::new(),
+            next_undo: NextUndo::Undo,
         };
         if let Some(src) = board.opened_in.as_ref().and_then(|dir| board.src_at(dir)) {
             let project = board.sources[src].project.clone().unwrap_or_default();
@@ -216,7 +238,17 @@ impl Board {
 
     /// Shows `msg` in the status bar for a few seconds.
     pub fn notify(&mut self, msg: impl Into<String>) {
-        self.message = Some((msg.into(), Instant::now()));
+        // Plain text: the command line's messages, which these often are, quote names in markdown's backticks.
+        let mut msg = msg.into().replace('`', "");
+        // What a read just found skipped stays beside what the action that read says: it's said only once.
+        if let Some((said, at)) = &self.message
+            && said.starts_with(SKIPPED)
+            && at.elapsed() < Duration::from_secs(1)
+            && *said != msg
+        {
+            msg = format!("{msg} · {said}");
+        }
+        self.message = Some((msg, Instant::now()));
     }
 
     /// Shows what went wrong in the status bar, with its causes.
@@ -234,12 +266,29 @@ impl Board {
     /// the list; a dialog on a folder no longer there closes.
     pub fn reload(&mut self) -> Result<()> {
         let before: Vec<PathBuf> = self.sources.iter().map(|s| s.brain.store.dir().to_path_buf()).collect();
-        self.sources = sources::load(&self.central, self.opened_in.as_deref())?;
+        let shown: Vec<usize> = match &self.scope {
+            Scope::Project(name) => self.repos_of(name).collect(),
+            _ => Vec::new(),
+        };
+        (self.sources, self.skipped) = sources::load(&self.central, self.opened_in.as_deref())?;
         let now_at: Vec<Option<usize>> = before.iter().map(|dir| self.src_at(dir)).collect();
         let to = |src: usize| now_at.get(src).copied().flatten();
         self.selected = self.selected.and_then(|k| Some(Key::new(to(k.src)?, k.id)));
         if let Scope::Repo(src) = self.scope {
             self.scope = to(src).map_or(Scope::All, Scope::Repo);
+        }
+        // A project shown that's gone from the command line: under its new name when its repositories are now all of
+        // another's, as after a rename or a move of its only repository to a new project; else all of them.
+        if let Scope::Project(name) = &self.scope
+            && self.repos_of(name).next().is_none()
+        {
+            let mut now: Vec<usize> = shown.iter().filter_map(|&src| to(src)).collect();
+            now.sort_unstable();
+            let renamed = now
+                .first()
+                .and_then(|&src| self.sources[src].project.clone())
+                .filter(|project| now.len() == shown.len() && self.repos_of(project).eq(now.iter().copied()));
+            self.scope = renamed.map_or(Scope::All, Scope::Project);
         }
         let open = !matches!(self.mode, Mode::Normal);
         self.mode = std::mem::replace(&mut self.mode, Mode::Normal).remap(to).unwrap_or(Mode::Normal);
@@ -252,12 +301,12 @@ impl Board {
 
     /// Re-reads the brains whose folders are among `dirs`, those another program changed, and the other
     /// repositories of their projects, rather than all of them: an agent's every command changes one, and
-    /// the window may show many. Everything is
-    /// re-read when the list of projects or their shared cards may have changed, or a folder is gone.
+    /// the window may show many. Everything is re-read when the list of projects or their shared cards may
+    /// have changed, a repository was renamed, or a folder is gone.
     pub fn reload_changed(&mut self, dirs: &[PathBuf]) -> Result<()> {
         let cards = projects::cards_dir(&self.central);
-        let everything =
-            dirs.iter().any(|d| *d == cards || !d.is_dir()) || (dirs.contains(&self.central) && !self.same_repos()?);
+        let left_out = |d: &PathBuf| self.skipped.iter().any(|s| s.dir == *d);
+        let everything = dirs.iter().any(|d| *d == cards || !d.is_dir() || left_out(d)) || !self.same_repos()?;
         if everything {
             return self.reload();
         }
@@ -274,12 +323,21 @@ impl Board {
         Ok(())
     }
 
-    /// Reports skipped files and puts the selection somewhere visible.
+    /// Reports what is newly skipped, files and repositories left out, and puts the selection somewhere visible.
+    /// Only what wasn't said already: an agent's every write reads a brain again, and the window reads everything
+    /// once more a second after it opens.
     fn after_load(&mut self) {
-        let warnings: Vec<&str> = self.sources.iter().flat_map(|s| &s.brain.warnings).map(String::as_str).collect();
-        if !warnings.is_empty() {
-            self.notify(format!("skipped: {}", warnings.join("; ")));
+        let left_out = self.skipped.iter().map(|s| s.said.clone());
+        // Named with their brain: two repositories may skip files of one name.
+        let files = self.sources.iter().flat_map(|s| {
+            s.brain.warnings.iter().map(move |w| s.label.as_ref().map_or_else(|| w.clone(), |l| format!("{l}: {w}")))
+        });
+        let now: Vec<String> = left_out.chain(files).collect();
+        let new: Vec<&str> = now.iter().filter(|w| !self.warned.contains(w)).map(String::as_str).collect();
+        if !new.is_empty() {
+            self.notify(format!("{SKIPPED}{}", new.join("; ")));
         }
+        self.warned = now;
         self.keep_selection();
     }
 

@@ -181,6 +181,21 @@ fn entries_link_to_other_repositories_of_the_project_and_show_both_ways() {
     let other = open(&api).add(new(Kind::Task, "another")).unwrap();
     web_brain = open(&web);
     web_brain.link(cart, &[], &to_api(other)).unwrap();
+    // An older brain with no `last-id`: below its highest file's id (#2's), a missing entry (#1) was deleted.
+    std::fs::remove_file(api.join("last-id")).unwrap();
+    let mut gone = web_brain.entry(note).unwrap().clone();
+    gone.repo_links = to_api(total);
+    Store::at(&web).unwrap().save(&mut gone).unwrap();
+    assert_eq!(open(&web).entry(note).unwrap().repo_links, [], "dropped without a last-id too");
+    web_brain = open(&web);
+    // Neither an entry whose file doesn't parse nor one newer than api's last id, as on a branch from before it,
+    // was deleted: links to them stay.
+    let mut ahead = web_brain.entry(note).unwrap().clone();
+    ahead.repo_links = to_api(99);
+    Store::at(&web).unwrap().save(&mut ahead).unwrap();
+    std::fs::write(path(&open(&api), other), "not an entry\n").unwrap();
+    assert_eq!(open(&web).entry(cart).unwrap().repo_links, to_api(other), "its file is still there");
+    assert_eq!(open(&web).entry(note).unwrap().repo_links, to_api(99), "not yet there");
     std::fs::rename(&api, code.path().join("api-away")).unwrap();
     assert_eq!(open(&web).entry(cart).unwrap().repo_links, to_api(other), "kept while api can't be read");
 }
@@ -265,4 +280,38 @@ fn agents_ask_propose_and_people_answer() {
     assert!(answered < context.find("## Tasks: parked").unwrap(), "{context}");
     assert!(context.contains(&format!("- #{other} Other · waiting for an answer\n  question (")), "{context}");
     assert!(context.contains("  answer ("), "{context}");
+}
+
+#[test]
+fn an_agent_giving_the_users_verdict_answers_the_task_that_asked() {
+    let (mut brain, _dir) = brain();
+    brain.author = Author::Agent;
+    let task = brain.add(NewEntry { start: true, ..new(Kind::Task, "Pick a database") }).unwrap();
+    let decision = brain.propose(task, new(Kind::Decision, "Use SQLite")).unwrap();
+    // Another task linking the decision, but waiting on a question of its own.
+    let other = brain.add(NewEntry { links: vec![decision], ..new(Kind::Task, "Pick a region") }).unwrap();
+    brain.ask(other, "Which region?").unwrap();
+    // As `kb accept` run by an agent when the user said so in the chat.
+    assert!(brain.resolve(decision, DecisionState::Accepted, "user said ok").unwrap());
+    assert!(matches!(brain.entry(task).unwrap().asked(), Some(Asked::Answered(_))), "not waiting forever");
+    assert!(matches!(brain.entry(other).unwrap().asked(), Some(Asked::Waiting(_))), "its own question still waits");
+    // A question that names another repository's entry of that number isn't about this decision.
+    let cache = brain.add(new(Kind::Decision, "Use Redis")).unwrap();
+    let elsewhere = brain.add(NewEntry { links: vec![cache], ..new(Kind::Task, "Check the web") }).unwrap();
+    brain.ask(elsewhere, &format!("Is web#{cache} merged?")).unwrap();
+    assert!(brain.resolve(cache, DecisionState::Rejected, "not now").unwrap());
+    assert!(matches!(brain.entry(elsewhere).unwrap().asked(), Some(Asked::Waiting(_))), "web#N isn't #N");
+    let reread = Store::at(brain.store.dir()).unwrap().load().unwrap().0;
+    let task = reread.iter().find(|t| t.id == task).unwrap();
+    assert!(matches!(task.asked(), Some(Asked::Answered(_))), "and so from the file");
+}
+
+#[test]
+fn a_question_a_person_asks_waits_for_an_answer_like_an_agents() {
+    let (mut brain, _dir) = brain();
+    let task = brain.add(new(Kind::Task, "Pick a region")).unwrap();
+    brain.ask(task, "Which region, team?").unwrap();
+    assert!(matches!(brain.entry(task).unwrap().asked(), Some(Asked::Waiting(_))), "not its own answer");
+    brain.add_comment(task, "eu-west").unwrap();
+    assert!(matches!(brain.entry(task).unwrap().asked(), Some(Asked::Answered(_))));
 }

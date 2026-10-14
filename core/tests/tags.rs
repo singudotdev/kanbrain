@@ -23,3 +23,11 @@ fn round_trip_and_custom_colors() {
     // Palette index 160 is xterm (215, 0, 0).
     assert_eq!(TagColor::Palette(0).rgb(), (215, 0, 0));
 }
+
+#[test]
+fn a_color_of_other_characters_is_no_color_rather_than_a_crash() {
+    // Six bytes like a hex color, hand-typed into a file that says "Edit freely".
+    let colors = TagColors::parse("# Tag colors\n\n- prod: #aééb\n- ui: #ü0000\n");
+    assert_eq!(colors.get("prod"), None);
+    assert_eq!(colors.get("ui"), None);
+}

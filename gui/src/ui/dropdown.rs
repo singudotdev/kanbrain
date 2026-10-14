@@ -133,15 +133,8 @@ pub fn list(
     if follow {
         scroll.scroll_to_item(sel);
     }
-    // The first row in view, from how far the list is scrolled; the offset is negative going down.
-    let scrolled = f32::from(-scroll.offset().y);
-    let mut top = (0..count).take_while(|&i| rows_height(i) + ROW_HEIGHT / 2. <= scrolled).count();
-    // The offset is last frame's; when the keyboard moved, the list is about to scroll just enough to
-    // show `sel`, so count from where that leaves it.
-    if follow {
-        top = top.min(sel).max((sel + 1).saturating_sub(max_rows));
-    }
-    let below = count.saturating_sub(top + max_rows);
+    // The offset is negative going down.
+    let (top, below) = hidden(count, sel, max_rows, f32::from(-scroll.offset().y), follow);
     let id = id.into();
     let selector = format!("{id}-list");
     let rows = div()
@@ -158,14 +151,32 @@ pub fn list(
     // scroll the keyboard just asked for.
     div().flex().flex_col().child(rows).children((count > max_rows).then(|| {
         div()
-            .when(below > 0, |d| d.debug_selector(|| "list more".into()))
+            // Rows hidden and none below: some are above.
+            .debug_selector(move || if below > 0 { "list more" } else { "list above" }.into())
             .h(px(MORE_HEIGHT))
             .px_2()
             .pt_1()
             .text_size(px(12.))
             .text_color(rgb(theme::DIM))
-            .when(below > 0, |d| d.child(format!("↓ {below} more · type to filter")))
+            // Rows above too: a list scrolled down hid its first rows, linked entries say, with nothing to say so.
+            .children(match (top, below) {
+                (0, 0) => None,
+                (above, 0) => Some(format!("↑ {above} above")),
+                (0, below) => Some(format!("↓ {below} more · type to filter")),
+                (above, below) => Some(format!("↑ {above} above · ↓ {below} more · type to filter")),
+            })
     }))
+}
+
+/// How many of `count` rows are above the view and below it, with the list `scrolled` this far down: the first row in
+/// view is the first more than half shown. The offset is last frame's; when the keyboard moved (`follow`), the list is
+/// about to scroll just enough to show `sel`, so counted from where that leaves it.
+pub(super) fn hidden(count: usize, sel: usize, max_rows: usize, scrolled: f32, follow: bool) -> (usize, usize) {
+    let mut top = (0..count).take_while(|&i| rows_height(i) + ROW_HEIGHT / 2. <= scrolled).count();
+    if follow {
+        top = top.min(sel).max((sel + 1).saturating_sub(max_rows));
+    }
+    (top, count.saturating_sub(top + max_rows))
 }
 
 /// How tall `n` rows are; lists are short, so `n` fits a `u16`.

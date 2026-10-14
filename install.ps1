@@ -67,23 +67,56 @@ function Install-Kanbrain {
     function Get-Output($exe, [string[]]$arguments) {
         $out = [IO.Path]::GetTempFileName()
         try {
-            Start-Process -FilePath $exe -ArgumentList $arguments -Wait -NoNewWindow -RedirectStandardOutput $out -ErrorAction Stop
-            Get-Content $out -ErrorAction SilentlyContinue | Select-Object -First 1
+            # Escaped: -RedirectStandardOutput reads `[` `]` in a path as wildcards, and the file exists already.
+            Start-Process -FilePath $exe -ArgumentList $arguments -Wait -NoNewWindow `
+                -RedirectStandardOutput ([WildcardPattern]::Escape($out)) -ErrorAction Stop
+            Get-Content -LiteralPath $out -Encoding UTF8 -ErrorAction SilentlyContinue | Select-Object -First 1
         } catch {
             $null
         } finally {
-            Remove-Item $out -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $out -Force -ErrorAction SilentlyContinue
         }
     }
 
     # Deletes one of the installed files, saying what to do if Windows refuses because it's open.
     function Remove-Binary($path, $what) {
         try {
-            Remove-Item $path -Force -ErrorAction Stop
+            Remove-Item -LiteralPath $path -Force -ErrorAction Stop
         } catch {
             throw "kanbrain: could not remove $path ($($_.Exception.Message)). Is kanbrain open? Close it and try again."
         }
         Say "removed $what"
+    }
+
+    # Whether $file, in the central brain whose full path is $data, is one kanbrain made, by its name and what it holds
+    # (as install.sh's is_owned), so a purge of a data folder shared with other notes never takes theirs: an entry
+    # carries `- id: N` matching its name (2024-01-15.md doesn't), tags.md and projects.md their headers, last-id and
+    # format a number, a card the name of a registered project, a report its header; temp files are .NAME.PID-N.tmp.
+    function Test-Owned($data, $file) {
+        $name = $file.Name
+        if ($name -match '^\..*\.\d+-\d+\.tmp$') { return $true }
+        $first = Get-Content -LiteralPath $file.FullName -TotalCount 1 -Encoding UTF8 -ErrorAction SilentlyContinue
+        if ($file.DirectoryName -eq (Join-Path $data 'projects')) {
+            return [bool](($first -match '^# (.+)$') -and (Test-Registered $data $Matches[1]))
+        }
+        # ASCII only in this file: Windows PowerShell reads a script without a byte-order mark as ANSI.
+        if ($file.DirectoryName -eq (Join-Path $data 'reports')) { return [bool]($first -like '# Time report *') }
+        if ($file.DirectoryName -ne $data) { return $false }
+        if ($name -match '^([0-9]{4,})-.*\.md$') {
+            $id = $Matches[1].TrimStart('0')
+            if (-not $id) { $id = '0' }
+            return [bool](Select-String -LiteralPath $file.FullName -Pattern "^- id: $id$" -Encoding UTF8 -Quiet)
+        }
+        if ($name -eq 'tags.md') { return $first -eq '# Tag colors' }
+        if ($name -eq 'projects.md') { return $first -eq '# Projects' }
+        if ($name -in 'last-id', 'format') { return [bool]((Get-Content -LiteralPath $file.FullName -Raw) -match '^\d+\s*$') }
+        return $false
+    }
+
+    # Whether project $project is in the registry of the central brain at $data (`- shop: C:\...\.brain`).
+    function Test-Registered($data, $project) {
+        $registry = Join-Path $data 'projects.md'
+        return [bool]((Test-Path -LiteralPath $registry) -and (Select-String -LiteralPath $registry -SimpleMatch "- ${project}: " -Encoding UTF8 -Quiet))
     }
 
     # Removes what versions before 0.3 installed in place of $bin: the app kanbrain-gui for the app, and for
@@ -92,11 +125,11 @@ function Install-Kanbrain {
     function Remove-Old($bin) {
         if ($bin -eq 'kanbrain') {
             $old = Join-Path $installDir 'kanbrain-gui.exe'
-            if (Test-Path $old) { Remove-Binary $old "$old (from before 0.3)" }
+            if (Test-Path -LiteralPath $old) { Remove-Binary $old "$old (from before 0.3)" }
         } elseif ($bin -eq 'kb') {
             $old = Join-Path $installDir 'kanbrain.exe'
             $v = $null
-            if (Test-Path $old) { $v = Get-Output $old @('--version') }
+            if (Test-Path -LiteralPath $old) { $v = Get-Output $old @('--version') }
             if ($v -match '^kanbrain 0\.[0-2]\.') { Remove-Binary $old "the old command line $old" }
         }
     }
@@ -107,28 +140,30 @@ function Install-Kanbrain {
         # because run inside a project `path` names that project's .brain\, which purge must not touch.
         $data = $null
         foreach ($cli in @((Join-Path $installDir 'kb.exe'), (Join-Path $installDir 'kanbrain.exe'))) {
-            if (-not $data -and (Test-Path $cli)) { $data = Get-Output $cli @('--project', 'central', 'path') }
+            if (-not $data -and (Test-Path -LiteralPath $cli)) { $data = Get-Output $cli @('--project', 'central', 'path') }
         }
         if (-not $data) { $data = if ($env:KANBRAIN_DIR) { $env:KANBRAIN_DIR } else { Join-Path $env:APPDATA 'kanbrain' } }
 
         $owned = @()
         if ($purge) {
             $full = [IO.Path]::GetFullPath($data).TrimEnd('\', '/')
-            $unsafe = @([IO.Path]::GetPathRoot($full).TrimEnd('\', '/'), "$env:USERPROFILE".TrimEnd('\'), "$HOME".TrimEnd('\', '/'))
+            $homes = @("$env:USERPROFILE".TrimEnd('\'), "$HOME".TrimEnd('\', '/')) | Where-Object { $_ }
+            $unsafe = @([IO.Path]::GetPathRoot($full).TrimEnd('\', '/')) + $homes
             if (-not $full -or $unsafe -contains $full) { throw "kanbrain: refusing to delete data in '$data'" }
-            if (Test-Path $data -PathType Container) {
-                # Only files kanbrain creates: NNNN-slug.md entries, tags.md, last-id, format, the project registry (projects.md)
-                # and cards (projects\*.md), exported reports, leftover temp files.
-                $owned = @(Get-ChildItem $data -File -Force | Where-Object {
-                    $_.Name -match '^\d{4,}-.*\.md$' -or $_.Name -in 'tags.md', 'projects.md', 'last-id', 'format' -or
-                    $_.Name -match '^\.(.*\.md|last-id|format)(\.\d+-\d+)?\.tmp$' })
-                $entries = @($owned | Where-Object { $_.Name -match '^\d{4,}-.*\.md$' }).Count
-                foreach ($sub in 'projects', 'reports') {
-                    $dir = Join-Path $data $sub
-                    if (Test-Path $dir -PathType Container) {
-                        $owned += @(Get-ChildItem $dir -File -Force | Where-Object { $_.Name -match '\.md$|^\..*\.md(\.\d+-\d+)?\.tmp$' })
-                    }
+            foreach ($h in $homes) {
+                if ("$h\".StartsWith("$full\", [StringComparison]::OrdinalIgnoreCase)) {
+                    throw "kanbrain: refusing to delete data in '$data': it holds your home folder"
                 }
+            }
+            if (Test-Path -LiteralPath $data -PathType Container) {
+                # Only files kanbrain made (see Test-Owned), listed whole before deleting any: whose cards they are is
+                # read from the registry, which goes too.
+                $owned = @(foreach ($dir in $full, (Join-Path $full 'projects'), (Join-Path $full 'reports')) {
+                    if (Test-Path -LiteralPath $dir -PathType Container) {
+                        Get-ChildItem -LiteralPath $dir -File -Force | Where-Object { Test-Owned $full $_ }
+                    }
+                })
+                $entries = @($owned | Where-Object { $_.DirectoryName -eq $full -and $_.Name -match '^\d{4,}-.*\.md$' }).Count
                 Say "data folder: $data"
                 Say "this permanently deletes $entries entry file(s), tags.md, the project registry and cards, exported reports, and the backups taken before migrations"
                 Say "projects' own .brain folders are kept"
@@ -150,13 +185,13 @@ function Install-Kanbrain {
             # apart from the app.
             Remove-Old $bin
             $exe = Join-Path $installDir "$bin.exe"
-            if (Test-Path $exe) { Remove-Binary $exe $exe } else { Say "no binary at $exe" }
-            if ($bin -eq 'kanbrain' -and (Test-Path $shortcut)) { Remove-Item $shortcut -Force; Say "removed $shortcut" }
+            if (Test-Path -LiteralPath $exe) { Remove-Binary $exe $exe } else { Say "no binary at $exe" }
+            if ($bin -eq 'kanbrain' -and (Test-Path -LiteralPath $shortcut)) { Remove-Item -LiteralPath $shortcut -Force; Say "removed $shortcut" }
         }
         # Once neither app is left, the folder and its PATH entry go too.
-        if ((Test-Path $installDir) -and -not (Get-ChildItem $installDir -Force)) { Remove-Item $installDir -Force }
+        if ((Test-Path -LiteralPath $installDir) -and -not (Get-ChildItem -LiteralPath $installDir -Force)) { Remove-Item -LiteralPath $installDir -Force }
         $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-        if ($userPath -and -not (Test-Path $installDir)) {
+        if ($userPath -and -not (Test-Path -LiteralPath $installDir)) {
             $kept = ($userPath -split ';') | Where-Object { $_ -and ($_.TrimEnd('\') -ne $installDir.TrimEnd('\')) }
             [Environment]::SetEnvironmentVariable('Path', ($kept -join ';'), 'User')
         }
@@ -165,9 +200,9 @@ function Install-Kanbrain {
             $owned | Remove-Item -Force
             foreach ($sub in 'projects', 'reports') {
                 $dir = Join-Path $data $sub
-                if ((Test-Path $dir) -and -not (Get-ChildItem $dir -Force)) { Remove-Item $dir -Force }
+                if ((Test-Path -LiteralPath $dir) -and -not (Get-ChildItem -LiteralPath $dir -Force)) { Remove-Item -LiteralPath $dir -Force }
             }
-            if (-not (Get-ChildItem $data -Force)) { Remove-Item $data -Force; Say "removed $data" }
+            if (-not (Get-ChildItem -LiteralPath $data -Force)) { Remove-Item -LiteralPath $data -Force; Say "removed $data" }
             else { Say "deleted kanbrain's files; kept $data because it contains other files" }
         } elseif (-not $purge) {
             Say "your tasks were kept in $data (set `$env:KANBRAIN_PURGE = `"1`" to delete them too)"
@@ -175,12 +210,12 @@ function Install-Kanbrain {
         # kanbrain's folder in the user's cache, as kb finds it: each brain's write lock, and the copies taken before
         # migrating one, which hold its data. Only those go.
         $cache = Join-Path $env:LOCALAPPDATA 'kanbrain'
-        if ($purge -and (Test-Path $cache -PathType Container)) {
+        if ($purge -and (Test-Path -LiteralPath $cache -PathType Container)) {
             foreach ($sub in 'locks', 'backups') {
                 $dir = Join-Path $cache $sub
-                if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+                if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
             }
-            if (-not (Get-ChildItem $cache -Force)) { Remove-Item $cache -Force; Say "removed $cache" }
+            if (-not (Get-ChildItem -LiteralPath $cache -Force)) { Remove-Item -LiteralPath $cache -Force; Say "removed $cache" }
             else { Say "deleted kanbrain's locks and backups; kept $cache because it contains other files" }
         }
         return
@@ -206,17 +241,38 @@ function Install-Kanbrain {
     # Windows PowerShell 5.1 defaults to old TLS versions.
     try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
 
-    New-Item -ItemType Directory -Path $installDir -Force | Out-Null
-    foreach ($bin in $bins) {
-        $asset = "$bin-x86_64-pc-windows-msvc.zip"
-        $exe = Join-Path $installDir "$bin.exe"
-        $tmp = Join-Path ([IO.Path]::GetTempPath()) ("kanbrain-" + [Guid]::NewGuid())
-        New-Item -ItemType Directory -Path $tmp | Out-Null
+    # The latest release's tag, asked once: two downloads each following `latest` could straddle a release and
+    # install a command line and an app of different versions. `latest` stands when it can't be told.
+    if (-not $env:KANBRAIN_BASE_URL -and $hostKind -eq 'github' -and $version -eq 'latest') {
         try {
+            $answer = Invoke-WebRequest -Uri "https://github.com/$repo/releases/latest" -Method Head -UseBasicParsing
+            # Where the redirect ended: Windows PowerShell and PowerShell 7 keep it in different places.
+            $final = if ($answer.BaseResponse.ResponseUri) { $answer.BaseResponse.ResponseUri } else { $answer.BaseResponse.RequestMessage.RequestUri }
+            if ("$final" -match '/tag/(v[^/?#]+)$') {
+                $version = $Matches[1]
+                $base = "https://github.com/$repo/releases/download/$version"
+            }
+        } catch { }
+    }
+
+    New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+    # Downloads $url to $path, written by .NET: Windows PowerShell 5.1's -OutFile reads `[` `]` in a path (a profile
+    # folder's) as wildcards, and has no literal form.
+    function Save-Url($url, $path) {
+        $response = Invoke-WebRequest -Uri $url -UseBasicParsing
+        [IO.File]::WriteAllBytes($path, $response.RawContentStream.ToArray())
+    }
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) ("kanbrain-" + [Guid]::NewGuid())
+    New-Item -ItemType Directory -Path $tmp | Out-Null
+    try {
+        # Every app is downloaded, checked and extracted before any is put in place: a failed download leaves the
+        # installed ones as they were, of one version.
+        foreach ($bin in $bins) {
+            $asset = "$bin-x86_64-pc-windows-msvc.zip"
             $zip = Join-Path $tmp $asset
             Say "downloading $asset ($version)"
             try {
-                Invoke-WebRequest -Uri "$base/$asset" -OutFile $zip -UseBasicParsing
+                Save-Url "$base/$asset" $zip
             } catch {
                 throw "kanbrain: download failed: $base/$asset ($($_.Exception.Message))"
             }
@@ -225,48 +281,49 @@ function Install-Kanbrain {
             $sumFile = Join-Path $tmp "$asset.sha256"
             # Every release publishes one; without it, nothing says the download is the release's.
             try {
-                Invoke-WebRequest -Uri "$base/$asset.sha256" -OutFile $sumFile -UseBasicParsing
+                Save-Url "$base/$asset.sha256" $sumFile
             } catch {
                 throw "kanbrain: no checksum found for ${asset}: $base/$asset.sha256"
             }
-            $expected = ((Get-Content $sumFile -Raw).Trim() -split '\s+')[0].ToLower()
-            $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+            $expected = ((Get-Content -LiteralPath $sumFile -Encoding UTF8 -Raw).Trim() -split '\s+')[0].ToLower()
+            $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLower()
             if ($actual -ne $expected) { throw "kanbrain: checksum mismatch for $asset (expected $expected, got $actual)" }
             Say 'checksum ok'
+            $unpacked = Join-Path $tmp $bin
+            Expand-Archive -LiteralPath $zip -DestinationPath $unpacked -Force
+            if (-not (Test-Path -LiteralPath (Join-Path $unpacked "$bin.exe"))) { throw "kanbrain: archive does not contain $bin.exe" }
+        }
 
-            # ---- install ----
+        # ---- install ----
+        foreach ($bin in $bins) {
+            $exe = Join-Path $installDir "$bin.exe"
             Remove-Old $bin
-            Expand-Archive -Path $zip -DestinationPath $tmp -Force
-            $newExe = Join-Path $tmp "$bin.exe"
-            if (-not (Test-Path $newExe)) { throw "kanbrain: archive does not contain $bin.exe" }
             try {
-                Copy-Item $newExe $exe -Force
+                Copy-Item -LiteralPath (Join-Path $tmp "$bin\$bin.exe") $exe -Force
             } catch {
                 throw "kanbrain: could not write $exe. Is $bin running? Close it and try again."
             }
-        } finally {
-            Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
-        }
 
-        # Not into $version, which names the release the next app comes from.
-        $installed = $bin
-        $said = Get-Output $exe @('--version')
-        if ($said) { $installed = $said }
-        Say "installed $installed to $exe"
+            # Not into $version, which names the release installed.
+            $said = Get-Output $exe @('--version')
+            if ($said) { Say "installed $said to $exe" } else { Say "warning: installed $exe, but it doesn't start here" }
 
-        # The desktop app goes in the Start Menu.
-        if ($bin -eq 'kanbrain') {
-            try {
-                $link = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcut)
-                $link.TargetPath = $exe
-                $link.WorkingDirectory = $installDir
-                $link.Description = 'kanbrain: kanban board'
-                $link.Save()
-                Say "added kanbrain to the Start Menu"
-            } catch {
-                Say "warning: could not add a Start Menu shortcut ($($_.Exception.Message)); run $exe"
+            # The desktop app goes in the Start Menu.
+            if ($bin -eq 'kanbrain') {
+                try {
+                    $link = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcut)
+                    $link.TargetPath = $exe
+                    $link.WorkingDirectory = $installDir
+                    $link.Description = 'kanbrain: kanban board'
+                    $link.Save()
+                    Say "added kanbrain to the Start Menu"
+                } catch {
+                    Say "warning: could not add a Start Menu shortcut ($($_.Exception.Message)); run $exe"
+                }
             }
         }
+    } finally {
+        Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     # ---- projects' agents ----
@@ -278,12 +335,14 @@ function Install-Kanbrain {
     $first = Join-Path $installDir "$firstBin.exe"
     $log = [IO.Path]::GetTempFileName()
     try {
-        Start-Process -FilePath $first -ArgumentList '--help' -Wait -NoNewWindow -RedirectStandardOutput $log
-        if ((Get-Content $log -Raw) -match 'init --all') {
+        # Escaped, as in Get-Output.
+        $logPattern = [WildcardPattern]::Escape($log)
+        Start-Process -FilePath $first -ArgumentList '--help' -Wait -NoNewWindow -RedirectStandardOutput $logPattern
+        if ((Get-Content -LiteralPath $log -Encoding UTF8 -Raw) -match 'init --all') {
             $run = Start-Process -FilePath $first -ArgumentList 'init', '--all' -Wait -NoNewWindow -PassThru `
-                -RedirectStandardOutput $log
+                -RedirectStandardOutput $logPattern
             if ($run.ExitCode -eq 0) {
-                Get-Content $log | Where-Object { $_ } | ForEach-Object { Say "$_" }
+                Get-Content -LiteralPath $log -Encoding UTF8 | Where-Object { $_ } | ForEach-Object { Say "$_" }
             } else {
                 Say "warning: couldn't update your projects' agent instructions; run: $firstBin init --all"
             }
@@ -291,7 +350,7 @@ function Install-Kanbrain {
     } catch {
         Say "warning: couldn't update your projects' agent instructions; run: $firstBin init --all"
     } finally {
-        Remove-Item $log -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $log -Force -ErrorAction SilentlyContinue
     }
 
     # ---- PATH ----

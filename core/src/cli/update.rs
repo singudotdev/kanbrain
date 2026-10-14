@@ -73,8 +73,8 @@ pub fn install_of(exe: &Path) -> Result<Install> {
 }
 
 /// The tasks agents are working on, in doing, in every registered repository and the central brain, as
-/// `shop/api #3 title` (`#3 title` in the central brain), as `kb status` names them: an update waits for them. A brain that can't be read, such as one a newer kanbrain wrote, has
-/// none to wait for.
+/// `shop/api #3 title` (`#3 title` in the central brain), as `kb status` names them: an update waits for them. A
+/// brain that can't be read, such as one a newer kanbrain wrote, has none to wait for.
 pub fn agents_working(central: &Path) -> Result<Vec<String>> {
     let repos = projects::load(central)?;
     let brains = std::iter::once((String::new(), central.to_path_buf()))
@@ -121,6 +121,13 @@ pub fn newer_release() -> Result<Option<String>> {
     Ok(newer(&latest, env!("CARGO_PKG_VERSION")).then_some(latest))
 }
 
+/// What `update` says instead of reinstalling, when the latest release is this one (or older, a build ahead of
+/// it); `None` to install: a newer release, or none found (the installer then says why it can't download).
+fn up_to_date(newer: &Result<Option<String>>) -> Option<String> {
+    matches!(newer, Ok(None))
+        .then(|| format!("kb {} is the latest release: nothing to update", env!("CARGO_PKG_VERSION")))
+}
+
 /// The version at the end of the address a response's headers redirect to, `…/tag/vX.Y.Z`.
 fn redirected_version(headers: &str) -> Option<String> {
     let location = headers.lines().find_map(|line| {
@@ -148,6 +155,29 @@ pub fn hide_console(command: &mut Command) {
     let _ = command;
 }
 
+/// The installer's variables that say to do something else than install the latest release: left set in a shell
+/// from an uninstall or a pinned install, they'd have an update uninstall, purge without asking, or reinstall
+/// that version instead. An update runs the installer without them.
+pub(crate) const INSTALLER_CHOICES: [&str; 4] =
+    ["KANBRAIN_UNINSTALL", "KANBRAIN_PURGE", "KANBRAIN_YES", "KANBRAIN_VERSION"];
+
+/// PowerShell that clears [`INSTALLER_CHOICES`] in its session, to run before the installer there.
+pub fn clear_installer_choices_ps1() -> String {
+    let vars: Vec<String> = INSTALLER_CHOICES.iter().map(|v| format!("Env:{v}")).collect();
+    format!("Remove-Item {} -ErrorAction SilentlyContinue", vars.join(", "))
+}
+
+/// The shell that runs the installer script given on its stdin, for `app` into `dir`, without
+/// [`INSTALLER_CHOICES`].
+fn installer_shell(dir: &Path, app: &str) -> Command {
+    let mut sh = Command::new("sh");
+    sh.args(["-s", "--", "--app", app, "--dir"]).arg(dir);
+    for var in INSTALLER_CHOICES {
+        sh.env_remove(var);
+    }
+    sh
+}
+
 /// Runs the installer for `app` into `dir`, on Linux and macOS: the binaries are replaced by renaming, so the
 /// running ones carry on. `captured`, its messages are kept out of sight and the last of them make up the error
 /// when it fails, as the app wants; otherwise they're printed.
@@ -160,8 +190,8 @@ pub fn run_installer(dir: &Path, app: &str, captured: bool) -> Result<()> {
         .spawn()
         .context("running curl, which downloads the installer")?;
     let script = curl.stdout.take().context("reading curl's output")?;
-    let mut sh = Command::new("sh");
-    sh.args(["-s", "--", "--app", app, "--dir"]).arg(dir).stdin(script);
+    let mut sh = installer_shell(dir, app);
+    sh.stdin(script);
     let (installed, said) = if captured {
         let out = sh.output().context("running the installer")?;
         let said = String::from_utf8_lossy(&out.stderr).trim().lines().last().unwrap_or_default().to_string();
@@ -184,6 +214,10 @@ pub fn run_installer(dir: &Path, app: &str, captured: bool) -> Result<()> {
 /// there. Installed with `cargo install`, it says to update the same way instead.
 pub fn update(central: &Path) -> Result<()> {
     check_no_agent_working(central)?;
+    if let Some(said) = up_to_date(&newer_release()) {
+        println!("{said}");
+        return Ok(());
+    }
     let exe = std::env::current_exe().context("finding this program's file")?;
     let Install::Installer { dir, app } = install_of(&exe)? else {
         println!(
@@ -194,8 +228,9 @@ pub fn update(central: &Path) -> Result<()> {
     };
     if cfg!(windows) {
         println!(
-            "Close kanbrain, then run in PowerShell:\n\n  $env:KANBRAIN_APP = \"{app}\"; \
+            "Close kanbrain, then run in PowerShell:\n\n  {}; $env:KANBRAIN_APP = \"{app}\"; \
              $env:KANBRAIN_INSTALL_DIR = \"{}\"; irm {INSTALL_PS1} | iex",
+            clear_installer_choices_ps1(),
             dir.display()
         );
         return Ok(());

@@ -136,7 +136,13 @@ impl Store {
     /// A store in `dir`, created if missing.
     pub fn at(dir: impl Into<PathBuf>) -> Result<Self> {
         let dir = dir.into();
-        fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+        if !dir.is_dir() {
+            fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+            // A brain made now is in this version's format: without the file it would read as format 1 once there's
+            // a 2, and have the migrations it doesn't need run over it.
+            let format = format!("{}\n", crate::migrate::FORMAT);
+            write_file(&dir.join(crate::migrate::FORMAT_FILE), &format)?;
+        }
         Ok(Self { dir, journal: RefCell::new(None) })
     }
 
@@ -211,6 +217,17 @@ impl Store {
         self.dir.join(REPORTS_DIR)
     }
 
+    /// The ids of the entries' files, by their names (`0005-fix-login.md` is 5), read or not: an entry whose file
+    /// doesn't parse is still there, and links to it must stay.
+    pub(crate) fn file_ids(&self) -> std::collections::HashSet<u32> {
+        let Ok(entries) = fs::read_dir(&self.dir) else { return std::collections::HashSet::new() };
+        entries
+            .filter_map(|entry| entry.ok()?.path().file_name()?.to_str().map(str::to_string))
+            .filter(|name| is_task_file(Path::new(name)))
+            .filter_map(|name| name.split('-').next()?.parse().ok())
+            .collect()
+    }
+
     /// Returns the parsed tasks plus a warning for every file that could not be read.
     pub fn load(&self) -> Result<(Vec<Task>, Vec<String>)> {
         // Every read goes through here: a brain a newer kanbrain wrote is refused before anything misreads it.
@@ -224,8 +241,7 @@ impl Store {
                 continue;
             }
             let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
-            let parsed =
-                fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|text| Task::from_markdown(&text));
+            let parsed = read_text(&path).map_err(|e| e.to_string()).and_then(|text| Task::from_markdown(&text));
             match parsed {
                 Ok(mut task) => {
                     task.path = Some(path);
@@ -240,6 +256,12 @@ impl Store {
     /// Writes atomically and renames the file when the title (slug) changed.
     pub fn save(&self, task: &mut Task) -> Result<()> {
         let path = self.dir.join(file_name(task));
+        // A name that differs only in case (renamed by hand or by a sync tool) is kept: on a case-insensitive file
+        // system it's the same file, and removing the "old" one after writing the new would delete the only copy.
+        let path = match &task.path {
+            Some(old) if old.parent() == Some(self.dir.as_path()) && same_ignoring_case(old, &path) => old.clone(),
+            _ => path,
+        };
         self.remember(&path);
         if let Some(old) = &task.path {
             self.remember(old);
@@ -268,7 +290,7 @@ impl Store {
     /// The highest id given so far, as `last-id` keeps it; 0 when it's missing (a folder from an older
     /// version) or unreadable, and then the entries' own ids are all there is to go by.
     pub fn last_id(&self) -> u32 {
-        fs::read_to_string(self.dir.join(LAST_ID_FILE)).ok().and_then(|text| text.trim().parse().ok()).unwrap_or(0)
+        read_text(&self.dir.join(LAST_ID_FILE)).ok().and_then(|text| text.trim().parse().ok()).unwrap_or(0)
     }
 
     /// Writes `last-id`.
@@ -280,7 +302,7 @@ impl Store {
     /// Reads `tags.md`; no file means no colors assigned yet.
     pub fn load_tag_colors(&self) -> Result<TagColors> {
         let path = self.dir.join(TAGS_FILE);
-        match fs::read_to_string(&path) {
+        match read_text(&path) {
             Ok(text) => Ok(TagColors::parse(&text)),
             Err(e) if e.kind() == ErrorKind::NotFound => Ok(TagColors::default()),
             Err(e) => Err(e).with_context(|| format!("reading {}", path.display())),
@@ -394,16 +416,45 @@ fn forget_cut_writes(dir: &Path) {
         let name = file.file_name();
         let name = name.to_string_lossy();
         let age = file.metadata().and_then(|m| m.modified()).ok().and_then(|at| at.elapsed().ok());
-        if name.starts_with('.') && name.ends_with(".tmp") && age.is_some_and(|age| age > CUT_WRITE_AGE) {
+        if is_cut_write(&name) && age.is_some_and(|age| age > CUT_WRITE_AGE) {
             let _ = fs::remove_file(file.path());
         }
     }
+}
+
+/// Whether `name` is a temporary file of [`write_file`]'s: `.NAME.PID-N.tmp`, or `.NAME.tmp` as versions before 0.4.0
+/// named them, where NAME is a file kanbrain writes (`*.md`, `format`, `last-id`). A central brain may be a notes
+/// vault, where other programs leave hidden `.tmp` files of their own.
+fn is_cut_write(name: &str) -> bool {
+    let Some(written) = name.strip_prefix('.').and_then(|n| n.strip_suffix(".tmp")) else { return false };
+    let written = match written.rsplit_once('.') {
+        Some((file, write)) if write.split_once('-').is_some_and(|(pid, n)| is_number(pid) && is_number(n)) => file,
+        _ => written,
+    };
+    Path::new(written).extension().is_some_and(|ext| ext == "md")
+        || written == crate::migrate::FORMAT_FILE
+        || written == LAST_ID_FILE
+}
+
+/// Whether `text` is digits only, and some.
+fn is_number(text: &str) -> bool {
+    !text.is_empty() && text.bytes().all(|b| b.is_ascii_digit())
 }
 
 /// What the cache keeps about the brain in `dir`, its lock file and its backups, to delete once the brain is: nothing
 /// asks for them after. Found while the brain is still there, since the key comes from its canonical path.
 pub(crate) fn cache_of(dir: &Path) -> Result<[PathBuf; 2]> {
     Ok([lock_path(dir)?, cache_dir_of(dir, "backups")?])
+}
+
+/// Reads a text file people may edit, without the byte-order mark some editors (Notepad, older Windows ones) put
+/// first: left in, it hides a file's first line, an entry's `# title` among them.
+pub(crate) fn read_text(path: &Path) -> std::io::Result<String> {
+    let text = fs::read_to_string(path)?;
+    Ok(match text.strip_prefix('\u{feff}') {
+        Some(rest) => rest.to_string(),
+        None => text,
+    })
 }
 
 /// Writes `text` to `path`, creating its folder if missing. It goes to a hidden temporary file beside it
@@ -432,6 +483,14 @@ pub(crate) fn write_file(path: &Path, text: &str) -> Result<()> {
 /// The name `task`'s file is saved under: `0005-fix-login.md`.
 pub(crate) fn file_name(task: &Task) -> String {
     format!("{:04}-{}.md", task.id, slugify(&task.title))
+}
+
+/// Whether two file names in one folder are the same but for case, which a case-insensitive file system (macOS,
+/// Windows) takes for one file.
+fn same_ignoring_case(a: &Path, b: &Path) -> bool {
+    a.file_name()
+        .zip(b.file_name())
+        .is_some_and(|(a, b)| a.to_string_lossy().eq_ignore_ascii_case(&b.to_string_lossy()))
 }
 
 /// The nearest `.brain/` folder in `start` or one of its parents.

@@ -55,21 +55,49 @@ pub enum Scope {
     Repo(usize),
 }
 
-/// The central brain, then every repository [`repos`] lists. A repository a newer kanbrain wrote is left out, said
-/// among the central brain's warnings: the rest of the board still opens.
-pub(super) fn load(central: &Path, also: Option<&Path>) -> Result<Vec<Source>> {
+/// The central brain, then every repository [`repos`] lists; and those left out. A repository that can't be read
+/// (a newer kanbrain wrote it, its `format` file is damaged) is left out, with why: the rest of the board still
+/// opens.
+pub(super) fn load(central: &Path, also: Option<&Path>) -> Result<(Vec<Source>, Vec<Skipped>)> {
+    // Each brain under its lock, in the order every window and `kb` take them: opening may repair files (renumber
+    // ids, park a second task of yours, drop links to deleted entries), which would otherwise race an agent's write.
+    // Held already when reloading under `BrainView::locked`, where taking it again costs nothing; one that can't be
+    // taken (an unwritable cache folder) is opened all the same, as `Board::lock_brains` does.
+    let mut locks = Vec::new();
+    let central_store = Store::at(central)?;
+    locks.extend(central_store.lock().ok());
     let repos = repos(central, also)?;
-    let mut sources = vec![Source { brain: Brain::open_in(Store::at(central)?, central)?, label: None, project: None }];
+    let mut sources = vec![Source { brain: Brain::open_in(central_store, central)?, label: None, project: None }];
+    let mut skipped = Vec::new();
     for repo in repos.iter().filter(|r| r.dir.is_dir()) {
-        match Brain::open_in(Store::at(&repo.dir)?, central) {
+        let store = Store::at(&repo.dir)?;
+        locks.extend(store.lock().ok());
+        match Brain::open_in(store, central) {
             Ok(brain) => {
                 sources.push(Source { brain, label: Some(repo.label(&repos)), project: Some(repo.project.clone()) });
             }
-            Err(e) if e.downcast_ref::<TooNew>().is_some() => sources[0].brain.warnings.push(format!("{e:#}")),
-            Err(e) => return Err(e),
+            // One repository that can't be read (a newer kanbrain's, a damaged `format` file) mustn't keep the
+            // board from showing the others.
+            Err(e) => {
+                let said = if e.downcast_ref::<TooNew>().is_some() {
+                    format!("{e:#}")
+                } else {
+                    format!("{} left out: {e:#}", repo.label(&repos))
+                };
+                skipped.push(Skipped { dir: repo.dir.clone(), said });
+            }
         }
     }
-    Ok(sources)
+    Ok((sources, skipped))
+}
+
+/// A registered repository left out because it couldn't be read, with why.
+#[derive(Debug)]
+pub(super) struct Skipped {
+    /// Its `.brain/`.
+    pub dir: PathBuf,
+    /// Why, as the status bar says it.
+    pub said: String,
 }
 
 /// Every registered repository, and `also`, a `.brain/` the window was opened in that isn't registered
@@ -131,6 +159,14 @@ impl Board {
         self.several().then(|| self.sources[src].label.as_deref().unwrap_or(projects::CENTRAL))
     }
 
+    /// How messages name the entry `key`: `#3`, or `shop/api #3` with several brains shown, whose ids repeat.
+    pub fn entry_name(&self, key: Key) -> String {
+        match self.source_label(key.src) {
+            Some(label) => format!("{label} #{}", key.id),
+            None => format!("#{}", key.id),
+        }
+    }
+
     /// The scopes there are, with their names, in the order the filter shows them: all, the central
     /// brain, then each project followed by its repositories if it has several.
     pub fn scopes(&self) -> Vec<(Scope, String)> {
@@ -181,14 +217,16 @@ impl Board {
         self.set_scope(scope);
     }
 
-    /// Asks which project the folder `dir`, picked in the system's dialog, joins or starts. The name begins as
-    /// `project`, the one it's added from, else the one its `.brain/` card gives if it has one (it was a repository
-    /// before), else the folder's, selected so that typing replaces it.
-    pub fn name_project(&mut self, dir: PathBuf, project: Option<String>) {
+    /// Asks which project the folder `dir`, picked in the system's dialog, joins or starts. The name begins as the
+    /// project of `from`, the repository whose Manage project it's added from, else the one its `.brain/` card gives
+    /// if it has one (it was a repository before), else the folder's, selected so that typing replaces it.
+    pub fn name_project(&mut self, dir: PathBuf, from: Option<&Path>) {
         let card = projects::read_repo_card(&dir.join(PROJECT_DIR)).map(|card| card.project);
         let folder = || Some(dir.file_name()?.to_string_lossy().into_owned());
+        let back = from.and_then(|brain| self.src_at(brain));
+        let project = back.and_then(|src| self.sources[src].project.clone());
         let name = project.or(card).or_else(folder).unwrap_or_default();
-        self.mode = Mode::AddProject(AddProject { dir, picker: Picker::named(&name) });
+        self.mode = Mode::AddProject(AddProject { dir, picker: Picker::named(&name), back });
     }
 
     /// The add-project dialog's rows for what's typed: a new project of that name unless there's one already, then
@@ -210,7 +248,12 @@ impl Board {
     /// highlighted row's project, `esc` cancels.
     pub(super) fn key_add_project(&mut self, add: AddProject, key: KeyEvent) {
         let count = self.add_project_options(&add.picker).len();
+        let back = add.back;
         self.pick(add, key, count, |a| &mut a.picker, Mode::AddProject, Self::choose_add_project);
+        // Cancelled from Manage project: back to it, on the repository it was on.
+        if let (Mode::Normal, Some(src)) = (&self.mode, back) {
+            self.mode = Mode::ManageProject(src);
+        }
     }
 
     /// Makes the folder a repository of the project at `index` among the dialog's rows, as `kb init` does there,
@@ -224,20 +267,36 @@ impl Board {
         };
         let name = option.name().to_string();
         let dir = add.dir.clone();
-        if let Err(e) = cli::init(&dir, Some(&name), None, &self.central) {
-            self.notify_error(&e);
-            return;
-        }
+        let from_manage = add.back.is_some();
+        let done = match cli::init(&dir, Some(&name), None, &self.central) {
+            Ok(done) => done,
+            Err(e) => return self.notify_error(&e),
+        };
         self.mode = Mode::Normal;
         let result = self.reload();
         self.report_error(result);
         let repos = self.repos_of(&name).count();
         self.set_scope(Scope::Project(name.clone()));
-        self.notify(if repos > 1 {
+        // A repository of another project moved here: said as a move, with the links it dropped.
+        let moved = done.first().is_some_and(|line| line.starts_with("moved "));
+        self.notify(if moved {
+            done.iter()
+                .filter(|l| l.starts_with("moved ") || l.starts_with("dropped "))
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("; ")
+        } else if repos > 1 {
             format!("added {} to project `{name}`; its agent instructions tell agents to use kanbrain", dir.display())
         } else {
             format!("added project `{name}`; its agent instructions tell agents to use kanbrain")
         });
+        // Added from Manage project: back to it, on the repository just added.
+        let added = dir.join(PROJECT_DIR);
+        if from_manage
+            && let Some(src) = self.sources.iter().position(|s| projects::same_dir(s.brain.store.dir(), &added))
+        {
+            self.mode = Mode::ManageProject(src);
+        }
     }
 
     /// A brain of the project shown, if the scope shows one project (or one of its repositories):
@@ -475,11 +534,16 @@ impl Board {
         brain.write_report(&report, &view)
     }
 
-    /// Whether the repositories shown are still those registered, with the same projects.
+    /// Whether the repositories shown are still those registered, with the same projects and labels: a
+    /// repository's name (`kb project repo`) is in its own `project.md`, which changes no other file.
     pub(super) fn same_repos(&self) -> Result<bool> {
         let repos = repos(&self.central, self.opened_in.as_deref())?;
-        let registered = repos.iter().filter(|r| r.dir.is_dir()).map(|r| (r.dir.as_path(), Some(r.project.as_str())));
-        let shown = self.sources.iter().skip(1).map(|s| (s.brain.store.dir(), s.project.as_deref()));
+        // Those that couldn't be read aren't shown: still left out, they're no change.
+        let registered = repos
+            .iter()
+            .filter(|r| r.dir.is_dir() && !self.skipped.iter().any(|s| s.dir == r.dir))
+            .map(|r| (r.dir.as_path(), Some(r.project.as_str()), Some(r.label(&repos))));
+        let shown = self.sources.iter().skip(1).map(|s| (s.brain.store.dir(), s.project.as_deref(), s.label.clone()));
         Ok(registered.eq(shown))
     }
 
@@ -501,6 +565,8 @@ impl Board {
     pub fn watched_dirs(&self) -> Vec<PathBuf> {
         let mut dirs: Vec<PathBuf> = self.sources.iter().map(|s| s.brain.store.dir().to_path_buf()).collect();
         dirs.push(projects::cards_dir(&self.central));
+        // Those left out too, so one repaired is shown.
+        dirs.extend(self.skipped.iter().map(|s| s.dir.clone()));
         dirs
     }
 }

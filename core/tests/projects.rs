@@ -22,10 +22,7 @@ fn a_project_can_have_several_repositories() {
     assert_eq!(find(central.path(), "shop/web").unwrap().dir, web);
     assert_eq!(find(central.path(), "blog").unwrap().dir, blog);
     let ambiguous = format!("{:#}", find(central.path(), "shop").unwrap_err());
-    assert!(
-        ambiguous.contains("several repositories") && ambiguous.contains("shop/api, shop/web, blog"),
-        "{ambiguous}"
-    );
+    assert_eq!(ambiguous, "project `shop` has several repositories: name one, shop/api, shop/web");
     assert_eq!(find(central.path(), "Shop/WEB").unwrap().dir, web, "in any case");
     register(central.path(), "Blog", &repo_dir(code.path(), "other")).unwrap();
     assert_eq!(find(central.path(), "Blog").unwrap().project, "Blog", "the exact one first");
@@ -91,4 +88,103 @@ fn a_repository_registered_by_another_path_to_its_folder_moves_rather_than_doubl
     assert_eq!(load(central.path()).unwrap().len(), 1, "already registered, by another path");
     register(central.path(), "store", &api).unwrap();
     assert_eq!(load(central.path()).unwrap(), [Repo { project: "store".into(), dir: api.clone() }], "moved, once");
+}
+
+#[test]
+fn projects_whose_names_slug_alike_each_keep_their_own_card() {
+    let central = tempfile::tempdir().unwrap();
+    let names = ["my-app", "my_app", "shop", "Shop", "日記", "Проект"];
+    for name in names {
+        write_description(central.path(), name, &format!("About {name}.")).unwrap();
+    }
+    for name in names {
+        assert_eq!(read_description(central.path(), name), format!("About {name}."));
+    }
+    assert!(remove_description(central.path(), "my_app").unwrap());
+    assert_eq!(read_description(central.path(), "my-app"), "About my-app.", "only its own card goes");
+    rename(central.path(), "日記", "Дневник").unwrap();
+    assert_eq!(read_description(central.path(), "Дневник"), "About 日記.");
+    assert_eq!(read_description(central.path(), "Проект"), "About Проект.");
+}
+
+#[test]
+fn cards_written_before_each_had_its_own_place_are_read_and_moved() {
+    let central = tempfile::tempdir().unwrap();
+    let cards = cards_dir(central.path());
+    fs::create_dir_all(&cards).unwrap();
+    // `my_app`'s card under its slug alone, as before 0.4.0.
+    fs::write(cards.join("my-app.md"), "# my_app\n\nThe app.\n").unwrap();
+    assert_eq!(read_description(central.path(), "my_app"), "The app.");
+    assert_eq!(read_description(central.path(), "my-app"), "", "titled with another project: not my-app's");
+    write_description(central.path(), "my-app", "Another app.").unwrap();
+    assert_eq!(read_description(central.path(), "my_app"), "The app.", "moved to its own place, not overwritten");
+    assert_eq!(read_description(central.path(), "my-app"), "Another app.");
+    write_description(central.path(), "my_app", "The app, again.").unwrap();
+    let mut files: Vec<_> = fs::read_dir(&cards).unwrap().map(|e| e.unwrap().file_name()).collect();
+    files.sort();
+    assert_eq!(files.len(), 2, "one card each: {files:?}");
+    assert!(!ensure_description(central.path(), "my_app").unwrap());
+}
+
+#[test]
+fn names_are_one_line_without_separators_or_a_leading_dash() {
+    for bad in ["", " shop", "a:b", "a/b", "two\nlines", "--help", "-x", "central", "Central"] {
+        assert!(check_name(bad).is_err(), "{bad:?} is a project name");
+    }
+    for bad in ["", "my app", "a,b", "a#b", "a:b", "a/b", "--help"] {
+        assert!(check_repo_name(bad).is_err(), "{bad:?} is a repository name");
+    }
+    assert!(check_name("shop v2").is_ok() && check_name("日記").is_ok() && check_repo_name("back-app").is_ok());
+}
+
+#[test]
+fn a_project_renamed_to_its_own_slug_keeps_one_card() {
+    let central = tempfile::tempdir().unwrap();
+    let cards = cards_dir(central.path());
+    fs::create_dir_all(&cards).unwrap();
+    // `Shop`'s card from before 0.4.0, under its slug alone.
+    fs::write(cards.join("shop.md"), "# Shop\n\nThe shop.\n").unwrap();
+    rename(central.path(), "Shop", "shop").unwrap();
+    assert_eq!(read_description(central.path(), "shop"), "The shop.");
+    let files: Vec<_> = fs::read_dir(&cards).unwrap().map(|e| e.unwrap().file_name()).collect();
+    assert_eq!(files, ["shop.md"], "no card left behind");
+}
+
+#[test]
+fn a_card_moved_aside_never_lands_on_that_projects_own() {
+    let central = tempfile::tempdir().unwrap();
+    write_description(central.path(), "Shop", "Shop, as it is now.").unwrap();
+    // A copy from before 0.4.0 left where `shop`'s card goes.
+    fs::write(cards_dir(central.path()).join("shop.md"), "# Shop\n\nShop, long ago.\n").unwrap();
+    write_description(central.path(), "shop", "The other shop.").unwrap();
+    assert_eq!(read_description(central.path(), "Shop"), "Shop, as it is now.", "not the old copy over it");
+    assert_eq!(read_description(central.path(), "shop"), "The other shop.");
+}
+
+#[test]
+fn a_projects_card_is_written_under_the_central_brains_lock() {
+    use std::time::{Duration, Instant};
+    type Write = fn(&Path);
+    let central = tempfile::tempdir().unwrap();
+    let writes: [(&str, Write); 3] = [
+        ("write", |central| write_description(central, "shop", "An online shop.").unwrap()),
+        ("ensure", |central| assert!(ensure_description(central, "blog").unwrap())),
+        ("remove", |central| assert!(remove_description(central, "shop").unwrap())),
+    ];
+    for (what, write) in writes {
+        // Held by another thread: this one's would let it take the lock again.
+        let (held, wait) = std::sync::mpsc::channel();
+        let dir = central.path().to_path_buf();
+        let holder = std::thread::spawn(move || {
+            let lock = Store::at(&dir).unwrap().lock().unwrap();
+            held.send(()).unwrap();
+            std::thread::sleep(Duration::from_millis(800));
+            drop(lock);
+        });
+        wait.recv().unwrap();
+        let started = Instant::now();
+        write(central.path());
+        assert!(started.elapsed() >= Duration::from_millis(500), "{what} didn't wait for the lock");
+        holder.join().unwrap();
+    }
 }

@@ -32,9 +32,10 @@ impl Board {
     /// it; accepting with a comment and rejecting ask for the text first, in the editor.
     pub fn accept_selected(&mut self) {
         let Some(key) = self.selected_decision() else { return };
+        let name = self.entry_name(key);
         match self.brain_mut(key.src).resolve(key.id, DecisionState::Accepted, "") {
-            Ok(true) => self.notify(format!("#{} accepted", key.id)),
-            Ok(false) => self.notify(format!("#{} is already accepted", key.id)),
+            Ok(true) => self.notify(format!("{name} accepted")),
+            Ok(false) => self.notify(format!("{name} is already accepted")),
             Err(e) => self.notify_error(&e),
         }
     }
@@ -43,7 +44,7 @@ impl Board {
     pub fn accept_with_comment(&mut self) {
         let Some(key) = self.selected_decision() else { return };
         match self.task(key).map(|t| t.decision) {
-            Some(DecisionState::Accepted) => self.notify(format!("#{} is already accepted", key.id)),
+            Some(DecisionState::Accepted) => self.notify(format!("{} is already accepted", self.entry_name(key))),
             Some(_) => self.open_editor(Target::Accept(key)),
             None => {}
         }
@@ -53,7 +54,7 @@ impl Board {
     pub fn reject_selected(&mut self) {
         let Some(key) = self.selected_decision() else { return };
         match self.task(key).map(|t| t.decision) {
-            Some(DecisionState::Rejected) => self.notify(format!("#{} is already rejected", key.id)),
+            Some(DecisionState::Rejected) => self.notify(format!("{} is already rejected", self.entry_name(key))),
             Some(_) => self.open_editor(Target::Reject(key)),
             None => {}
         }
@@ -62,13 +63,9 @@ impl Board {
     /// Tasks waiting for an answer to an agent's question, in every brain shown, in board order.
     pub fn waiting(&self) -> Vec<Key> {
         let mut waiting: Vec<Key> = self
-            .sources
-            .iter()
-            .enumerate()
-            .filter(|&(src, _)| self.in_scope(src))
-            .flat_map(|(src, source)| {
-                source
-                    .brain
+            .scoped()
+            .flat_map(|(src, brain)| {
+                brain
                     .tasks
                     .iter()
                     .filter(|t| matches!(t.asked(), Some(Asked::Waiting(_))))

@@ -7,7 +7,7 @@ use crate::api::ApiError;
 use crate::api::json::{Entry, Summary};
 use crate::api::text::line;
 use crate::brain::{Brain, NewEntry};
-use crate::model::{Asked, DecisionState, Kind, RepoLink, Status, Task, parse_links, parse_tags};
+use crate::model::{Asked, DecisionState, Kind, RepoLink, Status, Task, not_a_link, parse_links, parse_tags};
 use crate::projects::ProjectInfo;
 use anyhow::{Context, Result, anyhow, bail};
 use serde::Serialize;
@@ -19,7 +19,8 @@ use std::time::Duration;
 const CONTEXT_USAGE: &str = "\
 Commands: `kb show ID` (everything about an entry), `search WORDS`, \
 `add [--note|--decision] [--tag T] [--link ID] [--body TEXT|-] TITLE`, \
-`comment ID TEXT|-`, `ask ID TEXT|-`, `wait ID`, `start|park|done|todo ID`, `link ID OTHER…` (`REPO#ID` in another repository). Add `--json` for JSON.";
+`comment ID TEXT|-`, `ask ID TEXT|-`, `wait ID`, `start|park|done|todo ID`, \
+`link ID OTHER…` (`REPO#ID` in another repository). Add `--json` for JSON.";
 
 /// Usage lines for these commands, appended to the main usage text.
 pub const USAGE: &str = "\
@@ -41,7 +42,7 @@ pub const USAGE: &str = "\
             propose a decision for a task: linked to it, which asks about it and is parked
   accept ID [TEXT…|-]
   reject ID TEXT…|-
-            accept or reject a decision, with why (needed to reject); answers the tasks waiting on it
+            accept or reject a decision, with why (needed to reject); answers a question that names it (#ID)
   describe ID TEXT…|-
             replace the description
   link ID OTHER…
@@ -99,8 +100,8 @@ pub enum EntryCommand {
 pub enum ProjectChange {
     /// `describe|notes TEXT…|-`: replace one of its texts.
     Text(ProjectPart, Text),
-    /// `rename NAME…`: the project's name.
-    Rename(String),
+    /// `rename NAME…`: the project's name; `true` when given after `--`, as meant whatever it starts with.
+    Rename(String, bool),
     /// `repo NAME`: this repository's name in its project.
     Repo(String),
     /// `move PROJECT…`: this repository to another project, created if new.
@@ -169,11 +170,13 @@ impl EntryArgs {
 
     /// Parses `name` and the arguments after it, if `name` is one of these commands.
     pub fn parse(name: &str, args: impl Iterator<Item = String>) -> Result<Option<Self>> {
-        // `--json` may go anywhere.
+        // `--json` may go anywhere before a `--` (see `cli::options`).
         let mut json = false;
         let mut rest = Vec::new();
+        let mut text = false;
         for arg in args {
-            if arg == "--json" {
+            text |= arg == "--";
+            if arg == "--json" && !text {
                 json = true;
             } else {
                 rest.push(arg);
@@ -190,13 +193,15 @@ impl EntryArgs {
             (_, Some(status)) => EntryCommand::SetStatus(first_id(&mut rest)?, status),
             ("add", None) => EntryCommand::Add(AddArgs::parse(rest.drain(..), "add needs a title")?),
             ("show", None) => EntryCommand::Show(first_id(&mut rest)?),
-            ("search", None) => match std::mem::take(&mut rest).join(" ") {
-                // Every entry would match: `list` is for that.
-                words if words.trim().is_empty() => {
-                    bail!("search needs words to look for, or a #tag; `kb list` lists them all")
+            ("search", None) => {
+                match search_words(std::mem::take(&mut rest)) {
+                    // Every entry would match: `list` is for that.
+                    words if words.trim().is_empty() => {
+                        bail!("search needs words to look for, or a #tag; `kb list` lists them all")
+                    }
+                    words => EntryCommand::Search(words),
                 }
-                words => EntryCommand::Search(words),
-            },
+            }
             ("comment", None) => {
                 let (id, text) = id_and_text(&mut rest, "comment needs its text")?;
                 EntryCommand::Comment(id, text)
@@ -234,7 +239,7 @@ impl EntryArgs {
             }
             ("link", None) => {
                 let id = first_id(&mut rest)?;
-                let (others, repo_links) = parse_links(&std::mem::take(&mut rest).join(" "));
+                let (others, repo_links) = typed_links(&std::mem::take(&mut rest).join(" "))?;
                 if others.is_empty() && repo_links.is_empty() {
                     bail!("link needs the ids to link to");
                 }
@@ -262,7 +267,10 @@ impl EntryArgs {
             }
             EntryCommand::Search(query) => return print_search(&brain, &query, json),
             EntryCommand::SetStatus(id, status) => {
-                brain.set_status(id, status)?;
+                // On stderr, so stdout stays the entry's line for scripts.
+                if !brain.set_status(id, status)? {
+                    eprintln!("#{id} was already {}: nothing changed", status.as_str());
+                }
                 id
             }
             EntryCommand::Comment(id, text) => {
@@ -285,7 +293,9 @@ impl EntryArgs {
             }
             EntryCommand::Resolve(id, state, reason) => {
                 let reason = reason.map(Text::read).transpose()?.unwrap_or_default();
-                brain.resolve(id, state, &reason)?;
+                if !brain.resolve(id, state, &reason)? {
+                    eprintln!("#{id} was already {}: nothing changed", state.as_str());
+                }
                 id
             }
             EntryCommand::Describe(id, text) => {
@@ -321,7 +331,7 @@ impl AddArgs {
                 "--start" => add.start = true,
                 "--tag" => add.tags.extend(parse_tags(&args.next().context("--tag needs a value")?)),
                 "--link" => {
-                    let (links, repo_links) = parse_links(&args.next().context("--link needs an id")?);
+                    let (links, repo_links) = typed_links(&args.next().context("--link needs an id")?)?;
                     add.links.extend(links);
                     add.repo_links.extend(repo_links);
                 }
@@ -329,6 +339,8 @@ impl AddArgs {
                     let body = args.next().context("--body needs text, or - to read stdin")?;
                     add.body = Some(if body == "-" { Text::Stdin } else { Text::Given(body) });
                 }
+                // Every word after it is the title's, however it starts.
+                "--" => title.extend(args.by_ref()),
                 other if other.starts_with("--") => bail!("unknown add option `{other}`"),
                 _ => title.push(arg),
             }
@@ -361,9 +373,7 @@ impl Text {
     /// Reads stdin to the end for `-`, so the text is given from then on.
     fn read_stdin(&mut self) -> Result<()> {
         if *self == Text::Stdin {
-            let mut text = String::new();
-            std::io::stdin().read_to_string(&mut text).context("reading stdin")?;
-            *self = Text::Given(text);
+            *self = Text::Given(stdin_text()?);
         }
         Ok(())
     }
@@ -372,13 +382,37 @@ impl Text {
     fn read(self) -> Result<String> {
         match self {
             Text::Given(text) => Ok(text),
-            Text::Stdin => {
-                let mut text = String::new();
-                std::io::stdin().read_to_string(&mut text).context("reading stdin")?;
-                Ok(text)
-            }
+            Text::Stdin => stdin_text(),
         }
     }
+}
+
+/// Everything on stdin, for a `-`. Nothing there is refused: it's a heredoc left out (an agent's shell tool gives an
+/// empty stdin) far more often than a wish to clear the text, and `describe` would save it over the description.
+fn stdin_text() -> Result<String> {
+    let mut text = String::new();
+    std::io::stdin().read_to_string(&mut text).context("reading stdin")?;
+    if text.trim().is_empty() {
+        bail!("nothing came on stdin for `-`: give the text there, e.g. with a heredoc (<<'EOF' … EOF)");
+    }
+    Ok(text)
+}
+
+/// The words `search` looks for, without the first `--`, which only ends the options: `kb search -- --` looks for
+/// `--`.
+fn search_words(mut words: Vec<String>) -> String {
+    if let Some(at) = words.iter().position(|w| w == "--") {
+        words.remove(at);
+    }
+    words.join(" ")
+}
+
+/// The links typed in `value`; a word that isn't one is refused rather than left out.
+fn typed_links(value: &str) -> Result<(Vec<u32>, Vec<RepoLink>)> {
+    if let Some(word) = not_a_link(value) {
+        bail!("`{word}` isn't an entry id (12 or #12) or another repository's entry (REPO#ID)");
+    }
+    Ok(parse_links(value))
 }
 
 /// The first argument as an entry id (`12` or `#12`).
@@ -399,7 +433,11 @@ fn id_and_text(args: &mut Vec<String>, needs: &str) -> Result<(u32, Text)> {
 
 /// The remaining words as one text, or `-` alone for stdin; `needs` says what's missing without them.
 fn rest_as_text(args: &mut Vec<String>, needs: &str) -> Result<Text> {
-    let words = std::mem::take(args);
+    let mut words = std::mem::take(args);
+    // Only says where options end (see `cli::options`); the text is what follows.
+    if let Some(at) = words.iter().position(|w| w == "--") {
+        words.remove(at);
+    }
     match words.as_slice() {
         [] => bail!("{needs}: TEXT, or - to read it from stdin"),
         [dash] if dash == "-" => Ok(Text::Stdin),
@@ -423,7 +461,13 @@ fn project_args(args: &mut Vec<String>) -> Result<Option<ProjectChange>> {
             ProjectChange::Text(ProjectPart::Description, rest_as_text(args, "project describe needs the description")?)
         }
         "notes" => ProjectChange::Text(ProjectPart::Notes, rest_as_text(args, "project notes needs the notes")?),
-        "rename" => ProjectChange::Rename(words(args, "the new name")?),
+        "rename" => {
+            let literal = args.first().is_some_and(|a| a == "--");
+            if literal {
+                args.remove(0);
+            }
+            ProjectChange::Rename(words(args, "the new name")?, literal)
+        }
         "repo" => ProjectChange::Repo(words(args, "the repository's new name")?),
         "move" => ProjectChange::Move(words(args, "the project to move to")?),
         "remove" => {
@@ -473,7 +517,17 @@ fn run_project(brain: &mut Brain, change: Option<ProjectChange>) -> Result<()> {
             brain.set_repo_notes(&text.read()?)?;
             vec![format!("project {name}: repository role saved")]
         }
-        Some(ProjectChange::Rename(new)) => manage::rename_project(&central, &name, &new)?,
+        // `rename OLD NEW`, as other tools have it, would name the project "OLD NEW", names having spaces.
+        Some(ProjectChange::Rename(new, false))
+            if new.strip_prefix(&name).is_some_and(|rest| rest.starts_with(' ')) =>
+        {
+            let rest = new[name.len()..].trim();
+            bail!(
+                "`project rename` takes the new name only, for this project: `kb project rename {rest}`; to name it \
+                 `{new}`, `kb project rename -- {new}`"
+            )
+        }
+        Some(ProjectChange::Rename(new, _)) => manage::rename_project(&central, &name, &new)?,
         Some(ProjectChange::Repo(new)) => manage::rename_repo(&central, &dir, &new)?,
         Some(ProjectChange::Move(to)) => manage::move_repo(&central, &dir, &to)?,
         Some(ProjectChange::Remove(purge)) => manage::remove_project(&central, &name, purge)?,
@@ -514,7 +568,8 @@ fn wait_timeout(args: &mut Vec<String>) -> Result<Option<Duration>> {
 /// A number of minutes as a time limit, `None` for 0 (no limit).
 fn minutes(arg: &str) -> Result<Option<Duration>> {
     let minutes: u64 = arg.parse().with_context(|| format!("`{arg}` isn't a number of minutes"))?;
-    Ok((minutes > 0).then(|| Duration::from_secs(minutes * 60)))
+    let seconds = minutes.checked_mul(60).with_context(|| format!("`{arg}` minutes is longer than any wait"))?;
+    Ok((minutes > 0).then(|| Duration::from_secs(seconds)))
 }
 
 /// Blocks until entry `id` no longer waits on a person, then prints what they said; an error once
@@ -522,13 +577,33 @@ fn minutes(arg: &str) -> Result<Option<Duration>> {
 /// tool wakes it when it exits: one wake-up with the answer, instead of checking by turns.
 fn wait(brain: &Brain, id: u32, timeout: Option<Duration>) -> Result<()> {
     let started = std::time::Instant::now();
+    // The question it found waiting: answered and then moved before the next look, the answer is still what's said.
+    let mut asked_at = None;
+    let mut first = true;
+    let mut missed = false;
     loop {
-        let (tasks, _) = brain.store.load()?;
-        let task = tasks.iter().find(|t| t.id == id).ok_or(ApiError::NotFound(id))?;
-        if let Some(said) = settled(task) {
-            println!("{said}");
-            return Ok(());
+        // After the first look, a read that fails (the folder caught mid-change) is looked again at next time, and so
+        // is one without the entry: its file renamed for a new title between listing the folder and reading it. Not
+        // there twice in a row, it was deleted.
+        match brain.store.load() {
+            Ok((tasks, _)) => match tasks.into_iter().find(|t| t.id == id) {
+                None if first || missed => return Err(ApiError::NotFound(id).into()),
+                None => missed = true,
+                Some(task) => {
+                    missed = false;
+                    if let Some(Asked::Waiting(question)) = task.asked() {
+                        asked_at.get_or_insert(question.created);
+                    }
+                    if let Some(said) = settled(&task, asked_at) {
+                        println!("{said}");
+                        return Ok(());
+                    }
+                }
+            },
+            Err(e) if first => return Err(e),
+            Err(_) => {}
         }
+        first = false;
         if timeout.is_some_and(|limit| started.elapsed() >= limit) {
             bail!("no answer on #{id} yet: stop here and don't wait again; once answered, it comes first in `context`");
         }
@@ -537,9 +612,9 @@ fn wait(brain: &Brain, id: u32, timeout: Option<Duration>) -> Result<()> {
 }
 
 /// What `wait` prints once `task` no longer waits on a person, or `None` while it does: a decision that
-/// left proposed, with its verdict's comment; a task's answer; or that the task waits on nothing (never
-/// asked, or picked up since).
-fn settled(task: &Task) -> Option<String> {
+/// left proposed, with its verdict's comment; a task's answer, also when it was moved after it (the question
+/// `wait` found waiting was asked at `asked_at`); or that the task waits on nothing (never asked, or picked up since).
+fn settled(task: &Task, asked_at: Option<chrono::DateTime<chrono::Local>>) -> Option<String> {
     let head = format!("#{} {}", task.id, task.title);
     if task.kind == Kind::Decision {
         if task.decision == DecisionState::Proposed {
@@ -554,7 +629,15 @@ fn settled(task: &Task) -> Option<String> {
     match task.asked() {
         Some(Asked::Waiting(_)) => None,
         Some(Asked::Answered(answer)) => Some(format!("{head}: answered\n\n{}", answer.body)),
-        None if task.is_task() => Some(format!("{head}: not waiting for an answer ({})", task.status.as_str())),
+        None if task.is_task() => {
+            let answers = |c: &&crate::model::Comment| c.author == crate::model::Author::Human || c.answer;
+            let answer = asked_at
+                .and_then(|at| task.comments.iter().rev().find(|c| c.created >= at && !c.question && answers(c)));
+            Some(match answer {
+                Some(answer) => format!("{head}: answered, now {}\n\n{}", task.status.as_str(), answer.body),
+                None => format!("{head}: not waiting for an answer ({})", task.status.as_str()),
+            })
+        }
         // A note has no status to name.
         None => Some(format!("{head}: a note, not waiting for an answer")),
     }

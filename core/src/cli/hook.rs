@@ -59,9 +59,12 @@ pub fn respond(event: HookEvent, input: &str, central: &Path, here: &Path) -> Op
             let tasks = Store::at(&dir).and_then(|s| s.load()).map(|(tasks, _)| tasks).unwrap_or_default();
             // Each one: with subagents, an agent may have several running.
             reminders.extend(tasks.iter().filter(|t| uncommented(t)).map(|task| {
+                // Which session started it isn't known, so the agent of another, or one that crashed, is told
+                // apart by the agent reading this: never told to finish a task it didn't start.
                 format!(
-                    "kanbrain: #{0} {1} is in doing with no comment since you started it. Before ending this turn, \
-                     `kb comment {0}` what changed and what's next, or `kb done {0}` if it's finished.",
+                    "kanbrain: #{0} {1} is in doing with no comment since an agent started it. If you started it, \
+                     before ending this turn `kb comment {0}` what changed and what's next, or `kb done {0}` if \
+                     it's finished; if you didn't, leave it alone.",
                     task.id, task.title
                 )
             }));

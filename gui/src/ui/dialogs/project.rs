@@ -5,11 +5,10 @@ use super::{WIDE_WIDTH, dialog};
 use crate::state::{Board, COLUMNS, Target};
 use crate::text::event::KeyCode;
 use crate::ui::markdown;
-use crate::ui::theme::{self};
+use crate::ui::theme;
 use crate::ui::widgets::{Kind, button, dim, dim_small, section, small, tooltip};
 use crate::ui::{BrainView, action};
-use gpui::Stateful;
-use gpui::{ClickEvent, Context, Div, ElementId, ScrollHandle, div, prelude::*, px, rgb};
+use gpui::{ClickEvent, Context, Div, ElementId, ScrollHandle, Stateful, div, prelude::*, px, rgb};
 use kanbrain_core::model::{fmt_clock, fmt_dur, now, worked};
 use kanbrain_core::period::{Period, Unit};
 
@@ -30,16 +29,15 @@ pub(super) fn draw(
     let week = worked(repos.iter().flat_map(|&r| &board.brain(r).tasks), from, to, now);
     let several = repos.len() > 1;
     let blocks: Vec<Div> = repos.iter().map(|&repo| repo_block(board, repo, src, several, now, cx)).collect();
-    // The blocks follow the four children before them.
-    if follow && let Some(at) = repos.iter().position(|&r| r == src) {
-        scroll.scroll_to_item(4 + at);
+    if follow && let Some(item) = block_item(&repos, src) {
+        scroll.scroll_to_item(item);
     }
     let body = div()
         .id("manage-project-body")
         .flex()
         .flex_col()
         .gap_3()
-        .max_h(px(480.))
+        .max_h(px(600.))
         .overflow_y_scroll()
         .track_scroll(scroll)
         .child(section(
@@ -74,6 +72,13 @@ pub(super) fn draw(
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.ask_remove(src, true))));
     let buttons = vec![remove, action("close-manage-project", "Close", Kind::Primary, KeyCode::Esc, cx)];
     Some(dialog(format!("Manage project {}", project.name), content, buttons).w(px(WIDE_WIDTH)))
+}
+
+/// The scroll item of `src`'s block among the repositories `repos`: the blocks follow the four children before them,
+/// and the first goes back to the top, so About is in view again.
+pub(super) fn block_item(repos: &[usize], src: usize) -> Option<usize> {
+    let at = repos.iter().position(|&r| r == src)?;
+    Some(if at == 0 { 0 } else { 4 + at })
 }
 
 /// One of the project's repositories: its name with its buttons, where it is, its tasks per status, what's running

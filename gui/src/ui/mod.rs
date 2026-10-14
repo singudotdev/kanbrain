@@ -51,10 +51,10 @@ use gpui::{
 };
 use keys::{key_events, key_name};
 use std::borrow::Cow;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
-use text::{byte_at, edited, truncate, when};
+use text::{byte_at, edited, truncate, truncate_words, when};
 use widgets::Kind;
 
 /// The window's application id on Linux: the name of the installer's `kanbrain.desktop` and of its icon, so
@@ -310,7 +310,8 @@ impl BrainView {
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(caret::BLINK).await;
-                // Redrawn only with a cursor to blink: idle, the window would otherwise draw twice a second for nothing.
+                // Redrawn only with a cursor to blink: idle, the window would otherwise draw twice a second for
+                // nothing.
                 let blinked = this.update(cx, |view, cx| {
                     if view.board.is_typing() {
                         let shown = cx.global::<caret::Blink>().0;
@@ -412,9 +413,10 @@ impl BrainView {
         }
     }
 
-    /// Re-reads the files if another program changed them since they were last looked at. Every input calls it before acting, not only the timer: the board saves whole
-    /// entries from memory, so acting on a copy up to a second old would undo a comment or move an
-    /// agent made in that second, and the save would then mark that change as seen.
+    /// Re-reads the files if another program changed them since they were last looked at. Every input calls it
+    /// before acting, not only the timer: the board saves whole entries from memory, so acting on a copy up to a
+    /// second old would undo a comment or move an agent made in that second, and the save would then mark that
+    /// change as seen.
     fn catch_up(&mut self) {
         let changed = self.watcher.changed();
         if changed.is_empty() {
@@ -444,7 +446,8 @@ impl BrainView {
                 cx.spawn(async move |this, cx| {
                     let edited = edit.await;
                     this.update(cx, |this, cx| {
-                        if let Err(e) = edited.and_then(|()| this.board.reload()) {
+                        // Under the locks, as every read: the watcher then takes the edit as seen.
+                        if let Err(e) = edited.and_then(|()| this.locked(|this| this.board.reload())) {
                             this.board.notify_error(&e);
                         }
                         cx.notify();
@@ -453,16 +456,17 @@ impl BrainView {
                 })
                 .detach();
             }
-            Some(Request::Folder(project)) => Self::pick_project_folder(project, cx),
+            Some(Request::Folder(from)) => Self::pick_project_folder(from, cx),
             Some(Request::Update) => self.install_update(cx),
             None => {}
         }
         cx.notify();
     }
 
-    /// Opens the system's folder dialog, and asks which project the folder picked joins or starts, `project` if
-    /// given. On Linux the dialog is the desktop portal's: without one, the status bar says so.
-    fn pick_project_folder(project: Option<String>, cx: &mut Context<Self>) {
+    /// Opens the system's folder dialog, and asks which project the folder picked joins or starts: that of the
+    /// repository whose `.brain/` is `from`, if given. On Linux the dialog is the desktop portal's: without one,
+    /// the status bar says so.
+    fn pick_project_folder(from: Option<PathBuf>, cx: &mut Context<Self>) {
         let picked = cx.prompt_for_paths(PathPromptOptions {
             files: false,
             directories: true,
@@ -475,7 +479,7 @@ impl BrainView {
                 match picked {
                     Ok(Ok(Some(dirs))) => {
                         if let Some(dir) = dirs.into_iter().next() {
-                            this.board.name_project(dir, project);
+                            this.board.name_project(dir, from.as_deref());
                         }
                     }
                     Ok(Err(e)) => this.board.notify_error(&e),
@@ -640,9 +644,7 @@ fn action(
 /// Opens `path` in `$VISUAL` / `$EDITOR` (which may include arguments, e.g. `code -w`) and waits. One set but empty
 /// counts as unset, as shells treat it.
 fn open_editor(path: &Path) -> Result<()> {
-    let set = |name| std::env::var(name).ok().filter(|v: &String| !v.trim().is_empty());
-    let editor = set("VISUAL").or_else(|| set("EDITOR"));
-    let editor = editor.unwrap_or_else(|| if cfg!(windows) { "notepad" } else { "vi" }.to_string());
+    let editor = editor_of(std::env::var("VISUAL").ok(), std::env::var("EDITOR").ok());
     let mut parts = editor.split_whitespace();
     let program = parts.next().context("no editor to run")?;
     let status = Command::new(program).args(parts).arg(path).status().with_context(|| format!("running {program}"))?;
@@ -650,6 +652,13 @@ fn open_editor(path: &Path) -> Result<()> {
         bail!("{program} exited with {status}");
     }
     Ok(())
+}
+
+/// The editor to run, from `$VISUAL` and `$EDITOR`: the first set to something, as one set but empty (`VISUAL=`)
+/// names none; else the system's own.
+fn editor_of(visual: Option<String>, editor: Option<String>) -> String {
+    let set = |value: Option<String>| value.filter(|v| !v.trim().is_empty());
+    set(visual).or_else(|| set(editor)).unwrap_or_else(|| if cfg!(windows) { "notepad" } else { "vi" }.to_string())
 }
 
 #[cfg(test)]

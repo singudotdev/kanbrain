@@ -22,13 +22,7 @@ pub(super) fn draw(
     cx: &mut Context<BrainView>,
 ) -> Div {
     let task = edit.target.key().and_then(|key| board.task(key));
-    let project = |src: usize| board.brain(src).project.as_ref().map(|p| (p.name.clone(), p.repo.clone()));
-    let name = match edit.target {
-        Target::Project(src) => project(src).map(|(name, _)| format!("project {name}, shared by its repositories")),
-        Target::RepoNotes(src) => project(src).map(|(name, repo)| format!("repository {repo} of project {name}")),
-        _ => task.map(|t| format!("#{} {}", t.id, t.title)),
-    }
-    .unwrap_or_default();
+    let name = edited_name(board, edit.target);
     let what = match edit.target {
         Target::Description(_) => "Description".to_string(),
         Target::NewComment(_) if board.answers(edit.target) => "Answer".to_string(),
@@ -41,7 +35,8 @@ pub(super) fn draw(
         Target::Project(_) => "Project description".to_string(),
         Target::RepoNotes(_) => "This repository's role".to_string(),
     };
-    let modified = if edit.editor.modified { " •" } else { "" };
+    let changed = board.changed(edit);
+    let modified = if changed { " •" } else { "" };
 
     // Long lines wrap; the cursor's line is kept in view while typing.
     let (row, col) = edit.editor.cursor();
@@ -78,7 +73,7 @@ pub(super) fn draw(
         .children(lines);
     let text = pointable(text, TextBox::Editor, hits, cx);
     let content = div().flex_1().min_h_0().flex().flex_col().gap_2().child(dim_small(name)).child(text).child(
-        dim_small(if edit.editor.modified {
+        dim_small(if changed {
             "Markdown is fine. Esc or Ctrl+Enter saves and closes; Ctrl+D discards the changes."
         } else {
             "Markdown is fine. Esc closes."
@@ -86,7 +81,7 @@ pub(super) fn draw(
     );
     // Until something's typed there's nothing to save, and the button says so: as "Save", closing an answer
     // never written read as sending it.
-    let buttons = if edit.editor.modified {
+    let buttons = if changed {
         let save = match edit.target {
             Target::NewComment(_) if board.answers(edit.target) => "Answer",
             Target::NewComment(_) => "Add comment",
@@ -96,7 +91,7 @@ pub(super) fn draw(
         };
         vec![
             button("discard", "Discard changes", Kind::Secondary)
-                .tooltip(tooltip("Shortcut: ctrl+d"))
+                .tooltip(tooltip("Shortcut: Ctrl+D"))
                 .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.act(cx, Board::discard_edit))),
             action("save", save, Kind::Primary, KeyCode::Esc, cx),
         ]
@@ -104,4 +99,18 @@ pub(super) fn draw(
         vec![action("save", "Close", Kind::Secondary, KeyCode::Esc, cx)]
     };
     dialog(format!("{what}{modified}"), content, buttons).w(px(EDITOR_WIDTH)).h(relative(0.8))
+}
+
+/// What the editor's text belongs to: the entry, the project or the repository.
+pub(super) fn edited_name(board: &Board, target: Target) -> String {
+    let project = |src: usize| board.brain(src).project.as_ref();
+    match target {
+        Target::Project(src) => project(src).map(|p| format!("project {}, shared by its repositories", p.name)),
+        Target::RepoNotes(src) => project(src).map(|p| format!("repository {} of project {}", p.repo, p.name)),
+        _ => target
+            .key()
+            .zip(target.key().and_then(|key| board.task(key)))
+            .map(|(key, t)| format!("{} {}", board.entry_name(key), t.title)),
+    }
+    .unwrap_or_default()
 }

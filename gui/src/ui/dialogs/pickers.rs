@@ -60,7 +60,7 @@ pub(super) fn links(
         .child(dim_small("Click an entry (or Enter) to link or unlink it. Links show on both entries."))
         .child(list);
     let buttons = vec![action("links-done", "Done", Kind::Primary, KeyCode::Esc, cx)];
-    let title = format!("Related to #{} {}", task.id, truncate(&task.title, 40));
+    let title = format!("Related to {} {}", board.entry_name(picker.key), truncate(&task.title, 40));
     Some(dialog(title, content, buttons).w(px(WIDE_WIDTH)))
 }
 
@@ -96,7 +96,7 @@ pub(super) fn comments(
         .child(dim_small("Enter (or a click) edits the highlighted comment; x deletes it, after asking."))
         .child(list("comments", rows, picker.sel, MAX_ROWS, scroll, follow));
     let buttons = vec![action("comments-done", "Close", Kind::Primary, KeyCode::Esc, cx)];
-    let title = format!("Comments on #{} {}", task.id, truncate(&task.title, 40));
+    let title = format!("Comments on {} {}", board.entry_name(key), truncate(&task.title, 40));
     Some(dialog(title, content, buttons).w(px(WIDE_WIDTH)))
 }
 
@@ -140,7 +140,7 @@ pub(super) fn place(
         WhereFor::QuickAdd(_) => format!("New {} in which project?", EntryKind::Task.as_str()),
         WhereFor::Move(key) => {
             let name = board.task(key).map_or_else(String::new, |t| format!(" {}", truncate(&t.title, 40)));
-            format!("Move #{}{name} to which project?", key.id)
+            format!("Move {}{name} to which project?", board.entry_name(key))
         }
     };
     let content = match asked.then {

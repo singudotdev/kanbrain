@@ -85,8 +85,8 @@ pub enum When {
     OtherBrain,
     /// With an entry selected that doesn't wait for your answer.
     NotWaiting,
-    /// With an entry selected that has comments.
-    Commented,
+    /// With an entry selected that has comments (`true`) or none.
+    Commented(bool),
     /// With a task selected that waits for your answer to an agent's question.
     Asks,
     /// With a task selected that waits on a decision an agent proposed.
@@ -121,7 +121,7 @@ impl When {
             }
             Self::OtherBrain => entry.is_some() && board.sources.len() > 1,
             Self::NotWaiting => entry.is_some_and(|t| !matches!(t.asked(), Some(Asked::Waiting(_)))),
-            Self::Commented => entry.is_some_and(|t| !t.comments.is_empty()),
+            Self::Commented(some) => entry.is_some_and(|t| t.comments.is_empty() != some),
             // A task waiting on a proposed decision is answered by deciding (`y`, `Y`, `j`).
             Self::Asks => {
                 entry.is_some_and(|t| matches!(t.asked(), Some(Asked::Waiting(_))))
@@ -148,7 +148,7 @@ impl When {
                 | Self::DecisionNot(_)
                 | Self::OtherBrain
                 | Self::NotWaiting
-                | Self::Commented
+                | Self::Commented(_)
                 | Self::Asks
                 | Self::Proposed
         )
@@ -286,8 +286,10 @@ pub const ACTIONS: &[Action] = &[
     .menu("Edit description"),
     letter("c", Tabs::Entries, When::Asks, "Answer the agent's question", comment).menu("Answer…"),
     letter("c", Tabs::Entries, When::NotWaiting, "Add a comment", comment).menu("Add comment"),
-    letter("C", Tabs::Entries, When::Commented, "Edit or delete one of its comments", Board::open_comments)
+    letter("C", Tabs::Entries, When::Commented(true), "Edit or delete one of its comments", Board::open_comments)
         .menu("Edit or delete a comment…"),
+    // Not on the menu: there, an entry without comments has nothing to offer.
+    letter("C", Tabs::Entries, When::Commented(false), "Edit or delete one of its comments", Board::open_comments),
     letter("D", Tabs::Entries, When::Proposed, "Open the decision it waits on", Board::open_proposed)
         .menu("Open proposed decision"),
     letter("r", Tabs::Entries, When::Entry, "Relate to other entries", |b| selected(b, |b, _| b.open_links()))
@@ -345,7 +347,7 @@ pub const ACTIONS: &[Action] = &[
     ),
     letter("E", Tabs::Every, When::Project, "Edit the project's description", Board::edit_project_description),
     letter("N", Tabs::Every, When::Repo, "Edit the repository's role in its project", Board::edit_repo_notes),
-    letter("A", Tabs::Every, When::Always, "Add a project: pick a code folder, as `kb init` there", |b| {
+    letter("A", Tabs::Every, When::Always, "Add a project: pick a code folder, as kb init there", |b| {
         b.request = Some(Request::Folder(None));
     }),
     letter("1", Tabs::Every, When::Always, "Go to the board", |b| b.switch_tab(Tab::Board)),

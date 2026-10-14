@@ -137,9 +137,32 @@ impl Task {
     pub fn from_markdown(text: &str) -> Result<Task, String> {
         let mut parsed = Parsed::default();
         let mut section = Section::Meta;
+        // A title with line breaks, which versions before 0.4.0 wrote as typed: the lines right under it, up to the
+        // blank line kanbrain writes before the keys, continue it rather than read as a section that hides the id
+        // and every key after it. Never a `- key:` line, which a hand edit may put first.
+        let lines: Vec<&str> = text.lines().collect();
+        // Only a title above the id: a `# ` line further down is another section's text.
+        let id_at = lines.iter().position(|l| l.trim_start().starts_with("- id:")).unwrap_or_default();
+        let continued = match lines[..id_at].iter().position(|l| l.starts_with("# ")) {
+            Some(title) => {
+                let is_key = |l: &&&str| l.trim_start().strip_prefix("- ").is_some_and(|rest| rest.contains(':'));
+                let run = lines[title + 1..id_at].iter().take_while(|l| !l.trim().is_empty() && !is_key(l)).count();
+                title + 1..title + 1 + run
+            }
+            None => 0..0,
+        };
         // Read line by line; each `## ` heading switches the section the next lines belong to.
-        for line in text.lines() {
+        for (at, line) in text.lines().enumerate() {
             let trimmed = line.trim_end();
+            if continued.contains(&at) {
+                if let Some(title) = &mut parsed.title
+                    && !trimmed.trim().is_empty()
+                {
+                    title.push(' ');
+                    title.push_str(trimmed.trim());
+                }
+                continue;
+            }
             if let Some(heading) = trimmed.strip_prefix("## ") {
                 section = Section::from_heading(heading);
                 if matches!(section, Section::Other) {
@@ -234,6 +257,10 @@ impl<'a> Parsed<'a> {
             return;
         }
         let Some((key, value)) = line.trim_start().strip_prefix("- ").and_then(|rest| rest.split_once(':')) else {
+            // Text of a hand edit among the keys: kept, written back after them.
+            if self.title.is_some() && !line.trim().is_empty() {
+                self.unknown.meta.push(line.trim().to_string());
+            }
             return;
         };
         match key.trim() {
@@ -244,9 +271,20 @@ impl<'a> Parsed<'a> {
                 Some(decision) => self.decision = decision,
                 None => self.unknown.meta.push(line.trim().to_string()),
             },
+            // A second line, from a hand edit or a merge, adds to the first rather than replace it.
             "links" => {
-                (self.links, self.repo_links) = parse_links(value);
-                self.unknown.links = link_words(value).filter(|w| parse_link(w).is_none()).map(String::from).collect();
+                let (links, repo_links) = parse_links(value);
+                for link in links {
+                    if !self.links.contains(&link) {
+                        self.links.push(link);
+                    }
+                }
+                for link in repo_links {
+                    if !self.repo_links.contains(&link) {
+                        self.repo_links.push(link);
+                    }
+                }
+                self.unknown.links.extend(link_words(value).filter(|w| parse_link(w).is_none()).map(String::from));
             }
             "tags" => self.tags = parse_tags(value),
             "created" => self.created = parse_ts(value),
@@ -333,11 +371,11 @@ impl<'a> Parsed<'a> {
             status,
             decision: self.decision,
             created: self.created.or_else(|| self.history.first().map(|c| c.at)).unwrap_or_else(now),
-            description: self.description.join("\n").trim().to_string(),
+            description: without_blank_ends(&self.description),
             comments: self
                 .comments
                 .into_iter()
-                .map(|(comment, body)| Comment { body: body.join("\n").trim().to_string(), ..comment })
+                .map(|(comment, body)| Comment { body: without_blank_ends(&body), ..comment })
                 .collect(),
             history: self.history,
             sessions: self.sessions,
@@ -364,6 +402,12 @@ pub fn parse_links(value: &str) -> (Vec<u32>, Vec<RepoLink>) {
     (links, repo_links)
 }
 
+/// The first word of `value` that isn't a link (an id, `#12`, or `REPO#ID`): typed on the command line, it's a
+/// mistake to say, where a file's `- links:` line keeps such words as they are.
+pub fn not_a_link(value: &str) -> Option<&str> {
+    link_words(value).find(|word| parse_link(word).is_none())
+}
+
 /// The words of a `- links:` value, split at commas and spaces.
 fn link_words(value: &str) -> impl Iterator<Item = &str> {
     value.split([',', ' ']).map(str::trim).filter(|w| !w.is_empty())
@@ -387,6 +431,14 @@ fn parse_link(word: &str) -> Option<Link> {
     }
 }
 
+/// Free text without the blank lines around it, its first line keeping its indentation (an indented code block).
+fn without_blank_ends(lines: &[&str]) -> String {
+    let blank = |line: &&&str| line.trim().is_empty();
+    let start = lines.iter().position(|line| !blank(&line)).unwrap_or(lines.len());
+    let end = lines.iter().rposition(|line| !blank(&line)).map_or(start, |at| at + 1);
+    lines[start..end].join("\n").trim_end().to_string()
+}
+
 /// ` (agent)` after what an agent did; nothing after what a person did, so their files read as before.
 fn by_mark(by: Author) -> &'static str {
     match by {
@@ -395,13 +447,14 @@ fn by_mark(by: Author) -> &'static str {
     }
 }
 
-/// What a comment's header says in parentheses after its time: `agent`, `question`, words this version
+/// What a comment's header says in parentheses after its time: `agent`, `question` or `answer`, words this version
 /// doesn't know, then `edited <time>`.
 fn comment_attributes(comment: &Comment) -> Vec<String> {
     let author = (comment.author != Author::Human).then(|| comment.author.as_str().to_string());
     let question = comment.question.then(|| "question".to_string());
+    let answer = comment.answer.then(|| "answer".to_string());
     let edited = comment.edited.map(|at| format!("edited {}", fmt_ts(at)));
-    author.into_iter().chain(question).chain(comment.unknown.iter().cloned()).chain(edited).collect()
+    author.into_iter().chain(question).chain(answer).chain(comment.unknown.iter().cloned()).chain(edited).collect()
 }
 
 /// Parses `### <created>` or `### <created> (<attributes>)`, the attributes as [`comment_attributes`]
@@ -416,6 +469,8 @@ fn comment_header(line: &str) -> Option<Comment> {
     for word in attributes.split(',').map(str::trim).filter(|w| !w.is_empty()) {
         if word == "question" {
             comment.question = true;
+        } else if word == "answer" {
+            comment.answer = true;
         } else if let Some(author) = Author::parse(word) {
             comment.author = author;
         } else if let Some(at) = word.strip_prefix("edited ") {

@@ -4,13 +4,19 @@
 use super::pointer::TextBox;
 use super::theme::{self, BORDER, DIM, TEXT};
 use super::widgets::{self, Kind, card, dim, dim_small, small, state_pill, tag_chips};
-use super::{BrainView, menu};
+use super::{BrainView, menu, truncate_words};
 use crate::state::{Board, COLUMNS, Key, Mode};
 use gpui::{
     ClickEvent, Context, Div, ElementId, FontWeight, ScrollHandle, SharedString, Stateful, Window, div, prelude::*, px,
     rgb,
 };
 use kanbrain_core::model::{Asked, Status, Task, counted, fmt_age, fmt_clock, fmt_dur, now};
+
+/// Characters of a card's title, and of the question it waits on, shown before they're cut at a word's end: about
+/// three lines of a column at its narrowest. Cut by characters rather than by GPUI's line clamp, which cuts mid-word.
+const TITLE_CHARS: usize = 90;
+/// See [`TITLE_CHARS`].
+const QUESTION_CHARS: usize = 110;
 
 /// Narrowest a column gets before the board scrolls sideways.
 const COLUMN_MIN_WIDTH: f32 = 220.;
@@ -42,6 +48,7 @@ impl Render for DragPreview {
             .text_color(rgb(TEXT))
             .opacity(0.9)
             .line_clamp(2)
+            .text_ellipsis()
             .child(self.title.clone())
     }
 }
@@ -221,14 +228,19 @@ fn draw_card(
         .child(
             div()
                 .text_size(px(13.))
-                .line_clamp(3)
-                .text_ellipsis()
-                .text_color(rgb(if task.status == Status::Done { DIM } else { TEXT }))
-                .child(task.title.clone()),
+                .text_color(rgb(title_color(task.status)))
+                .child(truncate_words(&task.title, TITLE_CHARS)),
         )
-        .when(!task.tags.is_empty(), |d| d.child(tag_chips(board, &task.tags)))
-        .children(asked(task))
+        .when(!task.tags.is_empty(), |d| {
+            d.child(tag_chips(board, &task.tags).debug_selector(move || format!("tags {}/{}", key.src, key.id)))
+        })
+        .children(asked(task).map(|d| d.debug_selector(move || format!("asked {}/{}", key.src, key.id))))
         .child(footer)
+}
+
+/// A card's title color: dimmed once done, as what's no longer to do.
+pub(super) fn title_color(status: Status) -> u32 {
+    if status == Status::Done { DIM } else { TEXT }
 }
 
 /// The question a parked task waits on, or its answer, for its card: what the person watching the board
@@ -245,17 +257,8 @@ fn asked(task: &Task) -> Option<Div> {
             .items_start()
             .gap_1()
             .children(state_pill(task))
-            // As wide as the card, and an ellipsis where it's cut: at the text's own width it ran past the card's
-            // edge, and a clamped line ends mid-word without one.
-            .child(
-                div()
-                    .w_full()
-                    .text_size(px(12.))
-                    .text_color(rgb(DIM))
-                    .line_clamp(2)
-                    .text_ellipsis()
-                    .child(first.to_string()),
-            ),
+            // As wide as the card: at the text's own width it ran past the card's edge.
+            .child(div().w_full().text_size(px(12.)).text_color(rgb(DIM)).child(truncate_words(first, QUESTION_CHARS))),
     )
 }
 

@@ -66,9 +66,11 @@ macro_rules! named_enum {
                 }
             }
 
-            /// The variant whose name is `s` (surrounding whitespace ignored); the inverse of `as_str`.
+            /// The variant whose name is `s`, in any case and with surrounding whitespace ignored; the inverse of
+            /// `as_str`.
             pub fn parse(s: &str) -> Option<Self> {
-                Self::ALL.iter().copied().find(|v| v.as_str() == s.trim())
+                // A hand-edited `- status: Done` is done, not a todo.
+                Self::ALL.iter().copied().find(|v| v.as_str().eq_ignore_ascii_case(s.trim()))
             }
 
             /// Every name joined by `separator`, e.g. `hour|day|week|month`.

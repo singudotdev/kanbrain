@@ -35,8 +35,8 @@ pub fn parse_ts(s: &str) -> Option<DateTime<Local>> {
 pub fn fmt_age(d: Duration) -> String {
     let minutes = d.num_minutes().max(0);
     match minutes {
-        // As `fmt_dur` says it.
-        0 if d > Duration::zero() => "<1m".to_string(),
+        // An age is never none, though times are kept to the second and one read within it is exactly zero.
+        0 => "<1m".to_string(),
         ..60 => format!("{minutes}m"),
         60..1440 => format!("{}h", minutes / 60),
         1440..20160 => format!("{}d", minutes / 1440),

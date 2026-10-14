@@ -27,7 +27,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | `r` | **relate** to other entries: search and pick |
 | `o` | **open** the file in `$EDITOR`; the board reloads when it closes |
 | `x` | **delete** (asks first) |
-| `y` | **accept** the selected decision, or the one the selected task waits on; it answers the tasks waiting on it |
+| `y` | **accept** the selected decision, or the one the selected task waits on; it answers a question that names it (`#ID`) |
 | `Y` | **accept with a comment**: the editor asks for it, and the waiting tasks get it with the verdict |
 | `j` | **reject** the selected decision, or the one the selected task waits on: the editor asks why, which a rejection always says |
 | `w` | go to the next task **waiting for your answer**, in every project shown |
@@ -94,8 +94,9 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | right-click menu | `↑` `↓` move; `enter` or an item's own key chooses it; `esc` or a click outside closes it |
 | command palette | type to filter by what it does or its key; `↑` `↓` move; `enter` runs it; `esc` closes |
 
-Dropdowns and pickers show 8 rows at most (the form's Project and Related fields, 6; the command palette, 12) and scroll past that; a line under them says
-how many more are below (`↓ 4 more · type to filter`), and `↑` `↓` keep the highlighted row in view.
+Dropdowns and pickers show 8 rows at most (the form's Project and Related fields, 6; Add project's and Manage
+project's project lists, 5; the command palette, 12) and scroll past that; a line under them says
+how many more are below (`↓ 4 more · type to filter`) and above (`↑ 2 above`), and `↑` `↓` keep the highlighted row in view.
 
 In every field and the editor, `ctrl+a` selects all, `ctrl+c` / `ctrl+x` / `ctrl+v` copy, cut and paste with the
 system clipboard (`cmd` on macOS), and `shift` with the arrows, `home` or `end` selects text. Typing or pasting

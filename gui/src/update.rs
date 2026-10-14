@@ -37,12 +37,22 @@ pub fn take_failure() -> Option<String> {
 /// under `central`. Once it returns, this app is to close: on Windows, the installer waits for that to replace it.
 pub fn install(central: &Path) -> Result<()> {
     update::check_no_agent_working(central)?;
-    // Before installing: on Linux, the running program's path reads as deleted once it's replaced.
-    let exe = std::env::current_exe().context("finding this program's file")?;
+    // Before installing: on Linux, the running program's path reads as deleted once it's replaced. It may read so
+    // already, replaced by a `kb update` since this app started: the file to start again is the new one there.
+    let exe = running_file(std::env::current_exe().context("finding this program's file")?);
     let Install::Installer { dir, app } = update::install_of(&exe)? else {
         bail!("kanbrain was installed with cargo: update it the same way");
     };
     if cfg!(windows) { install_after_exit(&exe, &dir, app) } else { install_now(&exe, &dir, app) }
+}
+
+/// The file this program runs from, as [`std::env::current_exe`] gives it, without the ` (deleted)` Linux adds once
+/// the file was replaced: the one at that path now is the new release.
+fn running_file(exe: PathBuf) -> PathBuf {
+    match exe.to_str().and_then(|path| path.strip_suffix(" (deleted)")) {
+        Some(path) => PathBuf::from(path),
+        None => exe,
+    }
 }
 
 /// Runs the installer, which replaces the binaries by renaming, so this one carries on, then starts the new one.
@@ -58,10 +68,11 @@ fn install_after_exit(exe: &Path, dir: &Path, app: &str) -> Result<()> {
     // In single quotes, where only a single quote is special, written twice.
     let quote = |path: &Path| format!("'{}'", path.display().to_string().replace('\'', "''"));
     let script = format!(
-        "try {{ Wait-Process -Id {pid} -ErrorAction SilentlyContinue; $env:KANBRAIN_APP = '{app}'; \
+        "try {{ Wait-Process -Id {pid} -ErrorAction SilentlyContinue; {clear}; $env:KANBRAIN_APP = '{app}'; \
          $env:KANBRAIN_INSTALL_DIR = {dir}; irm {url} | iex }} catch {{ Set-Content -LiteralPath {note} -Value \
          \"$_\" }} finally {{ Start-Process -FilePath {exe} }}",
         pid = std::process::id(),
+        clear = update::clear_installer_choices_ps1(),
         dir = quote(dir),
         url = update::INSTALL_PS1,
         note = quote(&failure_note()),
@@ -73,3 +84,7 @@ fn install_after_exit(exe: &Path, dir: &Path, app: &str) -> Result<()> {
     powershell.spawn().context("starting PowerShell, which runs the installer")?;
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../tests/update.rs"]
+mod tests;

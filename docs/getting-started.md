@@ -185,6 +185,10 @@ Purge without the question, for scripts:
 $env:KANBRAIN_PURGE = "1"; $env:KANBRAIN_YES = "1"; irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
 ```
 
+These variables stay set in that PowerShell window, where installing again would uninstall or purge again: close
+it, or clear them with `Remove-Item Env:KANBRAIN_UNINSTALL, Env:KANBRAIN_PURGE, Env:KANBRAIN_YES -ErrorAction
+SilentlyContinue`. `kb update` and the app's update clear them, and `KANBRAIN_VERSION`, before installing.
+
 What purge does:
 
 - **It finds the central brain** by asking the installed command line (`kb --project central path`), so

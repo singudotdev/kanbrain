@@ -2,18 +2,24 @@
 
 ```
 kb list [doing|todo|parked|done|all] [notes] [decisions] [--tag TAG] [--json]
-                 print tasks as markdown, one section per status
+                 print tasks as markdown, one section per status, then notes and decisions
+                 (default: doing, todo, parked; several can be given; notes or decisions alone
+                 list only those)
 kb init [NAME] [--repo REPO]
                  make this folder a project: its own .brain/, registered as NAME (default: the
                  folder's name) with a card for the application, and a section telling its agents
-                 about it in CLAUDE.md / AGENTS.md (run again to update them)
+                 about it in CLAUDE.md / AGENTS.md (run again to update them); in a project with
+                 several, the repository is named REPO (default: the folder's, made unique)
 kb init --all    update the agents' section and hooks in every registered project to this version's
+                 (the installer and update run it)
 kb deinit [--purge]
                  stop this folder (or --project NAME) being a project: unregister it, remove its
-                 section from CLAUDE.md / AGENTS.md and, with its last repository, the project's card;
-                 its .brain/ is kept unless --purge
+                 section from CLAUDE.md / AGENTS.md, the other repositories' links to it and, with
+                 its last repository, the project's card; its .brain/ is kept unless --purge
 kb hook prompt|stop
-                 what the Claude Code hooks `init` adds run (see For coding agents)
+                 what the Claude Code hooks `init` adds run: they hold an agent to describing an
+                 undescribed project first, and to commenting on the tasks it started (they read the
+                 hook's JSON on stdin)
 kb status    print the running tasks, in whichever project, and how many wait for an answer
                  (for status bars)
 kb report [hour|day|week|month] [--group task|tag] [--tag TAG] [--save]
@@ -22,14 +28,16 @@ kb add | show | search | start | park | done | todo | comment | ask | wait | pro
    | describe | link | project | context
                  entries by id, for agents and scripts (see For coding agents)
 kb path      print the data directory in use (a project's .brain/ inside it)
-kb update    install the latest release over this one
+kb update    install the latest release over this one (and the other app, if it's beside it)
 kb completions bash|zsh|fish
-                 print a tab completion script for the shell
+                 print a tab completion script for the shell (commands, ids, projects, tags)
 kb --version print the version (also -V)
-kb --help    show usage (also with no arguments)
+kb --help    show usage (also with no arguments, or `kb help`); `kb COMMAND --help` or `kb help COMMAND` shows one
 
 --project NAME         anywhere on the line: run the command on a registered project's brain,
                        or `central`, from any folder
+--                     ends a text's options: every word after it is the text (a title, comment,
+                       search…), as in `kb comment 3 -- use --json`
 ```
 
 All commands read and write the same folder as the kanban app (see
@@ -59,7 +67,7 @@ Makes the current folder a repository of project `NAME` (default: the folder's n
   several repositories, holds this one's role among them (`project notes`);
 - registers it in the central brain's `projects.md`. Another repository already in project `NAME` makes it a
   multi-repository project: each keeps its own tasks, labelled `NAME/REPO` (`shop/shop-web`);
-- creates the project's card in the central brain, `projects/NAME.md` (the name as a slug: `acme-corp.md`), if it's
+- creates the project's card in the central brain, `projects/NAME.md` (`shop.md`; another name adds a hash: `acme-corp-1a2b3c4d.md`), if it's
   new: the application's shared context (what it is, its services and how they connect, conventions they share),
   written with `project describe`. `context` starts with it, then this repository's role and where the other
   repositories are, so an agent knows the project without exploring it;
@@ -82,7 +90,7 @@ Run inside one of the project's repositories (or with `--project`):
 
 | command | does |
 | --- | --- |
-| `kb project rename NAME…` | renames the project: the registry, its card and each repository's `.brain/project.md` |
+| `kb project rename NAME…` | renames the project: the registry, its card and each repository's `.brain/project.md`. A new name that starts with the old one and a space (`rename shop store`) is refused as a mistyped `rename OLD NEW`; `rename -- shop v2` takes it |
 | `kb project repo NAME` | renames this repository in its project, and rewrites the other repositories' links to it |
 | `kb project move PROJECT…` | moves this repository to another project, created if new; its links to the old project's repositories are dropped, on both sides |
 | `kb project remove [--purge]` | takes every repository of the project out, as `deinit` does each; `--purge` deletes their `.brain/` too |
@@ -140,7 +148,7 @@ $ kb list
 | `doing` / `todo` / `parked` / `done` | only these statuses; give several to combine them | all but `done` |
 | `all` | every status, done included | |
 | `notes` / `decisions` | also list notes and/or decisions after the tasks, newest first; given alone, only those | |
-| `--json` | a JSON array of `{ id, kind, title, status, decision, asked, tags }` in the same order, on one line | markdown |
+| `--json` | a JSON array of `{ id, kind, title, status, decision, asked, tags }` in the same order, on one line: `status` only on tasks, `decision` only on decisions, `asked` only on a task an agent asked about | markdown |
 | `--tag TAG` | only tasks with this tag (`prod` or `#prod`) | all |
 
 Examples:
@@ -171,7 +179,9 @@ The time is the length of the **current session**, not the task's total. See [In
 
 ## `kb report`
 
-Prints a markdown report for the **current** period to stdout. This is the same content as **Export .md** on the report tab.
+Prints a markdown report for the **current** period to stdout, of the brain the command works on. **Export .md** on
+the report tab writes the same report of what the app shows: with several brains in its scope, all of them, each
+task named with its repository.
 
 | option | meaning | default |
 | --- | --- | --- |
@@ -235,13 +245,15 @@ Handy for scripts: `cd "$(kb path)"` (in PowerShell, `cd (kb path)`).
 ## `kb update`
 
 Refused while an agent has a task in doing, in any project: updating rewrites the agents' instructions, and may
-migrate their data, under them. Once they're done or parked (park a stale one yourself), it runs the installer for
-the latest release, into the folder `kb` is in. It checks the download's checksum and replaces `kb`, and
+migrate their data, under them. Already on the latest release, it says so and installs nothing. Once they're done
+or parked (park a stale one yourself), it runs the installer for the latest release, into the folder `kb` is in. It checks the download's checksum and replaces `kb`, and
 `kanbrain` too when it's installed beside it, then updates every project (`kb init --all`): its agent
 instructions, and its data, migrated to the new version's format when it changed, after a backup (see
 [Format versions and migrations](data-format.md#format-versions-and-migrations)). On Windows, where a running
 program can't be replaced, it prints the PowerShell command to run once the app is closed. Installed with
 `cargo install`, it doesn't replace anything behind cargo's back: it prints `cargo install kanbrain && kb init --all`.
+The installer only writes inside your home folder, so a `kb` elsewhere (`/usr/local/bin`, a build's `target/`) is
+refused with "install folder must be inside your home folder": reinstall it there instead.
 
 ## `kb completions`
 

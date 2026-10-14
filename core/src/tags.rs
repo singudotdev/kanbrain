@@ -39,7 +39,8 @@ impl TagColor {
             return Some(TagColor::Palette(i));
         }
         let hex = s.strip_prefix('#')?;
-        if hex.len() != 6 {
+        // ASCII, so the slices below fall on characters: `#aééb` is six bytes too.
+        if hex.len() != 6 || !hex.is_ascii() {
             return None;
         }
         let byte = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();

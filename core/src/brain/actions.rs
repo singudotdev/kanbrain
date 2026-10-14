@@ -4,7 +4,8 @@ use super::{Brain, ReportView};
 use crate::api::ApiError;
 use crate::export;
 use crate::model::{
-    Asked, Author, Comment, DecisionState, Kind, RepoLink, Status, Task, now, sanitize_comment, sanitize_description,
+    Asked, Author, Comment, DecisionState, Kind, RepoLink, Status, Task, now, one_line, sanitize_comment,
+    sanitize_description,
 };
 use crate::projects;
 use anyhow::Result;
@@ -143,7 +144,7 @@ impl Brain {
 
     /// Saves a new title and tags (a new title also renames the file).
     pub fn update(&mut self, id: u32, title: &str, tags: Vec<String>) -> Result<()> {
-        let title = title.trim();
+        let title = &one_line(title);
         if title.is_empty() {
             return Err(ApiError::Empty("title").into());
         }
@@ -275,14 +276,14 @@ impl Brain {
 
     /// Adds a timestamped comment. Returns whether headings had to become `####`.
     pub fn add_comment(&mut self, id: u32, text: &str) -> Result<bool> {
-        self.push_comment(id, text, false)
+        self.push_comment(id, text, Said::Comment)
     }
 
     /// Asks the user a question on a task and parks it, until a person answers with a comment (see
     /// [`Task::asked`]). Returns whether headings had to become `####`.
     pub fn ask(&mut self, id: u32, question: &str) -> Result<bool> {
         let index = self.task_index(id)?;
-        let demoted = self.push_comment(id, question, true)?;
+        let demoted = self.push_comment(id, question, Said::Question)?;
         if self.tasks[index].set_status(Status::Parked, now(), self.author) {
             self.store.save(&mut self.tasks[index])?;
         }
@@ -298,7 +299,7 @@ impl Brain {
         if !links.contains(&id) {
             links.insert(0, id);
         }
-        let title = decision.title.trim().to_string();
+        let title = one_line(&decision.title);
         let new = NewEntry { kind: Kind::Decision, title: title.clone(), links, start: false, ..decision };
         let decision = self.add(new)?;
         let index = self.index_of(decision)?;
@@ -335,27 +336,42 @@ impl Brain {
         };
         self.tasks[index].decision = state;
         self.store.save(&mut self.tasks[index])?;
-        self.push_comment(id, &said(verdict), false)?;
+        self.push_comment(id, &said(verdict), Said::Comment)?;
+        // The tasks whose question is about this decision, as `propose` asks it ("Proposed decision #5, …"): a task
+        // that only links it waits on something else.
+        let about = format!("#{id}");
         let waiting: Vec<u32> = self
             .tasks
             .iter()
-            .filter(|t| matches!(t.asked(), Some(Asked::Waiting(_))) && self.are_related(t.id, id))
+            .filter(|t| match t.asked() {
+                Some(Asked::Waiting(question)) => {
+                    self.are_related(t.id, id)
+                        // Words as a link is written, so `web#6`, another repository's entry, isn't `#6`.
+                        && question
+                            .body
+                            .split(|c: char| !(c.is_alphanumeric() || matches!(c, '#' | '-' | '_')))
+                            .any(|w| w == about)
+                }
+                _ => false,
+            })
             .map(|t| t.id)
             .collect();
         for task in waiting {
-            self.push_comment(task, &said(&format!("{verdict} decision #{id}, {title}")), false)?;
+            self.push_comment(task, &said(&format!("{verdict} decision #{id}, {title}")), Said::Answer)?;
         }
         Ok(true)
     }
 
-    /// Adds a comment by this brain's author, a question or not. Returns whether headings had to become `####`.
-    fn push_comment(&mut self, id: u32, text: &str, question: bool) -> Result<bool> {
+    /// Adds a comment by this brain's author, saying what `said` says it is. Returns whether headings had to become
+    /// `####`.
+    fn push_comment(&mut self, id: u32, text: &str, said: Said) -> Result<bool> {
         let index = self.index_of(id)?;
         let (body, demoted) = sanitize_comment(text);
         if body.is_empty() {
-            return Err(ApiError::Empty(if question { "question" } else { "comment" }).into());
+            return Err(ApiError::Empty(if said == Said::Question { "question" } else { "comment" }).into());
         }
-        let comment = Comment { question, ..Comment::new(now(), body, self.author) };
+        let (question, answer) = (said == Said::Question, said == Said::Answer);
+        let comment = Comment { question, answer, ..Comment::new(now(), body, self.author) };
         self.tasks[index].comments.push(comment);
         self.store.save(&mut self.tasks[index])?;
         Ok(demoted)
@@ -410,4 +426,15 @@ impl Brain {
         crate::store::write_file(&path, &markdown)?;
         Ok(path)
     }
+}
+
+/// What a comment is to the task it's on.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Said {
+    /// Anything said.
+    Comment,
+    /// A question the task then waits on.
+    Question,
+    /// The answer to the question it waits on.
+    Answer,
 }

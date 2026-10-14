@@ -63,10 +63,10 @@ pub struct Slot {
 }
 
 impl Slot {
-    /// `#id title`, after its brain when the report merges several: `api · #3 Fix login`.
+    /// `#id title`, after its brain when the report merges several: `api #3 Fix login`, as the app names entries.
     pub fn label(&self) -> String {
         match &self.project {
-            Some(project) => format!("{project} · #{} {}", self.id, self.title),
+            Some(project) => format!("{project} #{} {}", self.id, self.title),
             None => format!("#{} {}", self.id, self.title),
         }
     }
@@ -120,7 +120,7 @@ impl Report {
 impl Report {
     /// Several brains' reports for the same view as one, worked out again from their sessions so time
     /// tasks of different brains ran at once counts once too. Task rows and timeline entries are named
-    /// after their brain (`api · #3 Fix login`), since each brain numbers its entries from 1.
+    /// after their brain (`api #3 Fix login`), since each brain numbers its entries from 1.
     pub fn merge(parts: Vec<(Option<String>, Report)>, view: &ReportView) -> Report {
         let timeline = parts
             .into_iter()

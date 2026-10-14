@@ -59,3 +59,24 @@ fn a_folder_new_to_sync_is_read_again() {
     assert_eq!(watcher.changed(), [b.path()], "read before its lock was held");
     assert_eq!(changed(&mut watcher), 0);
 }
+
+#[test]
+fn a_folder_is_read_again_once_it_is_watched_from_the_start() {
+    let dir = tempfile::tempdir().unwrap();
+    // Written between the board's first read and the watcher's start (the window opening).
+    fs::write(dir.path().join("0001-a.md"), "# a").unwrap();
+    let mut watcher = Watcher::new(vec![dir.path().to_path_buf()]);
+    assert_eq!(changed(&mut watcher), 1, "read again, as what it holds may be newer than the board");
+    assert_eq!(changed(&mut watcher), 0);
+}
+
+#[test]
+fn a_brains_format_file_changing_is_noticed() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("format"), "abc\n").unwrap();
+    let mut watcher = Watcher::new(vec![dir.path().to_path_buf()]);
+    changed(&mut watcher);
+    // Repaired, a repository left out for it can be read again.
+    fs::write(dir.path().join("format"), "1\n").unwrap();
+    assert_eq!(changed(&mut watcher), 1);
+}

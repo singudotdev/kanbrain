@@ -5,7 +5,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-## [0.3.6] - 2026-10-13
+## [0.4.0] - 2026-10-14
 
 ### Added
 
@@ -13,6 +13,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   or delete one, `ctrl+d` discards the editor's changes, `shift+tab` goes back a tab or a form field, and Manage
   project's buttons have keys, on the repository `↑` `↓` highlight.
 - `kb show --json` lists the other repositories' entries linking to it, in `repo_linked_from`.
+- `--` ends a text's options: every word after it is the text (`kb comment 3 -- use --json`).
 
 ### Changed
 
@@ -21,8 +22,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A tag shows in one color all over the app, though several brains color it.
 - Time under a minute shows as `<1m`, not `0m`, which now means none.
 - `kb list` marks a task waiting for an answer and a decision proposed or rejected, as `kb context` does.
-- A command-line error is followed by that command's usage only, not every command's.
-- `--project` takes a name in any case when only one project or repository has it, and `central` in any case.
+- A command-line error is followed by that command's usage only, not every command's; `kb COMMAND --help` and
+  `kb help COMMAND` print it.
+- `--project` takes a name in any case when only one project or repository has it, and `central` in any case; a
+  project of several repositories alone is told to name one, not that it doesn't exist.
+- `kanbrain-core`, for code built on it: `model::Comment` has an `answer` field and `cli::ProjectChange::Rename` a
+  second one, `true` for a name given after `--`. Build a `Comment` with `Comment::new`, then `..` for the rest.
+- `kb` refuses what 0.3.5 took, saying what to type instead: `kb project rename OLD NEW` (now
+  `kb project rename -- OLD NEW`), a project or repository name starting with `-`, a project called `Central` in any
+  case, several tags after one `kb list --tag`, a word `kb link` can't read as a link, `kb search` without words,
+  `kb reject` without why, an empty stdin for `-`, and `kb init` where the path has a line break or in the central
+  brain. `kb init --all`, which `kb update` runs, renames the projects and repositories already registered under such
+  names; until then, `kb init` in one of their repositories says to run it.
 
 ### Fixed
 
@@ -44,9 +55,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The kanban app:
   - the board scrolls sideways to the selected card's column instead of hiding the Done column under the details,
     also when the details open on it;
-  - a card's question wraps within the card instead of being cut at its edge, and a cut title or question ends in an
-    ellipsis;
-  - Manage project's editors go back to it when closed, and it keeps the highlighted repository and its keys in view;
+  - a card's question wraps within the card instead of being cut at its edge, and a long title or question is cut at
+    a word's end;
+  - Manage project's editors and adding a repository from it ("Add a repository to PROJECT") go back to it, on the
+    repository it was on, and it keeps the highlighted repository, its top and its keys in view;
+  - the status bar shows messages without backticks; an editor whose text is back to what it was no longer reads
+    as changed, nor says it was saved; answering an agent says the answer was sent;
   - a note or decision of headings alone previews its first heading, and the delete dialogs say what will be removed;
   - a calendar day of several sessions spans from the first, beside their total;
   - a dialog left open follows its project when another is added or removed;
@@ -56,7 +70,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   - running tasks keep their place in the top bar, which wraps alike on every tab;
   - the notes and decisions lists line up across brains, preview without markdown and say `1 note`;
   - an empty column says when the search hides its tasks, and saving a form without a title says so under it;
+  - a move's message names the repository when several are shown, and answering an agent says the answer was sent;
+  - Manage project stays open after taking one of several repositories out, and its remove dialog speaks of what it
+    removes;
+  - the board's list view lines its titles up across brains;
+  - a shown project taken out from the command line falls back to All, not a blank scope;
+  - a comment's Edit and Delete stay inside the details, the New button keeps one width so the top bar wraps alike,
+    the project's line in the bar is plain text, and the link picker's highlight follows the entry it links;
+  - moves, deletes and verdicts name the entry's repository when several are shown, `u` says when it redoes, and
+    Unlink and delete tasks says what it deleted;
+  - a renamed project stays shown, a new task that can't start says why, saving the title and tags says so, `C`
+    without comments says how to add one, long lists say what's hidden above, and dialogs name the repository;
   - the calendar's month names each entry's project when several are shown;
+  - quiet buttons have an outline, so they no longer look like plain text;
+  - a repository renamed with `kb project repo` and a shown project renamed from the command line show under their
+    new names; saving the form unchanged no longer rewrites the entry nor says it was saved;
+  - long titles in the calendar's week end with an ellipsis instead of being cut mid-letter, and its moves stay in
+    their column; a running task's row in the list view lines up with the others; the move dialog, the edit
+    form and the comments list name the repository;
   - it redraws only when something on it changes with time, not twice a second while idle.
 - `kb update` and the app's update run the latest release's installer, not the one on `main`.
 - New tags get the same color whatever build of kanbrain picks it.
@@ -66,11 +97,52 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   the project names `--project` takes, and open tasks' ids first.
 - Errors name their command once (`reject needs why`, `propose needs the decision's title`) and a bad id without the
   parser's words, `kb wait` on a note gives no status, counts say `1 session` and `1 entry`, ages say `<1m`, `kb
-  update` names agents' tasks as `kb status` does, and moving or removing a repository says what happens to its notes
-  and tasks.
+  update` names agents' tasks as `kb status` does, `kb init --all` says "more" only after others it listed, and moving
+  or removing a repository says what happens to its notes and tasks.
 - `kb --help` names every command that takes `--json`.
+- A status move or a verdict that changes nothing says so on stderr.
+- Moving a repository says so first, by the name it had, keeps a name of its own (or says why it can't), and when it
+  was its project's last, takes the project's description to the new one if that has none (or says it's dropped),
+  and removes the old card.
+- `kb project remove` no longer says the card stays before removing it; a merged report names tasks `api #3`.
 - `install.sh` takes `KANBRAIN_UNINSTALL`, `KANBRAIN_PURGE` and `KANBRAIN_YES` as `install.ps1` does, and cancelling
   a purge is no longer an error; `install.ps1` installs the second app at the version asked for.
+- Data that could be lost no longer is:
+  - on macOS and Windows, saving an entry whose file was renamed only in case deleted it;
+  - a file an editor saved with a byte-order mark lost its title;
+  - links to an entry whose file didn't parse, or to one a repository's older branch doesn't have, were dropped;
+  - a title with line breaks made its entry unreadable; such files read again;
+  - projects whose names slug alike (`my_app` and `my-app`, `Shop` and `shop`, any two in another script) shared
+    one card, each overwriting the other's description;
+  - `--purge` deleted files of your own named like kanbrain's (`2024-01-15.md` in a vault), followed a linked data
+    folder only part way, and took `$HOME//` for a data folder.
+- A `tags.md` color of other characters no longer crashes every command; the largest id no longer wraps to 0.
+- An agent's `accept` or `reject` answers the task that asked about the decision; one asking something else keeps
+  waiting. `kb wait` returns the answer even when the task was moved right after it, and no longer takes a task
+  retitled while it waits for a deleted one.
+- `describe -` and `project describe|notes -` with nothing on stdin are refused instead of wiping the text; a word
+  `link` can't read is refused instead of dropped; files that don't read as entries are named on stderr.
+- `-h` in a comment's words is text; `KANBRAIN_AUTHOR` is read in any case; the Stop hook no longer tells an agent to
+  finish another session's task.
+- `kb init NAME` moves a repository as `kb project move` does; a folder named `My App` gets a name links can hold, as
+  does one named after the folder above it; a repository away during a rename follows its project; `kb init --all`
+  goes on past a repository it can't update.
+- `kb init` no longer writes over a `CLAUDE.md` or `AGENTS.md` it can't read (one not in UTF-8): it leaves it as it
+  is and says so.
+- A new repository no longer takes the name of one whose folder is gone (an unmounted disk): that one keeps it, and
+  stays registered.
+- A repository moved to another project keeps its name there unless that's refused, and says why.
+- Crash leftovers are cleaned up only among kanbrain's own files, not other programs' hidden `.tmp` files in a
+  notes vault used as the central brain.
+- `kb update` says when it's already on the latest release, and ignores uninstall, purge and version variables left
+  in the shell; the installers fetch every app before replacing any, and say when the app can't start. On Windows
+  PowerShell 5.1, uninstalling with `--purge` under a profile with an accent (`C:\Users\José`) found no data folder
+  and deleted nothing; a temporary folder with `[` `]` in its name no longer breaks installing.
+- The kanban app opens with a repository that can't be read left out, says so once rather than on every agent's
+  write, and shows it once it's repaired; it takes each brain's lock while opening, reads again a write an agent made
+  while it was starting, and names the repository in the link picker's title. A folder added from Manage project
+  joins that project though the board changed while the folder dialog was open; the form's project list keeps its
+  highlighted row; a decision already rejected and an entry the form created are named with their repository.
 
 ## [0.3.5] - 2026-10-13
 
@@ -208,8 +280,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.3.6...HEAD
-[0.3.6]: https://github.com/singudotdev/kanbrain/compare/v0.3.5...v0.3.6
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/singudotdev/kanbrain/compare/v0.3.5...v0.4.0
 [0.3.5]: https://github.com/singudotdev/kanbrain/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/singudotdev/kanbrain/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/singudotdev/kanbrain/compare/v0.3.2...v0.3.3
