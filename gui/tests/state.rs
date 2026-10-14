@@ -259,6 +259,17 @@ fn dropping_a_card_moves_it_unless_it_is_its_own_column() {
 }
 
 #[test]
+fn a_dragged_card_is_found_by_its_brains_folder() {
+    let mut f = Fixture::new(&["feature", "bug"]);
+    let gone = f.dir.path().join("gone");
+    f.board.drop_dragged(&gone, 2, Status::Done);
+    assert_eq!(f.status(2), Status::Todo, "its brain gone from the list meanwhile: nothing moves");
+    let dir = f.dir.path().to_path_buf();
+    f.board.drop_dragged(&dir, 2, Status::Done);
+    assert_eq!((f.status(2), f.board.selected), (Status::Done, Some(k(2))));
+}
+
+#[test]
 fn arrows_move_between_columns_and_cards() {
     let mut f = Fixture::new(&["a", "b", "c"]);
     f.board.set_status(k(3), Status::Parked);

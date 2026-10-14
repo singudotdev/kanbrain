@@ -11,6 +11,7 @@ use gpui::{
     rgb,
 };
 use kanbrain_core::model::{Asked, Status, Task, counted, fmt_age, fmt_clock, fmt_dur, now};
+use std::path::PathBuf;
 
 /// Characters of a card's title, and of the question it waits on, shown before they're cut at a word's end: about
 /// three lines of a column at its narrowest. Cut by characters rather than by GPUI's line clamp, which cuts mid-word.
@@ -23,8 +24,11 @@ const COLUMN_MIN_WIDTH: f32 = 220.;
 
 /// A card being dragged: which task, and the title its preview shows under the pointer.
 pub struct DraggedCard {
-    /// The task.
-    key: Key,
+    /// The task's brain, by its folder: a reload while it's dragged may move the brain in the list, and an index
+    /// would then name another.
+    dir: PathBuf,
+    /// The task's id there.
+    id: u32,
     /// The task's title.
     title: SharedString,
 }
@@ -139,12 +143,15 @@ fn column(board: &Board, status: Status, scroll: &ScrollHandle, follow: bool, cx
 pub(super) fn drop_target(target: Div, status: Status, cx: &mut Context<BrainView>) -> Div {
     target
         .drag_over::<DraggedCard>(|style, _, _, _| style.border_color(rgb(theme::ACCENT)).bg(rgb(theme::HOVER)))
-        .on_drop(cx.listener(move |this, card: &DraggedCard, _, cx| this.act(cx, |b| b.drop_card(card.key, status))))
+        .on_drop(cx.listener(move |this, card: &DraggedCard, _, cx| {
+            this.act(cx, |b| b.drop_dragged(&card.dir, card.id, status));
+        }))
 }
 
 /// Makes `element`, which shows `task`, draggable onto a column or a list's section.
-pub(super) fn draggable(element: Stateful<Div>, key: Key, task: &Task) -> Stateful<Div> {
-    element.on_drag(DraggedCard { key, title: task.title.clone().into() }, |card, _, _, cx| {
+pub(super) fn draggable(element: Stateful<Div>, board: &Board, key: Key, task: &Task) -> Stateful<Div> {
+    let dir = board.brain(key.src).store.dir().to_path_buf();
+    element.on_drag(DraggedCard { dir, id: key.id, title: task.title.clone().into() }, |card, _, _, cx| {
         cx.new(|_| DragPreview { title: card.title.clone() })
     })
 }
@@ -205,7 +212,7 @@ fn draw_card(
         .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
             this.act(cx, |b| b.click_entry(key, event.click_count()));
         }));
-    draggable(card, key, task)
+    draggable(card, board, key, task)
         .child(
             div()
                 .flex()
