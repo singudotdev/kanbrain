@@ -142,4 +142,7 @@ fn a_brain_reached_through_a_link_is_a_brain_still() {
     let central_link = code.path().join("central");
     std::os::unix::fs::symlink(central.path(), &central_link).unwrap();
     assert!(edit(&root, &central_link.join("0001-plan.md"), central.path()).is_some());
+    // And the central brain set through a link (`KANBRAIN_DIR`), written at its real path.
+    let real = central.path().canonicalize().unwrap().join("0001-plan.md");
+    assert!(edit(&root, &real, &central_link).is_some());
 }
