@@ -453,7 +453,8 @@ The kanban app's look is checked by running it (`KANBRAIN_DIR=/tmp/t cargo run -
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push to `main` and `develop` and every pull request:
+`.github/workflows/ci.yml` runs on every push to `main` and `develop` and every pull request, each job as the change
+needs it (see below):
 
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and the docs with
   `cargo doc --workspace --no-deps --document-private-items` failing on warnings; and the published crates
@@ -472,8 +473,27 @@ The kanban app's look is checked by running it (`KANBRAIN_DIR=/tmp/t cargo run -
 - the release app started on Linux, macOS and Windows, idle under 3% of a core, its screenshot kept
   (`e2e/smoke-app.sh`, `e2e/smoke-app.ps1`)
 
+Each job runs only when the change touches what it checks: a first `plan` job (`.github/plan.sh`) compares the
+change with the pull request's base, or a push with the last commit on its branch whose run passed.
+
+| Changed | Jobs |
+|---|---|
+| `core/`, or a file built into it (`tag-changelog/`, `install.sh`, `docs/agents.md`, `docs/cli.md`, the logo) | all but the licenses |
+| `cli/` | lints, tests, minimum Rust version, installers, upgrade |
+| `gui/`, or `docs/keybindings.md` | lints, tests, the app started |
+| `xtask/` | lints, licenses |
+| a script (`*.sh`, `*.ps1`) | the installers (with `shellcheck` and PSScriptAnalyzer); `e2e/upgrade.sh` and `e2e/smoke-app.*` their own job too |
+| the workflows, `Cargo.toml`, `Cargo.lock`, the toolchain or tools' configuration | everything |
+| only documentation | nothing |
+
+Mutation testing runs when Rust lines changed, whatever the folder.
+
+A `release/*` branch runs everything. A tree a passing run already checked runs nothing again: the squash of a pull
+request into `develop`, of a release into `main`, or a commit only re-signed, holds the tree its pull request passed
+with. Each run keeps an artifact named after its tree (`ci-tree-…`, `mutants-tree-…`, 90 days) for a later run to find.
+
 `.github/workflows/release.yml` refuses a tag that doesn't match the version in `Cargo.toml`, or whose commit has no
-passing `ci.yml` and `mutants.yml` run.
+passing `ci.yml` and `mutants.yml` run (one that found its tree already checked counts).
 
 ## Branches
 
