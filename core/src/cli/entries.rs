@@ -577,37 +577,57 @@ fn minutes(arg: &str) -> Result<Option<Duration>> {
 /// tool wakes it when it exits: one wake-up with the answer, instead of checking by turns.
 fn wait(brain: &Brain, id: u32, timeout: Option<Duration>) -> Result<()> {
     let started = std::time::Instant::now();
-    // The question it found waiting: answered and then moved before the next look, the answer is still what's said.
-    let mut asked_at = None;
-    let mut first = true;
-    let mut missed = false;
+    let mut watch = Watch::default();
     loop {
-        // After the first look, a read that fails (the folder caught mid-change) is looked again at next time, and so
-        // is one without the entry: its file renamed for a new title between listing the folder and reading it. Not
-        // there twice in a row, it was deleted.
-        match brain.store.load() {
-            Ok((tasks, _)) => match tasks.into_iter().find(|t| t.id == id) {
-                None if first || missed => return Err(ApiError::NotFound(id).into()),
-                None => missed = true,
-                Some(task) => {
-                    missed = false;
-                    if let Some(Asked::Waiting(question)) = task.asked() {
-                        asked_at.get_or_insert(question.created);
-                    }
-                    if let Some(said) = settled(&task, asked_at) {
-                        println!("{said}");
-                        return Ok(());
-                    }
-                }
-            },
-            Err(e) if first => return Err(e),
-            Err(_) => {}
+        if let Some(said) = watch.look(id, brain.store.load().map(|(tasks, _)| tasks)) {
+            println!("{}", said?);
+            return Ok(());
         }
-        first = false;
         if timeout.is_some_and(|limit| started.elapsed() >= limit) {
             bail!("no answer on #{id} yet: stop here and don't wait again; once answered, it comes first in `context`");
         }
         std::thread::sleep(WAIT_POLL);
+    }
+}
+
+/// What `wait` keeps from one look at the brain to the next, apart from the clock so a test can play
+/// a run of looks without sleeping through them.
+#[derive(Default)]
+struct Watch {
+    /// The question it found waiting: answered and then moved before the next look, the answer is still what's said.
+    asked_at: Option<chrono::DateTime<chrono::Local>>,
+    /// Whether it looked before: the first look fails at once on a brain it can't read or without the entry, as
+    /// waiting on either would only wait out the time limit.
+    looked: bool,
+    /// Whether the entry was missing from the last look: its file renamed for a new title between listing the
+    /// folder and reading it is back by the next one, so only missing twice in a row it was deleted.
+    missed: bool,
+}
+
+impl Watch {
+    /// Takes one look's read of the brain: `Some` ends the wait, with what to print or why it can't go on;
+    /// `None` looks again.
+    fn look(&mut self, id: u32, read: Result<Vec<Task>>) -> Option<Result<String>> {
+        let first = !std::mem::replace(&mut self.looked, true);
+        // After the first look, a read that fails (the folder caught mid-change) is looked again at next time.
+        match read {
+            Ok(tasks) => match tasks.into_iter().find(|t| t.id == id) {
+                None if first || self.missed => Some(Err(ApiError::NotFound(id).into())),
+                None => {
+                    self.missed = true;
+                    None
+                }
+                Some(task) => {
+                    self.missed = false;
+                    if let Some(Asked::Waiting(question)) = task.asked() {
+                        self.asked_at.get_or_insert(question.created);
+                    }
+                    settled(&task, self.asked_at).map(Ok)
+                }
+            },
+            Err(e) if first => Some(Err(e)),
+            Err(_) => None,
+        }
     }
 }
 

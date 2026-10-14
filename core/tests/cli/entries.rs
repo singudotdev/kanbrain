@@ -224,22 +224,23 @@ fn waiting_on_an_entry_missing_from_one_look_carries_on() {
     let mut brain = Brain::open(crate::store::Store::at(dir.path()).unwrap()).unwrap();
     let task = brain.add(NewEntry { title: "Rate-limit login".into(), ..NewEntry::default() }).unwrap();
     brain.ask(task, "Per IP or per account?").unwrap();
-    let file = brain.entry(task).unwrap().path.clone().unwrap();
-    let text = std::fs::read(&file).unwrap();
-    let store = dir.path().to_path_buf();
-    // Gone across the look at 2 s, as a file renamed for a new title is gone between listing and reading it.
-    let mover = std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(1400));
-        std::fs::remove_file(&file).unwrap();
-        std::thread::sleep(Duration::from_millis(1200));
-        std::fs::write(&file, text).unwrap();
-        std::thread::sleep(Duration::from_millis(500));
-        let mut brain = Brain::open(crate::store::Store::at(&store).unwrap()).unwrap();
-        brain.author = crate::model::Author::Human;
-        brain.add_comment(task, "Per account").unwrap();
-    });
-    wait(&brain, task, Some(Duration::from_secs(60))).expect("still there: the answer");
-    mover.join().unwrap();
+    let asked = || Ok(brain.store.load().unwrap().0);
+    // Gone from one look, as a file renamed for a new title is gone between listing and reading it.
+    let mut watch = Watch::default();
+    assert!(watch.look(task, asked()).is_none());
+    assert!(watch.look(task, Ok(Vec::new())).is_none(), "looked at again");
+    assert!(watch.look(task, asked()).is_none());
+    assert!(watch.look(task, Ok(Vec::new())).is_none(), "a miss after it was back is a first miss again");
+    let mut gone = Watch::default();
+    assert!(gone.look(task, asked()).is_none());
+    assert!(gone.look(task, Ok(Vec::new())).is_none());
+    let error = gone.look(task, Ok(Vec::new())).unwrap().unwrap_err();
+    assert_eq!(error.downcast::<ApiError>().unwrap(), ApiError::NotFound(task), "not there twice in a row");
+
+    brain.author = crate::model::Author::Human;
+    brain.add_comment(task, "Per account").unwrap();
+    let answered = watch.look(task, Ok(brain.store.load().unwrap().0)).unwrap().unwrap();
+    assert_eq!(answered, format!("#{task} Rate-limit login: answered\n\nPer account"));
 }
 
 #[test]
