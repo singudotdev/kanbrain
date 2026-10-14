@@ -16,10 +16,10 @@ kb deinit [--purge]
                  stop this folder (or --project NAME) being a project: unregister it, remove its
                  section from CLAUDE.md / AGENTS.md, the other repositories' links to it and, with
                  its last repository, the project's card; its .brain/ is kept unless --purge
-kb hook prompt|stop
+kb hook prompt|stop|edit
                  what the Claude Code hooks `init` adds run: they hold an agent to describing an
-                 undescribed project first, and to commenting on the tasks it started (they read the
-                 hook's JSON on stdin)
+                 undescribed project first, to commenting on the tasks it started, and to `kb` for
+                 the brain's files (they read the hook's JSON on stdin)
 kb status    print the running tasks, in whichever project, and how many wait for an answer
                  (for status bars)
 kb report [hour|day|week|month] [--group task|tag] [--tag TAG] [--save]
@@ -72,9 +72,9 @@ Makes the current folder a repository of project `NAME` (default: the folder's n
   written with `project describe`. `context` starts with it, then this repository's role and where the other
   repositories are, so an agent knows the project without exploring it;
 - writes the "Project memory" section into `CLAUDE.md` / `AGENTS.md` and, with `CLAUDE.md`, Claude Code hooks into
-  `.claude/settings.local.json`: the context at the start of each session, and `kb hook prompt|stop`, which hold an
-  agent to describing an undescribed project first and to commenting on the tasks it started (see
-  [For coding agents](agents.md)).
+  `.claude/settings.local.json`: the context at the start of each session, and `kb hook prompt|stop|edit`, which hold
+  an agent to describing an undescribed project first, to commenting on the tasks it started and to `kb` for the
+  brain's files (see [For coding agents](agents.md)).
 
 Running it again is safe: it updates the agent section and the hooks, and `init NAME` moves the repository to project
 `NAME`.

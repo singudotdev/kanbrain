@@ -87,8 +87,8 @@ Either way, this sets up everything an agent needs:
    (it creates `CLAUDE.md` if neither file exists). Agents read that file at the start of every session. The section
    sits between `<!-- kanbrain:start/end -->` markers, so the rest of the file is left alone. For Claude Code it
    also adds hooks to `.claude/settings.local.json`: they hand the agent `kb context` at the start of each session
-   and after compaction, don't let it end its first turn without describing an undescribed project, and remind it
-   to comment on the task it started.
+   and after compaction, remind it to describe an undescribed project and to comment on the task it started, and
+   send it to `kb` when it tries to write the brain's files itself.
    Upgrading refreshes them in every project: the installer and `kb update` run `kb init --all`.
 
 To stop a repository being a project, run `kb deinit` in it, or `kb --project NAME deinit` from

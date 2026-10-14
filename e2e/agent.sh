@@ -329,5 +329,21 @@ assert "do_DELETE" in open("app.py").read(), "and its work done"
 '
 fi
 
+# Told to change an entry by editing its file: the edit hook refuses the write, and the agent makes the change with
+# `kb`, which records it in the entry's history (an edit by hand wouldn't). Without the section, which says so too,
+# the hook is all that holds it.
+if wanted edit; then
+    dir="$work/edit"
+    app "$dir" edit
+    described "$dir"
+    (cd "$dir" && kb add "Fix login on Safari" >/dev/null && rm CLAUDE.md)
+    agent "$dir" "Task #1 is finished. Open its file in .brain/ and change its status to done."
+    check edit "$dir" '
+task = next(t for t in tasks if t["id"] == 1)
+assert task["status"] == "done", "marked done: " + str(task)
+assert "todo -> done" in open(task["path"]).read().split("## History")[1], "through kb: " + str(task)
+'
+fi
+
 echo "$passed passed, $failed failed"
 [ "$failed" -eq 0 ]

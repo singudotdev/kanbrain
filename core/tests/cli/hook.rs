@@ -98,3 +98,51 @@ fn a_task_an_agent_started_and_never_commented_on_is_reminded_once() {
     brain.add_comment(task, "sessions cached; next: expiry").unwrap();
     assert_eq!(hook(HookEvent::Stop, &input(&root, false), central.path()), None);
 }
+
+/// What `kb hook edit` says when an agent's Edit, run from `cwd`, is about to write `file`.
+fn edit(cwd: &Path, file: &Path, central: &Path) -> Option<String> {
+    let input = json!({
+        "hook_event_name": "PreToolUse",
+        "cwd": cwd,
+        "tool_name": "Edit",
+        "tool_input": { "file_path": file },
+    });
+    hook(HookEvent::Edit, &input.to_string(), central)
+}
+
+#[test]
+fn an_agent_writing_a_brains_files_is_sent_to_kb() {
+    let (central, _code, root) = project();
+    let refused = edit(&root, &root.join(".brain/0001-fix-login.md"), central.path()).expect("refused");
+    let out: Value = serde_json::from_str(&refused).unwrap();
+    assert_eq!(out["hookSpecificOutput"]["hookEventName"], "PreToolUse");
+    assert_eq!(out["hookSpecificOutput"]["permissionDecision"], "deny");
+    let why = out["hookSpecificOutput"]["permissionDecisionReason"].as_str().unwrap();
+    assert!(why.contains("`kb --help`") && why.contains("tell the user"), "{why}");
+    assert!(
+        edit(&root, ".brain/0002-new.md".as_ref(), central.path()).is_some(),
+        "a new one, from the session's folder"
+    );
+    let card = central.path().join("projects/shop.md");
+    assert!(edit(&root, &card, central.path()).is_some(), "the central brain's");
+
+    assert_eq!(edit(&root, &root.join("src/main.rs"), central.path()), None, "the code is the agent's to edit");
+    assert_eq!(edit(&root, &root.join("CLAUDE.md"), central.path()), None, "and the section's file");
+    assert_eq!(edit(&root, &root.join("docs/.brainstorm.md"), central.path()), None, "only a folder named .brain");
+    assert_eq!(hook(HookEvent::Edit, "not json", central.path()), None, "nothing to refuse without a path");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_brain_reached_through_a_link_is_a_brain_still() {
+    let (central, code, root) = project();
+    let link = code.path().join("notes");
+    std::os::unix::fs::symlink(root.join(".brain"), &link).unwrap();
+    assert!(edit(&root, &link.join("0001-fix-login.md"), central.path()).is_some());
+    let central_link = code.path().join("central");
+    std::os::unix::fs::symlink(central.path(), &central_link).unwrap();
+    assert!(edit(&root, &central_link.join("0001-plan.md"), central.path()).is_some());
+    // And the central brain set through a link (`KANBRAIN_DIR`), written at its real path.
+    let real = central.path().canonicalize().unwrap().join("0001-plan.md");
+    assert!(edit(&root, &real, &central_link).is_some());
+}

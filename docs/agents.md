@@ -28,7 +28,7 @@ kb init        # creates .brain/ and tells the project's agents about it
    isn't touched. Running `init` again updates the section in place, and upgrading does it in every project: the
    installer and `kb update` run `kb init --all`.
 
-   For Claude Code (when the section goes in `CLAUDE.md`), it also adds three hooks to
+   For Claude Code (when the section goes in `CLAUDE.md`), it also adds four hooks to
    `.claude/settings.local.json`, keeping whatever else is there:
 
    | hook | runs | does |
@@ -36,13 +36,14 @@ kb init        # creates .brain/ and tells the project's agents about it
    | `SessionStart` | `kb context` | when a session starts or resumes, after `/clear` and after compaction, the agent gets the brain's state without spending a tool call, and keeps it deep into a long session |
    | `UserPromptSubmit` | `kb hook prompt` | while the project isn't described (or, with several repositories, this one's role isn't), every prompt arrives with the request to write it before anything else |
    | `Stop` | `kb hook stop` | an agent ending its turn with it still missing is reminded to write it, once a turn (a reminder, not a block: the turn ends all the same). It also reminds an agent of each task it started and hasn't commented on since, to say where it stands |
+   | `PreToolUse` (`Edit`, `Write`, `MultiEdit`) | `kb hook edit` | an agent about to write a file in a brain's folder (a project's `.brain/`, or the central brain) is refused and told to make the change with `kb`, which takes the brain's lock, numbers new entries and keeps the format; or, if no command makes it, to tell you what to change. A shell command's writes aren't seen |
 
    Agents skipped describing the project when only the section and `context` asked them to; with these, Claude
    Code reminds them on their first turn. Once it's described and the tasks the agent started commented on,
    both print nothing and cost nothing. An explicit
    instruction from you still wins: told to use no tools, the agent says it couldn't describe the project and stops.
 
-`kb deinit` undoes all three, except that `.brain/` is kept: see [Command line](cli.md#kb-deinit).
+`kb deinit` undoes all four, except that `.brain/` is kept: see [Command line](cli.md#kb-deinit).
 
 The section reads:
 

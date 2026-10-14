@@ -23,9 +23,11 @@ fn the_hooks_are_added_once_beside_other_settings_and_removed_cleanly() {
     assert_eq!(commands(&path, "SessionStart"), ["date", "kb context"], "next to the user's hook");
     assert_eq!(commands(&path, "UserPromptSubmit"), ["kb hook prompt"]);
     assert_eq!(commands(&path, "Stop"), ["kb hook stop"]);
+    assert_eq!(commands(&path, "PreToolUse"), ["kb hook edit"]);
     let settings: Value = serde_json::from_str(&text).unwrap();
     assert_eq!(settings["hooks"]["SessionStart"][1]["matcher"], "startup|resume|clear|compact");
     assert!(settings["hooks"]["Stop"][0].get("matcher").is_none(), "Stop takes no matcher");
+    assert_eq!(settings["hooks"]["PreToolUse"][0]["matcher"], "Edit|Write|MultiEdit", "the tools that write files");
 
     assert_eq!(remove_hooks(root.path()).unwrap(), Change::Written);
     let back: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();

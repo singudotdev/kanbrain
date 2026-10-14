@@ -1,6 +1,7 @@
-//! `kb hook prompt|stop`: what Claude Code's hooks run so that an agent describes the project (and,
-//! with several repositories, this one's role) before anything else. Asked to in the section and in
-//! `context`, agents still skipped it on their first turn; these have Claude Code remind them:
+//! `kb hook prompt|stop|edit`: what Claude Code's hooks run so that an agent describes the project (and,
+//! with several repositories, this one's role) before anything else, and keeps to `kb` for the brain's files.
+//! Asked to in the section and in `context`, agents still skipped describing it on their first turn; these have
+//! Claude Code remind them:
 //!
 //! - `prompt` (`UserPromptSubmit`): while something is missing, every prompt arrives with the request
 //!   to write it first;
@@ -12,6 +13,11 @@
 //!
 //! Once the project is described and the tasks the agent started commented on, they print nothing, so they cost
 //! nothing.
+//!
+//! - `edit` (`PreToolUse`, on the tools that write files): an agent about to write a file in a brain's folder is
+//!   refused and sent to `kb`. The section tells it so, yet an agent seeing markdown files may edit them: that
+//!   skips the brain's lock (the board and other agents write there too), the numbering of new entries and the
+//!   format `kb` keeps.
 
 use crate::enums::named_enum;
 use crate::model::{Author, Status, Task};
@@ -28,56 +34,99 @@ named_enum! {
         Prompt => "prompt",
         /// `Stop`: the agent is about to end its turn.
         Stop => "stop",
+        /// `PreToolUse`: the agent is about to write a file.
+        Edit => "edit",
     }
 }
 
 /// What to print for `event`, given the JSON Claude Code sent (`input`) and the central brain: `None`
-/// outside a project, or when there's nothing to remind. Malformed input reads as empty, so a hook never
-/// breaks a session: it falls back to the folder it runs in, `here`, and lets the turn end.
+/// outside a project, or when there's nothing to remind or refuse. Malformed input reads as empty, so a hook
+/// never breaks a session: it falls back to the folder it runs in, `here`, and lets the turn end.
 pub fn respond(event: HookEvent, input: &str, central: &Path, here: &Path) -> Option<String> {
     let input: Value = serde_json::from_str(input).unwrap_or(Value::Null);
     let cwd = input["cwd"].as_str().map_or_else(|| here.to_path_buf(), PathBuf::from);
-    let dir = store::find_project(&cwd)?;
+    match event {
+        // Claude Code gives the path absolute; joined to the session's folder in case it isn't.
+        HookEvent::Edit => refuse_brain_write(&cwd.join(input["tool_input"]["file_path"].as_str()?), central),
+        HookEvent::Prompt | HookEvent::Stop => remind(event, &input, &cwd, central),
+    }
+}
+
+/// `edit`'s answer to an agent about to write `file`: refused, and sent to `kb`, when it's in a brain's folder.
+fn refuse_brain_write(file: &Path, central: &Path) -> Option<String> {
+    in_brain(file, central).then(|| {
+        json!({
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": "kanbrain: a brain's files are written only through `kb`, which takes \
+                    the brain's lock (the board and other agents write there too), numbers new entries and keeps \
+                    their format. Make this change with `kb` (`kb --help` lists the commands); if none makes it, \
+                    tell the user what to change instead of editing the file.",
+            },
+        })
+        .to_string()
+    })
+}
+
+/// Whether `file` is in a brain's folder: a project's `.brain/`, or the central brain. A link to one counts,
+/// through the nearest of `file`'s folders that exists (a file being created doesn't yet).
+fn in_brain(file: &Path, central: &Path) -> bool {
+    let central_real = central.canonicalize().ok();
+    let inside = |path: &Path| {
+        path.ancestors().any(|dir| {
+            dir.file_name().is_some_and(|name| name == store::PROJECT_DIR)
+                || dir == central
+                || central_real.as_deref() == Some(dir)
+        })
+    };
+    inside(file) || file.ancestors().find_map(|dir| dir.canonicalize().ok()).is_some_and(|real| inside(&real))
+}
+
+/// `prompt`'s and `stop`'s reminders, for the project the session runs in (`cwd`).
+fn remind(event: HookEvent, input: &Value, cwd: &Path, central: &Path) -> Option<String> {
+    let dir = store::find_project(cwd)?;
     let project = projects::info(&dir, Some(central))?;
     let missing = missing(&project).join("; and ");
-    match event {
-        HookEvent::Prompt if missing.is_empty() => None,
-        HookEvent::Prompt => Some(format!(
-            "kanbrain: this project isn't described yet. Before anything else in this turn, read the README \
-             and manifests and write {missing}. Then go on with the request."
-        )),
-        HookEvent::Stop if input["stop_hook_active"].as_bool() == Some(true) => None,
-        HookEvent::Stop => {
-            let mut reminders = Vec::new();
-            if !missing.is_empty() {
-                reminders.push(format!(
-                    "kanbrain: the project still isn't described. Before ending this turn, read the README and \
-                     manifests and write {missing}."
-                ));
-            }
-            // A brain that can't be read only loses the reminder, never the turn.
-            let tasks = Store::at(&dir).and_then(|s| s.load()).map(|(tasks, _)| tasks).unwrap_or_default();
-            // Each one: with subagents, an agent may have several running.
-            reminders.extend(tasks.iter().filter(|t| uncommented(t)).map(|task| {
-                // Which session started it isn't known, so the agent of another, or one that crashed, is told
-                // apart by the agent reading this: never told to finish a task it didn't start.
-                format!(
-                    "kanbrain: #{0} {1} is in doing with no comment since an agent started it. If you started it, \
-                     before ending this turn `kb comment {0}` what changed and what's next, or `kb done {0}` if \
-                     it's finished; if you didn't, leave it alone.",
-                    task.id, task.title
-                )
-            }));
-            // As additional context rather than `decision: "block"`: the turn goes on all the same, but
-            // Claude Code shows it as a reminder instead of a hook error.
-            (!reminders.is_empty()).then(|| {
-                json!({
-                    "hookSpecificOutput": { "hookEventName": "Stop", "additionalContext": reminders.join("\n") },
-                })
-                .to_string()
-            })
-        }
+    if event == HookEvent::Prompt {
+        return (!missing.is_empty()).then(|| {
+            format!(
+                "kanbrain: this project isn't described yet. Before anything else in this turn, read the README \
+                 and manifests and write {missing}. Then go on with the request."
+            )
+        });
     }
+    if input["stop_hook_active"].as_bool() == Some(true) {
+        return None;
+    }
+    let mut reminders = Vec::new();
+    if !missing.is_empty() {
+        reminders.push(format!(
+            "kanbrain: the project still isn't described. Before ending this turn, read the README and \
+             manifests and write {missing}."
+        ));
+    }
+    // A brain that can't be read only loses the reminder, never the turn.
+    let tasks = Store::at(&dir).and_then(|s| s.load()).map(|(tasks, _)| tasks).unwrap_or_default();
+    // Each one: with subagents, an agent may have several running.
+    reminders.extend(tasks.iter().filter(|t| uncommented(t)).map(|task| {
+        // Which session started it isn't known, so the agent of another, or one that crashed, is told
+        // apart by the agent reading this: never told to finish a task it didn't start.
+        format!(
+            "kanbrain: #{0} {1} is in doing with no comment since an agent started it. If you started it, \
+             before ending this turn `kb comment {0}` what changed and what's next, or `kb done {0}` if \
+             it's finished; if you didn't, leave it alone.",
+            task.id, task.title
+        )
+    }));
+    // As additional context rather than `decision: "block"`: the turn goes on all the same, but
+    // Claude Code shows it as a reminder instead of a hook error.
+    (!reminders.is_empty()).then(|| {
+        json!({
+            "hookSpecificOutput": { "hookEventName": "Stop", "additionalContext": reminders.join("\n") },
+        })
+        .to_string()
+    })
 }
 
 /// Whether `task` runs because an agent started it, and nobody has commented on it since. A task the
