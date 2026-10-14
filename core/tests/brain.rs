@@ -158,6 +158,18 @@ fn an_entry_sharing_its_id_with_another_gets_a_new_one() {
 }
 
 #[test]
+fn a_new_entry_never_takes_the_id_of_a_file_that_didnt_parse() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut brain = Brain::open(Store::at(dir.path()).unwrap()).unwrap();
+    brain.add(NewEntry { title: "one".into(), ..NewEntry::default() }).unwrap();
+    std::fs::write(dir.path().join("0002-two.md"), "not an entry").unwrap();
+    let mut brain = Brain::open(Store::at(dir.path()).unwrap()).unwrap();
+    let id = brain.add(NewEntry { title: "two".into(), ..NewEntry::default() }).unwrap();
+    assert_eq!(id, 3, "#2 is the broken file's");
+    assert_eq!(std::fs::read_to_string(dir.path().join("0002-two.md")).unwrap(), "not an entry");
+}
+
+#[test]
 fn comments_are_added_edited_and_deleted() {
     let mut f = Fixture::with_titles(&["feature"]);
     f.brain.add_comment(1, "first").unwrap();
