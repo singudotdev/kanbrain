@@ -262,6 +262,11 @@ impl Store {
             Some(old) if old.parent() == Some(self.dir.as_path()) && same_ignoring_case(old, &path) => old.clone(),
             _ => path,
         };
+        // A file there that isn't this entry's is one that didn't parse (a sync conflict's, a hand edit's): writing
+        // over it would lose what it holds.
+        if task.path.as_ref() != Some(&path) && path.exists() {
+            bail!("{} is there and couldn't be read as #{}: fix or move it, then try again", path.display(), task.id);
+        }
         self.remember(&path);
         if let Some(old) = &task.path {
             self.remember(old);
