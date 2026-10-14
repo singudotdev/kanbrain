@@ -98,7 +98,7 @@ build() {
     cd "$w/src/dash" && p init -dash >/dev/null 2>&1 && p add "Dash task" >/dev/null
     cd "$w/src/upper" && p init Central >/dev/null 2>&1 && p add "Upper task" >/dev/null
     cd "$w/src/docs" && p init docs >/dev/null && p add "Docs task" >/dev/null
-    p project repo -docs >/dev/null 2>&1
+    p project repo -docs >/dev/null 2>&1 || true
     cd "$w/src/solo" && p init solo >/dev/null
     p project describe "A side project" >/dev/null
     p add --tag misc "Solo todo" >/dev/null
@@ -207,7 +207,13 @@ for tag in $tags; do
     tar -xzf "$dir/$asset" -C "$dir/bin"
     old_kb="$dir/bin/kb"
 
-    build "$old_kb" "$dir/data" 2>"$dir/build.err" || fail "$tag: writing its data failed: $(cat "$dir/build.err")"
+    # A subshell on its own, not in a `||` list, where bash turns `set -e` off for everything it runs: so the first
+    # step that fails stops it, instead of only the last counting.
+    set +e
+    (set -e; build "$old_kb" "$dir/data") 2>"$dir/build.err"
+    built=$?
+    set -e
+    [ "$built" -eq 0 ] || fail "$tag: writing its data failed: $(cat "$dir/build.err")"
     record "$old_kb" "$dir/data" "$dir/old"
 
     cp -a "$dir/data" "$dir/head"
