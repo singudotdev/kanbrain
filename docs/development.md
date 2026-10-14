@@ -453,7 +453,7 @@ The kanban app's look is checked by running it (`KANBRAIN_DIR=/tmp/t cargo run -
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push to `main` and every pull request:
+`.github/workflows/ci.yml` runs on every push to `main` and `develop` and every pull request:
 
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and the docs with
   `cargo doc --workspace --no-deps --document-private-items` failing on warnings; and the published crates
@@ -475,6 +475,17 @@ The kanban app's look is checked by running it (`KANBRAIN_DIR=/tmp/t cargo run -
 `.github/workflows/release.yml` refuses a tag that doesn't match the version in `Cargo.toml`, or whose commit has no
 passing `ci.yml` and `mutants.yml` run.
 
+## Branches
+
+`main` is what's released: the last version tagged, working, and nothing else. Work happens on a branch per change
+(`feat/…`, `fix/…`, `docs/…`, `test/…`, `ci/…`) from `develop`, and comes back to it through a pull request once CI and
+mutation testing pass on it, squashed into one commit whose message is the pull request's title (one line,
+imperative, conventional), so `develop`'s history is a change per line. A release is cut from `develop` on
+`release/vX.Y.Z`, which adds only its notes and the version, is checked there in full (CI, the installers, the upgrade
+from every release, the app by hand), and is squashed into `main` through a pull request: one commit per release,
+which is tagged. `main` is then merged back into `develop`, so the next release's pull request holds only what's new.
+A fix for a released version starts from `main` on `hotfix/…` and goes back to both.
+
 ## Releases and installers
 
 ### Publishing a release
@@ -490,9 +501,11 @@ passing `ci.yml` and `mutants.yml` run.
 3. Update `version` under `[workspace.package]` in `Cargo.toml`, and `kanbrain-core`'s `version` under
    `[workspace.dependencies]` to the same, run `cargo build` so `Cargo.lock` follows, and commit it on its own. Every
    crate of the workspace shares it.
-4. Push `main` alone and wait for CI on Linux, macOS and Windows, and for mutation testing, to pass on the version's
-   commit (the latter can take hours after many commits): a tag is a release, and the release workflow refuses a
-   commit without a passing run of each.
+4. Steps 2 and 3 go on `release/vX.Y.Z`, cut from `develop` (see [Branches](#branches)). Open its pull request into
+   `main` and wait for CI on Linux, macOS and Windows, and for mutation testing, to pass on it (the latter can take
+   hours after many commits). Squash it into `main` as `chore: release vX.Y.Z`, wait for both to pass again on that
+   commit, which is the one tagged, and merge `main` back into `develop`. A tag is a release, and the release workflow
+   refuses a commit without a passing run of each.
 5. Create a signed, annotated tag and push it:
 
    ```sh
