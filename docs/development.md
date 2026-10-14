@@ -479,10 +479,12 @@ passing `ci.yml` and `mutants.yml` run.
 
 `main` is what's released: the last version tagged, working, and nothing else. Work happens on a branch per change
 (`feat/…`, `fix/…`, `docs/…`, `test/…`, `ci/…`) from `develop`, and comes back to it through a pull request once CI and
-mutation testing pass on it, fast-forwarded so the commits CI checked are the ones kept. A release is cut from
-`develop` on `release/vX.Y.Z`, which adds only its notes and the version, is checked there in full (CI, the
-installers, the upgrade from every release, the app by hand), and reaches `main` through a pull request; `main` is
-then tagged. A fix for a released version starts from `main` on `hotfix/…` and goes back to both.
+mutation testing pass on it, squashed into one commit whose message is the pull request's title (one line,
+imperative, conventional), so `develop`'s history is a change per line. A release is cut from `develop` on
+`release/vX.Y.Z`, which adds only its notes and the version, is checked there in full (CI, the installers, the upgrade
+from every release, the app by hand), and is squashed into `main` through a pull request: one commit per release,
+which is tagged. `main` is then merged back into `develop`, so the next release's pull request holds only what's new.
+A fix for a released version starts from `main` on `hotfix/…` and goes back to both.
 
 ## Releases and installers
 
@@ -500,9 +502,10 @@ then tagged. A fix for a released version starts from `main` on `hotfix/…` and
    `[workspace.dependencies]` to the same, run `cargo build` so `Cargo.lock` follows, and commit it on its own. Every
    crate of the workspace shares it.
 4. Steps 2 and 3 go on `release/vX.Y.Z`, cut from `develop` (see [Branches](#branches)). Open its pull request into
-   `main` and wait for CI on Linux, macOS and Windows, and for mutation testing, to pass on the version's commit (the
-   latter can take hours after many commits); then fast-forward `main` to it, and `develop` too. A tag is a release,
-   and the release workflow refuses a commit without a passing run of each.
+   `main` and wait for CI on Linux, macOS and Windows, and for mutation testing, to pass on it (the latter can take
+   hours after many commits). Squash it into `main` as `chore: release vX.Y.Z`, wait for both to pass again on that
+   commit, which is the one tagged, and merge `main` back into `develop`. A tag is a release, and the release workflow
+   refuses a commit without a passing run of each.
 5. Create a signed, annotated tag and push it:
 
    ```sh
