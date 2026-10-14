@@ -162,7 +162,14 @@ fn wait_ends_on_a_persons_answer_or_verdict() {
 
     brain.ask(task, "Per IP or per account?").unwrap();
     assert_eq!(settled_on(&brain, task), None);
-    let timed_out = wait(&brain, task, Some(Duration::ZERO)).unwrap_err().to_string();
+    // On a thread, so a limit that never passes fails here instead of hanging the run.
+    let (sent, got) = std::sync::mpsc::channel();
+    let store = dir.path().to_path_buf();
+    std::thread::spawn(move || {
+        let brain = Brain::open(crate::store::Store::at(&store).unwrap()).unwrap();
+        sent.send(wait(&brain, task, Some(Duration::ZERO)).unwrap_err().to_string()).unwrap();
+    });
+    let timed_out = got.recv_timeout(Duration::from_secs(10)).expect("stopped at the time limit");
     assert!(timed_out.starts_with(&format!("no answer on #{task} yet")), "{timed_out}");
     brain.add_comment(task, "Checking the logs meanwhile.").unwrap();
     assert_eq!(settled_on(&brain, task), None, "an agent's comment isn't an answer");
