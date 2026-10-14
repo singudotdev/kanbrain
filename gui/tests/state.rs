@@ -479,6 +479,21 @@ fn selection_survives_a_reload_by_id() {
 }
 
 #[test]
+fn a_dialog_on_an_entry_deleted_meanwhile_closes() {
+    for open in ['x', 'r', 'e', 'm'] {
+        let mut f = Fixture::new(&["feature", "bug"]);
+        f.board.select(k(2));
+        f.press(KeyCode::Char(open));
+        assert!(!matches!(f.board.mode, Mode::Normal), "{open} opens a dialog on #2");
+        let store = Store::at(f.dir.path()).unwrap();
+        store.delete(&f.on_disk(2)).unwrap();
+        f.board.reload_changed(&[f.dir.path().to_path_buf()]).unwrap();
+        assert!(matches!(f.board.mode, Mode::Normal), "{open}: closed, not left taking the keys unseen");
+        assert_eq!(f.board.message(), Some("closed: #2 was deleted meanwhile"));
+    }
+}
+
+#[test]
 fn notes_have_their_own_tab_and_open_from_links() {
     let mut f = Fixture::new(&["feature"]);
     f.press(KeyCode::Char('2'));
