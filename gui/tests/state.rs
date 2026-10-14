@@ -1038,6 +1038,23 @@ fn picking_tags_adds_them_to_the_search_and_takes_them_out() {
 }
 
 #[test]
+fn a_ctrl_letter_does_nothing_but_in_the_editor() {
+    let mut f = Fixture::new(&["a"]);
+    let ctrl = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL);
+    for c in ['d', 's', 'p', 'n', 'x', 'q'] {
+        f.board.on_key(ctrl(c));
+    }
+    assert_eq!(f.status(1), Status::Todo, "ctrl+d, ctrl+s and ctrl+p aren't d, s and p");
+    assert!(matches!(f.board.mode, Mode::Normal), "nor ctrl+n n, nor ctrl+x x");
+    f.press(KeyCode::Char('m'));
+    f.type_text("text");
+    f.board.on_key(ctrl('d'));
+    assert_eq!(f.board.message(), Some("changes discarded"), "in the editor, ctrl+d discards");
+    f.board.on_key(ctrl('d'));
+    assert_eq!(f.status(1), Status::Todo, "and a second one, on the board, is nothing");
+}
+
+#[test]
 fn the_form_suggests_the_tags_of_its_own_kind() {
     use kanbrain_core::brain::NewEntry;
     use kanbrain_core::model::Kind as EntryKind;
