@@ -99,9 +99,9 @@ impl Dropdown<'_> {
     }
 }
 
-/// A row of a [`list`]: `ROW_HEIGHT` tall, as the list counts on, and highlighted while it's the list's
-/// selection. A `clickable` one shows a pointer and lights up under the mouse; `selector` names it for
-/// tests. What it shows and what a click does are the caller's.
+/// A row of a [`list`]: `ROW_HEIGHT` tall, as the list counts on (the line above it included), and
+/// highlighted while it's the list's selection. A `clickable` one shows a pointer and lights up under
+/// the mouse; `selector` names it for tests. What it shows and what a click does are the caller's.
 pub fn row(id: impl Into<ElementId>, selector: String, highlighted: bool, clickable: bool) -> Stateful<Div> {
     div()
         .id(id)
@@ -112,7 +112,8 @@ pub fn row(id: impl Into<ElementId>, selector: String, highlighted: bool, clicka
         .h(px(ROW_HEIGHT))
         .flex_none()
         .px_2()
-        .rounded_sm()
+        // The line between it and the row above, which `list` draws: as the list view's, darker than the popup.
+        .border_color(rgb(theme::BG))
         .when(highlighted, |d| d.bg(rgb(theme::SELECTED)))
         .when(clickable, Styled::cursor_pointer)
         .when(clickable && !highlighted, |d| d.hover(|s| s.bg(rgb(theme::HOVER))))
@@ -137,6 +138,8 @@ pub fn list(
     let (top, below) = hidden(count, sel, max_rows, f32::from(-scroll.offset().y), follow);
     let id = id.into();
     let selector = format!("{id}-list");
+    let mut rows = rows.into_iter();
+    let first = rows.next();
     let rows = div()
         .debug_selector(move || selector)
         .id(id)
@@ -145,7 +148,8 @@ pub fn list(
         .max_h(px(rows_height(max_rows)))
         .overflow_y_scroll()
         .track_scroll(scroll)
-        .children(rows);
+        .children(first)
+        .children(rows.map(Styled::border_t_1));
     // A list that scrolls keeps the line's room even when nothing is below, so reaching the end
     // doesn't change its height: the dialogs are centered, and a jump would shift the rows under the
     // scroll the keyboard just asked for.

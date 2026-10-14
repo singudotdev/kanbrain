@@ -204,8 +204,9 @@ pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central:
 }
 
 /// Renames each project a version before 0.4.0 named as none can be now (see [`projects::check_name`]): one
-/// starting with `-`, which `--project` reads as an option, or `Central` in any case, which reaches the central
-/// brain. Without it, `kb init` in its repositories is refused. Returns what it did, one line each.
+/// starting with `-`, which `--project` reads as an option, `Central` in any case, which reaches the central
+/// brain, or one with `:` or `/` (a registry edited by hand). Without it, `kb init` in its repositories is refused.
+/// Returns what it did, one line each.
 fn rename_unreachable_projects(central: &Path) -> Result<Vec<String>> {
     let mut names: Vec<String> = projects::load(central)?.into_iter().map(|r| r.project).collect();
     names.sort_unstable();
@@ -213,12 +214,14 @@ fn rename_unreachable_projects(central: &Path) -> Result<Vec<String>> {
     let unreachable: Vec<String> = names.iter().filter(|name| projects::check_name(name).is_err()).cloned().collect();
     let mut done = Vec::new();
     for old in unreachable {
-        let base = match old.trim_start_matches('-').trim() {
+        let kept: String = old.chars().map(|c| if matches!(c, ':' | '/' | '\n') { '-' } else { c }).collect();
+        let base = match kept.trim().trim_start_matches('-').trim() {
             "" => "project",
             base => base,
         };
-        // As many names as there are projects: `old` is one of them and none of these, so one is free.
-        let new = (0..names.len())
+        // At most `base` is refused (`Central`; its `-project` forms never are) and every other project takes one: of
+        // these, one more than there are projects, one is free.
+        let new = (0..=names.len())
             .map(|n| match n {
                 0 => base.to_string(),
                 1 => format!("{base}-project"),
@@ -324,7 +327,8 @@ fn write_agent_files(root: &Path, targets: &[&str]) -> Result<Vec<(bool, String)
                 true,
                 format!(
                     "added kanbrain's hooks to {}: Claude Code reads `kb context` when a session starts and \
-                     after compaction, and an agent is sent back once a turn to describe the project while it isn't",
+                     after compaction, and reminds an agent with every prompt and at the end of its turn to \
+                     describe the project while it isn't",
                     claude::SETTINGS
                 ),
             ),

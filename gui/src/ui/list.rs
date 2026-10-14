@@ -121,5 +121,5 @@ fn row(
         .child(dim(meta(board, key, task, now)).text_size(px(11.)).flex_none())
         .children(running.map(|r| clock(r, theme::running_color(task)).text_size(px(11.)).flex_none()))
         .child(dim(fmt_age(now - task.status_since())).text_size(px(11.)).w(px(32.)).flex_none().text_right());
-    draggable(row, key, task)
+    draggable(row, board, key, task)
 }

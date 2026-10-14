@@ -212,7 +212,7 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
 │   ├── mode.rs      the dialogs and fields that take the keys (Mode): search, form, quick add, editor, confirm, links, project and tag dropdowns, which project a quick-added task goes in or an entry moves to, Manage project, command palette, adding a project (AddProject, ProjectOption), renaming, moving or removing a project or repository (Manage)
 │   ├── actions.rs   status changes and drops, asking which brain a new entry goes in when the scope shows several, moving an entry to another brain, the editor's save, deletes, links, undo (recording what each change writes), reload, park & quit, export
 │   ├── decisions.rs the questions and decisions waiting on you: which, the next one, answering, accepting or rejecting
-│   ├── form.rs      the new / edit form (its related entries, column and project) and quick add
+│   ├── form.rs      the new / edit form (its tags to pick, related entries, column and project) and quick add
 │   ├── manage.rs    renaming, moving and removing projects and repositories from Manage project
 │   ├── input.rs     keys in each dialog; typing, select all, cut, paste, the mouse in text
 │   ├── keys.rs      every key outside dialogs in one table (ACTIONS: key, tabs, when it's offered, palette text, menu label, what it runs), which the keys, the palette and the menu read
@@ -221,6 +221,7 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
 │   ├── nav.rs       moving the selection between cards, columns and list rows
 │   └── sources.rs   the central brain and every project repository (Source), entries by Key { src, id }, the Scope filter, merged reports and calendars, adding a project from a picked folder (`cli::init`)
 ├── text/            text editing with a selection
+│   ├── mod.rs       the editors and the key presses they take, without any drawing
 │   ├── editor.rs    multi-line TextEditor (descriptions, comments), one-line LineInput (fields)
 │   └── event.rs     KeyCode / KeyEvent / KeyModifiers: what GPUI keystrokes become
 └── ui/              the window: draws the Board with GPUI and turns clicks, drags and keys into its calls
@@ -367,14 +368,15 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | `tags` | no color repeats until the palette is used up, `tags.md` round trip, custom colors |
 | `period`, `export` | period bounds and stepping, report tables |
 | `enums` | generated `ALL` / `position` / `next`, `parse` as the inverse of `as_str` |
-| `state` (gui) | the board driven by keys over a temporary folder: the palette offering only what works now, moving between cards and columns, moving cards, drops, quick add, the form and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, nothing asked once your task stops, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from Manage project, the update offered once a newer release is found and refused while an agent works, the details' buttons acting on the entry from the calendar too |
+| `state` (gui) | the board driven by keys over a temporary folder: the palette offering only what works now, moving between cards and columns, moving cards, drops, quick add, the form, the tags it offers and picks and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, nothing asked once your task stops, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from Manage project, the update offered once a newer release is found and refused while an agent works, the details' buttons acting on the entry from the calendar too |
+| `dialogs` (gui) | the delete question naming the entry, what removing one repository or several says, Manage project scrolling to the repository it's opened from, the editor naming what its text belongs to |
 | `keys` (gui) | no key running two things on one tab; what the menu offers named and described; every key in `docs/keybindings.md` on its tabs |
 | `editor` (gui) | line editing (split/join), unicode, wrapping; one-line cursor editing; selecting, copying and replacing; mouse selection by character, word and line |
 | `markdown` (gui) | inline styles and link ranges, kept line breaks, heading levels, numbered and task lists, nesting, code, quotes, tables, rules |
 | `update` (gui) | a program replaced on disk since it started restarting from the new file |
 | `watch` (gui) | new, changed, renamed and deleted files are noticed once, naming the folder; temporary files aren't; own writes are taken as seen |
 | `xtask` | the notices list each license with the crates under it and leave this workspace's out; each program carries Rust's standard library and what else it embeds (musl, the app's fonts in `gui/fonts/`) |
-| `ui` (gui) | in a real (test) window: GPUI keystrokes to keys, shortcut names, clicks and double-clicks on cards (in every brain), a right click's menu acting on its card, dragging a card onto a column, closing the details (no + under ✕ once they close; a click or a double-click on ✕ opening nothing), reloading after another program's change, acting right after one without undoing it, opening an entry from the calendar, buttons pressed while typing, dropdowns that scroll to the highlighted row and how many rows each shows, clipboard shortcuts, + Add project through the folder dialog |
+| `ui` (gui) | in a real (test) window: GPUI keystrokes to keys, shortcut names, clicks and double-clicks on cards (in every brain), a right click's menu acting on its card, dragging a card onto a column, closing the details (no + under ✕ once they close; a click or a double-click on ✕ opening nothing), reloading after another program's change, acting right after one without undoing it, opening an entry from the calendar, buttons pressed while typing, dropdowns that scroll to the highlighted row and how many rows each shows, the form's tag list and a click picking one, clipboard shortcuts, + Add project through the folder dialog |
 
 ### The command line, from outside
 
@@ -451,7 +453,7 @@ The kanban app's look is checked by running it (`KANBRAIN_DIR=/tmp/t cargo run -
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push to `main` and every pull request:
+`.github/workflows/ci.yml` runs on every push to `main` and `develop` and every pull request:
 
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and the docs with
   `cargo doc --workspace --no-deps --document-private-items` failing on warnings; and the published crates
@@ -473,6 +475,17 @@ The kanban app's look is checked by running it (`KANBRAIN_DIR=/tmp/t cargo run -
 `.github/workflows/release.yml` refuses a tag that doesn't match the version in `Cargo.toml`, or whose commit has no
 passing `ci.yml` and `mutants.yml` run.
 
+## Branches
+
+`main` is what's released: the last version tagged, working, and nothing else. Work happens on a branch per change
+(`feat/…`, `fix/…`, `docs/…`, `test/…`, `ci/…`) from `develop`, and comes back to it through a pull request once CI and
+mutation testing pass on it, squashed into one commit whose message is the pull request's title (one line,
+imperative, conventional), so `develop`'s history is a change per line. A release is cut from `develop` on
+`release/vX.Y.Z`, which adds only its notes and the version, is checked there in full (CI, the installers, the upgrade
+from every release, the app by hand), and is squashed into `main` through a pull request: one commit per release,
+which is tagged. `main` is then merged back into `develop`, so the next release's pull request holds only what's new.
+A fix for a released version starts from `main` on `hotfix/…` and goes back to both.
+
 ## Releases and installers
 
 ### Publishing a release
@@ -488,9 +501,11 @@ passing `ci.yml` and `mutants.yml` run.
 3. Update `version` under `[workspace.package]` in `Cargo.toml`, and `kanbrain-core`'s `version` under
    `[workspace.dependencies]` to the same, run `cargo build` so `Cargo.lock` follows, and commit it on its own. Every
    crate of the workspace shares it.
-4. Push `main` alone and wait for CI on Linux, macOS and Windows, and for mutation testing, to pass on the version's
-   commit (the latter can take hours after many commits): a tag is a release, and the release workflow refuses a
-   commit without a passing run of each.
+4. Steps 2 and 3 go on `release/vX.Y.Z`, cut from `develop` (see [Branches](#branches)). Open its pull request into
+   `main` and wait for CI on Linux, macOS and Windows, and for mutation testing, to pass on it (the latter can take
+   hours after many commits). Squash it into `main` as `chore: release vX.Y.Z`, wait for both to pass again on that
+   commit, which is the one tagged, and merge `main` back into `develop`. A tag is a release, and the release workflow
+   refuses a commit without a passing run of each.
 5. Create a signed, annotated tag and push it:
 
    ```sh

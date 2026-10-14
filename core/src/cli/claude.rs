@@ -6,7 +6,7 @@
 //!   otherwise leave only the section in `CLAUDE.md`;
 //! - with every prompt, and when the agent would end its turn, `kb hook prompt` and `kb hook stop`
 //!   check that the project is described (see [`super::hook`]). Agents skipped describing it when only
-//!   asked to, so until it's done the prompt carries the request and the turn can't end without it.
+//!   asked to, so until it's done the prompt carries the request and the turn's end repeats it.
 //!   `stop` also reminds an agent of each task it started and hasn't commented on since.
 //!
 //! They go in `.claude/settings.local.json`, the repository's personal settings, since `init` runs on

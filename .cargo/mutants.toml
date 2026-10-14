@@ -12,6 +12,9 @@ exclude_re = [
     'gui/src/update\.rs:.*replace (install|install_after_exit|install_now) -> Result',
     # The hover style of a list row: the window tests have no pointer to hover with.
     'gui/src/ui/list\.rs:.*delete ! in row',
+    # The highlight of the form's tags list: a color, and the window tests read bounds, not colors (the state tests
+    # check which row it is, `Form::tag_sel`).
+    'gui/src/ui/dialogs/form\.rs:.*replace == with != in tags_field',
     # Runs the user's editor and waits for it: the choice of editor (`editor_of`) is what tests check.
     'gui/src/ui/mod\.rs:.*(replace open_editor -> Result| in open_editor$)',
     # A leftover exactly CUT_WRITE_AGE old, to the nanosecond, is the only one `>=` would delete too.

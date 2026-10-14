@@ -5,7 +5,7 @@ name: Mutants
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
 
 permissions:
@@ -56,8 +56,8 @@ jobs:
         run: |
           BASE=$PR_BASE
           if [ -z "$BASE" ]; then
-            # From the last commit on main whose run passed, else the push before this one.
-            BASE=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow mutants.yml --branch main --event push \
+            # From the last commit on this branch whose run passed, else the push before this one.
+            BASE=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow mutants.yml --branch "$GITHUB_REF_NAME" --event push \
               --status success --limit 1 --json headSha --jq '.[0].headSha // empty')
             if [ -z "$BASE" ] || ! git merge-base --is-ancestor "$BASE" HEAD 2>/dev/null; then BASE=$BEFORE; fi
           fi

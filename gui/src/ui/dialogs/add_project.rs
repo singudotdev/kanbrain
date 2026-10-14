@@ -1,15 +1,14 @@
 //! Adding a project: the folder picked in the system's dialog, the project it joins or starts, found with a search
 //! or named as typed, and what adding it does.
 
-use super::{DIALOG_WIDTH, dialog, labeled};
+use super::{DIALOG_WIDTH, dialog, labeled, list_box};
 use crate::state::{AddProject, Board, ProjectOption};
 use crate::text::event::KeyCode;
 use crate::ui::dropdown::{list, row};
 use crate::ui::pointer::TextBox;
-use crate::ui::theme::{self, BORDER};
 use crate::ui::widgets::{Kind, dim, dim_small, text_field};
 use crate::ui::{BrainView, action};
-use gpui::{ClickEvent, Context, Div, FontWeight, ScrollHandle, div, prelude::*, px, rgb};
+use gpui::{ClickEvent, Context, Div, FontWeight, ScrollHandle, div, prelude::*, px};
 use kanbrain_core::model::counted;
 
 /// Rows of projects shown before the list scrolls: few, since it's inside the dialog.
@@ -48,14 +47,8 @@ pub(super) fn draw(
         })
         .collect();
     let empty = rows.is_empty();
-    let options = div()
-        .p_1()
-        .rounded_md()
-        .border_1()
-        .border_color(rgb(BORDER))
-        .bg(rgb(theme::POPUP))
+    let options = list_box(list("add-project-options", rows, add.picker.sel, PROJECT_ROWS, scroll, follow))
         .text_size(px(13.))
-        .child(list("add-project-options", rows, add.picker.sel, PROJECT_ROWS, scroll, follow))
         .when(empty, |d| d.child(dim("Type the new project's name.").px_2()));
     let project = div()
         .flex()

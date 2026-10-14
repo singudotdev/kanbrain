@@ -82,7 +82,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | --- | --- |
 | search box | type to filter; `enter` or `esc` stop typing and keep the filter |
 | quick add | `enter` adds the task and keeps the field open for the next; `esc` closes it |
-| new / edit form | `tab` (`shift+tab` back) moves between project (new entries), title, tags, related and, for a new task, its column, selecting the field's text so typing replaces it; `enter` saves; `esc` cancels. In **Project**: type to search, `↑` `↓` move, `enter` picks it and goes on to the title. In **Related**: type to search, `↑` `↓` move, `enter` checks or unchecks; the Save button saves. On **Column**: `←` `→` pick it |
+| new / edit form | `tab` (`shift+tab` back) moves between project (new entries), title, tags, related and, for a new task, its column, selecting the field's text so typing replaces it; `enter` saves; `esc` cancels. In **Project**: type to search, `↑` `↓` move, `enter` picks it and goes on to the title. In **Tags**: the tags in use drop down, filtered by the one typed; typing a tag's start highlights it, `↓` `↑` move, `enter` or a click puts the highlighted one in place of what's typed; with none highlighted, `enter` saves. In **Related**: type to search, `↑` `↓` move, `enter` checks or unchecks; the Save button saves. On **Column**: `←` `→` pick it |
 | text editor (descriptions, comments, answers, a decision's reason, a project's description and notes) | `enter` new line; `esc` or `ctrl+enter` **save** (the button says what: **Answer**, **Add comment**, **Accept**, **Reject**, **Save**); **Discard changes** (`ctrl+d`) throws the edit away; with nothing typed, `esc` or **Close** closes it |
 | link picker | type to search; `↑` `↓` move; `enter` links or unlinks; `esc` closes |
 | comments (`C`) | `↑` `↓` move; `enter` edits the highlighted comment; `x` deletes it, after asking; `esc` closes |
@@ -94,7 +94,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | right-click menu | `↑` `↓` move; `enter` or an item's own key chooses it; `esc` or a click outside closes it |
 | command palette | type to filter by what it does or its key; `↑` `↓` move; `enter` runs it; `esc` closes |
 
-Dropdowns and pickers show 8 rows at most (the form's Project and Related fields, 6; Add project's and Manage
+Dropdowns and pickers show 8 rows at most (the form's Project, Tags and Related fields, 6; Add project's and Manage
 project's project lists, 5; the command palette, 12) and scroll past that; a line under them says
 how many more are below (`↓ 4 more · type to filter`) and above (`↑ 2 above`), and `↑` `↓` keep the highlighted row in view.
 

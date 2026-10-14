@@ -197,11 +197,12 @@ impl Brain {
         tags
     }
 
-    /// Takes the id for a new entry: one more than the highest ever given, by `last-id` or by the entries
-    /// in memory, whichever is higher, since another program may have added one since this brain loaded.
+    /// Takes the id for a new entry: one more than the highest ever given, by `last-id`, the entries in memory or
+    /// the entry files there are (one that doesn't parse holds its id too), whichever is higher, since another
+    /// program may have added one since this brain loaded.
     /// It's recorded before the entry is written, so a failure in between leaves a gap, never a reused id.
     fn take_id(&self) -> Result<u32> {
-        let highest = self.tasks.iter().map(|t| t.id).max().unwrap_or(0);
+        let highest = self.tasks.iter().map(|t| t.id).chain(self.store.file_ids()).max().unwrap_or(0);
         // A hand-edited `- id:` or `last-id` can be the largest id there is; wrapping to 0 would hand it out again
         // and again, each new entry over the last's file.
         let id = highest.max(self.store.last_id()).checked_add(1).context("no ids left: the highest id is taken")?;

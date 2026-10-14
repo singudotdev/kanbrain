@@ -43,7 +43,7 @@ pub(super) fn draw(
         .child(section(
             "About",
             [
-                manage_button("rename-project", src, src, "Rename…", 'R', Board::ask_rename_project, cx),
+                manage_button("rename-project", src, src, "Rename", 'R', Board::ask_rename_project, cx),
                 manage_button(
                     "edit-project",
                     src,
@@ -67,7 +67,7 @@ pub(super) fn draw(
         ))
         .children(blocks);
     let content = div().flex().flex_col().gap_3().child(body).child(keys_hint(several));
-    let remove: Stateful<Div> = button("remove-project", "Remove project…", Kind::Danger)
+    let remove: Stateful<Div> = button("remove-project", "Remove project", Kind::Danger)
         .tooltip(tooltip("Shortcut: X"))
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.ask_remove(src, true))));
     let buttons = vec![remove, action("close-manage-project", "Close", Kind::Primary, KeyCode::Esc, cx)];
@@ -119,9 +119,9 @@ fn repo_block(
         .child(section(
             info.map_or_else(String::new, |i| i.repo.clone()),
             [
-                manage_button("rename-repo", repo, src, "Rename…", 'r', Board::ask_rename_repo, cx),
-                manage_button("move-repo", repo, src, "Move…", 'M', Board::ask_move_repo, cx),
-                manage_button("remove-repo", repo, src, "Remove…", 'x', |b, at| b.ask_remove(at, false), cx),
+                manage_button("rename-repo", repo, src, "Rename", 'r', Board::ask_rename_repo, cx),
+                manage_button("move-repo", repo, src, "Move", 'M', Board::ask_move_repo, cx),
+                manage_button("remove-repo", repo, src, "Remove", 'x', |b, at| b.ask_remove(at, false), cx),
                 manage_button("edit-notes", repo, src, "Edit", 'N', notes, cx),
             ],
         ))

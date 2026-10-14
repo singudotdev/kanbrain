@@ -197,7 +197,7 @@ fn description_block(task: &Task, cx: &mut Context<BrainView>) -> Div {
 /// its brain, then those of the project's other repositories, named by their repository.
 fn related_block(board: &Board, key: Key, cx: &mut Context<BrainView>) -> Div {
     let related: Vec<_> = board.related_keys(key).into_iter().filter_map(|k| Some((k, board.task(k)?))).collect();
-    let link = small(entry_action("link", "Link…", Kind::Secondary, KeyCode::Char('r'), cx));
+    let link = small(entry_action("link", "Link", Kind::Secondary, KeyCode::Char('r'), cx));
     let rows: Vec<_> = related
         .iter()
         .map(|&(other_key, other)| {

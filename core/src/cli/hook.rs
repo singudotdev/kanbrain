@@ -1,11 +1,11 @@
 //! `kb hook prompt|stop`: what Claude Code's hooks run so that an agent describes the project (and,
 //! with several repositories, this one's role) before anything else. Asked to in the section and in
-//! `context`, agents still skipped it on their first turn; these make Claude Code hold them to it:
+//! `context`, agents still skipped it on their first turn; these have Claude Code remind them:
 //!
 //! - `prompt` (`UserPromptSubmit`): while something is missing, every prompt arrives with the request
 //!   to write it first;
-//! - `stop` (`Stop`): an agent about to end its turn with it still missing is sent back to write it.
-//!   Only once a turn (`stop_hook_active`), so a describe that keeps failing can't loop.
+//! - `stop` (`Stop`): an agent ending its turn with it still missing is reminded to write it, as context
+//!   Claude Code adds rather than a block (the turn ends all the same). Only once a turn (`stop_hook_active`).
 //!
 //! `stop` also catches the board falling behind: a task an agent started and hasn't commented on since
 //! gets a reminder to say where it stands, as the section asks, so the person watching sees it.

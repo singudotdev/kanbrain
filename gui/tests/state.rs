@@ -2,6 +2,7 @@
 
 use super::nav::Step;
 use super::*;
+use crate::text::editor::Pointer;
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
 use kanbrain_core::model::{Asked, Author, DecisionState, now};
 use kanbrain_core::store::Store;
@@ -73,11 +74,11 @@ fn the_menu_offers_what_the_keys_do_and_presses_them() {
             "Edit title and tags",
             "Edit description",
             "Add comment",
-            "Link…",
+            "Link",
             "Open file",
-            "Delete…"
+            "Delete"
         ],
-        "no move to its own status, and no Move… with one brain"
+        "no move to its own status, and no Move to project with one brain"
     );
     f.press(KeyCode::Down);
     f.press(KeyCode::Enter);
@@ -255,6 +256,17 @@ fn dropping_a_card_moves_it_unless_it_is_its_own_column() {
     assert_eq!((f.status(1), f.board.selected), (Status::Todo, Some(k(1))));
     assert!(f.on_disk(1).history.is_empty(), "dropping it back writes nothing");
     assert!(!f.board.message().is_some_and(|m| m.contains("already")), "and says nothing");
+}
+
+#[test]
+fn a_dragged_card_is_found_by_its_brains_folder() {
+    let mut f = Fixture::new(&["feature", "bug"]);
+    let gone = f.dir.path().join("gone");
+    f.board.drop_dragged(&gone, 2, Status::Done);
+    assert_eq!(f.status(2), Status::Todo, "its brain gone from the list meanwhile: nothing moves");
+    let dir = f.dir.path().to_path_buf();
+    f.board.drop_dragged(&dir, 2, Status::Done);
+    assert_eq!((f.status(2), f.board.selected), (Status::Done, Some(k(2))));
 }
 
 #[test]
@@ -475,6 +487,21 @@ fn selection_survives_a_reload_by_id() {
     f.board.reload().unwrap();
     assert_eq!(f.board.selected, Some(k(2)));
     assert_eq!(f.status(1), Status::Done);
+}
+
+#[test]
+fn a_dialog_on_an_entry_deleted_meanwhile_closes() {
+    for open in ['x', 'r', 'e', 'm'] {
+        let mut f = Fixture::new(&["feature", "bug"]);
+        f.board.select(k(2));
+        f.press(KeyCode::Char(open));
+        assert!(!matches!(f.board.mode, Mode::Normal), "{open} opens a dialog on #2");
+        let store = Store::at(f.dir.path()).unwrap();
+        store.delete(&f.on_disk(2)).unwrap();
+        f.board.reload_changed(&[f.dir.path().to_path_buf()]).unwrap();
+        assert!(matches!(f.board.mode, Mode::Normal), "{open}: closed, not left taking the keys unseen");
+        assert_eq!(f.board.message(), Some("closed: #2 was deleted meanwhile"));
+    }
 }
 
 #[test]
@@ -1037,6 +1064,23 @@ fn picking_tags_adds_them_to_the_search_and_takes_them_out() {
 }
 
 #[test]
+fn a_ctrl_letter_does_nothing_but_in_the_editor() {
+    let mut f = Fixture::new(&["a"]);
+    let ctrl = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL);
+    for c in ['d', 's', 'p', 'n', 'x', 'q'] {
+        f.board.on_key(ctrl(c));
+    }
+    assert_eq!(f.status(1), Status::Todo, "ctrl+d, ctrl+s and ctrl+p aren't d, s and p");
+    assert!(matches!(f.board.mode, Mode::Normal), "nor ctrl+n n, nor ctrl+x x");
+    f.press(KeyCode::Char('m'));
+    f.type_text("text");
+    f.board.on_key(ctrl('d'));
+    assert_eq!(f.board.message(), Some("changes discarded"), "in the editor, ctrl+d discards");
+    f.board.on_key(ctrl('d'));
+    assert_eq!(f.status(1), Status::Todo, "and a second one, on the board, is nothing");
+}
+
+#[test]
 fn the_form_suggests_the_tags_of_its_own_kind() {
     use kanbrain_core::brain::NewEntry;
     use kanbrain_core::model::Kind as EntryKind;
@@ -1053,12 +1097,154 @@ fn the_form_suggests_the_tags_of_its_own_kind() {
         .unwrap();
     f.press(KeyCode::Char('n'));
     let Mode::Form(form) = &f.board.mode else { panic!("n opens the form") };
-    assert_eq!(f.board.form_tags(form), (EntryKind::Task, vec!["auth".to_string()]), "a task's: no #stripe");
+    assert_eq!(f.board.form_tags(form), (EntryKind::Task, vec![("auth".to_string(), 1)]), "a task's: no #stripe");
     f.press(KeyCode::Esc);
     f.board.switch_tab(Tab::Notes);
     f.press(KeyCode::Char('e'));
     let Mode::Form(form) = &f.board.mode else { panic!("e edits the note") };
-    assert_eq!(f.board.form_tags(form), (EntryKind::Note, vec!["stripe".to_string()]), "a note's: no #auth");
+    assert_eq!(
+        f.board.form_tags(form),
+        (EntryKind::Note, Vec::new()),
+        "a note's, but not the #stripe it has: no #auth"
+    );
+}
+
+#[test]
+fn the_form_suggests_only_the_tags_containing_the_one_typed() {
+    let mut f = Fixture::new(&["login bug", "slow page"]);
+    let brain = f.board.brain_mut(0);
+    brain.update(1, "login bug", vec!["auth".into(), "bug".into()]).unwrap();
+    brain.update(2, "slow page", vec!["perf".into(), "prod".into()]).unwrap();
+    let tags = |f: &Fixture| {
+        let Mode::Form(form) = &f.board.mode else { panic!("the form is open") };
+        f.board.form_tags(form).1.into_iter().map(|(tag, _)| tag).collect::<Vec<_>>()
+    };
+    f.press(KeyCode::Char('n'));
+    f.type_text("p");
+    assert_eq!(tags(&f), ["auth", "bug", "perf", "prod"], "what the title says filters nothing");
+    f.press(KeyCode::Tab);
+    f.type_text("#R");
+    assert_eq!(tags(&f), ["perf", "prod"], "as saved (no #, lowercase), and contained, as the dropdowns filter");
+    f.type_text("o");
+    assert_eq!(tags(&f), ["prod"]);
+    f.type_text("d, ");
+    assert_eq!(tags(&f), ["auth", "bug", "perf", "prod"], "after a separator, a new tag: every one");
+    f.type_text("x");
+    assert!(tags(&f).is_empty(), "none in use has it");
+    for _ in 0..4 {
+        f.press(KeyCode::Left);
+    }
+    assert_eq!(tags(&f), ["prod"], "the word the cursor ends, not the field's last");
+}
+
+#[test]
+fn the_form_picks_tags_from_its_list() {
+    let mut f = Fixture::new(&["login bug", "slow page"]);
+    let brain = f.board.brain_mut(0);
+    brain.update(1, "login bug", vec!["auth".into(), "prod".into()]).unwrap();
+    brain.update(2, "slow page", vec!["perf".into(), "prod".into()]).unwrap();
+    let form = |f: &Fixture| {
+        let Mode::Form(form) = &f.board.mode else { panic!("the form is open") };
+        (f.board.form_tags(form).1, form.tag_sel, form.tags.text().to_string())
+    };
+    let owned = |tags: &[(&str, usize)]| tags.iter().map(|&(t, n)| (t.to_string(), n)).collect::<Vec<_>>();
+    f.press(KeyCode::Char('n'));
+    f.type_text("x");
+    f.press(KeyCode::Tab);
+    assert_eq!(form(&f).0, owned(&[("auth", 1), ("perf", 1), ("prod", 2)]), "each with how many use it");
+    assert_eq!(form(&f).1, None, "nothing highlighted until a tag is typed");
+    f.type_text("prod");
+    assert_eq!(form(&f).1, None, "a whole tag typed is taken as it is");
+    (0..3).for_each(|_| f.press(KeyCode::Backspace));
+    assert_eq!(form(&f).0, owned(&[("perf", 1), ("prod", 2)]));
+    assert_eq!(form(&f).1, Some(0), "part of one highlights the first");
+    f.press(KeyCode::Down);
+    f.press(KeyCode::Down);
+    assert_eq!(form(&f).1, Some(1), "the last stays highlighted");
+    f.press(KeyCode::Up);
+    f.press(KeyCode::Up);
+    assert_eq!(form(&f).1, None, "up off the first leaves the list");
+    assert!(matches!(&f.board.mode, Mode::Form(form) if form.field == Field::Tags), "and stays in the field");
+    f.press(KeyCode::Down);
+    f.press(KeyCode::Enter);
+    assert_eq!((form(&f).1, form(&f).2), (None, "perf, ".to_string()), "enter picks it, ready for the next");
+    assert_eq!(form(&f).0, owned(&[("auth", 1), ("prod", 2)]), "what the field holds isn't offered again");
+    f.board.choose_form_tag(1);
+    assert_eq!(form(&f).2, "perf, prod, ", "a click picks one too");
+    f.type_text("zz");
+    assert!(form(&f).0.is_empty(), "nothing to pick");
+    f.press(KeyCode::Down);
+    assert!(
+        matches!(&f.board.mode, Mode::Form(form) if form.field == Field::Links),
+        "so down goes on to the next field"
+    );
+    f.press(KeyCode::BackTab);
+    f.press(KeyCode::End);
+    f.press(KeyCode::Enter);
+    let task = f.board.brain(0).tasks.iter().find(|t| t.title == "x").expect("enter with nothing to pick saves");
+    assert_eq!(task.tags, ["perf", "prod", "zz"]);
+}
+
+#[test]
+fn enter_saves_the_form_unless_the_start_of_a_tag_was_typed() {
+    let mut f = Fixture::new(&["login bug", "slow page"]);
+    let brain = f.board.brain_mut(0);
+    brain.update(1, "login bug", vec!["build".into(), "project".into()]).unwrap();
+    brain.update(2, "slow page", vec!["prod".into()]).unwrap();
+    let sel = |f: &Fixture| {
+        let Mode::Form(form) = &f.board.mode else { panic!("the form is open") };
+        form.tag_sel
+    };
+    f.board.selected = Some(Key { src: 0, id: 2 });
+    f.press(KeyCode::Char('e'));
+    f.press(KeyCode::Tab);
+    f.press(KeyCode::End);
+    f.press(KeyCode::Left);
+    assert_eq!(sel(&f), None, "moving the cursor into a tag held highlights nothing, though #project starts with pro");
+    f.press(KeyCode::End);
+    f.type_text(" pro");
+    assert_eq!(sel(&f), Some(0), "typing the start of #project does");
+    let Mode::Form(form) = &mut f.board.mode else { panic!("the form is open") };
+    form.tag_sel = Some(1);
+    f.press(KeyCode::Enter);
+    assert_eq!(f.on_disk(2).tags, ["prod", "pro"], "a highlight past the list (one row) is none: enter saves");
+
+    f.press(KeyCode::Char('n'));
+    f.type_text("x");
+    f.press(KeyCode::Tab);
+    f.type_text("ui");
+    assert_eq!(sel(&f), None, "#build only contains ui");
+    f.press(KeyCode::Enter);
+    let task = f.board.brain(0).tasks.iter().find(|t| t.title == "x").expect("enter saves a new tag");
+    assert_eq!(task.tags, ["ui"]);
+}
+
+#[test]
+fn a_picked_tag_takes_the_place_of_the_one_typed() {
+    let mut form = Form::new(0, Kind::Task, Status::Todo, false);
+    form.go_to(Field::Tags);
+    let put = |form: &mut Form, text: &str, cursor: usize, tag: &str| {
+        form.tags = LineInput::new(text);
+        form.tags.point(cursor, Pointer::Place);
+        form.put_tag(tag);
+        (form.tags.text().to_string(), form.tags.cursor())
+    };
+    assert_eq!(put(&mut form, "", 0, "prod"), ("prod, ".into(), 6));
+    assert_eq!(put(&mut form, "auth pr", 7, "prod"), ("auth, prod, ".into(), 12));
+    assert_eq!(
+        put(&mut form, "auth pr bug", 6, "prod"),
+        ("auth, prod, bug".into(), 12),
+        "the whole word the cursor is in"
+    );
+    assert_eq!(put(&mut form, "auth, #Pr", 9, "prod"), ("auth, prod, ".into(), 12));
+    form.tags = LineInput::new("auth, prxx");
+    form.tags.point(8, Pointer::Place);
+    assert_eq!(form.typed_tag(), "pr", "the word the cursor ends, up to it");
+    form.tags = LineInput::new("auth, bug");
+    form.tags.select_all();
+    assert_eq!(form.typed_tag(), "", "selected text isn't a tag being typed");
+    form.put_tag("prod");
+    assert_eq!(form.tags.text(), "auth, bug, prod, ", "after the others");
 }
 
 #[test]
@@ -1215,7 +1401,7 @@ fn the_user_answers_questions_and_decides_on_proposals() {
 
     f.board.open_entry(k(decision));
     let labels: Vec<&str> = f.board.menu_items(k(decision)).iter().map(|i| i.label).collect();
-    assert!(labels.contains(&"Accept") && labels.contains(&"Reject…"), "{labels:?}");
+    assert!(labels.contains(&"Accept") && labels.contains(&"Reject"), "{labels:?}");
     f.press(KeyCode::Char('j'));
     f.type_text("too costly");
     f.board.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL));
@@ -1432,7 +1618,7 @@ fn a_task_waiting_on_you_is_answered_and_its_decision_opened_from_the_palette_an
     let rows = |board: &Board| board.commands(&Picker::default()).iter().map(|a| a.does).collect::<Vec<_>>();
 
     f.board.select(k(2));
-    assert!(labels(&f.board, 2).contains(&"Answer…") && !labels(&f.board, 2).contains(&"Add comment"));
+    assert!(labels(&f.board, 2).contains(&"Answer") && !labels(&f.board, 2).contains(&"Add comment"));
     assert!(!labels(&f.board, 2).contains(&"Open proposed decision"), "a question, no decision");
     assert!(rows(&f.board).contains(&"Answer the agent's question"));
     f.press(KeyCode::Char('c'));
@@ -1445,7 +1631,7 @@ fn a_task_waiting_on_you_is_answered_and_its_decision_opened_from_the_palette_an
     assert!(rows(&f.board).contains(&"Open the decision it waits on"));
     f.press(KeyCode::Char('D'));
     assert_eq!((f.board.tab, f.board.selected), (Tab::Decisions, Some(k(decision))), "D opens it");
-    assert!(!labels(&f.board, decision).contains(&"Answer…"), "a decision waits on nothing");
+    assert!(!labels(&f.board, decision).contains(&"Answer"), "a decision waits on nothing");
 }
 
 #[test]
@@ -1507,10 +1693,10 @@ fn a_task_waiting_on_a_decision_is_answered_by_deciding_with_or_without_a_commen
 
     f.board.select(k(1));
     let menu = labels(&f.board, 1);
-    for offered in ["Accept", "Accept with a comment…", "Reject…", "Open proposed decision"] {
+    for offered in ["Accept", "Accept with a comment", "Reject", "Open proposed decision"] {
         assert!(menu.contains(&offered), "{offered}: {menu:?}");
     }
-    assert!(!menu.contains(&"Answer…"), "it's answered by deciding");
+    assert!(!menu.contains(&"Answer"), "it's answered by deciding");
     f.press(KeyCode::Char('Y'));
     f.press(KeyCode::Esc);
     assert_eq!(f.on_disk(redis).decision, DecisionState::Proposed, "a comment never written accepts nothing");

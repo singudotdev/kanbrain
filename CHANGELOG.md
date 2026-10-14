@@ -5,6 +5,38 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-14
+
+### Added
+
+- The kanban app's form picks tags from a list: in the tags field, the tags in use by entries of its kind drop down
+  with how many use each (`Board::form_tags`), those it holds left out, filtered by the tag being typed
+  (`Form::typed_tag`) as the dropdowns filter, the first starting with it highlighted. A click, or `↓` `↑` and
+  `enter`, puts one in its place (`Form::put_tag`); with none highlighted, `enter` saves; a line says when none
+  matches: the tag will be a new one. It replaces the chips of the tags in use under the field.
+
+### Changed
+
+- The kanban app's buttons and menu entries drop the trailing ellipsis: **Rename**, **Move**, **Remove**, **Remove
+  project**, **Link**, **Answer**, **Accept with a comment**, **Reject**, **Move to project**, **Delete**, **Edit or
+  delete a comment**.
+- The kanban app's dropdowns, pickers and right-click menu draw a line between rows, as the list view does
+  (`dropdown::list`, `menu::draw`), and a dialog's list sits in a bordered box (`dialogs::list_box`): the link
+  picker, comments, which project and the command palette now too.
+
+
+### Fixed
+
+- `kb init --all` (run by the installer and `kb update`) renames a registry's only project named `Central`, or one
+  with `:` or `/`, instead of panicking (`rename_unreachable_projects`).
+- An entry file that doesn't parse (a sync conflict's, a hand edit's) is no longer lost: saving another entry over
+  its name is refused (`Store::save`), and a new entry never takes its id (`Brain::take_id` counts the files there).
+- The kanban app: a ctrl+letter does nothing outside the editor, where `ctrl+d` discarded the edit and a second one
+  moved the selected task to Done (`Board::key`); a dialog on an entry another program deleted closes, saying so,
+  instead of taking the keys unseen (`Mode::entry`, `after_load`); a dragged card is dropped on its own brain, found
+  by folder, though a reload reordered the brains meanwhile (`Board::drop_dragged`).
+- `kb init`'s message and `docs/agents.md` say the `Stop` hook reminds an agent to describe the project, as it does,
+  rather than holding the turn.
 ## [0.4.0] - 2026-10-14
 
 ### Added
@@ -280,7 +312,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/singudotdev/kanbrain/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/singudotdev/kanbrain/compare/v0.3.5...v0.4.0
 [0.3.5]: https://github.com/singudotdev/kanbrain/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/singudotdev/kanbrain/compare/v0.3.3...v0.3.4

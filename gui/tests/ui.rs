@@ -674,6 +674,45 @@ fn long_text_is_cut_at_a_words_end() {
 }
 
 #[gpui::test]
+fn the_form_says_when_the_tag_typed_is_new(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    view.update(cx, |view, cx| {
+        view.board.brain_mut(0).update(1, "a", vec!["auth".into()]).unwrap();
+        cx.notify();
+    });
+    cx.simulate_keystrokes("n");
+    cx.simulate_keystrokes("tab");
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("new tag").is_none(), "nothing typed yet");
+    cx.simulate_keystrokes("a");
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("new tag").is_none(), "#auth has it");
+    cx.simulate_keystrokes("x");
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("new tag").is_some(), "no tag has ax");
+}
+
+#[gpui::test]
+fn the_form_lists_its_tags_while_typing_them_and_a_click_picks_one(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    view.update(cx, |view, cx| {
+        view.board.brain_mut(0).update(1, "a", vec!["auth".into(), "bug".into()]).unwrap();
+        cx.notify();
+    });
+    cx.simulate_keystrokes("n");
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("tag-options-list").is_none(), "not while typing the title");
+    cx.simulate_keystrokes("tab");
+    cx.run_until_parked();
+    let bug = cx.debug_bounds("tag option 1").expect("the tags drop down under the field").center();
+    cx.simulate_click(bug, gpui::Modifiers::none());
+    view.read_with(cx, |view, _| {
+        let Mode::Form(form) = &view.board.mode else { panic!("the form stays open") };
+        assert_eq!(form.tags.text(), "bug, ");
+    });
+}
+
+#[gpui::test]
 fn a_comments_buttons_stay_in_the_details_however_long_its_heading(cx: &mut gpui::TestAppContext) {
     let (view, cx, _dir) = window(cx, &["a"]);
     view.update(cx, |view, cx| {

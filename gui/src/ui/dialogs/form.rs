@@ -1,16 +1,16 @@
 //! The new / edit form: the project a new entry goes in, its title and tags, related entries and column.
 
-use super::{DIALOG_WIDTH, check, dialog, labeled};
+use super::{DIALOG_WIDTH, check, dialog, labeled, list_box};
 use crate::state::{Board, COLUMNS, Field, Form, FormTarget, Picker};
 use crate::text::editor::LineInput;
 use crate::text::event::KeyCode;
 use crate::ui::dropdown::{list, row};
 use crate::ui::pointer::TextBox;
 use crate::ui::theme::{self, ACCENT, BORDER};
-use crate::ui::widgets::{self, Kind, button, dim, dim_small, entry_pill, tag_chips, text_field};
+use crate::ui::widgets::{self, Kind, button, dim, dim_small, entry_pill, tag_chip, text_field};
 use crate::ui::{BrainView, Scrolls, action, truncate};
 use gpui::{ClickEvent, Context, Div, ElementId, FontWeight, ScrollHandle, Stateful, div, prelude::*, px, rgb};
-use kanbrain_core::model::Status;
+use kanbrain_core::model::{Status, counted};
 
 /// Rows the form's related field shows before it scrolls: fewer than other lists, since it's inside
 /// the form, under its other fields.
@@ -25,7 +25,6 @@ pub(super) fn draw(board: &Board, form: &Form, scroll: &Scrolls, follow: bool, c
     let field = |which: Field, input: &LineInput, text_box: TextBox, placeholder: &str, cx: &mut Context<BrainView>| {
         text_field(text_box, input, form.field == which, placeholder, cx)
     };
-    let (kind, known) = board.form_tags(form);
     let content = div()
         .flex()
         .flex_col()
@@ -38,18 +37,17 @@ pub(super) fn draw(board: &Board, form: &Form, scroll: &Scrolls, follow: bool, c
         .when(form.title_missed && form.title.text().trim().is_empty(), |d| {
             d.child(div().text_size(px(12.)).text_color(rgb(theme::RED)).child("A title is needed to save."))
         })
-        .child(labeled("Tags", field(Field::Tags, &form.tags, TextBox::Tags, "e.g. prod, support", cx)))
+        .child(labeled(
+            "Tags",
+            tags_field(
+                board,
+                form,
+                field(Field::Tags, &form.tags, TextBox::Tags, "e.g. prod, support", cx),
+                (&scroll.form_tags, follow),
+                cx,
+            ),
+        ))
         .child(dim_small("Separate tags with commas or spaces. Tab switches fields."))
-        .when(!known.is_empty(), |d| {
-            d.child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(dim_small(format!("Tags in use in {}s", kind.as_str())))
-                    .child(tag_chips(board, &known)),
-            )
-        })
         .child(labeled(
             "Related",
             related_field(
@@ -133,16 +131,47 @@ fn project_field(
         })
         .collect();
     let empty = rows.is_empty();
-    let options = div()
-        .p_1()
-        .rounded_md()
-        .border_1()
-        .border_color(rgb(BORDER))
-        .bg(rgb(theme::POPUP))
+    let options = list_box(list("project-options", rows, picker.sel, FORM_LINK_ROWS, scroll, follow))
         .text_size(px(13.))
-        .child(list("project-options", rows, picker.sel, FORM_LINK_ROWS, scroll, follow))
         .when(empty, |d| d.child(dim("No project matches.").px_2()));
     div().flex().flex_col().gap_1().child(search).child(options)
+}
+
+/// The tags field: while it has the keys, the tags in use by entries of the form's kind drop down below it, those
+/// it holds left out and filtered by the one typed, to pick with a click or `↓` and `enter`; or a line saying the tag
+/// typed is a new one.
+fn tags_field(
+    board: &Board,
+    form: &Form,
+    search: Stateful<Div>,
+    (scroll, follow): (&ScrollHandle, bool),
+    cx: &mut Context<BrainView>,
+) -> Div {
+    let field = div().flex().flex_col().gap_1().child(search);
+    if form.field != Field::Tags {
+        return field;
+    }
+    let (kind, tags) = board.form_tags(form);
+    let typed = form.typed_tag();
+    if tags.is_empty() {
+        return field.when(!typed.is_empty(), |d| {
+            let says = format!("No tag in use in {}s matches {typed}: it'll be a new one.", kind.as_str());
+            d.child(dim_small(says).debug_selector(|| "new tag".into()))
+        });
+    }
+    let (one, many) = (kind.as_str(), format!("{}s", kind.as_str()));
+    let rows: Vec<_> = tags
+        .iter()
+        .enumerate()
+        .map(|(index, (tag, uses))| {
+            row(("tag-option", index), format!("tag option {index}"), form.tag_sel == Some(index), true)
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.choose_form_tag(index))))
+                .child(tag_chip(board, tag))
+                .child(dim_small(counted(*uses, one, &many)))
+        })
+        .collect();
+    let sel = form.tag_sel.unwrap_or(0);
+    field.child(list_box(list("tag-options", rows, sel, FORM_LINK_ROWS, scroll, follow)).text_size(px(13.)))
 }
 
 /// The related field: the entries checked, each a chip with ×, then the search box; while it has the
@@ -194,14 +223,8 @@ fn related_field(
             })
             .collect();
         let empty = rows.is_empty();
-        div()
-            .p_1()
-            .rounded_md()
-            .border_1()
-            .border_color(rgb(BORDER))
-            .bg(rgb(theme::POPUP))
+        list_box(list("link-options", rows, form.related.sel, FORM_LINK_ROWS, scroll, follow))
             .text_size(px(13.))
-            .child(list("link-options", rows, form.related.sel, FORM_LINK_ROWS, scroll, follow))
             .when(empty, |d| d.child(dim("Nothing matches.").px_2()))
     });
     div()

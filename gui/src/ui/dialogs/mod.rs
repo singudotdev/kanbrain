@@ -86,6 +86,12 @@ fn dialog(title: impl Into<String>, content: impl IntoElement, buttons: Vec<Stat
         .child(div().flex().justify_end().gap_2().children(buttons))
 }
 
+/// The box a dialog's list sits in, bordered as its fields are, so the rows and the lines between them don't float
+/// in the dialog.
+fn list_box(list: Div) -> Div {
+    div().p_1().rounded_md().border_1().border_color(rgb(BORDER)).bg(rgb(theme::POPUP)).child(list)
+}
+
 /// A label above a field.
 fn labeled(label: &str, field: impl IntoElement) -> Div {
     div()

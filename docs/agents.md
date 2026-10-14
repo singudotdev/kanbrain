@@ -35,10 +35,10 @@ kb init        # creates .brain/ and tells the project's agents about it
    | --- | --- | --- |
    | `SessionStart` | `kb context` | when a session starts or resumes, after `/clear` and after compaction, the agent gets the brain's state without spending a tool call, and keeps it deep into a long session |
    | `UserPromptSubmit` | `kb hook prompt` | while the project isn't described (or, with several repositories, this one's role isn't), every prompt arrives with the request to write it before anything else |
-   | `Stop` | `kb hook stop` | an agent about to end its turn with it still missing is sent back to write it, once a turn, so it can't loop. It also reminds an agent of each task it started and hasn't commented on since, to say where it stands |
+   | `Stop` | `kb hook stop` | an agent ending its turn with it still missing is reminded to write it, once a turn (a reminder, not a block: the turn ends all the same). It also reminds an agent of each task it started and hasn't commented on since, to say where it stands |
 
    Agents skipped describing the project when only the section and `context` asked them to; with these, Claude
-   Code holds them to it on their first turn. Once it's described and the tasks the agent started commented on,
+   Code reminds them on their first turn. Once it's described and the tasks the agent started commented on,
    both print nothing and cost nothing. An explicit
    instruction from you still wins: told to use no tools, the agent says it couldn't describe the project and stops.
 
