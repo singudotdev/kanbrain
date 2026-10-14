@@ -1,6 +1,6 @@
 //! The new / edit form: the project a new entry goes in, its title and tags, related entries and column.
 
-use super::{DIALOG_WIDTH, check, dialog, labeled};
+use super::{DIALOG_WIDTH, check, dialog, labeled, list_box};
 use crate::state::{Board, COLUMNS, Field, Form, FormTarget, Picker};
 use crate::text::editor::LineInput;
 use crate::text::event::KeyCode;
@@ -133,14 +133,8 @@ fn project_field(
         })
         .collect();
     let empty = rows.is_empty();
-    let options = div()
-        .p_1()
-        .rounded_md()
-        .border_1()
-        .border_color(rgb(BORDER))
-        .bg(rgb(theme::POPUP))
+    let options = list_box(list("project-options", rows, picker.sel, FORM_LINK_ROWS, scroll, follow))
         .text_size(px(13.))
-        .child(list("project-options", rows, picker.sel, FORM_LINK_ROWS, scroll, follow))
         .when(empty, |d| d.child(dim("No project matches.").px_2()));
     div().flex().flex_col().gap_1().child(search).child(options)
 }
@@ -194,14 +188,8 @@ fn related_field(
             })
             .collect();
         let empty = rows.is_empty();
-        div()
-            .p_1()
-            .rounded_md()
-            .border_1()
-            .border_color(rgb(BORDER))
-            .bg(rgb(theme::POPUP))
+        list_box(list("link-options", rows, form.related.sel, FORM_LINK_ROWS, scroll, follow))
             .text_size(px(13.))
-            .child(list("link-options", rows, form.related.sel, FORM_LINK_ROWS, scroll, follow))
             .when(empty, |d| d.child(dim("Nothing matches.").px_2()))
     });
     div()

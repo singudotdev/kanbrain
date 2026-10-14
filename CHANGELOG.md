@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The kanban app's buttons and menu entries drop the trailing ellipsis: **Rename**, **Move**, **Remove**, **Remove
   project**, **Link**, **Answer**, **Accept with a comment**, **Reject**, **Move to project**, **Delete**, **Edit or
   delete a comment**.
+- The kanban app's dropdowns, pickers and right-click menu draw a line between rows, as the list view does
+  (`dropdown::list`, `menu::draw`), and a dialog's list sits in a bordered box (`dialogs::list_box`): the link
+  picker, comments, which project and the command palette now too.
 
 ## [0.4.0] - 2026-10-14
 

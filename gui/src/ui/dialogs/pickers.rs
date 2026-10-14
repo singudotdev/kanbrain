@@ -1,7 +1,7 @@
 //! Dialogs that pick from a searchable list: the link picker, "which project?" and the
 //! command palette.
 
-use super::{WIDE_WIDTH, check, dialog};
+use super::{WIDE_WIDTH, check, dialog, list_box};
 use crate::state::{Action, Board, CommentPicker, LinkPicker, Picker, Tab, Target, WhereFor, WherePicker};
 use crate::text::event::KeyCode;
 use crate::ui::dropdown::{MAX_ROWS, list, row};
@@ -58,7 +58,7 @@ pub(super) fn links(
         .gap_3()
         .child(text_field(TextBox::LinkSearch, &picker.rows.search, true, "Search titles, or #tag", cx))
         .child(dim_small("Click an entry (or Enter) to link or unlink it. Links show on both entries."))
-        .child(list);
+        .child(list_box(list));
     let buttons = vec![action("links-done", "Done", Kind::Primary, KeyCode::Esc, cx)];
     let title = format!("Related to {} {}", board.entry_name(picker.key), truncate(&task.title, 40));
     Some(dialog(title, content, buttons).w(px(WIDE_WIDTH)))
@@ -94,7 +94,7 @@ pub(super) fn comments(
         .flex_col()
         .gap_3()
         .child(dim_small("Enter (or a click) edits the highlighted comment; x deletes it, after asking."))
-        .child(list("comments", rows, picker.sel, MAX_ROWS, scroll, follow));
+        .child(list_box(list("comments", rows, picker.sel, MAX_ROWS, scroll, follow)));
     let buttons = vec![action("comments-done", "Close", Kind::Primary, KeyCode::Esc, cx)];
     let title = format!("Comments on {} {}", board.entry_name(key), truncate(&task.title, 40));
     Some(dialog(title, content, buttons).w(px(WIDE_WIDTH)))
@@ -131,7 +131,7 @@ pub(super) fn place(
         .flex_col()
         .gap_3()
         .child(text_field(TextBox::WhereSearch, &picker.search, true, "Search projects", cx))
-        .child(list);
+        .child(list_box(list));
     let buttons = vec![
         action("where-cancel", "Cancel", Kind::Secondary, KeyCode::Esc, cx),
         action("where-choose", "Choose", Kind::Primary, KeyCode::Enter, cx),
@@ -165,13 +165,13 @@ pub(super) fn palette(
         .iter()
         .enumerate()
         .map(|(index, &&Action { shown, does, runs, .. })| {
-            // The first row of each section names it, with a line above it but on the first: a heading row would
+            // The first row of each section names it, its line above lighter than the others: a heading row would
             // break the list's even rows, which its scrolling counts on.
             let section = commands[index].section();
             let starts = index == 0 || commands[index - 1].section() != section;
             row(("command", index), format!("command {index}"), index == picker.sel, runs)
                 .gap_3()
-                .when(starts && index > 0, |d| d.border_t_1().border_color(rgb(BORDER)))
+                .when(starts, |d| d.border_color(rgb(BORDER)))
                 .when(runs, |d| {
                     d.on_click(
                         cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.choose_command(index))),
@@ -200,7 +200,7 @@ pub(super) fn palette(
         .flex_col()
         .gap_3()
         .child(text_field(TextBox::PaletteSearch, &picker.search, true, "Search commands or keys", cx))
-        .child(list);
+        .child(list_box(list));
     let buttons = vec![
         action("palette-close", "Close", Kind::Secondary, KeyCode::Esc, cx),
         action("palette-run", "Run", Kind::Primary, KeyCode::Enter, cx),

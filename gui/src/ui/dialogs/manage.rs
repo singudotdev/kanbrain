@@ -1,15 +1,14 @@
 //! Changing a project or one of its repositories, from Manage project: renaming either, moving a repository
 //! to another project, and taking a repository or the whole project out, keeping their tasks or deleting them.
 
-use super::{DIALOG_WIDTH, dialog, labeled};
+use super::{DIALOG_WIDTH, dialog, labeled, list_box};
 use crate::state::{Board, Manage, Picker, ProjectOption};
 use crate::text::event::KeyCode;
 use crate::ui::dropdown::{list, row};
 use crate::ui::pointer::TextBox;
-use crate::ui::theme::{self, BORDER};
 use crate::ui::widgets::{Kind, dim, dim_small, text_field};
 use crate::ui::{BrainView, action};
-use gpui::{ClickEvent, Context, Div, FontWeight, ScrollHandle, div, prelude::*, px, rgb};
+use gpui::{ClickEvent, Context, Div, FontWeight, ScrollHandle, div, prelude::*, px};
 
 /// Rows of projects shown before the list scrolls, as in the add-project dialog.
 const PROJECT_ROWS: usize = 5;
@@ -84,14 +83,8 @@ fn move_dialog(
         })
         .collect();
     let empty = rows.is_empty();
-    let options = div()
-        .p_1()
-        .rounded_md()
-        .border_1()
-        .border_color(rgb(BORDER))
-        .bg(rgb(theme::POPUP))
+    let options = list_box(list("move-options", rows, picker.sel, PROJECT_ROWS, scroll, follow))
         .text_size(px(13.))
-        .child(list("move-options", rows, picker.sel, PROJECT_ROWS, scroll, follow))
         .when(empty, |d| d.child(dim("Type the project's name.").px_2()));
     let content = div()
         .flex()

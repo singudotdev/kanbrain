@@ -17,7 +17,7 @@ const ROW_HEIGHT: f32 = 26.;
 pub fn draw(board: &Board, at: Option<Point<Pixels>>, cx: &mut Context<BrainView>) -> Option<impl IntoElement> {
     let (Mode::Menu(menu), Some(at)) = (&board.mode, at) else { return None };
     let MenuPicker { key, sel } = *menu;
-    let rows = board.menu_items(key).into_iter().enumerate().map(|(index, item)| {
+    let mut rows = board.menu_items(key).into_iter().enumerate().map(|(index, item)| {
         div()
             .id(("menu", index))
             .debug_selector(move || format!("menu {index}"))
@@ -27,7 +27,8 @@ pub fn draw(board: &Board, at: Option<Point<Pixels>>, cx: &mut Context<BrainView
             .gap_4()
             .h(px(ROW_HEIGHT))
             .px_2()
-            .rounded_sm()
+            // The line above every row but the first (added where the panel takes them), as the lists'.
+            .border_color(rgb(theme::BG))
             .cursor_pointer()
             .text_color(rgb(if item.danger { RED } else { TEXT }))
             .when(index == sel, |d| d.bg(rgb(theme::SELECTED)))
@@ -53,7 +54,8 @@ pub fn draw(board: &Board, at: Option<Point<Pixels>>, cx: &mut Context<BrainView
                 this.act(cx, |b| b.mode = Mode::Normal);
             }
         }))
-        .children(rows);
+        .children(rows.next())
+        .children(rows.map(Styled::border_t_1));
     // Drawn after everything else, so it covers what's under it; moved in if it would leave the window.
     Some(deferred(gpui::anchored().position(at).snap_to_window_with_margin(px(8.)).child(panel)).with_priority(2))
 }
