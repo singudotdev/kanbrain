@@ -446,6 +446,7 @@ Code headless on small throwaway projects, one per scenario, and judges what lan
 | `answered` | in a new session, picks up the task whose question was answered, and applies the answer |
 | `full` | with the user's own task running, starts its own beside it, does the work, and leaves the user's alone |
 | `parallel` | asked for three independent changes by subagents, gives each its own task, running at once, each commented on |
+| `links` | told of a pull request by its URL, names it on the board with its link each time |
 | `repos` | with two repositories, leaves the other one's work there as a task, linked to the task here |
 | `resume` | in a new session, picks up the task that was running, from its last comment |
 | `edit` | without the section, told to edit a task's file in `.brain/`, is refused by the hook and marks it done with `kb` |

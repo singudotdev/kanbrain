@@ -291,6 +291,23 @@ assert "280" in open("app.py").read(), "with the answer"
 '
 fi
 
+# A pull request named in the work: the board's comments and bodies carry its link, which opens from there, not
+# just its number.
+if wanted links; then
+    dir="$work/links"
+    app "$dir" links
+    described "$dir"
+    agent "$dir" "A POST /notes with an empty body stores an empty note. Upstream fixed that in pull request #12 \
+(https://github.com/acme/notes-api/pull/12): port that fix here."
+    check links "$dir" '
+url = "https://github.com/acme/notes-api/pull/12"
+texts = [t.get("description", "") for t in tasks] + [c["body"] for t in tasks for c in t["comments"]]
+named = [x for x in texts if "#12" in x or "pull/12" in x]
+assert named, "the pull request is named on the board: " + str(texts)
+assert all(url in x for x in named), "each time with its link: " + str(named)
+'
+fi
+
 # A project of two repositories: work the other one needs becomes a task there, linked to this one's.
 if wanted repos; then
     api="$work/repos/api"
