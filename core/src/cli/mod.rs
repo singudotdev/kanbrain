@@ -8,6 +8,9 @@
 //! - [`completions`]: `kb completions SHELL`, tab completion, and the ids, projects and tags it offers.
 //! - [`update`]: `kb update` and the app's, the latest release over this one, through the installer, once no
 //!   agent is working.
+//!
+//! What the command line parses to ([`Command`], [`EntryCommand`], their variants and parts) is `#[non_exhaustive]`,
+//! so a new command, or a new option of one, isn't a breaking change of this crate's API.
 
 mod claude;
 mod completions;
@@ -202,42 +205,58 @@ const DEFAULT_REPORT_UNIT: Unit = Unit::Week;
 
 /// What to do, as chosen on the command line.
 #[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Command {
     /// `list`: print tasks as markdown.
+    #[non_exhaustive]
     List(ListArgs),
     /// `init [NAME] [--repo REPO]`: make the current directory a project, named `NAME` or after the folder,
     /// and the repository `REPO` in it.
+    #[non_exhaustive]
     Init(Option<String>, Option<String>),
     /// `init --all`: bring every registered repository's agent instructions up to this version's.
+    #[non_exhaustive]
     InitAll,
     /// `deinit [--purge]`: undo `init` for the current directory's project, or the one `--project` names;
     /// `true` also deletes its `.brain/`.
+    #[non_exhaustive]
     Deinit(bool),
     /// `hook prompt|stop|edit`: what Claude Code's hooks run (see [`hook`]).
+    #[non_exhaustive]
     Hook(hook::HookEvent),
     /// `status`: print the running tasks for status bars.
+    #[non_exhaustive]
     Status,
     /// `report`: print a time report as markdown.
+    #[non_exhaustive]
     Report(ReportArgs),
     /// `add`, `show`, `search`, `start`, `comment`, …: entries by id, for agents and scripts.
+    #[non_exhaustive]
     Entries(EntryArgs),
     /// `path`: print the data folder.
+    #[non_exhaustive]
     Path,
     /// `update`: install the latest release.
+    #[non_exhaustive]
     Update,
     /// `completions SHELL`: print a tab completion script.
+    #[non_exhaustive]
     Completions(completions::Shell),
     /// `complete ids|projects|tags …`: what the completion scripts offer, one per line. The words after
     /// it are the command line being completed, ignored but for its `--project`.
+    #[non_exhaustive]
     Complete(completions::Candidates),
     /// `--version` / `-V`.
+    #[non_exhaustive]
     Version,
     /// `--help` / `-h`.
+    #[non_exhaustive]
     Help,
 }
 
 /// Options of `kb list`.
 #[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ListArgs {
     /// Task statuses to show, in list order.
     pub statuses: Vec<Status>,
@@ -251,6 +270,7 @@ pub struct ListArgs {
 
 /// Options of `kb report`.
 #[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ReportArgs {
     /// Period length; the current one is reported.
     pub unit: Unit,
