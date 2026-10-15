@@ -39,7 +39,7 @@
 //! says `agent`. `- links:` is only written when there are links. `shop-api#3` is entry 3 of the project's `shop-api`
 //! repository. Other `- key:` lines, link words and `##` sections are kept and written back (see [`Unknown`]).
 
-use super::text::parse_tags;
+use super::text::{one_line, parse_tags};
 use super::time::{fmt_dur, fmt_ts, now, parse_ts};
 use super::{Author, Comment, DecisionState, Kind, RepoLink, Session, Status, StatusChange, Task, Unknown};
 use chrono::{DateTime, Local};
@@ -159,7 +159,7 @@ impl Task {
                     && !trimmed.trim().is_empty()
                 {
                     title.push(' ');
-                    title.push_str(trimmed.trim());
+                    title.push_str(&one_line(trimmed));
                 }
                 continue;
             }
@@ -257,7 +257,8 @@ impl<'a> Parsed<'a> {
         if self.title.is_none()
             && let Some(title) = line.strip_prefix("# ")
         {
-            self.title = Some(title.trim().to_string());
+            // A lone `\r` older versions kept in it is a line break too, as markdown reads it.
+            self.title = Some(one_line(title));
             return;
         }
         let Some((key, value)) = line.trim_start().strip_prefix("- ").and_then(|rest| rest.split_once(':')) else {

@@ -128,7 +128,7 @@ fn cards_written_before_each_had_its_own_place_are_read_and_moved() {
 
 #[test]
 fn names_are_one_line_without_separators_or_a_leading_dash() {
-    for bad in ["", " shop", "a:b", "a/b", "two\nlines", "--help", "-x", "central", "Central"] {
+    for bad in ["", " shop", "a:b", "a/b", "two\nlines", "two\rlines", "--help", "-x", "central", "Central"] {
         assert!(check_name(bad).is_err(), "{bad:?} is a project name");
     }
     for bad in ["", "my app", "a,b", "a#b", "a:b", "a/b", "--help"] {

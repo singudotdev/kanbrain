@@ -111,6 +111,10 @@ fn line_input_selects_copies_and_replaces() {
     input.on_key(shift(KeyCode::Home));
     input.on_key(key(KeyCode::Right));
     assert_eq!((input.cursor(), input.selection()), (3, None));
+    // A lone carriage return breaks a line too: one space, as for `\n`, and one for both.
+    input.select_all();
+    input.insert("a\rb\r\nc");
+    assert_eq!(input.text(), "a b c");
 }
 
 #[test]

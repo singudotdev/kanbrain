@@ -262,6 +262,9 @@ fn titles_typed_with_line_breaks_are_kept_on_one_line() {
     let mut f = Fixture::with_titles(&[]);
     let id = f.brain.add(NewEntry { title: "Plan\n## Steps\r\n".into(), ..NewEntry::default() }).unwrap();
     assert_eq!(f.brain.task(id).unwrap().title, "Plan ## Steps");
+    // A lone carriage return breaks a line too, for markdown (and a terminal it's printed to).
+    f.brain.update(id, "Plan\rold\r\rMac", Vec::new()).unwrap();
+    assert_eq!(f.brain.task(id).unwrap().title, "Plan old Mac");
     f.brain.update(id, "Plan\n\nmore", Vec::new()).unwrap();
     let decision = f.brain.propose(id, NewEntry { title: "Use\nSQLite".into(), ..NewEntry::default() }).unwrap();
     let titles: Vec<_> = f.reloaded().into_iter().map(|t| t.title).collect();
