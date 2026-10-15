@@ -170,7 +170,7 @@ usage:
 
 --project NAME, anywhere on the line, runs a command on a registered project's brain (or `central`).
 --json prints JSON instead, for list, add, show, search, start|park|done|todo, comment, ask, propose, accept,
-reject, describe, tag and link.
+reject, describe, rename, tag and link.
 -- ends a text's options: every word after it is the text (`{name} comment 3 -- use --json`).
 Data lives in the nearest .brain/ folder here or above (see init); else in the central brain:
 $KANBRAIN_DIR, else the platform data dir (e.g. ~/.local/share/kanbrain).

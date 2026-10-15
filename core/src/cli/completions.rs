@@ -26,6 +26,7 @@ const COMMANDS: &[&str] = &[
     "accept",
     "reject",
     "describe",
+    "rename",
     "tag",
     "link",
     "project",
@@ -42,7 +43,7 @@ const COMMANDS: &[&str] = &[
 
 /// The commands whose first argument is an entry's id; `link` takes more after it. `tag` is apart: the id, then signed
 /// tags.
-const BY_ID: &str = "show start park done todo comment ask wait propose accept reject describe link";
+const BY_ID: &str = "show start park done todo comment ask wait propose accept reject describe rename link";
 
 named_enum! {
     /// A shell `completions` writes a script for.
