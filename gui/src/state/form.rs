@@ -65,6 +65,7 @@ impl Board {
         if let (Some(key), Some(task)) = (self.selected, self.selected_task()) {
             let related = self.related_keys(key);
             self.mode = Mode::Form(Box::new(Form::edit(key, task, related)));
+            self.say_agent_working(key);
         }
     }
 

@@ -644,6 +644,45 @@ fn an_open_form_says_kb_swapped_a_related_entry() {
 }
 
 #[test]
+fn opening_what_an_agent_is_working_on_says_so() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["Fix login", "Mine"]);
+    let mut agent = Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    agent.author = Author::Agent;
+    agent.set_status(1, Status::Doing).unwrap();
+    agent.add_comment(1, "on it").unwrap();
+    f.board.reload().unwrap();
+    let opening = |f: &mut Fixture, open: &dyn Fn(&mut Board)| {
+        f.board.message = None;
+        open(&mut f.board);
+        let said = f.board.message().map(str::to_string);
+        assert!(!matches!(f.board.mode, Mode::Normal), "opened");
+        f.board.mode = Mode::Normal;
+        said
+    };
+    let working = Some("#1 is being worked on by an agent".to_string());
+
+    // The form, its description and its comments: what's saved may cross what the agent writes next.
+    f.board.select(k(1));
+    assert_eq!(opening(&mut f, &|b| press(b, KeyCode::Char('e'))), working, "the form");
+    assert_eq!(opening(&mut f, &|b| press(b, KeyCode::Char('m'))), working, "the description");
+    assert_eq!(opening(&mut f, &|b| b.open_editor(Target::Comment(k(1), 0))), working, "a comment");
+    // A new comment crosses nothing: it's how to tell the agent.
+    assert_eq!(opening(&mut f, &|b| press(b, KeyCode::Char('c'))), None, "a new comment");
+
+    // A task a person started, or one the agent parked, isn't being worked on by an agent.
+    f.board.select(k(2));
+    f.board.set_status(k(2), Status::Doing);
+    assert_eq!(opening(&mut f, &|b| press(b, KeyCode::Char('e'))), None, "the user's");
+    let mut agent = Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    agent.author = Author::Agent;
+    agent.set_status(1, Status::Parked).unwrap();
+    f.board.reload().unwrap();
+    f.board.select(k(1));
+    assert_eq!(opening(&mut f, &|b| press(b, KeyCode::Char('e'))), None, "parked");
+}
+
+#[test]
 fn a_new_entrys_form_has_nothing_on_disk_to_mark() {
     use kanbrain_core::brain::Brain;
     let mut f = Fixture::new(&["Fix login"]);
