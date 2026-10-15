@@ -8,7 +8,7 @@ use crate::text::editor::{LineInput, TextEditor};
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveTime};
 use kanbrain_core::cli::update;
-use kanbrain_core::model::{DecisionState, Kind, Status};
+use kanbrain_core::model::{Comment, DecisionState, Kind, Status};
 use kanbrain_core::period::{Period, Unit};
 use kanbrain_core::store::{self, Change};
 use std::path::Path;
@@ -159,13 +159,45 @@ impl Board {
     /// Opens the editor on `target` from Manage project on `back`, which closing it goes back to.
     pub fn open_editor_from(&mut self, target: Target, back: Option<usize>) {
         let Some(text) = self.text_of(target) else { return };
-        self.mode = Mode::Edit(Edit { editor: TextEditor::new(text), target, back });
+        let (editor, base) = (TextEditor::new(text), text.to_string());
+        let comments = match target {
+            Target::Comment(key, _) => self.task(key).map(|t| t.comments.clone()).unwrap_or_default(),
+            _ => Vec::new(),
+        };
+        self.mode = Mode::Edit(Edit { editor, target, back, base, comments });
     }
 
-    /// Whether the editor's text differs from what its target holds: typed and put back as it was is no change, to
-    /// save, to say was saved, or to mark in its title.
+    /// Whether the comment at the editor's index is still the one it opened on: the others are as they were, but
+    /// for any written after them, and the one there was written when it was, by the same author. Anything but a
+    /// comment is.
+    fn same_comment(&self, edit: &Edit) -> bool {
+        fn others(comments: &[Comment], index: usize) -> impl Iterator<Item = &Comment> {
+            comments.iter().enumerate().filter(move |&(at, _)| at != index).map(|(_, comment)| comment)
+        }
+        let Target::Comment(key, index) = edit.target else { return true };
+        let (Some(task), Some(then)) = (self.task(key), edit.comments.get(index)) else { return false };
+        task.comments.get(index).is_some_and(|now| now.created == then.created && now.author == then.author)
+            && others(&edit.comments, index).eq(others(&task.comments, index).take(edit.comments.len() - 1))
+    }
+
+    /// What the editor's text is, to say what changed meanwhile.
+    fn text_name(&self, target: Target) -> String {
+        match target {
+            Target::Description(key) => format!("{}'s description", self.entry_name(key)),
+            Target::NewComment(key) | Target::Comment(key, _) | Target::Reject(key) | Target::Accept(key) => {
+                format!("{}'s comment", self.entry_name(key))
+            }
+            Target::Project(_) => "the project's description".into(),
+            Target::RepoNotes(_) => "this repository's role".into(),
+        }
+    }
+
+    /// Whether the editor holds a change of the user's: its text differs from the one it started from (`Edit::base`)
+    /// and from what its target holds. Typed and put back as it was is no change, to save, to say was saved, or to
+    /// mark in its title, even once `kb` changed the target meanwhile.
     pub fn changed(&self, edit: &Edit) -> bool {
-        edit.editor.modified && self.text_of(edit.target) != Some(edit.editor.text().as_str())
+        let text = edit.editor.text();
+        edit.editor.modified && text != edit.base && self.text_of(edit.target) != Some(text.as_str())
     }
 
     /// What `target` holds now: the text the editor starts from, and saving the same is no change.
@@ -182,7 +214,7 @@ impl Board {
     }
 
     /// Writes the editor's text to its target, if it changed.
-    pub(super) fn save_edit(&mut self, edit: &Edit) {
+    pub(super) fn save_edit(&mut self, mut edit: Edit) {
         let answers = self.answers(edit.target);
         let text = edit.editor.text();
         // A comment or a reason is something said: closing with none says so, rather than closing as if it was
@@ -202,7 +234,28 @@ impl Board {
                 _ => {}
             };
         }
-        if !self.changed(edit) {
+        if !self.changed(&edit) {
+            return;
+        }
+        // What `kb` wrote meanwhile isn't replaced unseen: the save stops, the editor open, and says so; saved again
+        // with nothing new there, it replaces it.
+        if let Target::Comment(key, _) = edit.target
+            && !self.same_comment(&edit)
+        {
+            let name = self.entry_name(key);
+            self.notify(format!("{name}'s comments changed around this one meanwhile: copy your text, then ctrl+d"));
+            self.mode = Mode::Edit(edit);
+            return;
+        }
+        if let Some(now) = self.text_of(edit.target)
+            && now != edit.base
+        {
+            edit.base = now.to_string();
+            self.notify(format!(
+                "{} changed meanwhile: save again to replace it with yours, ctrl+d to keep it",
+                self.text_name(edit.target)
+            ));
+            self.mode = Mode::Edit(edit);
             return;
         }
         let saved = match edit.target {
