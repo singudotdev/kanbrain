@@ -68,12 +68,15 @@ if touches '^(\.github/(workflows/|plan\.sh$)|Cargo\.(toml|lock)$|rust-toolchain
   all=true
 fi
 
-# Files built into the programs (`include_str!`, `include_bytes!`, core/build.rs) count as their code.
-core='^(core/|tag-changelog/|install\.sh$|docs/(agents|cli)\.md$|docs/images/logo\.svg$)'
+# Files built into the programs or their tests (`include_str!`, `include_bytes!`, core/build.rs) count as their code.
+core='^(core/|tag-changelog/|docs/(agents|cli)\.md$)'
 # A test reads the README, as the crate's README must list the same commands.
 cli='^(cli/|README\.md$)'
-gui='^(gui/|docs/keybindings\.md$|docs/images/logo\.svg$)'
-xtask='^(xtask/|about\.toml$)'
+gui='^(gui/|docs/keybindings\.md$|docs/images/logo\.svg$|install\.sh$)'
+# The notices carry the fonts' licenses.
+xtask='^(xtask/|gui/fonts/)'
+# A crate's manifest may turn on a dependency the lock already holds.
+manifests='^(core|cli|gui|xtask)/Cargo\.toml$'
 scripts='\.(sh|ps1)$'
 
 # Writes whether job $1 runs: when `$2...` succeeds, unless the tree was already checked.
@@ -87,10 +90,10 @@ need() {
 case "$workflow" in
   ci)
     need lint touches "$core|$cli|$gui|$xtask"
-    need deny touches "$xtask"
-    need test touches "$core|$cli|$gui"
+    need deny touches "$xtask|$manifests"
+    need test touches "$core|$cli|$gui|$xtask"
     need msrv touches "$core|$cli"
-    need installers touches "$core|$cli|$scripts"
+    need installers touches "$core|$cli|$scripts|^gui/icons/"
     need upgrade touches "$core|$cli|^e2e/upgrade\.sh$"
     need app touches "$core|$gui|^e2e/smoke-app\."
     ;;

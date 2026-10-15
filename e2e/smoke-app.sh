@@ -27,7 +27,7 @@ fail() {
 }
 
 export HOME="$work/home" KANBRAIN_DIR="$work/home/central"
-unset CLAUDECODE AI_AGENT AGENT KANBRAIN_AUTHOR
+unset CLAUDECODE AI_AGENT AGENT CODEX_SANDBOX CODEX_CI CODEX_THREAD_ID GEMINI_CLI KANBRAIN_AUTHOR
 mkdir -p "$KANBRAIN_DIR" "$out"
 # The app takes `kb`'s commands with arguments: the demo tasks, none running.
 "$app" add --tag auth "Rate-limit the login endpoint" >/dev/null

@@ -164,13 +164,14 @@ fn tags_field(
         .iter()
         .enumerate()
         .map(|(index, (tag, uses))| {
-            row(("tag-option", index), format!("tag option {index}"), form.tag_sel == Some(index), true)
-                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.choose_form_tag(index))))
+            let chosen = tag.clone();
+            row(("tag-option", index), format!("tag option {index}"), form.tag_sel.as_ref() == Some(tag), true)
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.choose_form_tag(&chosen))))
                 .child(tag_chip(board, tag))
                 .child(dim_small(counted(*uses, one, &many)))
         })
         .collect();
-    let sel = form.tag_sel.unwrap_or(0);
+    let sel = form.tag_sel.as_ref().and_then(|sel| tags.iter().position(|(tag, _)| tag == sel)).unwrap_or(0);
     field.child(list_box(list("tag-options", rows, sel, FORM_LINK_ROWS, scroll, follow)).text_size(px(13.)))
 }
 

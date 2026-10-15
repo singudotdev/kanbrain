@@ -48,7 +48,7 @@ pub struct Entry<'a> {
     /// Whether the task's clock is running now; only present when it is.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub running: bool,
-    /// The markdown file, to read or edit directly.
+    /// The markdown file, to read; a change goes through `kb`, which takes the brain's lock.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
 }

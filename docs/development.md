@@ -247,7 +247,7 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
     ├── dropdown.rs  dropdowns with a search box (the project filter and the tag filters), and the list and row every dropdown and picker is built from
     ├── widgets.rs   buttons, segmented controls, text fields, tag chips, cards, tooltips
     ├── pointer.rs   the mouse in text fields and the editor: place the cursor, drag to select, double/triple-click, middle-click paste
-    ├── caret.rs     the text cursor: a thin line drawn over the text, blinking (`Blink`, restarted on every input)
+    ├── caret.rs     the text cursor: a thin line drawn over the text, blinking (`Blink`, restarted on every input); a one-line field scrolled to keep it in view (`keep_in_view`)
     └── theme.rs     colors, fonts, status colors, styled text
 
 core/tests/, gui/tests/, xtask/tests/   each crate's tests (see Tests)
@@ -339,8 +339,8 @@ Steps chain: a brain several formats behind, from a user skipping versions, runs
 Eight layers: unit tests of `core` and `gui` (below), the kanban app in a real test window (`ui`), the `kb` binary run
 from outside ([below](#the-command-line-from-outside)), the installers end to end
 ([below](#installers-end-to-end)), brains of every release opened by this build (`e2e/upgrade.sh`), the release app
-started on each system (`e2e/smoke-app.*`), mutation testing of every change (`mutants.yml`), and a real agent end to
-end ([below](#agents-end-to-end), by hand).
+started on each system (`e2e/smoke-app.*`), mutation testing of every change to Rust (`mutants.yml`), and a real
+agent end to end ([below](#agents-end-to-end), by hand).
 
 Unit tests live in each crate's `tests/` folder, one file per module, laid out like `src/` in `core` and side by side in
 `gui`: `gui/src/text/editor.rs` is tested by `gui/tests/editor.rs`, `core/src/model/mod.rs` by `core/tests/model.rs`. They have access to private items:
@@ -359,7 +359,7 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | --- | --- |
 | `brain` | status history, columns, one person's task in doing and agents' unlimited (a second start refused, loading parks the extra ones), sessions, comments, links, renames and deletes, ids never given twice, moving to another brain, reports, the calendar's days and filters, the decision template |
 | `api`, `cli` | agent operations and their refusals, links to other repositories, compact text and JSON, `context`'s caps, command parsing, `--project`, `list` output, usage, completion scripts and candidates, which apps `update` installs and where (a macOS bundle's folder), whether a release is newer, an update waiting for agents' tasks in doing and not a person's |
-| `cli::init` | the agent section written, updated in place and left alone when unclosed; `init --all` updating every registered repository that has it, and no other; registering repositories and joining them into a project; `deinit` taking it all back but `.brain/`; the Claude Code hooks added once beside other settings, and removed leaving them as they were; `kb hook` asking with every prompt and holding the turn once while the project or this repository's role isn't described, and silent once they are |
+| `cli::init` | the agent section written, updated in place and left alone when unclosed; `init --all` updating every registered repository that has it, and no other; registering repositories and joining them into a project; `deinit` taking it all back but `.brain/`; the Claude Code hooks added once beside other settings, and removed leaving them as they were; `kb hook` asking with every prompt and reminding once a turn while the project or this repository's role isn't described, and of a task an agent started and left uncommented, and silent once they are; `kb hook edit` refusing a write to a brain's file, through a link or a `..` too, and leaving a notes vault's own files and a repository kept in the central brain to the agent |
 | `projects` | the registry and its labels, cards, moving a repository between projects, refusing two repositories with one name |
 | `migrate` | every format after the first having its step; an old brain backed up, then migrated step by step and only once, resuming from where it is; a brain in a newer format refused, read or written |
 | `cli::manage` | two folders named alike getting distinct repository names (`--repo` refused when taken); renaming a repository rewriting its siblings' links; renaming a project with its card and repositories; moving a repository dropping its links to the old project; removing keeping or deleting the tasks, and a whole project |
@@ -368,7 +368,7 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | `tags` | no color repeats until the palette is used up, `tags.md` round trip, custom colors |
 | `period`, `export` | period bounds and stepping, report tables |
 | `enums` | generated `ALL` / `position` / `next`, `parse` as the inverse of `as_str` |
-| `state` (gui) | the board driven by keys over a temporary folder: the palette offering only what works now, moving between cards and columns, moving cards, drops, quick add, the form, the tags it offers and picks and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, nothing asked once your task stops, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from Manage project, the update offered once a newer release is found and refused while an agent works, the details' buttons acting on the entry from the calendar too |
+| `state` (gui) | the board driven by keys over a temporary folder: the palette offering only what works now, moving between cards and columns, moving cards, drops, quick add, the form, the tags it offers and picks and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, nothing asked once your task stops, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from Manage project, the update offered once a newer release is found and refused while an agent works, the details' buttons acting on the entry from the calendar too, the form's tags highlight after a paste, a cut or a reload, a brain found while the board acts locked and read again under its lock |
 | `dialogs` (gui) | the delete question naming the entry, what removing one repository or several says, Manage project scrolling to the repository it's opened from, the editor naming what its text belongs to |
 | `keys` (gui) | no key running two things on one tab; what the menu offers named and described; every key in `docs/keybindings.md` on its tabs |
 | `editor` (gui) | line editing (split/join), unicode, wrapping; one-line cursor editing; selecting, copying and replacing; mouse selection by character, word and line |
@@ -376,14 +376,16 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | `update` (gui) | a program replaced on disk since it started restarting from the new file |
 | `watch` (gui) | new, changed, renamed and deleted files are noticed once, naming the folder; temporary files aren't; own writes are taken as seen |
 | `xtask` | the notices list each license with the crates under it and leave this workspace's out; each program carries Rust's standard library and what else it embeds (musl, the app's fonts in `gui/fonts/`) |
-| `ui` (gui) | in a real (test) window: GPUI keystrokes to keys, shortcut names, clicks and double-clicks on cards (in every brain), a right click's menu acting on its card, dragging a card onto a column, closing the details (no + under ✕ once they close; a click or a double-click on ✕ opening nothing), reloading after another program's change, acting right after one without undoing it, opening an entry from the calendar, buttons pressed while typing, dropdowns that scroll to the highlighted row and how many rows each shows, the form's tag list and a click picking one, clipboard shortcuts, + Add project through the folder dialog |
+| `ui` (gui) | in a real (test) window: GPUI keystrokes to keys, shortcut names, clicks and double-clicks on cards (in every brain), a right click's menu acting on its card, dragging a card onto a column, closing the details (no + under ✕ once they close; a click or a double-click on ✕ opening nothing), reloading after another program's change, acting right after one without undoing it, opening an entry from the calendar, buttons pressed while typing, dropdowns that scroll to the highlighted row and how many rows each shows, the form's tag list and a click picking one, the list following its highlight, clipboard shortcuts, + Add project through the folder dialog, a one-line field scrolling sideways to keep its cursor in view |
 
 ### The command line, from outside
 
-`cli/tests/kb.rs` runs the built `kb` the way agents and scripts do, over temporary folders: an agent's session
-from `init` to `context`, text read from stdin with `-`, one-line JSON, errors on stderr with a failing exit code
-and the usage, `--project` from another folder, completion candidates, the hooks asking until the project is
-described, and sixteen commands run at once losing no change and no id (the brain's write lock). They're Cargo integration tests (`CARGO_BIN_EXE_kb`), so they see only what the binary prints.
+`cli/tests/kb.rs` runs the built `kb` the way agents and scripts do, over temporary folders: an agent's session from
+`init` to `context`, text read from stdin with `-`, one-line JSON, errors on stderr with a failing exit code and the
+usage, `--project` from another folder, completion candidates, the hooks asking until the project is described, the edit
+hook refusing a write to `.brain/` (and a `~` path read as the home folder), and sixteen commands run at once losing no
+change and no id (the brain's write lock). They're Cargo integration tests (`CARGO_BIN_EXE_kb`), so they see only what
+the binary prints.
 
 ### Installers, end to end
 
@@ -407,8 +409,8 @@ links within a brain and across repositories, unicode and markdown. This build t
 file, shows every entry as the old version did, field by field (it may add fields), and runs `init --all` and writes.
 Releases that took the names v0.4.0 refuses also write a project named `-dash`, one named `Central` and a repository
 named `-docs`, which `init --all` must rename to `dash`, `Central-project` and `docs` with their tasks; at least one
-release must have written each. A tag whose release isn't published yet is skipped. CI runs it on every push; locally it
-needs curl, git, python3 and the tags.
+release must have written each. A tag whose release isn't published yet is skipped. CI runs it when a change touches
+it; locally it needs curl, git, python3 and the tags.
 
 ### The app, started
 
@@ -444,6 +446,7 @@ Code headless on small throwaway projects, one per scenario, and judges what lan
 | `parallel` | asked for three independent changes by subagents, gives each its own task, running at once, each commented on |
 | `repos` | with two repositories, leaves the other one's work there as a task, linked to the task here |
 | `resume` | in a new session, picks up the task that was running, from its last comment |
+| `edit` | without the section, told to edit a task's file in `.brain/`, is refused by the hook and marks it done with `kb` |
 
 It calls the model, so it costs money (`E2E_BUDGET` dollars per scenario at most, 1 by default) and takes minutes,
 and an agent's choices vary between runs: run it by hand before a release that changes what agents are told (the
@@ -475,16 +478,17 @@ needs it (see below):
 
 Each job runs only when the change touches what it checks: a first `plan` job (`.github/plan.sh`) compares the
 change, a rename's both paths, with the last commit on the branch (pushed to, or a pull request's base) whose push
-run passed; with none in a pull request's base, every job runs.
+run passed; with none, a push is measured from the push before it, and a pull request runs every job.
 
 | Changed | Jobs |
-|---|---|
-| `core/`, or a file built into it (`tag-changelog/`, `install.sh`, `docs/agents.md`, `docs/cli.md`, the logo) | all but the licenses |
+| --- | --- |
+| `core/`, or a file built into it or its tests (`tag-changelog/`, `docs/agents.md`, `docs/cli.md`) | all but the licenses |
 | `cli/`, or the README (a test reads its commands) | lints, tests, minimum Rust version, installers, upgrade |
-| `gui/`, or `docs/keybindings.md` | lints, tests, the app started |
-| `xtask/` | lints, licenses |
-| a script (`*.sh`, `*.ps1`) | the installers (with `shellcheck` and PSScriptAnalyzer); `e2e/upgrade.sh` and `e2e/smoke-app.*` their own job too |
-| the workflows, `Cargo.toml`, `Cargo.lock`, the toolchain or tools' configuration | everything |
+| `gui/`, or a file built into it or its tests (`docs/keybindings.md`, the logo, `install.sh`) | lints, tests, the app started; its fonts the licenses too |
+| `xtask/` | lints, tests, licenses |
+| a script (`*.sh`, `*.ps1`), or the app's icons (`gui/icons/`, which the installers carry) | the installers (with `shellcheck` and PSScriptAnalyzer); `e2e/upgrade.sh` and `e2e/smoke-app.*` their own job too |
+| the workflows or `.github/plan.sh`, `Cargo.toml`, `Cargo.lock`, the toolchain or tools' configuration (`.cargo/`, `rustfmt.toml`, `deny.toml`) | everything |
+| a crate's `Cargo.toml` | that crate's jobs, and the licenses |
 | only documentation | nothing |
 
 Mutation testing runs when Rust lines changed, whatever the folder.
@@ -521,8 +525,9 @@ A fix for a released version starts from `main` on `hotfix/…` and goes back to
    breaking change's migration) and its section in `CHANGELOG.md`, with its compare link at the end of the file, and
    commit them. `core/build.rs` stops a version without them from compiling in the repository.
 3. Update `version` under `[workspace.package]` in `Cargo.toml`, and `kanbrain-core`'s `version` under
-   `[workspace.dependencies]` to the same, run `cargo build` so `Cargo.lock` follows, and commit it on its own. Every
-   crate of the workspace shares it.
+   `[workspace.dependencies]` to the same, and the version in the examples of `docs/getting-started.md` and
+   `install.ps1`; run `cargo build` so `Cargo.lock` follows, and commit it on its own. Every crate of the workspace
+   shares it.
 4. Steps 2 and 3 go on `release/vX.Y.Z`, cut from `develop` (see [Branches](#branches)). Open its pull request into
    `main` and wait for CI on Linux, macOS and Windows, and for mutation testing, to pass on it (the latter can take
    hours after many commits). Squash it into `main` as `chore: release vX.Y.Z`, wait for both to pass again on that

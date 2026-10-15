@@ -184,6 +184,10 @@ impl Task {
     }
 }
 
+/// [`Task::from_markdown`]'s error for a file with no id: what tells markdown of other kinds, which a central brain
+/// kept in a notes vault holds, from a broken entry.
+pub(crate) const MISSING_ID: &str = "missing `- id:` line";
+
 /// The `##` section a line belongs to.
 #[derive(Clone, Copy)]
 enum Section {
@@ -346,7 +350,7 @@ impl<'a> Parsed<'a> {
     /// are closed where they can't be running: any but the last at the next one's start, and the
     /// last at the latest status change if the task isn't `doing`.
     fn into_task(mut self) -> Result<Task, String> {
-        let id = self.id.ok_or("missing `- id:` line")?;
+        let id = self.id.ok_or(MISSING_ID)?;
         self.history.sort_by_key(|c| c.at);
         self.sessions.sort_by_key(|s| s.start);
         let next_starts: Vec<_> = self.sessions.iter().skip(1).map(|s| s.start).collect();
