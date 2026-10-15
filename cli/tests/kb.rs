@@ -22,10 +22,12 @@ fn kb(dir: &Path, central: &Path, args: &[&str], stdin: &str) -> Output {
 
 /// A temporary folder to run `kb` in. Without a `.brain` of its own, `kb` takes the nearest one above it rather than
 /// the central brain the test gives: one above the temporary folders (`TMPDIR` inside a repository using kanbrain)
-/// would take the test's writes, so the test stops before any.
+/// would take the test's writes, so the test stops before any. Looked for from the folder's real path, as `kb` finds it
+/// from the current directory: a `TMPDIR` that's a link into such a folder would hide it.
 fn tempdir() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
-    if let Some(above) = dir.path().ancestors().skip(1).map(|d| d.join(".brain")).find(|brain| brain.is_dir()) {
+    let real = dir.path().canonicalize().unwrap();
+    if let Some(above) = real.ancestors().skip(1).map(|d| d.join(".brain")).find(|brain| brain.is_dir()) {
         panic!("{} is above the temporary folders and would take kb's writes: set TMPDIR elsewhere", above.display());
     }
     dir
