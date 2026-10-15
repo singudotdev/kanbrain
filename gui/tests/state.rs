@@ -1143,6 +1143,28 @@ fn the_form_suggests_only_the_tags_containing_the_one_typed() {
 }
 
 #[test]
+fn pasting_or_cutting_in_the_tags_field_highlights_as_typing_does() {
+    let mut f = Fixture::new(&["login bug", "slow page"]);
+    let brain = f.board.brain_mut(0);
+    brain.update(1, "login bug", vec!["auth".into(), "prod".into()]).unwrap();
+    brain.update(2, "slow page", vec!["perf".into(), "prod".into()]).unwrap();
+    let sel = |f: &Fixture| {
+        let Mode::Form(form) = &f.board.mode else { panic!("the form is open") };
+        form.tag_sel.map(|at| f.board.form_tags(form).1[at].0.clone())
+    };
+    f.press(KeyCode::Char('n'));
+    f.type_text("x");
+    f.press(KeyCode::Tab);
+    f.board.paste("pe");
+    assert_eq!(sel(&f).as_deref(), Some("perf"), "pasted, the start of a tag is highlighted");
+    f.board.select_all();
+    assert_eq!(f.board.cut().as_deref(), Some("pe"));
+    assert_eq!(sel(&f), None, "cut, nothing is typed: enter saves");
+    f.board.paste("prod");
+    assert_eq!(sel(&f), None, "a whole tag pasted: enter saves it as typed");
+}
+
+#[test]
 fn the_form_picks_tags_from_its_list() {
     let mut f = Fixture::new(&["login bug", "slow page"]);
     let brain = f.board.brain_mut(0);
