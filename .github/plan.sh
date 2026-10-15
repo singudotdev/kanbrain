@@ -13,15 +13,22 @@ out=${GITHUB_OUTPUT:-/dev/stdout}
 tree=$(git rev-parse 'HEAD^{tree}')
 echo "tree=$tree" >>"$out"
 
-# What the change is measured from. A pull request is checked out as its merge into the base: the commit's first
-# parent is the base as it is now. A push, from the last commit on its branch whose run of this workflow passed, so a
-# push after a failing one still checks what that one brought; else from the push before it.
-if [ "${GITHUB_EVENT_NAME:-}" = pull_request ]; then
-  base=$(git rev-parse HEAD^1)
-else
-  base=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow.yml" --branch "$GITHUB_REF_NAME" --event push \
+# What the change is measured from: the last commit on the branch whose push run of this workflow passed, so what a
+# failing push brought is still checked, by the push after it or by a pull request into that branch. A pull request
+# is checked out as its merge into the base; with no passing commit there (a branch CI doesn't push-run), all jobs
+# run. A push without one is measured from the push before it.
+# Whether the last passing push run on branch `$1` checked an ancestor of HEAD: its commit.
+passed_on() {
+  local sha
+  sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow.yml" --branch "$1" --event push \
     --status success --limit 1 --json headSha --jq '.[0].headSha // empty')
-  if [ -z "$base" ] || ! git merge-base --is-ancestor "$base" HEAD 2>/dev/null; then base=${BEFORE:-}; fi
+  if [ -n "$sha" ] && git merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then echo "$sha"; fi
+}
+if [ "${GITHUB_EVENT_NAME:-}" = pull_request ]; then
+  base=$(passed_on "$GITHUB_BASE_REF")
+else
+  base=$(passed_on "$GITHUB_REF_NAME")
+  base=${base:-${BEFORE:-}}
 fi
 echo "base=$base" >>"$out"
 
@@ -33,13 +40,15 @@ while read -r run; do
     echo "tree $tree passed in run $run"
     break
   fi
+  # Only this repository's runs: a fork's pull request runs its own workflow, which could leave the artifact unchecked.
 done < <(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$workflow-tree-$tree&per_page=20" \
-  --jq '.artifacts[].workflow_run.id')
+  --jq '.artifacts[].workflow_run | select(.head_repository_id == .repository_id) | .id')
 
 all=false
 case "${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-}}" in release/*) all=true ;; esac
 if [ -n "$base" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then
-  changed=$(git diff --name-only "$base" HEAD)
+  # Both sides of a rename: the old path is what a job may check (a file built in, moved away).
+  changed=$(git diff --name-only --no-renames "$base" HEAD)
   echo "changed since $base:"
   while IFS= read -r file; do echo "  $file"; done <<<"$changed"
 else
@@ -61,7 +70,8 @@ fi
 
 # Files built into the programs (`include_str!`, `include_bytes!`, core/build.rs) count as their code.
 core='^(core/|tag-changelog/|install\.sh$|docs/(agents|cli)\.md$|docs/images/logo\.svg$)'
-cli='^cli/'
+# A test reads the README, as the crate's README must list the same commands.
+cli='^(cli/|README\.md$)'
 gui='^(gui/|docs/keybindings\.md$|docs/images/logo\.svg$)'
 xtask='^(xtask/|about\.toml$)'
 scripts='\.(sh|ps1)$'
