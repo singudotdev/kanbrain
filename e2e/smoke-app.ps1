@@ -13,7 +13,8 @@ $ErrorActionPreference = 'Stop'
 $idleLimit = 3
 $work = Join-Path ([IO.Path]::GetTempPath()) "kb-smoke-$(Get-Random)"
 $env:KANBRAIN_DIR = Join-Path $work 'central'
-foreach ($var in 'CLAUDECODE', 'AI_AGENT', 'AGENT', 'KANBRAIN_AUTHOR') { Remove-Item "Env:$var" -ErrorAction SilentlyContinue }
+$agentVars = 'CLAUDECODE', 'AI_AGENT', 'AGENT', 'CODEX_SANDBOX', 'CODEX_CI', 'CODEX_THREAD_ID', 'GEMINI_CLI', 'KANBRAIN_AUTHOR'
+foreach ($var in $agentVars) { Remove-Item "Env:$var" -ErrorAction SilentlyContinue }
 New-Item -ItemType Directory -Force -Path $env:KANBRAIN_DIR, $Out | Out-Null
 $process = $null
 

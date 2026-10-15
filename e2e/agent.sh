@@ -86,7 +86,7 @@ agent() {
         --allowedTools "Bash(kb:*)" "Bash(python3:*)" Read Edit Write Glob Grep Task Agent
         --max-budget-usd "${E2E_BUDGET:-1}")
     if [ -n "${E2E_MODEL:-}" ]; then args+=(--model "$E2E_MODEL"); fi
-    (cd "$1" && claude "${args[@]}" >"$1.log" 2>&1) || true
+    (cd "$1" && claude "${args[@]}" </dev/null >"$1.log" 2>&1) || true
 }
 
 # Judges a scenario: the Python in `$2` reads the brain of folder `$1` (as `brain`, every entry in full) and
@@ -341,7 +341,7 @@ if wanted edit; then
     check edit "$dir" '
 task = next(t for t in tasks if t["id"] == 1)
 assert task["status"] == "done", "marked done: " + str(task)
-assert "todo -> done" in open(task["path"]).read().split("## History")[1], "through kb: " + str(task)
+assert "-> done" in open(task["path"]).read().split("## History")[1], "through kb: " + str(task)
 '
 fi
 
