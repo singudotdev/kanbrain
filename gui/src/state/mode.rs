@@ -505,9 +505,8 @@ pub struct Edit {
     /// For a comment, the entry's comments when the editor opened: one deleted, moved or edited meanwhile may put
     /// another at its index, which comments written in one second, with one text, don't tell apart.
     pub comments: Vec<Comment>,
-    /// For a verdict, where the decision stood when the editor opened, or as a save that stopped to ask found it:
-    /// `kb` deciding meanwhile isn't overturned unseen. A stop over the verdict being given leaves it, so it stops
-    /// every time.
+    /// For a verdict, where the decision stood when the editor opened, or as the last save that stopped found it:
+    /// `kb` deciding meanwhile isn't overturned unseen.
     pub decision: Option<DecisionState>,
     /// The entry's status when the editor opened: an agent may have finished or parked the task meanwhile.
     pub status: Option<Status>,

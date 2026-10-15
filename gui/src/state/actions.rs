@@ -296,7 +296,7 @@ impl Board {
         };
         if let Some((key, verb, verdict, word)) = giving
             && let Some(now) = self.task(key).map(|t| t.decision)
-            && Some(now) != edit.decision
+            && (Some(now) != edit.decision || now == verdict)
         {
             let was = match now {
                 DecisionState::Proposed => "proposed again",
@@ -304,13 +304,13 @@ impl Board {
             };
             let name = self.entry_name(key);
             // Given the verdict the user was writing, `resolve` does nothing: the text would be lost while saying
-            // it's done.
+            // it's done. Where it stood is kept all the same, so a change after it stops the save again.
             if now == verdict {
                 self.notify(format!("{name} was {was} meanwhile: copy your {word}, then ctrl+d"));
             } else {
-                edit.decision = Some(now);
                 self.notify(format!("{name} was {was} meanwhile: save again to {verb} it anyway, ctrl+d to leave it"));
             }
+            edit.decision = Some(now);
             self.mode = Mode::Edit(edit);
             return;
         }
