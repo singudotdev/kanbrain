@@ -298,7 +298,8 @@ fn init_all_renames_a_project_a_version_before_0_4_0_named_as_no_project_can_be_
 #[test]
 fn init_all_renames_a_lone_central_project_and_one_with_a_slash() {
     use std::fmt::Write;
-    for name in ["Central", "shop/web", ":"] {
+    // A lone `\r`: before 0.5.0 a name could have one (`kb init "$(printf 'shop\rapi')"`).
+    for name in ["Central", "shop/web", ":", "shop\rapi"] {
         let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let root = code.path().join("api");
         fs::create_dir(&root).unwrap();
