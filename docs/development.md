@@ -474,12 +474,13 @@ needs it (see below):
   (`e2e/smoke-app.sh`, `e2e/smoke-app.ps1`)
 
 Each job runs only when the change touches what it checks: a first `plan` job (`.github/plan.sh`) compares the
-change with the pull request's base, or a push with the last commit on its branch whose run passed.
+change, a rename's both paths, with the last commit on the branch (pushed to, or a pull request's base) whose push
+run passed; with none in a pull request's base, every job runs.
 
 | Changed | Jobs |
 |---|---|
 | `core/`, or a file built into it (`tag-changelog/`, `install.sh`, `docs/agents.md`, `docs/cli.md`, the logo) | all but the licenses |
-| `cli/` | lints, tests, minimum Rust version, installers, upgrade |
+| `cli/`, or the README (a test reads its commands) | lints, tests, minimum Rust version, installers, upgrade |
 | `gui/`, or `docs/keybindings.md` | lints, tests, the app started |
 | `xtask/` | lints, licenses |
 | a script (`*.sh`, `*.ps1`) | the installers (with `shellcheck` and PSScriptAnalyzer); `e2e/upgrade.sh` and `e2e/smoke-app.*` their own job too |
@@ -488,7 +489,8 @@ change with the pull request's base, or a push with the last commit on its branc
 
 Mutation testing runs when Rust lines changed, whatever the folder.
 
-A `release/*` branch runs everything. A tree a passing run already checked runs nothing again: the squash of a pull
+A `release/*` branch runs everything, unless its tree was checked already. A tree a passing run of this repository
+(not a fork's pull request, which runs its own workflow) already checked runs nothing again: the squash of a pull
 request into `develop`, of a release into `main`, or a commit only re-signed, holds the tree its pull request passed
 with. Each run keeps an artifact named after its tree (`ci-tree-…`, `mutants-tree-…`, 90 days) for a later run to find.
 
