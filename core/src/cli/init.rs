@@ -67,9 +67,9 @@ The user follows them live on a kanban board: keep it showing what you're doing 
   picture changes (a service added, another storage), not after every change. With several repositories, this
   one's role too: `project notes -`. How to build, test and run this repository, and its code style, go in this
   file, outside this section: add them as you learn them.
-- Also: `show ID` (one entry in full), `describe ID TEXT`, `link ID OTHER…` (an id here, or `REPO#ID` in another
-  repository of the project); `-` reads text from stdin. Never edit the files in `.brain/` by hand: `kb` keeps
-  them consistent.";
+- Also: `show ID` (one entry in full), `describe ID TEXT`, `rename ID TITLE`, `tag ID +TAG -TAG` (add or remove
+  tags), `link ID OTHER…` (an id here, or `REPO#ID` in another repository of the project); `-` reads text from
+  stdin. Never edit the files in `.brain/` by hand: `kb` keeps them consistent.";
 
 /// Makes `root` a repository of project `name` (else the one its card names, else one named after
 /// the folder), named `repo` in it (else as [`projects::repo_name`] picks): creates its `.brain/` and card,
@@ -203,9 +203,10 @@ pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central:
     Ok(done)
 }
 
-/// Renames each project a version before 0.4.0 named as none can be now (see [`projects::check_name`]): one
-/// starting with `-`, which `--project` reads as an option, `Central` in any case, which reaches the central
-/// brain, or one with `:` or `/` (a registry edited by hand). Without it, `kb init` in its repositories is refused.
+/// Renames each project an older version named as none can be now (see [`projects::check_name`]): one starting
+/// with `-`, which `--project` reads as an option, `Central` in any case, which reaches the central brain (both
+/// before 0.4.0), one with a lone `\r`, a line break to markdown (before 0.5.0), or one with `:` or `/` (a registry
+/// edited by hand). Without it, `kb init` in its repositories is refused.
 /// Returns what it did, one line each.
 fn rename_unreachable_projects(central: &Path) -> Result<Vec<String>> {
     let mut names: Vec<String> = projects::load(central)?.into_iter().map(|r| r.project).collect();
@@ -214,7 +215,7 @@ fn rename_unreachable_projects(central: &Path) -> Result<Vec<String>> {
     let unreachable: Vec<String> = names.iter().filter(|name| projects::check_name(name).is_err()).cloned().collect();
     let mut done = Vec::new();
     for old in unreachable {
-        let kept: String = old.chars().map(|c| if matches!(c, ':' | '/' | '\n') { '-' } else { c }).collect();
+        let kept: String = old.chars().map(|c| if matches!(c, ':' | '/' | '\n' | '\r') { '-' } else { c }).collect();
         let base = match kept.trim().trim_start_matches('-').trim() {
             "" => "project",
             base => base,

@@ -123,12 +123,15 @@ entry also has **Project**, the brain it goes to: the one the filter or the sele
 A new task also has a
 **Column**, To do unless you pick another: a column's `+` opens the form with that column picked, and **+ New task**
 and `n` with To do. A task created in Doing starts its clock. `tab` moves between the fields, `←` `→` pick the
-column, `enter` saves (or **Create** / **Save**), `esc` cancels.
+column, `enter` saves (or **Create** / **Save**), `esc` cancels. From the command line,
+`kb rename ID TITLE` changes an entry's title.
 
 **Related** is a search box with a dropdown: typing filters the other entries of the same brain (tasks, notes and
 decisions, by title or `#tag`), `↑` `↓` move, `enter` or a click checks or unchecks one. The checked ones show above
 the box as chips; × takes one out. Editing starts from the entry's related entries, and saving links and unlinks to
-match. In the tags field, the tags already used by entries of the same kind (task tags for a task, note tags for a
+match. Saving an edit changes only what you changed in the form: a title, tags or related entries that `kb` changed
+while it was open are kept, and tags or related entries you edited keep those added elsewhere meanwhile, without
+those taken out there. In the tags field, the tags already used by entries of the same kind (task tags for a task, note tags for a
 note) drop down below it, each with how many use it, so you can reuse the same names: those it holds are left out,
 and while you type a tag, only those containing it show, the first starting with it highlighted, or a line saying
 it'll be a new one. A click, or `↓` `↑` and `enter`, puts the tag in place of the one typed; with none highlighted (a
@@ -218,7 +221,8 @@ Tags group related work, e.g. `prod`, `support`, `meeting`, `feature`, or a clie
 - An entry can have any number of tags, or none.
 - Tags are shown wherever an entry appears: cards, lists, the details, dialogs and `kb list`.
 
-To change an entry's tags, select it and press `e` (or **Edit title and tags**).
+To change an entry's tags, select it and press `e` (or **Edit title and tags**); from the command line,
+`kb tag ID +TAG -TAG` adds or removes them.
 
 ### Tag colors
 

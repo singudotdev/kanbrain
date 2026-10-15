@@ -84,6 +84,9 @@ impl Mode {
                     FormTarget::Edit(k) => FormTarget::Edit(key(k)?),
                 };
                 form.links = form.links.into_iter().filter_map(key).collect();
+                if let Some(opened) = &mut form.opened {
+                    opened.links = std::mem::take(&mut opened.links).into_iter().filter_map(key).collect();
+                }
                 // With nothing searched its rows are the brains in order, so the row follows its brain; a search's
                 // rows shift in ways only the board knows, so it goes back to the first.
                 if let Some(picker) = &mut form.project {
@@ -168,6 +171,21 @@ pub struct Form {
     pub field: Field,
     /// Saving was tried without a title: the form says, under the field, while it's still empty.
     pub title_missed: bool,
+    /// On an edit, the entry as the form opened it, so saving changes only what was changed in the form: what `kb`
+    /// changed meanwhile is kept.
+    pub opened: Option<Opened>,
+}
+
+/// An edited entry's title, tags and related entries when its form opened. A field equal to it is unchanged in the
+/// form, however it got there, and saves what the entry has then.
+#[derive(Debug)]
+pub struct Opened {
+    /// As saved, on one line: the form's title, trimmed, is compared with it.
+    pub title: String,
+    /// As saved, lowercase and without `#`: the field's, read by `parse_tags`, are compared with them.
+    pub tags: Vec<String>,
+    /// Naming brains by index, as `Form::links` does: a change to the list of brains remaps both (`Mode::remap`).
+    pub links: Vec<Key>,
 }
 
 impl Form {
@@ -181,7 +199,11 @@ impl Form {
     /// The form for changing the title, tags and related entries of `task`, which `key` names;
     /// `related` are the ids it's related to now.
     pub fn edit(key: Key, task: &Task, related: Vec<Key>) -> Self {
-        Self::filled(FormTarget::Edit(key), &task.title, &task.tags.join(", "), related)
+        let opened = Opened { title: task.title.clone(), tags: task.tags.clone(), links: related.clone() };
+        Self {
+            opened: Some(opened),
+            ..Self::filled(FormTarget::Edit(key), &task.title, &task.tags.join(", "), related)
+        }
     }
 
     /// A form for `target` with these fields, typing into the title.
@@ -196,6 +218,7 @@ impl Form {
             project: None,
             field: Field::Title,
             title_missed: false,
+            opened: None,
         }
     }
 

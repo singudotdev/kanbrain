@@ -1,13 +1,13 @@
 //! Commands that read or change entries by id, for agents and scripts: `add`, `show`, `search`,
-//! `start`/`park`/`done`/`todo`, `comment`, `ask`, `wait`, `propose`, `accept`/`reject`, `describe`, `link`
-//! and `context`. Each prints a short confirmation, or with `--json`, the entry (or entries) as JSON.
+//! `start`/`park`/`done`/`todo`, `comment`, `ask`, `wait`, `propose`, `accept`/`reject`, `describe`, `rename`,
+//! `tag`, `link` and `context`. Each prints a short confirmation, or with `--json`, the entry (or entries) as JSON.
 
 use super::manage;
 use crate::api::ApiError;
 use crate::api::json::{Entry, Summary};
 use crate::api::text::line;
 use crate::brain::{Brain, NewEntry};
-use crate::model::{Asked, DecisionState, Kind, RepoLink, Status, Task, not_a_link, parse_links, parse_tags};
+use crate::model::{Asked, DecisionState, Kind, RepoLink, Status, Task, not_a_link, one_line, parse_links, parse_tags};
 use crate::projects::ProjectInfo;
 use anyhow::{Context, Result, anyhow, bail};
 use serde::Serialize;
@@ -45,6 +45,10 @@ pub const USAGE: &str = "\
             accept or reject a decision, with why (needed to reject); answers a question that names it (#ID)
   describe ID TEXT…|-
             replace the description
+  rename ID TITLE…
+            replace the title (and its file's name)
+  tag ID +TAG|-TAG…
+            add tags to an entry (+TAG) or remove them (-TAG), in order
   link ID OTHER…
             link an entry to others: an id here, or REPO#ID in another repository of the project
   project [describe|notes TEXT…|-]
@@ -57,6 +61,7 @@ pub const USAGE: &str = "\
 
 /// One of the entry commands, and whether to print JSON.
 #[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct EntryArgs {
     /// What to do.
     pub command: EntryCommand,
@@ -66,70 +71,115 @@ pub struct EntryArgs {
 
 /// What to do to which entry.
 #[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum EntryCommand {
     /// `add`: create an entry.
+    #[non_exhaustive]
     Add(AddArgs),
     /// `show ID`.
+    #[non_exhaustive]
     Show(u32),
     /// `search WORDS…`.
+    #[non_exhaustive]
     Search(String),
     /// `start|park|done|todo ID`.
+    #[non_exhaustive]
     SetStatus(u32, Status),
     /// `comment ID TEXT…|-`.
+    #[non_exhaustive]
     Comment(u32, Text),
     /// `ask ID TEXT…|-`: a question to the user, parking the task.
+    #[non_exhaustive]
     Ask(u32, Text),
     /// `wait ID [--timeout MINUTES]`: block until a person answers, or the time is up (`None`: never).
+    #[non_exhaustive]
     Wait(u32, Option<Duration>),
     /// `propose ID … TITLE…`: a proposed decision for the task.
+    #[non_exhaustive]
     Propose(u32, AddArgs),
     /// `accept ID [TEXT…|-]` / `reject ID TEXT…|-`: a decision accepted or rejected, and why.
+    #[non_exhaustive]
     Resolve(u32, DecisionState, Option<Text>),
     /// `describe ID TEXT…|-`.
+    #[non_exhaustive]
     Describe(u32, Text),
+    /// `rename ID TITLE…`.
+    #[non_exhaustive]
+    Rename(u32, String),
+    /// `tag ID +TAG|-TAG…`: tags added and removed, in order.
+    #[non_exhaustive]
+    Tag(u32, Vec<TagChange>),
     /// `link ID OTHER…`: ids here, and `REPO#ID` in the project's other repositories.
+    #[non_exhaustive]
     Link(u32, Vec<u32>, Vec<RepoLink>),
     /// `context`.
+    #[non_exhaustive]
     Context,
     /// `project`: show the project's description and this repository's role, or change the project.
+    #[non_exhaustive]
     Project(Option<ProjectChange>),
 }
 
 /// What `project` changes.
 #[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ProjectChange {
     /// `describe|notes TEXT…|-`: replace one of its texts.
+    #[non_exhaustive]
     Text(ProjectPart, Text),
     /// `rename NAME…`: the project's name; `true` when given after `--`, as meant whatever it starts with.
+    #[non_exhaustive]
     Rename(String, bool),
     /// `repo NAME`: this repository's name in its project.
+    #[non_exhaustive]
     Repo(String),
     /// `move PROJECT…`: this repository to another project, created if new.
+    #[non_exhaustive]
     Move(String),
     /// `remove [--purge]`: take every repository of the project out of it; `true` also deletes their tasks.
+    #[non_exhaustive]
     Remove(bool),
 }
 
 /// What `project` changes in one of its texts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ProjectPart {
     /// `describe`: the project's description, on the card all its repositories share.
+    #[non_exhaustive]
     Description,
     /// `notes`: this repository's role among the project's, in its `.brain/project.md`.
+    #[non_exhaustive]
     Notes,
+}
+
+/// A change `tag` makes to an entry's tags.
+#[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum TagChange {
+    /// `+TAG`: added after its others, unless it has it.
+    #[non_exhaustive]
+    Add(String),
+    /// `-TAG`: removed, if it has it.
+    #[non_exhaustive]
+    Remove(String),
 }
 
 /// Text given on the command line, or `-` to read it from stdin (for multi-line markdown).
 #[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Text {
     /// The words after the id, joined by spaces.
+    #[non_exhaustive]
     Given(String),
     /// Read stdin to the end.
+    #[non_exhaustive]
     Stdin,
 }
 
 /// Options of `add`.
 #[derive(Debug, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub struct AddArgs {
     /// `--note` / `--decision`; a task otherwise.
     pub kind: Kind,
@@ -161,6 +211,8 @@ impl EntryArgs {
             | EntryCommand::Search(_)
             | EntryCommand::SetStatus(..)
             | EntryCommand::Wait(..)
+            | EntryCommand::Rename(..)
+            | EntryCommand::Tag(..)
             | EntryCommand::Link(..)
             | EntryCommand::Context
             | EntryCommand::Project(_) => None,
@@ -237,6 +289,14 @@ impl EntryArgs {
                 let (id, text) = id_and_text(&mut rest, "describe needs the description")?;
                 EntryCommand::Describe(id, text)
             }
+            ("rename", None) => {
+                let id = first_id(&mut rest)?;
+                EntryCommand::Rename(id, new_title(std::mem::take(&mut rest))?)
+            }
+            ("tag", None) => {
+                let id = first_id(&mut rest)?;
+                EntryCommand::Tag(id, tag_changes(std::mem::take(&mut rest))?)
+            }
             ("link", None) => {
                 let id = first_id(&mut rest)?;
                 let (others, repo_links) = typed_links(&std::mem::take(&mut rest).join(" "))?;
@@ -300,6 +360,18 @@ impl EntryArgs {
             }
             EntryCommand::Describe(id, text) => {
                 brain.set_description(id, &text.read()?)?;
+                id
+            }
+            EntryCommand::Rename(id, title) => {
+                if !retitle(&mut brain, id, &title)? {
+                    eprintln!("#{id} already had that title: nothing changed");
+                }
+                id
+            }
+            EntryCommand::Tag(id, changes) => {
+                if !retag(&mut brain, id, &changes)? {
+                    eprintln!("#{id}'s tags were already so: nothing changed");
+                }
                 id
             }
             EntryCommand::Link(id, others, repo_links) => {
@@ -413,6 +485,86 @@ fn typed_links(value: &str) -> Result<(Vec<u32>, Vec<RepoLink>)> {
         bail!("`{word}` isn't an entry id (12 or #12) or another repository's entry (REPO#ID)");
     }
     Ok(parse_links(value))
+}
+
+/// The words after `rename`'s id as the title, as `add` takes its own: `--` makes every word after it the title's,
+/// however it starts.
+fn new_title(words: Vec<String>) -> Result<String> {
+    let mut title = Vec::new();
+    let mut words = words.into_iter();
+    while let Some(word) = words.next() {
+        match word.as_str() {
+            "--" => title.extend(words.by_ref()),
+            other if other.starts_with("--") => bail!("unknown rename option `{other}`"),
+            _ => title.push(word),
+        }
+    }
+    let title = title.join(" ");
+    if title.trim().is_empty() {
+        bail!("rename needs the new title");
+    }
+    Ok(title)
+}
+
+/// Saves `title`, on one line, as entry `id`'s, as the kanban app's form does (its file is renamed after it); returns
+/// whether it changed, as nothing is written when it didn't.
+fn retitle(brain: &mut Brain, id: u32, title: &str) -> Result<bool> {
+    let entry = brain.entry(id)?;
+    let title = one_line(title);
+    if title == entry.title {
+        return Ok(false);
+    }
+    let tags = entry.tags.clone();
+    brain.update(id, &title, tags)?;
+    Ok(true)
+}
+
+/// What `tag` says a word after the id has to be.
+const TAG_SIGNS: &str = "+TAG adds a tag, -TAG removes one";
+
+/// The words after `tag`'s id as changes, in order. A word may name several tags (`+ui,#bug`), read as `add --tag`
+/// reads them.
+fn tag_changes(words: Vec<String>) -> Result<Vec<TagChange>> {
+    let mut changes = Vec::new();
+    for word in words {
+        let change = match word.as_bytes() {
+            // Not an option `--` ends: `tag` takes no text.
+            [b'-', b'-'] => bail!("unexpected argument `--`"),
+            [b'-', b'-', ..] => bail!("unknown tag option `{word}`: {TAG_SIGNS}"),
+            [b'+', ..] => TagChange::Add,
+            [b'-', ..] => TagChange::Remove,
+            _ => bail!("`{word}`: {TAG_SIGNS}"),
+        };
+        let tags = parse_tags(&word[1..]);
+        if tags.is_empty() {
+            bail!("`{word}` names no tag");
+        }
+        changes.extend(tags.into_iter().map(change));
+    }
+    if changes.is_empty() {
+        bail!("tag needs what to change: {TAG_SIGNS}");
+    }
+    Ok(changes)
+}
+
+/// Makes `changes` to entry `id`'s tags and saves them as the kanban app's form does, colors included; returns
+/// whether they changed, as nothing is written when they didn't.
+fn retag(brain: &mut Brain, id: u32, changes: &[TagChange]) -> Result<bool> {
+    let entry = brain.entry(id)?;
+    let mut tags = entry.tags.clone();
+    for change in changes {
+        match change {
+            TagChange::Add(tag) if !tags.contains(tag) => tags.push(tag.clone()),
+            TagChange::Add(_) => {}
+            TagChange::Remove(tag) => tags.retain(|t| t != tag),
+        }
+    }
+    if tags == entry.tags {
+        return Ok(false);
+    }
+    let title = entry.title.clone();
+    brain.update(id, &title, tags)?;
+    Ok(true)
 }
 
 /// The first argument as an entry id (`12` or `#12`).

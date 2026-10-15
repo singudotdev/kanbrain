@@ -59,6 +59,8 @@ context: write commands reply with one line, like `#4 Fix login 500 (doing) #aut
 | `kb propose ID [--body TEXT\|-] TITLE` | propose a decision for a task, for the user to accept or reject |
 | `kb accept ID [TEXT]` / `kb reject ID TEXT` | accept or reject a decision, which answers the tasks waiting on it |
 | `kb describe ID TEXT` | replace the description |
+| `kb rename ID TITLE` | replace the title |
+| `kb tag ID +TAG\|-TAG…` | add tags to an entry, or remove them |
 | `kb link ID OTHER…` | link entries to each other (`REPO#ID`: in another repository of the project) |
 | `kb project [describe\|notes TEXT\|-]` | show or rewrite the project's description and this repository's role |
 | `kb project rename\|repo\|move\|remove` | rename the project or this repository, move it to another project, or remove the project |

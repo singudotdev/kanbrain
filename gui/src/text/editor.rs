@@ -360,15 +360,15 @@ impl LineInput {
     }
 
     /// Inserts `text` at the cursor, in place of the selection if any (for typing and pasting).
-    /// Newlines and tabs become spaces and other control characters are dropped: the input is one line.
-    /// Returns whether the text changed.
+    /// Line breaks (`\n`, `\r\n` or a lone `\r`, as markdown reads them) and tabs become spaces and other control
+    /// characters are dropped: the input is one line. Returns whether the text changed.
     pub fn insert(&mut self, text: &str) -> bool {
         let deleted = self.delete_selection();
         let text: String = text
+            .replace("\r\n", "\n")
             .chars()
             .filter_map(|c| match c {
-                '\n' | '\t' => Some(' '),
-                '\r' => None,
+                '\n' | '\r' | '\t' => Some(' '),
                 c if c.is_control() => None,
                 c => Some(c),
             })

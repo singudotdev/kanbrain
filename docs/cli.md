@@ -25,7 +25,7 @@ kb status    print the running tasks, in whichever project, and how many wait fo
 kb report [hour|day|week|month] [--group task|tag] [--tag TAG] [--save]
                  print the current period's tracked time as markdown
 kb add | show | search | start | park | done | todo | comment | ask | wait | propose | accept | reject
-   | describe | link | project | context
+   | describe | rename | tag | link | project | context
                  entries by id, for agents and scripts (see For coding agents)
 kb path      print the data directory in use (a project's .brain/ inside it)
 kb update    install the latest release over this one (and the other app, if it's beside it)

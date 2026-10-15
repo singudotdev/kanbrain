@@ -225,7 +225,7 @@ pub fn repo_name(central: &Path, project: &str, dir: &Path, wanted: Option<&str>
 /// repository, so they're one line without `:` or `/`, and not the central brain's name.
 pub fn check_name(name: &str) -> Result<()> {
     // Nor start with `-`: typed after `project rename` or `move`, it's an option mistyped, not a name.
-    if name.trim().is_empty() || name.contains([':', '/', '\n']) || name.trim() != name || name.starts_with('-') {
+    if name.trim().is_empty() || name.contains([':', '/', '\n', '\r']) || name.trim() != name || name.starts_with('-') {
         bail!(
             "`{name}` can't be a project name: it needs to be one line, without `:`, `/`, surrounding spaces or a \
              leading `-`"

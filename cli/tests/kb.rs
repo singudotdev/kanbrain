@@ -138,6 +138,73 @@ fn an_empty_stdin_for_a_dash_is_refused_and_overwrites_nothing() {
 }
 
 #[test]
+fn tag_adds_and_removes_and_says_when_nothing_changed() {
+    let (central, dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let run = |args: &[&str]| kb(dir.path(), central.path(), args, "");
+    ok(&run(&["add", "--tag", "auth", "Fix", "login"]));
+    let changed = run(&["tag", "1", "+bug", "-auth"]);
+    assert_eq!(ok(&changed), "#1 Fix login (todo) #bug\n");
+    assert!(changed.stderr.is_empty(), "a change says nothing more");
+    let same = run(&["tag", "1", "+bug"]);
+    assert_eq!(String::from_utf8_lossy(&same.stderr), "#1's tags were already so: nothing changed\n");
+    assert_eq!(ok(&same), "#1 Fix login (todo) #bug\n", "stdout keeps the entry's line");
+    let json = ok(&run(&["tag", "1", "--json", "-bug"]));
+    assert!(json.starts_with("{\"id\":1,") && json.contains(r#""tags":[]"#), "{json}");
+    let misused = String::from_utf8(run(&["tag", "1", "bug"]).stderr).unwrap();
+    assert!(misused.contains("usage:\n  kb tag ID +TAG|-TAG…\n"), "{misused}");
+}
+
+#[test]
+fn rename_changes_the_title_and_says_when_nothing_changed() {
+    let (central, dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let run = |args: &[&str]| kb(dir.path(), central.path(), args, "");
+    ok(&run(&["add", "--tag", "auth", "Fix", "login"]));
+    let changed = run(&["rename", "1", "Fix", "the", "SSO", "login"]);
+    assert_eq!(ok(&changed), "#1 Fix the SSO login (todo) #auth\n");
+    assert!(changed.stderr.is_empty(), "a change says nothing more");
+    let same = run(&["rename", "#1", "Fix", "the", "SSO", "login"]);
+    assert_eq!(String::from_utf8_lossy(&same.stderr), "#1 already had that title: nothing changed\n");
+    assert_eq!(ok(&same), "#1 Fix the SSO login (todo) #auth\n", "stdout keeps the entry's line");
+    let json = ok(&run(&["rename", "1", "--json", "Fix", "SSO"]));
+    assert!(json.starts_with("{\"id\":1,") && json.contains(r#""title":"Fix SSO""#), "{json}");
+    let misused = String::from_utf8(run(&["rename", "1"]).stderr).unwrap();
+    assert!(misused.contains("usage:\n  kb rename ID TITLE…\n"), "{misused}");
+}
+
+/// What bash's completion of `kb` offers for `line` (its last word being completed), in `dir`.
+#[cfg(unix)]
+fn bash_completes(dir: &Path, central: &Path, line: &[&str]) -> String {
+    let bin = Path::new(env!("CARGO_BIN_EXE_kb")).parent().unwrap();
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
+    // `eval`, not `source <(…)`, which macOS's bash 3.2 reads as empty.
+    let script =
+        r#"eval "$(kb completions bash)"; COMP_WORDS=("$@"); COMP_CWORD=$(($# - 1)); _kb; echo "${COMPREPLY[*]}""#;
+    let output = Command::new("bash")
+        .args(["-c", script, "bash"])
+        .args(line)
+        .current_dir(dir)
+        .env("KANBRAIN_DIR", central)
+        .env("PATH", path)
+        .output()
+        .unwrap();
+    ok(&output).trim_end().to_string()
+}
+
+#[cfg(unix)]
+#[test]
+fn bash_completes_tag_with_the_id_then_signed_tags() {
+    let (central, dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    ok(&kb(dir.path(), central.path(), &["add", "--tag", "ui", "--tag", "bug", "Fix", "login"], ""));
+    let completes = |line: &[&str]| bash_completes(dir.path(), central.path(), line);
+    assert_eq!(completes(&["kb", "tag", ""]), "1", "the id first");
+    assert_eq!(completes(&["kb", "tag", "--project", "central", ""]), "1", "options aren't the id");
+    assert_eq!(completes(&["kb", "tag", "1", ""]), "+bug -bug +ui -ui");
+    assert_eq!(completes(&["kb", "tag", "1", "+ui", "-b"]), "-bug");
+    assert_eq!(completes(&["kb", "show", ""]), "1");
+    assert_eq!(completes(&["kb", "rename", ""]), "1");
+}
+
+#[test]
 fn words_that_look_like_options_are_text_after_a_double_dash_or_inside_it() {
     let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let run = |args: &[&str], stdin: &str| kb(repo.path(), central.path(), args, stdin);

@@ -42,6 +42,9 @@ fn a_title_written_over_several_lines_reads_back_as_one() {
     assert_eq!(task.tags, ["api"]);
     let again = Task::from_markdown(&task.to_markdown()).unwrap();
     assert_eq!(again.title, task.title, "saved on one line");
+    // A lone carriage return, which versions before 0.5.0 kept in a title: a line break, as markdown reads it.
+    let task = Task::from_markdown("# Plan\rold\r\rMac\n\n- id: 5\n").unwrap();
+    assert_eq!(task.title, "Plan old Mac");
 }
 
 #[test]

@@ -5,6 +5,46 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-15
+
+### Added
+
+- `kb tag ID +TAG|-TAG…` adds tags to an entry or removes them, in order, as the kanban app's form saves them
+  (`Brain::update`, tag colors included); tags already so write nothing and say `nothing changed` on stderr
+  (`cli::entries::retag`). With `--json`, and tab completion of `+TAG` and `-TAG` in bash, zsh and fish. The agents'
+  section names it (`init --all`).
+- `kb rename ID TITLE…` replaces an entry's title, as the kanban app's form saves it (`Brain::update`: on one line,
+  its file renamed after it); the same title writes nothing and says `nothing changed` on stderr
+  (`cli::entries::retitle`). With `--json`, `--` before a title that starts with `--`, and tab completion of the id.
+  The agents' section names it (`init --all`).
+
+### Changed
+
+- **Breaking:** for `kanbrain-core`'s Rust API only, what the command line parses to is `#[non_exhaustive]`:
+  `cli::Command`, `cli::EntryCommand`, `cli::ProjectChange`, `cli::ProjectPart`, `cli::TagChange` and `cli::Text`
+  and each of their variants, `cli::EntryArgs`, `cli::AddArgs`, `cli::ListArgs` and `cli::ReportArgs`. A new
+  command, or a new option of one, is no longer a breaking change of the crate; outside it, a `match` on them needs
+  `_` and `..`, and only the crate builds them. `kb`, the kanban app and the data are unchanged, and nothing needs
+  migrating.
+
+### Fixed
+
+- Fish's tab completion goes by the command, the first word after `kb` that isn't an option, as bash's and zsh's do
+  (`__kb_words`, `__kb_using` in `kb completions fish`): it went by any word on the line, so `kb project rename `,
+  `kb list todo ` or `kb add Fix the show ` offered ids, `kb project describe ` the project's words again, and
+  `kb --project central ` no command. `kb report ` offers the periods, which were offered as `--save`'s value.
+- The kanban app's edit form saves only what was changed in it, over the entry as it is then (`Form::opened`,
+  `form::merged`): a title, tags or related entries that `kb` changed while it was open (`kb rename`, `kb tag`,
+  `kb link`) were written back as the form had found them, even saved untouched. Tags and related entries edited
+  in it keep those added elsewhere meanwhile, without those taken out; an edited title replaces the one `kb` gave
+  it.
+- A lone carriage return (`\r`, as `kb add "$(printf 'a\rb')"` gives) is a line break in a title, as markdown
+  reads it: it becomes a space like a line feed does, typed (`model::one_line`), pasted into the kanban app
+  (`LineInput::insert`, which dropped it) or already in a file (`Task::from_markdown`). It was kept, so the file's
+  `# ` line read as two lines to markdown, and `kb list` printed it raw. A project name with one is refused, as
+  with a line feed (`projects::check_name`); `kb init --all`, which `kb update` runs, renames one an older version
+  registered, its `\r` made a `-` (`cli::init::rename_unreachable_projects`).
+
 ## [0.4.2] - 2026-10-15
 
 ### Added
@@ -340,7 +380,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/singudotdev/kanbrain/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/singudotdev/kanbrain/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/singudotdev/kanbrain/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/singudotdev/kanbrain/compare/v0.3.5...v0.4.0
