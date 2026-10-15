@@ -14,6 +14,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   (`Board::after_load`, `Edit::changed_on_disk`, `Form::changed_on_disk`). What a read finds (this, or a file
   skipped) is said once, so the key that read for doesn't replace it: its message goes beside it (`#1 saved · #1's
   status changed on disk`; `Board::notify_found`).
+- Opening the edit form, the description or a comment of a task an agent has in doing says so in the status bar
+  (`#1 is being worked on by an agent`): what's saved may cross what it writes next. It only warns; a new comment, how
+  to tell the agent, doesn't (`Board::say_agent_working`).
 
 ### Changed
 

@@ -8,7 +8,7 @@ use crate::text::editor::{LineInput, TextEditor};
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveTime};
 use kanbrain_core::cli::update;
-use kanbrain_core::model::{Comment, DecisionState, Kind, Status};
+use kanbrain_core::model::{Author, Comment, DecisionState, Kind, Status};
 use kanbrain_core::period::{Period, Unit};
 use kanbrain_core::store::{self, Change};
 use std::path::Path;
@@ -170,6 +170,18 @@ impl Board {
         };
         let status = target.key().and_then(|key| self.task(key)).map(|t| t.status);
         self.mode = Mode::Edit(Edit { editor, target, back, base, comments, decision, status, changed_on_disk: false });
+        // A new comment crosses nothing the agent writes: it's how to tell it.
+        if let Target::Description(key) | Target::Comment(key, _) = target {
+            self.say_agent_working(key);
+        }
+    }
+
+    /// Says, on opening the form or an editor on a task an agent has in doing, that it's being worked on: what's
+    /// saved may cross what the agent writes next. It only warns, since the user may be correcting the agent.
+    pub(super) fn say_agent_working(&mut self, key: Key) {
+        if self.task(key).is_some_and(|t| t.is_task() && t.status == Status::Doing && t.started_by() == Author::Agent) {
+            self.notify(format!("{} is being worked on by an agent", self.entry_name(key)));
+        }
     }
 
     /// Whether the comment at the editor's index is still the one it opened on: the others are as they were, but
