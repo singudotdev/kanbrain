@@ -247,7 +247,7 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
     ├── dropdown.rs  dropdowns with a search box (the project filter and the tag filters), and the list and row every dropdown and picker is built from
     ├── widgets.rs   buttons, segmented controls, text fields, tag chips, cards, tooltips
     ├── pointer.rs   the mouse in text fields and the editor: place the cursor, drag to select, double/triple-click, middle-click paste
-    ├── caret.rs     the text cursor: a thin line drawn over the text, blinking (`Blink`, restarted on every input)
+    ├── caret.rs     the text cursor: a thin line drawn over the text, blinking (`Blink`, restarted on every input); a one-line field scrolled to keep it in view (`keep_in_view`)
     └── theme.rs     colors, fonts, status colors, styled text
 
 core/tests/, gui/tests/, xtask/tests/   each crate's tests (see Tests)
@@ -359,7 +359,7 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | --- | --- |
 | `brain` | status history, columns, one person's task in doing and agents' unlimited (a second start refused, loading parks the extra ones), sessions, comments, links, renames and deletes, ids never given twice, moving to another brain, reports, the calendar's days and filters, the decision template |
 | `api`, `cli` | agent operations and their refusals, links to other repositories, compact text and JSON, `context`'s caps, command parsing, `--project`, `list` output, usage, completion scripts and candidates, which apps `update` installs and where (a macOS bundle's folder), whether a release is newer, an update waiting for agents' tasks in doing and not a person's |
-| `cli::init` | the agent section written, updated in place and left alone when unclosed; `init --all` updating every registered repository that has it, and no other; registering repositories and joining them into a project; `deinit` taking it all back but `.brain/`; the Claude Code hooks added once beside other settings, and removed leaving them as they were; `kb hook` asking with every prompt and holding the turn once while the project or this repository's role isn't described, and silent once they are |
+| `cli::init` | the agent section written, updated in place and left alone when unclosed; `init --all` updating every registered repository that has it, and no other; registering repositories and joining them into a project; `deinit` taking it all back but `.brain/`; the Claude Code hooks added once beside other settings, and removed leaving them as they were; `kb hook` asking with every prompt and reminding once a turn while the project or this repository's role isn't described, and of a task an agent started and left uncommented, and silent once they are; `kb hook edit` refusing a write to a brain's file, through a link or a `..` too, and leaving a notes vault's own files and a repository kept in the central brain to the agent |
 | `projects` | the registry and its labels, cards, moving a repository between projects, refusing two repositories with one name |
 | `migrate` | every format after the first having its step; an old brain backed up, then migrated step by step and only once, resuming from where it is; a brain in a newer format refused, read or written |
 | `cli::manage` | two folders named alike getting distinct repository names (`--repo` refused when taken); renaming a repository rewriting its siblings' links; renaming a project with its card and repositories; moving a repository dropping its links to the old project; removing keeping or deleting the tasks, and a whole project |
@@ -407,7 +407,7 @@ links within a brain and across repositories, unicode and markdown. This build t
 file, shows every entry as the old version did, field by field (it may add fields), and runs `init --all` and writes.
 Releases that took the names v0.4.0 refuses also write a project named `-dash`, one named `Central` and a repository
 named `-docs`, which `init --all` must rename to `dash`, `Central-project` and `docs` with their tasks; at least one
-release must have written each. A tag whose release isn't published yet is skipped. CI runs it on every push; locally it
+release must have written each. A tag whose release isn't published yet is skipped. CI runs it when a change touches it; locally it
 needs curl, git, python3 and the tags.
 
 ### The app, started
@@ -444,6 +444,7 @@ Code headless on small throwaway projects, one per scenario, and judges what lan
 | `parallel` | asked for three independent changes by subagents, gives each its own task, running at once, each commented on |
 | `repos` | with two repositories, leaves the other one's work there as a task, linked to the task here |
 | `resume` | in a new session, picks up the task that was running, from its last comment |
+| `edit` | without the section, told to edit a task's file in `.brain/`, is refused by the hook and marks it done with `kb` |
 
 It calls the model, so it costs money (`E2E_BUDGET` dollars per scenario at most, 1 by default) and takes minutes,
 and an agent's choices vary between runs: run it by hand before a release that changes what agents are told (the
