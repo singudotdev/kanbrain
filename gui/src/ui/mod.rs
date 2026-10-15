@@ -353,9 +353,10 @@ impl BrainView {
     /// board's read and its save, nor the board over it. Released before `after_input`, which may run
     /// `$EDITOR` for as long as the user edits.
     fn locked<T>(&mut self, input: impl FnOnce(&mut Self) -> T) -> T {
-        let mut locks = self.board.lock_brains();
+        let mut tried = Vec::new();
+        let mut locks = self.board.lock_brains(&mut tried);
         self.catch_up();
-        self.board.lock_found_brains(&mut locks);
+        self.board.lock_found_brains(&mut locks, &mut tried);
         let result = input(self);
         self.watcher.sync(self.board.watched_dirs());
         drop(locks);

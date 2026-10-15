@@ -51,8 +51,9 @@ pub fn caret(text: &StyledText, index: usize, field: Option<ScrollHandle>) -> im
 }
 
 /// Scrolls one-line `field` sideways, as little as needed, for the cursor at `x` to show inside it; the frame
-/// after this one draws it there.
-fn keep_in_view(field: &ScrollHandle, x: Pixels, window: &mut Window) {
+/// after this one draws it there. No further than the field scrolls: at the end of a long line its border leaves the
+/// cursor a pixel short of `INSET`, and asking for more, clamped back every frame, redrew it for ever.
+fn keep_in_view(field: &ScrollHandle, x: Pixels, window: &Window) {
     let bounds = field.bounds();
     let (left, right) = (bounds.left() + INSET, bounds.right() - INSET);
     let shift = if x > right {
@@ -66,7 +67,11 @@ fn keep_in_view(field: &ScrollHandle, x: Pixels, window: &mut Window) {
         return;
     }
     let offset = field.offset();
-    field.set_offset(point((offset.x + shift).min(px(0.)), offset.y));
+    let to = (offset.x + shift).clamp(-field.max_offset().x, px(0.));
+    if (to - offset.x).abs() <= SLACK {
+        return;
+    }
+    field.set_offset(point(to, offset.y));
     // Drawn with the new offset in a frame of its own: a refresh while this one is drawn is dropped.
     window.on_next_frame(|window, _| window.refresh());
 }

@@ -11,6 +11,7 @@ use gpui::{
     div, point, prelude::*, px, rgb, rgba, transparent_black,
 };
 use kanbrain_core::model::{Asked, DecisionState, Status, Task};
+use std::collections::HashMap;
 
 /// How a button looks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,9 +99,9 @@ pub fn segmented(segments: impl IntoIterator<Item = Stateful<Div>>) -> Div {
         .children(segments)
 }
 
-/// Each one-line field's sideways scroll, by the field.
+/// The sideways scroll of each one-line field, kept from frame to frame: GPUI builds the elements anew every frame.
 #[derive(Default)]
-struct FieldScrolls(std::collections::HashMap<TextBox, ScrollHandle>);
+struct FieldScrolls(HashMap<TextBox, ScrollHandle>);
 
 impl Global for FieldScrolls {}
 
@@ -124,7 +125,7 @@ pub fn text_field(
     };
     let text = content.render();
     let hit = Hit::new(&text, input.text().chars().count());
-    // Each field keeps its scroll from frame to frame; one not typed into shows its start.
+    // One not typed into shows its start.
     let scroll = cx.default_global::<FieldScrolls>().0.entry(which).or_default().clone();
     if !active {
         scroll.set_offset(point(px(0.), px(0.)));
@@ -142,6 +143,8 @@ pub fn text_field(
         .border_color(rgb(if active { ACCENT } else { BORDER }))
         .whitespace_nowrap()
         .overflow_x_scroll()
+        // A wheel turned over the field scrolls what holds it: taken sideways, it moved the text off the cursor.
+        .restrict_scroll_to_axis()
         .track_scroll(&scroll)
         .debug_selector(|| which.id().to_string())
         .child(text)
