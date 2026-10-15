@@ -130,6 +130,10 @@ fn an_agent_writing_a_brains_files_is_sent_to_kb() {
     assert_eq!(edit(&root, &root.join("src/main.rs"), central.path()), None, "the code is the agent's to edit");
     assert_eq!(edit(&root, &root.join("CLAUDE.md"), central.path()), None, "and the section's file");
     assert_eq!(edit(&root, &root.join("docs/.brainstorm.md"), central.path()), None, "only a folder named .brain");
+    // `..` is resolved as Claude Code resolves it, before anything is looked up.
+    assert_eq!(edit(&root, &root.join(".brain/../src/main.rs"), central.path()), None, "out of .brain again");
+    let back_in = central.path().join("nosuch/../0009-new.md");
+    assert!(edit(&root, &back_in, central.path()).is_some(), "into the central brain through a folder not there");
     assert_eq!(hook(HookEvent::Edit, "not json", central.path()), None, "nothing to refuse without a path");
 }
 
@@ -138,6 +142,11 @@ fn the_central_brain_kept_in_a_notes_vault_leaves_the_vaults_own_files_to_the_ag
     let (central, _code, root) = project();
     let vault = central.path();
     assert_eq!(edit(&root, &vault.join("daily/2026-10-15.md"), vault), None, "a note of the vault's");
+    std::fs::write(vault.join("Inbox.md"), "# Inbox\n\n- buy milk\n").unwrap();
+    assert_eq!(edit(&root, &vault.join("Inbox.md"), vault), None, "at its top too");
+    assert_eq!(edit(&root, &vault.join("2026-10-15.md"), vault), None, "and a new one, dated");
+    std::fs::write(vault.join("plan.md"), "# Plan\n\n- id: 3\n- type: task\n").unwrap();
+    assert!(edit(&root, &vault.join("plan.md"), vault).is_some(), "but an entry renamed by hand is kanbrain's");
     let code = vault.join("code/app");
     std::fs::create_dir_all(code.join(".brain")).unwrap();
     assert_eq!(edit(&code, &code.join("src/main.rs"), vault), None, "a repository kept in it");

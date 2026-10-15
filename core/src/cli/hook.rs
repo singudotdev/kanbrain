@@ -14,17 +14,17 @@
 //! Once the project is described and the tasks the agent started commented on, they print nothing, so they cost
 //! nothing.
 //!
-//! - `edit` (`PreToolUse`, on the tools that write files): an agent about to write a file in a brain's folder is
-//!   refused and sent to `kb`. The section tells it so, yet an agent seeing markdown files may edit them: that
-//!   skips the brain's lock (the board and other agents write there too), the numbering of new entries and the
-//!   format `kb` keeps.
+//! `edit` (`PreToolUse`, on the tools that write files) refuses instead: an agent about to write a brain's file is
+//! sent to `kb`. The section tells it so, yet an agent seeing markdown files may edit them: that skips the brain's
+//! lock (the board and other agents write there too), the numbering of new entries and the format `kb` keeps.
 
 use crate::enums::named_enum;
 use crate::model::{Author, Status, Task};
 use crate::projects::{self, ProjectInfo};
 use crate::store::{self, Store};
 use serde_json::{Value, json};
-use std::path::{Path, PathBuf};
+use std::fs;
+use std::path::{Component, Path, PathBuf};
 
 named_enum! {
     /// Which hook is asking, as `kb hook NAME` names it.
@@ -39,15 +39,15 @@ named_enum! {
     }
 }
 
-/// What to print for `event`, given the JSON Claude Code sent (`input`) and the central brain: `None`
-/// outside a project, or when there's nothing to remind or refuse. Malformed input reads as empty, so a hook
+/// What to print for `event`, given the JSON Claude Code sent (`input`) and the central brain: `None` when
+/// there's nothing to remind or refuse, as for `prompt` and `stop` outside a project. Malformed input reads as empty, so a hook
 /// never breaks a session: it falls back to the folder it runs in, `here`, and lets the turn end.
 pub fn respond(event: HookEvent, input: &str, central: &Path, here: &Path) -> Option<String> {
     let input: Value = serde_json::from_str(input).unwrap_or(Value::Null);
     let cwd = input["cwd"].as_str().map_or_else(|| here.to_path_buf(), PathBuf::from);
     match event {
         // Claude Code gives the path absolute; joined to the session's folder in case it isn't.
-        HookEvent::Edit => refuse_brain_write(&cwd.join(input["tool_input"]["file_path"].as_str()?), central),
+        HookEvent::Edit => refuse_brain_write(&lexical(&cwd.join(input["tool_input"]["file_path"].as_str()?)), central),
         HookEvent::Prompt | HookEvent::Stop => remind(event, &input, &cwd, central),
     }
 }
@@ -74,26 +74,49 @@ fn refuse_brain_write(file: &Path, central: &Path) -> Option<String> {
 /// agent's to write. A link to either counts, through the nearest of `file`'s folders that exists (a file being
 /// created doesn't yet).
 fn in_brain(file: &Path, central: &Path) -> bool {
-    let centrals = [Some(central.to_path_buf()), central.canonicalize().ok()];
+    let canonical = central.canonicalize().ok();
+    let centrals = [Some(central), canonical.as_deref()];
     let owned = |path: &Path| {
         path.ancestors().any(|dir| dir.file_name().is_some_and(|name| name == store::PROJECT_DIR))
-            || centrals.iter().flatten().any(|c| path.strip_prefix(c).is_ok_and(central_owned))
+            || centrals.into_iter().flatten().any(|c| path.strip_prefix(c).is_ok_and(|rel| central_owned(c, rel)))
     };
     owned(file) || real_path(file).is_some_and(|real| owned(&real))
 }
 
-/// Whether `rel`, a path inside the central brain, is kanbrain's: a file at its top (an entry, `tags.md`,
-/// `projects.md`, `last-id`, `format`: `Store::load` reads every `.md` there), or anything in the project cards'
-/// or reports' folders.
-fn central_owned(rel: &Path) -> bool {
+/// Whether `rel`, a path inside the central brain `central`, is kanbrain's: `tags.md`, `projects.md`, `last-id`,
+/// `format`, an entry, or anything in the project cards' or reports' folders. An entry is a file at the top holding
+/// a `- id:` line, as `Store::load` reads them, or one yet to be written named as one (`0007-title.md`): the vault's
+/// other notes, there too, aren't.
+fn central_owned(central: &Path, rel: &Path) -> bool {
     let mut parts = rel.components();
-    let Some(first) = parts.next().map(std::path::Component::as_os_str) else { return false };
+    let Some(first) = parts.next().map(Component::as_os_str) else { return false };
     if parts.next().is_some() {
         return first == projects::CARDS_DIR || first == store::REPORTS_DIR;
     }
-    Path::new(first).extension().is_some_and(|ext| ext == "md")
-        || first == store::LAST_ID_FILE
-        || first == crate::migrate::FORMAT_FILE
+    let kanbrains = [store::TAGS_FILE, projects::REGISTRY_FILE, store::LAST_ID_FILE, crate::migrate::FORMAT_FILE];
+    let name = first.to_string_lossy();
+    kanbrains.contains(&&*name)
+        || name.ends_with(".md")
+            && match fs::read_to_string(central.join(rel)) {
+                Ok(text) => text.lines().any(|line| line.trim_start().starts_with("- id:")),
+                Err(_) => store::entry_named(&name),
+            }
+}
+
+/// `path` with its `.` and `..` resolved as text, as Claude Code resolves the path it writes: through the folder
+/// named, which needn't exist, rather than where a link in it leads.
+fn lexical(path: &Path) -> PathBuf {
+    let mut resolved = PathBuf::new();
+    for part in path.components() {
+        match part {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                resolved.pop();
+            }
+            _ => resolved.push(part),
+        }
+    }
+    resolved
 }
 
 /// `file` with its links resolved: its nearest folder that exists, canonical, then the rest of the path.
