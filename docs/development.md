@@ -38,6 +38,10 @@ All the tests, the kanban app's too:
 cargo test --workspace
 ```
 
+Keep `TMPDIR` (and a mutation run's worktree) out of any folder with a `.brain` above it, as this repository has
+once kanbrain's own tasks are kept in it: `kb` takes the nearest `.brain` above where it runs, so the command line's
+tests, run in temporary folders, would write into it. They stop first, saying so.
+
 Lints, which must be warning-free (pedantic is on, see below):
 
 ```sh
@@ -427,7 +431,7 @@ Mesa's software Vulkan, and keeps the screenshots as the run's artifacts.
 again: a change no test notices is behavior nothing guards. CI runs it on each push's and pull request's diff and
 fails on a mutant no test catches. `.cargo/mutants.toml` lists what no test can tell apart (starting the installer,
 a hover style), each with why; anything else missed is a test to write. Locally, run it from a clean checkout
-(`git worktree add`): it copies the working tree as it is when it starts.
+(`git worktree add`) outside the repository (see `TMPDIR` above): it copies the working tree as it is when it starts.
 
 ### Agents, end to end
 
