@@ -161,29 +161,62 @@ complete -F {function} {program}
         Shell::Bash => bash,
         Shell::Zsh => format!("autoload -U +X bashcompinit && bashcompinit\n{bash}"),
         Shell::Fish => format!(
-            r#"complete -c {program} -f
-complete -c {program} -n __fish_use_subcommand -a '{commands}'
+            r#"{words}complete -c {program} -f
+complete -c {program} -n 'test (count (_{function}_words)) -eq 0' -a '{commands}'
 complete -c {program} -l project -x -a '({program} complete projects)'
 complete -c {program} -l tag -x -a '({program} complete tags (commandline -opc)[2..])'
 complete -c {program} -l json
-complete -c {program} -n '__fish_seen_subcommand_from {BY_ID}' -a '({program} complete ids (commandline -opc)[2..])'
-complete -c {program} -n '__fish_seen_subcommand_from tag; and test (count (commandline -opc)) -eq (contains -i -- tag (commandline -opc))' -a '({program} complete ids (commandline -opc)[2..])'
-complete -c {program} -n '__fish_seen_subcommand_from tag; and test (count (commandline -opc)) -gt (contains -i -- tag (commandline -opc))' -a '({program} complete tags (commandline -opc)[2..] | sed "s/^/+/; p; s/^+/-/")'
-complete -c {program} -n '__fish_seen_subcommand_from add' -l link -x -a '({program} complete ids (commandline -opc)[2..])'
-complete -c {program} -n '__fish_seen_subcommand_from add' -l note -l decision -l start -l body
-complete -c {program} -n '__fish_seen_subcommand_from list' -a '{statuses} all notes decisions'
-complete -c {program} -n '__fish_seen_subcommand_from report' -a '{units}' -l save
-complete -c {program} -n '__fish_seen_subcommand_from report' -l group -x -a '{groups}'
-complete -c {program} -n '__fish_seen_subcommand_from project' -a '{project}'
-complete -c {program} -n '__fish_seen_subcommand_from project' -l purge
-complete -c {program} -n '__fish_seen_subcommand_from init' -l all -d 'in every registered project'
-complete -c {program} -n '__fish_seen_subcommand_from init' -l repo -x
-complete -c {program} -n '__fish_seen_subcommand_from deinit' -l purge
-complete -c {program} -n '__fish_seen_subcommand_from wait' -l timeout -x
-complete -c {program} -n '__fish_seen_subcommand_from completions' -a '{shells}'
-"#
+complete -c {program} -n '_{function}_using {BY_ID}' -a '({program} complete ids (commandline -opc)[2..])'
+complete -c {program} -n '_{function}_using tag; and test (count (_{function}_words)) -eq 1' -a '({program} complete ids (commandline -opc)[2..])'
+complete -c {program} -n '_{function}_using tag; and test (count (_{function}_words)) -gt 1' -a '({program} complete tags (commandline -opc)[2..] | sed "s/^/+/; p; s/^+/-/")'
+complete -c {program} -n '_{function}_using add' -l link -x -a '({program} complete ids (commandline -opc)[2..])'
+complete -c {program} -n '_{function}_using add' -l note -l decision -l start -l body
+complete -c {program} -n '_{function}_using list' -a '{statuses} all notes decisions'
+complete -c {program} -n '_{function}_using report' -a '{units}'
+complete -c {program} -n '_{function}_using report' -l save
+complete -c {program} -n '_{function}_using report' -l group -x -a '{groups}'
+complete -c {program} -n '_{function}_using project; and test (count (_{function}_words)) -eq 1' -a '{project}'
+complete -c {program} -n '_{function}_using project' -l purge
+complete -c {program} -n '_{function}_using init' -l all -d 'in every registered project'
+complete -c {program} -n '_{function}_using init' -l repo -x
+complete -c {program} -n '_{function}_using deinit' -l purge
+complete -c {program} -n '_{function}_using wait' -l timeout -x
+complete -c {program} -n '_{function}_using completions' -a '{shells}'
+"#,
+            words = fish_words(&function),
         ),
     }
+}
+
+/// The functions fish's script asks which command the line is: `__fish_seen_subcommand_from` matches a word anywhere
+/// on it, so `project rename` or a title's `show` would be taken for the command.
+fn fish_words(function: &str) -> String {
+    format!(
+        r"function _{function}_words -d 'the command, then the words after it that are not --options'
+    set -l words (commandline -opc)[2..]
+    set -l found
+    while set -q words[1]
+        switch $words[1]
+            case --project
+                set words $words[3..]
+            case '--*'
+                set words $words[2..]
+            case '-*'
+                set -q found[1]; and set -a found $words[1]
+                set words $words[2..]
+            case '*'
+                set -a found $words[1]
+                set words $words[2..]
+        end
+    end
+    string join \n -- $found
+end
+function _{function}_using -d 'whether the command is one of the arguments'
+    set -l words (_{function}_words)
+    set -q words[1]; and contains -- $words[1] $argv
+end
+"
+    )
 }
 
 #[cfg(test)]

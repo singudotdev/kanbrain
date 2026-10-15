@@ -24,6 +24,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   option of one, is no longer a breaking change of the crate; outside it, a `match` on them needs `_` and `..`, and
   only the crate builds them. `kb`, the kanban app and the data are unchanged, and nothing needs migrating.
 
+### Fixed
+
+- Fish's tab completion goes by the command, the first word after `kb` that isn't an option, as bash's and zsh's do
+  (`__kb_words`, `__kb_using` in `kb completions fish`): it went by any word on the line, so `kb project rename `,
+  `kb list todo ` or `kb add Fix the show ` offered ids, `kb project describe ` the project's words again, and
+  `kb --project central ` no command. `kb report ` offers the periods, which were offered as `--save`'s value.
+
 ## [0.4.2] - 2026-10-15
 
 ### Added
