@@ -203,9 +203,10 @@ pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central:
     Ok(done)
 }
 
-/// Renames each project a version before 0.4.0 named as none can be now (see [`projects::check_name`]): one
-/// starting with `-`, which `--project` reads as an option, `Central` in any case, which reaches the central
-/// brain, or one with `:` or `/` (a registry edited by hand). Without it, `kb init` in its repositories is refused.
+/// Renames each project an older version named as none can be now (see [`projects::check_name`]): one starting
+/// with `-`, which `--project` reads as an option, `Central` in any case, which reaches the central brain (both
+/// before 0.4.0), one with a lone `\r`, a line break to markdown (before 0.5.0), or one with `:` or `/` (a registry
+/// edited by hand). Without it, `kb init` in its repositories is refused.
 /// Returns what it did, one line each.
 fn rename_unreachable_projects(central: &Path) -> Result<Vec<String>> {
     let mut names: Vec<String> = projects::load(central)?.into_iter().map(|r| r.project).collect();
@@ -214,7 +215,7 @@ fn rename_unreachable_projects(central: &Path) -> Result<Vec<String>> {
     let unreachable: Vec<String> = names.iter().filter(|name| projects::check_name(name).is_err()).cloned().collect();
     let mut done = Vec::new();
     for old in unreachable {
-        let kept: String = old.chars().map(|c| if matches!(c, ':' | '/' | '\n') { '-' } else { c }).collect();
+        let kept: String = old.chars().map(|c| if matches!(c, ':' | '/' | '\n' | '\r') { '-' } else { c }).collect();
         let base = match kept.trim().trim_start_matches('-').trim() {
             "" => "project",
             base => base,

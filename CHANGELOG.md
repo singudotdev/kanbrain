@@ -39,7 +39,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   reads it: it becomes a space like a line feed does, typed (`model::one_line`), pasted into the kanban app
   (`LineInput::insert`, which dropped it) or already in a file (`Task::from_markdown`). It was kept, so the file's
   `# ` line read as two lines to markdown, and `kb list` printed it raw. A project name with one is refused, as
-  with a line feed (`projects::check_name`).
+  with a line feed (`projects::check_name`); `kb init --all`, which `kb update` runs, renames one an older version
+  registered, its `\r` made a `-` (`cli::init::rename_unreachable_projects`).
 
 ## [0.4.2] - 2026-10-15
 
