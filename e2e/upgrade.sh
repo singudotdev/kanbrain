@@ -12,8 +12,8 @@
 # - runs `init --all`, which renames the names v0.4.0 stopped taking, and writes (comments, status changes)
 #   without an error.
 #
-# CI runs it when a change touches it (the `upgrade` job). It needs cargo, curl, git, python3 and the repository's tags, and
-# touches nothing outside a temporary folder.
+# CI runs it when a change touches it (the `upgrade` job). It needs cargo, curl, git, python3 and the repository's
+# tags, and touches nothing outside a temporary folder.
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)

@@ -75,7 +75,8 @@ jobs:
           tool: cargo-mutants@27.1.0
       - name: Mutants of the changed lines
         env:
-          # The pull request's base, or the last commit on this branch whose run passed (.github/plan.sh).
+          # The last commit on the branch pushed to, or on the pull request's base, whose push run passed
+          # (.github/plan.sh).
           BASE: ${{ needs.plan.outputs.base }}
           SHARD: ${{ matrix.shard }}
         run: |
