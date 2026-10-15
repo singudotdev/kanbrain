@@ -196,6 +196,7 @@ e2e/install.sh       install.sh end to end, from a local copy of a release (CI; 
 e2e/upgrade.sh       brains written by every released kb, opened by this build (CI)
 e2e/smoke-app.sh     the release app starts, stays up and idles; a screenshot (CI; smoke-app.ps1 for Windows)
 e2e/agent.sh         a real agent working with kanbrain, scenario by scenario (run by hand)
+docs/decisions/      why things are as they are, one decision a file (NNNN-title.md)
 xtask/               `cargo xtask notices kb|kanbrain` (the alias is in .cargo/config.toml): THIRD-PARTY-LICENSES.txt,
                      from cargo-about (about.toml) and licenses/ for what's compiled in but isn't a crate
 
@@ -520,7 +521,9 @@ A fix for a released version starts from `main` on `hotfix/…` and goes back to
    data and setup move forward on their own: a data format change has its step in `MIGRATIONS` (see
    [Changing the file format](#changing-the-file-format)); a change of behavior or of the agents' instructions is
    fixed on load or by `kb init --all`, which `kb update` runs. Only a change to `kanbrain-core`'s Rust API alone,
-   which isn't meant for other crates, needs none.
+   which isn't meant for other crates, needs none; it's breaking all the same when
+   `cargo semver-checks -p kanbrain-core --baseline-rev vLAST` says so (see
+   [decision 1](decisions/0001-kanbrain-core-follows-cargo-semver.md)).
 2. Write the version's release notes in `tag-changelog/vX.Y.Z.md` (terse bullets anchored in the code, naming each
    breaking change's migration) and its section in `CHANGELOG.md`, with its compare link at the end of the file, and
    commit them. `core/build.rs` stops a version without them from compiling in the repository.

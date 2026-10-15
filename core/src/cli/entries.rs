@@ -57,6 +57,7 @@ pub const USAGE: &str = "\
 
 /// One of the entry commands, and whether to print JSON.
 #[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct EntryArgs {
     /// What to do.
     pub command: EntryCommand,
@@ -66,52 +67,73 @@ pub struct EntryArgs {
 
 /// What to do to which entry.
 #[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum EntryCommand {
     /// `add`: create an entry.
+    #[non_exhaustive]
     Add(AddArgs),
     /// `show ID`.
+    #[non_exhaustive]
     Show(u32),
     /// `search WORDS…`.
+    #[non_exhaustive]
     Search(String),
     /// `start|park|done|todo ID`.
+    #[non_exhaustive]
     SetStatus(u32, Status),
     /// `comment ID TEXT…|-`.
+    #[non_exhaustive]
     Comment(u32, Text),
     /// `ask ID TEXT…|-`: a question to the user, parking the task.
+    #[non_exhaustive]
     Ask(u32, Text),
     /// `wait ID [--timeout MINUTES]`: block until a person answers, or the time is up (`None`: never).
+    #[non_exhaustive]
     Wait(u32, Option<Duration>),
     /// `propose ID … TITLE…`: a proposed decision for the task.
+    #[non_exhaustive]
     Propose(u32, AddArgs),
     /// `accept ID [TEXT…|-]` / `reject ID TEXT…|-`: a decision accepted or rejected, and why.
+    #[non_exhaustive]
     Resolve(u32, DecisionState, Option<Text>),
     /// `describe ID TEXT…|-`.
+    #[non_exhaustive]
     Describe(u32, Text),
     /// `link ID OTHER…`: ids here, and `REPO#ID` in the project's other repositories.
+    #[non_exhaustive]
     Link(u32, Vec<u32>, Vec<RepoLink>),
     /// `context`.
+    #[non_exhaustive]
     Context,
     /// `project`: show the project's description and this repository's role, or change the project.
+    #[non_exhaustive]
     Project(Option<ProjectChange>),
 }
 
 /// What `project` changes.
 #[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ProjectChange {
     /// `describe|notes TEXT…|-`: replace one of its texts.
+    #[non_exhaustive]
     Text(ProjectPart, Text),
     /// `rename NAME…`: the project's name; `true` when given after `--`, as meant whatever it starts with.
+    #[non_exhaustive]
     Rename(String, bool),
     /// `repo NAME`: this repository's name in its project.
+    #[non_exhaustive]
     Repo(String),
     /// `move PROJECT…`: this repository to another project, created if new.
+    #[non_exhaustive]
     Move(String),
     /// `remove [--purge]`: take every repository of the project out of it; `true` also deletes their tasks.
+    #[non_exhaustive]
     Remove(bool),
 }
 
 /// What `project` changes in one of its texts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ProjectPart {
     /// `describe`: the project's description, on the card all its repositories share.
     Description,
@@ -121,6 +143,7 @@ pub enum ProjectPart {
 
 /// Text given on the command line, or `-` to read it from stdin (for multi-line markdown).
 #[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Text {
     /// The words after the id, joined by spaces.
     Given(String),
@@ -130,6 +153,7 @@ pub enum Text {
 
 /// Options of `add`.
 #[derive(Debug, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub struct AddArgs {
     /// `--note` / `--decision`; a task otherwise.
     pub kind: Kind,
