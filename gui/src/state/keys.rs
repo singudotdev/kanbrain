@@ -69,8 +69,6 @@ impl Tabs {
 pub enum When {
     /// Always.
     Always,
-    /// On the board tab.
-    OnBoard,
     /// With an entry selected.
     Entry,
     /// With an entry selected and its details shown (`true`) or hidden (`false`).
@@ -111,7 +109,6 @@ impl When {
         let entry = key.and_then(|k| board.task(k));
         match self {
             Self::Always => true,
-            Self::OnBoard => board.tab == Tab::Board,
             Self::Entry => entry.is_some(),
             Self::Details(shown) => entry.is_some() && board.drawer == shown,
             Self::MoveTo(status) => entry.is_some_and(|t| t.is_task() && t.status != status),
@@ -436,7 +433,7 @@ pub const ACTIONS: &[Action] = &[
         b.quick_add(Status::Todo);
     }),
     letter("v", Tabs::Board, When::Always, "Board as kanban columns or as a list", Board::toggle_layout),
-    letter("f", Tabs::Entries, When::OnBoard, "Show every done task, or only the latest", |b| {
+    letter("f", Tabs::Board, When::Always, "Show every done task, or only the latest", |b| {
         b.all_done = !b.all_done;
         b.keep_selection();
     }),

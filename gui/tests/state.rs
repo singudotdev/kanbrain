@@ -195,6 +195,11 @@ fn t_takes_a_task_back_to_to_do_and_hash_alone_filters_the_reports_tags() {
         matches!(f.board.mode, Mode::Normal) && !f.board.all_done,
         "f is the board's, for done tasks; not a second tag filter"
     );
+    for tab in [Tab::Notes, Tab::Decisions] {
+        f.board.switch_tab(tab);
+        f.press(KeyCode::Char('f'));
+        assert!(!f.board.all_done, "nor on {tab:?}, where it would change the board unseen");
+    }
     f.press(KeyCode::Char('#'));
     assert!(matches!(f.board.mode, Mode::Tags(_)));
 }
