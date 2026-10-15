@@ -164,7 +164,11 @@ impl Board {
             Target::Comment(key, _) => self.task(key).map(|t| t.comments.clone()).unwrap_or_default(),
             _ => Vec::new(),
         };
-        self.mode = Mode::Edit(Edit { editor, target, back, base, comments });
+        let decision = match target {
+            Target::Reject(key) | Target::Accept(key) => self.task(key).map(|t| t.decision),
+            _ => None,
+        };
+        self.mode = Mode::Edit(Edit { editor, target, back, base, comments, decision });
     }
 
     /// Whether the comment at the editor's index is still the one it opened on: the others are as they were, but
@@ -255,6 +259,35 @@ impl Board {
                 "{} changed meanwhile: save again to replace it with yours, ctrl+d to keep it",
                 self.text_name(edit.target)
             ));
+            self.mode = Mode::Edit(edit);
+            return;
+        }
+        let giving = match edit.target {
+            Target::Reject(key) => Some((key, "reject", DecisionState::Rejected, "reason")),
+            Target::Accept(key) => Some((key, "accept", DecisionState::Accepted, "comment")),
+            Target::Description(_)
+            | Target::NewComment(_)
+            | Target::Comment(..)
+            | Target::Project(_)
+            | Target::RepoNotes(_) => None,
+        };
+        if let Some((key, verb, verdict, word)) = giving
+            && let Some(now) = self.task(key).map(|t| t.decision)
+            && Some(now) != edit.decision
+        {
+            let was = match now {
+                DecisionState::Proposed => "proposed again",
+                now => now.as_str(),
+            };
+            let name = self.entry_name(key);
+            // Given the verdict the user was writing, `resolve` does nothing: the text would be lost while saying
+            // it's done.
+            if now == verdict {
+                self.notify(format!("{name} was {was} meanwhile: copy your {word}, then ctrl+d"));
+            } else {
+                edit.decision = Some(now);
+                self.notify(format!("{name} was {was} meanwhile: save again to {verb} it anyway, ctrl+d to leave it"));
+            }
             self.mode = Mode::Edit(edit);
             return;
         }

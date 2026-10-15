@@ -16,6 +16,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   editor found them (but for new ones after them), the save stops for good (`… comments changed around this one
   meanwhile`; `Edit::comments`, `Board::same_comment`), and the editor's title names the comment it opened. The edit
   form does the same for a title both changed (`… title changed meanwhile, to “…”`), which v0.5.0 replaced.
+- The kanban app's reject and accept-with-a-comment editor doesn't overturn unseen a verdict `kb` gave while it was
+  open: it flipped a decision an agent's `kb accept` accepted meanwhile to rejected, saying only `#N rejected`. The save
+  stops and says so (`#N was accepted meanwhile: save again to reject it anyway, ctrl+d to leave it`); given the
+  verdict being written, it stops for good (`… copy your reason, then ctrl+d`), where it dropped the reason or
+  comment unsaid while saying `#N rejected` (`Edit::decision`).
 
 ## [0.5.0] - 2026-10-15
 

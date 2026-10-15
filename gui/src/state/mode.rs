@@ -3,7 +3,7 @@
 use super::Key;
 use crate::text::editor::{LineInput, Pointer, TextEditor};
 use crate::text::event::{KeyCode, KeyEvent};
-use kanbrain_core::model::{Comment, Kind, Status, Task};
+use kanbrain_core::model::{Comment, DecisionState, Kind, Status, Task};
 use std::path::PathBuf;
 
 /// The dialog or field that takes the keys; `Normal` leaves them to the board.
@@ -498,6 +498,10 @@ pub struct Edit {
     /// For a comment, the entry's comments when the editor opened: one deleted, moved or edited meanwhile may put
     /// another at its index, which comments written in one second, with one text, don't tell apart.
     pub comments: Vec<Comment>,
+    /// For a verdict, where the decision stood when the editor opened, or as a save that stopped to ask found it:
+    /// `kb` deciding meanwhile isn't overturned unseen. A stop over the verdict being given leaves it, so it stops
+    /// every time.
+    pub decision: Option<DecisionState>,
 }
 
 /// What the text editor edits.
