@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The section `kb init` writes in `CLAUDE.md`/`AGENTS.md` (`init::SECTION`) tells agents to give a pull request,
+  issue, CI run, commit or page named in a comment or body its link (`[PR #39](URL)`, not just `PR #39`), so it opens
+  from the board; `kb init` refreshes the section in place.
+
 ### Fixed
 
 - The kanban app's text editor doesn't replace unseen what `kb` wrote while it was open: a description (an agent's

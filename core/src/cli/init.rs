@@ -43,7 +43,8 @@ The user follows them live on a kanban board: keep it showing what you're doing 
 - While working: `comment ID TEXT` when a step is done, when you find a cause, and before you stop (one or two
   lines: what changed, what's next); `done ID` as soon as one is finished. Stopping before it is: `comment`, then
   `park ID`. Doing isn't limited for you: several of your tasks can run at once. Never park, finish or move a task
-  you didn't start (the user's, or another session's).
+  you didn't start (the user's, or another session's). A pull request, issue, CI run, commit or page named in a
+  comment or body goes with its link, `[PR #39](URL)`, not just `PR #39`: the user opens it from the board.
 - Splitting work between subagents: give each part that changes the repository its own task, and run the board
   yourself: `add --start` it before launching the subagent, then `comment` its result and `done` it. Subagents
   only do the work; lookups and research get no task. `kb` commands can run in parallel.
