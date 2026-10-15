@@ -369,10 +369,10 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | `tags` | no color repeats until the palette is used up, `tags.md` round trip, custom colors |
 | `period`, `export` | period bounds and stepping, report tables |
 | `enums` | generated `ALL` / `position` / `next`, `parse` as the inverse of `as_str` |
-| `state` (gui) | the board driven by keys over a temporary folder: the palette offering only what works now, moving between cards and columns, moving cards, drops, quick add, the form, the tags it offers and picks and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, nothing asked once your task stops, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from Manage project, the update offered once a newer release is found and refused while an agent works, the details' buttons acting on the entry from the calendar too, the form's tags highlight after a paste, a cut or a reload, a brain found while the board acts locked and read again under its lock |
+| `state` (gui) | the board driven by keys over a temporary folder: the palette offering only what works now, moving between cards and columns, moving cards, drops, quick add, the form, the tags it offers and picks and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, nothing asked once your task stops, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from Manage project, the update offered once a newer release is found and refused while an agent works, the details' buttons acting on the entry from the calendar too, the form's tags highlight after a paste, a cut or a reload, an edit saving only what was changed in the form over what `kb` changed meanwhile (also when the list of brains changes while it's open), a brain found while the board acts locked and read again under its lock |
 | `dialogs` (gui) | the delete question naming the entry, what removing one repository or several says, Manage project scrolling to the repository it's opened from, the editor naming what its text belongs to |
 | `keys` (gui) | no key running two things on one tab; what the menu offers named and described; every key in `docs/keybindings.md` on its tabs |
-| `editor` (gui) | line editing (split/join), unicode, wrapping; one-line cursor editing; selecting, copying and replacing; mouse selection by character, word and line |
+| `editor` (gui) | line editing (split/join), unicode, wrapping; one-line cursor editing, line breaks pasted into one line (a lone `\r` too) as spaces; selecting, copying and replacing; mouse selection by character, word and line |
 | `markdown` (gui) | inline styles and link ranges, kept line breaks, heading levels, numbered and task lists, nesting, code, quotes, tables, rules |
 | `update` (gui) | a program replaced on disk since it started restarting from the new file |
 | `watch` (gui) | new, changed, renamed and deleted files are noticed once, naming the folder; temporary files aren't; own writes are taken as seen |
@@ -384,9 +384,10 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 `cli/tests/kb.rs` runs the built `kb` the way agents and scripts do, over temporary folders: an agent's session from
 `init` to `context`, text read from stdin with `-`, one-line JSON, errors on stderr with a failing exit code and the
 usage, `--project` from another folder, completion candidates, the hooks asking until the project is described, the edit
-hook refusing a write to `.brain/` (and a `~` path read as the home folder), and sixteen commands run at once losing no
-change and no id (the brain's write lock). They're Cargo integration tests (`CARGO_BIN_EXE_kb`), so they see only what
-the binary prints.
+hook refusing a write to `.brain/` (and a `~` path read as the home folder), `tag` and `rename` and what they say when
+nothing changed, bash running `kb completions bash` itself to complete `tag`'s id and then its signed tags, and sixteen
+commands run at once losing no change and no id (the brain's write lock). They're Cargo integration tests
+(`CARGO_BIN_EXE_kb`), so they see only what the binary prints.
 
 ### Installers, end to end
 
@@ -517,11 +518,11 @@ A fix for a released version starts from `main` on `hotfix/…` and goes back to
 
 ### Publishing a release
 
-1. Every breaking change in the range (a `feat!:` or `fix!:` commit) comes with its migration, so existing users'
-   data and setup move forward on their own: a data format change has its step in `MIGRATIONS` (see
-   [Changing the file format](#changing-the-file-format)); a change of behavior or of the agents' instructions is
-   fixed on load or by `kb init --all`, which `kb update` runs. Only a change to `kanbrain-core`'s Rust API alone,
-   which isn't meant for other crates, needs none; it's breaking all the same when
+1. Every breaking change in the range (a commit marked `!`: `feat!:`, `fix!:`, `refactor!:`, …) comes with its
+   migration, so existing users' data and setup move forward on their own: a data format change has its step in
+   `MIGRATIONS` (see [Changing the file format](#changing-the-file-format)); a change of behavior or of the agents'
+   instructions is fixed on load or by `kb init --all`, which `kb update` runs. Only a change to `kanbrain-core`'s Rust
+   API alone, which isn't meant for other crates, needs none; it's breaking all the same when
    `cargo semver-checks -p kanbrain-core --baseline-rev vLAST` says so (see
    [decision 1](decisions/0001-kanbrain-core-follows-cargo-semver.md)).
 2. Write the version's release notes in `tag-changelog/vX.Y.Z.md` (terse bullets anchored in the code, naming each
