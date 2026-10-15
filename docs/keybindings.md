@@ -35,7 +35,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | `/` | **search** titles and tags, on every tab; `#tag` matches tags only (several `#tags`: entries with all of them) |
 | `#` | **filter by tags**, on every tab: a dropdown of the tags of what the tab shows, with a search box; each pick adds or takes out `#tag` in the search box, and it stays open for several (`esc` closes) |
 | `esc` | close the details; with them closed, clear the search (words and tags) |
-| `f` | show every done task, or only the latest 20 |
+| `f` | on the board, show every done task, or only the latest 20 |
 | `1` `2` `3` `4` `5` / `tab` / `shift+tab` | Board, Notes, Decisions, Report, Calendar; `tab` the next, `shift+tab` the previous |
 | `I` | **manage the project** shown, or with **All** of the selected card's project: description, repositories with their roles, tasks per status, what's running, this week's time; with buttons to rename, move and remove them and add a repository |
 | `E` | **edit the description** of the project shown, or with **All** of the selected card's project, shared by its repositories |

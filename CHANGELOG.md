@@ -24,6 +24,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   meanwhile was read, and could be written to, without it, so a `kb` run then could write over it or be written
   over. Its lock is taken after catching up, and every brain read again under the locks
   (`Board::lock_found_brains`, `BrainLock::taken`).
+- `f` acts on the kanban app's board only: on the notes or decisions it showed every done task, or only the latest,
+  on the board, unseen (`keys::ACTIONS`, `Tabs::Board`; `When::OnBoard` is gone, as nothing checked it on a key).
 
 ## [0.4.1] - 2026-10-14
 
