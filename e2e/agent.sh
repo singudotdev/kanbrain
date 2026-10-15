@@ -229,7 +229,7 @@ EOF
     kill "$answerer" 2>/dev/null || true
     wait "$answerer" || true
     check wait "$dir" '
-asked = [t for t in tasks if any(c.get("question") for c in t["comments"])]
+asked = [t for t in tasks if any(c.get("question") for c in t.get("comments", []))]
 assert asked, "it asked: " + str([(t["title"], t.get("status")) for t in tasks])
 assert asked[0]["status"] in ("doing", "done"), "and went on in the same session: " + asked[0]["status"]
 assert "280" in open("app.py").read(), "with the answer"
@@ -261,7 +261,7 @@ if wanted parallel; then
 {\"status\": \"ok\"}, GET /version returning {\"version\": \"1.0\"}, and DELETE /notes clearing every note."
     check parallel "$dir" '
 # Done, or parked when the sandbox kept it from running its check: what matters here is the split.
-worked = [t for t in tasks if t.get("status") in ("done", "parked") and t["comments"]]
+worked = [t for t in tasks if t.get("status") in ("done", "parked") and t.get("comments")]
 assert len(worked) >= 3, "a task per part, worked on: " + str([(t["title"], t.get("status")) for t in tasks])
 import glob, re
 sessions = []
@@ -288,6 +288,25 @@ if wanted answered; then
 task = next(t for t in tasks if t["id"] == 1)
 assert task["status"] in ("doing", "done"), "the answered task was picked up: " + task["status"]
 assert "280" in open("app.py").read(), "with the answer"
+'
+fi
+
+# A pull request named in the work: the board's comments and bodies carry its link, which opens from there, not
+# just its number.
+if wanted links; then
+    dir="$work/links"
+    app "$dir" links
+    described "$dir"
+    agent "$dir" "A POST /notes with an empty body stores an empty note. Upstream fixed that in pull request #12 \
+(https://github.com/acme/notes-api/pull/12): port that fix here."
+    check links "$dir" '
+url = "https://github.com/acme/notes-api/pull/12"
+import re
+# show --json leaves out an empty list of comments. Titles are not asked to carry links.
+texts = [t.get("description", "") for t in tasks] + [c["body"] for t in tasks for c in t.get("comments", [])]
+named = [x for x in texts if re.search(r"#12\b|pull/12\b|\b(PR|pull request) 12\b", x, re.I)]
+assert named, "the pull request is named on the board: " + str(texts)
+assert all(url in x for x in named), "each time with its link: " + str(named)
 '
 fi
 

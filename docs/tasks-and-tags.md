@@ -127,15 +127,21 @@ column, `enter` saves (or **Create** / **Save**), `esc` cancels. From the comman
 `kb rename ID TITLE` changes an entry's title.
 
 **Related** is a search box with a dropdown: typing filters the other entries of the same brain (tasks, notes and
-decisions, by title or `#tag`), `↑` `↓` move, `enter` or a click checks or unchecks one. The checked ones show above
-the box as chips; × takes one out. Editing starts from the entry's related entries, and saving links and unlinks to
-match. Saving an edit changes only what you changed in the form: a title, tags or related entries that `kb` changed
-while it was open are kept, and tags or related entries you edited keep those added elsewhere meanwhile, without
-those taken out there. In the tags field, the tags already used by entries of the same kind (task tags for a task, note tags for a
-note) drop down below it, each with how many use it, so you can reuse the same names: those it holds are left out,
-and while you type a tag, only those containing it show, the first starting with it highlighted, or a line saying
-it'll be a new one. A click, or `↓` `↑` and `enter`, puts the tag in place of the one typed; with none highlighted (a
-whole tag or a new one typed, or `↑` off the first), `enter` saves. The title can't be empty.
+decisions, by title or `#tag`), `↑` `↓` move, `enter` or a click checks or unchecks one. The checked ones show above the
+box as chips; × takes one out. Editing starts from the entry's related entries, and saving links and unlinks to match.
+Saving an edit changes only what you changed in the form: a title, tags or related entries that `kb` changed while it
+was open are kept, and tags or related entries you edited keep those added elsewhere meanwhile, without those taken out
+there. A title you changed that `kb` changed too isn't replaced unseen: the save stops, the form stays open, and the
+status bar says what the title is now; saving again replaces it. Once `kb` changes the title, tags, related entries or
+status of the entry being edited, the form's title says **· changed on disk** until it's closed, and the status bar
+says what changed (an agent may have finished or parked the task: saving doesn't move it back). Opening the form, the
+description or a comment of a task an agent has in doing, the status bar says **#N is being worked on by an agent**:
+nothing stops you, but what you save may cross what it writes next. In the tags field, the tags already used by entries
+of the same kind (task tags for a task, note tags for a note) drop down below it, each with how many use it, so you can
+reuse the same names: those it holds are left out, and while you type a tag, only those containing it show, the first
+starting with it highlighted, or a line saying it'll be a new one. A click, or `↓` `↑` and `enter`, puts the tag in
+place of the one typed; with none highlighted (a whole tag or a new one typed, or `↑` off the first), `enter` saves. The
+title can't be empty.
 
 ### Status history
 
@@ -178,7 +184,18 @@ Descriptions and comments are written in the text editor: `esc` or **Save** save
 says **Add comment**, **Answer**, **Accept** or **Reject** when that's what saving does),
 **Discard changes** (`ctrl+d`) throws the edit away; until something's typed, the button is **Close**. An empty comment or
 answer adds nothing, and the status bar says so (an answer never written leaves the question waiting); to remove a
-comment, delete it.
+comment, delete it. A description, comment, project description or role that `kb` changed while the editor was open
+(an agent's `kb describe`) isn't replaced unseen: the save stops, the editor stays open with your text, and the status
+bar says so; saving again replaces it, `ctrl+d` keeps theirs. A comment isn't saved over another: if this comment was
+deleted or replaced meanwhile, or the entry's other comments changed (one deleted or edited; new ones after them are
+fine), the save stops for good: copy your text, then `ctrl+d`. On a task an agent has in doing, opening its
+description or a comment says so in the status bar (see the form above). Writing why you reject or accept a decision
+that `kb` decided meanwhile (an agent's `kb accept` or `kb reject`), the save stops the same way: saving again gives
+your verdict; if it's the one you were giving, there's nothing left to give, and it stops for good: copy your text,
+then `ctrl+d`.
+Once `kb` changes the text being edited, the task's status, or the verdict of a decision being rejected or accepted,
+the editor's title says **· changed on disk** until it's closed, and the status bar says what changed; a new comment or
+another comment edited doesn't count.
 Markdown headings inside descriptions and comments are moved down a level when saved (`##` → `###` in a description,
 `##`/`###` → `####` in a comment), because those levels mark sections and comments in the task file.
 

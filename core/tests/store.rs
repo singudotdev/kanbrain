@@ -107,6 +107,7 @@ fn projects_are_found_from_any_subfolder() {
     let root = tempfile::tempdir().unwrap();
     let nested = root.path().join("src/deep");
     fs::create_dir_all(&nested).unwrap();
+    assert_eq!(find_project(root.path()), None, "a .brain above the temporary folders: set TMPDIR elsewhere");
     assert_eq!(find_project(&nested), None);
     let brain = root.path().join(PROJECT_DIR);
     fs::create_dir(&brain).unwrap();

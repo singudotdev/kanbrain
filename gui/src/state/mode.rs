@@ -3,7 +3,7 @@
 use super::Key;
 use crate::text::editor::{LineInput, Pointer, TextEditor};
 use crate::text::event::{KeyCode, KeyEvent};
-use kanbrain_core::model::{Kind, Status, Task};
+use kanbrain_core::model::{Comment, DecisionState, Kind, Status, Task};
 use std::path::PathBuf;
 
 /// The dialog or field that takes the keys; `Normal` leaves them to the board.
@@ -174,10 +174,13 @@ pub struct Form {
     /// On an edit, the entry as the form opened it, so saving changes only what was changed in the form: what `kb`
     /// changed meanwhile is kept.
     pub opened: Option<Opened>,
+    /// On an edit, `kb` changed one of the fields, or the task's status, since it opened: the title says so until
+    /// it's closed, as a change put back is still one that happened.
+    pub changed_on_disk: bool,
 }
 
-/// An edited entry's title, tags and related entries when its form opened. A field equal to it is unchanged in the
-/// form, however it got there, and saves what the entry has then.
+/// An edited entry's title, tags and related entries when its form opened (its title as a save that stopped found
+/// it). A field equal to it is unchanged in the form, however it got there, and saves what the entry has then.
 #[derive(Debug)]
 pub struct Opened {
     /// As saved, on one line: the form's title, trimmed, is compared with it.
@@ -186,6 +189,8 @@ pub struct Opened {
     pub tags: Vec<String>,
     /// Naming brains by index, as `Form::links` does: a change to the list of brains remaps both (`Mode::remap`).
     pub links: Vec<Key>,
+    /// The task's: an agent may have finished or parked it meanwhile, which the form doesn't change.
+    pub status: Status,
 }
 
 impl Form {
@@ -199,7 +204,8 @@ impl Form {
     /// The form for changing the title, tags and related entries of `task`, which `key` names;
     /// `related` are the ids it's related to now.
     pub fn edit(key: Key, task: &Task, related: Vec<Key>) -> Self {
-        let opened = Opened { title: task.title.clone(), tags: task.tags.clone(), links: related.clone() };
+        let opened =
+            Opened { title: task.title.clone(), tags: task.tags.clone(), links: related.clone(), status: task.status };
         Self {
             opened: Some(opened),
             ..Self::filled(FormTarget::Edit(key), &task.title, &task.tags.join(", "), related)
@@ -219,6 +225,7 @@ impl Form {
             field: Field::Title,
             title_missed: false,
             opened: None,
+            changed_on_disk: false,
         }
     }
 
@@ -492,6 +499,20 @@ pub struct Edit {
     pub target: Target,
     /// Manage project, on this brain, when it was opened from there: where closing it goes back to.
     pub back: Option<usize>,
+    /// The text a save replaces: the target's when the editor opened, or as a save that stopped found it. Another
+    /// text there is a change made meanwhile (`kb describe`), which a save doesn't replace unseen.
+    pub base: String,
+    /// For a comment, the entry's comments when the editor opened: one deleted, moved or edited meanwhile may put
+    /// another at its index, which comments written in one second, with one text, don't tell apart.
+    pub comments: Vec<Comment>,
+    /// For a verdict, where the decision stood when the editor opened, or as the last save that stopped found it:
+    /// `kb` deciding meanwhile isn't overturned unseen.
+    pub decision: Option<DecisionState>,
+    /// The entry's status when the editor opened: an agent may have finished or parked the task meanwhile.
+    pub status: Option<Status>,
+    /// `kb` changed the text, the entry's status or the verdict being given since the editor opened: the title says
+    /// so until it's closed, as a change put back is still one that happened.
+    pub changed_on_disk: bool,
 }
 
 /// What the text editor edits.

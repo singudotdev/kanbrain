@@ -1,6 +1,6 @@
 //! The new / edit form and the quick-add field: what typing in them and saving them changes.
 
-use super::{Board, Field, Form, FormTarget, Key, Mode, QuickAdd, Tab, WhereFor};
+use super::{Board, Field, Form, FormTarget, Key, Mode, QuickAdd, Tab, WhereFor, changed_on_disk};
 use crate::text::editor::LineInput;
 use anyhow::Result;
 use kanbrain_core::brain::NewEntry;
@@ -42,11 +42,30 @@ impl Board {
         form.put_tag(tag);
     }
 
+    /// What `kb` changed, since the edit form opened, of its entry's title, tags, related entries and status, said for
+    /// the status bar; `None` if nothing, or on a new entry's form.
+    pub(super) fn form_changed_on_disk(&self, form: &Form) -> Option<String> {
+        let (FormTarget::Edit(key), Some(opened)) = (form.target, &form.opened) else { return None };
+        let now = self.task(key)?;
+        let related = self.related_keys(key);
+        let relinked = related.len() != opened.links.len() || related.iter().any(|k| !opened.links.contains(k));
+        changed_on_disk(
+            &self.entry_name(key),
+            &[
+                (now.title != opened.title, "title"),
+                (now.tags != opened.tags, "tags"),
+                (relinked, "related entries"),
+                (now.status != opened.status, "status"),
+            ],
+        )
+    }
+
     /// Opens the form for changing the selected entry's title and tags.
     pub fn edit_selected(&mut self) {
         if let (Some(key), Some(task)) = (self.selected, self.selected_task()) {
             let related = self.related_keys(key);
             self.mode = Mode::Form(Box::new(Form::edit(key, task, related)));
+            self.say_agent_working(key);
         }
     }
 
@@ -65,6 +84,25 @@ impl Board {
         match form.target {
             FormTarget::New(src, kind, status) => self.create(src, kind, title, tags, form.links, status),
             FormTarget::Edit(key) => {
+                // A title `kb` changed meanwhile too isn't replaced unseen: the save stops, the form open, and says
+                // what it is now; saved again with no newer one, the form's replaces it.
+                let renamed = match (&form.opened, self.task(key)) {
+                    (Some(opened), Some(now))
+                        if title != opened.title && now.title != opened.title && title != now.title =>
+                    {
+                        Some(now.title.clone())
+                    }
+                    _ => None,
+                };
+                if let Some(now) = renamed {
+                    let name = self.entry_name(key);
+                    self.notify(format!("{name}'s title changed meanwhile, to “{now}”: save again to replace it"));
+                    if let Some(opened) = &mut form.opened {
+                        opened.title = now;
+                    }
+                    self.mode = Mode::Form(form);
+                    return;
+                }
                 let related = self.related_keys(key);
                 // Only what was changed in the form, over the entry as it is now: `kb` may have changed it since.
                 let (title, tags, links) = match (&form.opened, self.task(key)) {

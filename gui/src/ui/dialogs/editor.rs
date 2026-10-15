@@ -1,6 +1,6 @@
 //! The multi-line editor for a description, a comment or a project's text.
 
-use super::dialog;
+use super::{dialog, titled};
 use crate::state::{Board, Edit, Target};
 use crate::text::event::KeyCode;
 use crate::ui::caret::caret;
@@ -21,7 +21,6 @@ pub(super) fn draw(
     follow: bool,
     cx: &mut Context<BrainView>,
 ) -> Div {
-    let task = edit.target.key().and_then(|key| board.task(key));
     let name = edited_name(board, edit.target);
     let what = match edit.target {
         Target::Description(_) => "Description".to_string(),
@@ -29,14 +28,15 @@ pub(super) fn draw(
         Target::NewComment(_) => "New comment".to_string(),
         Target::Reject(_) => "Why it's rejected".to_string(),
         Target::Accept(_) => "Accepted, with a comment".to_string(),
-        Target::Comment(_, index) => task
-            .and_then(|t| t.comments.get(index))
+        // As it opened: another may be at its index now.
+        Target::Comment(_, index) => edit
+            .comments
+            .get(index)
             .map_or_else(|| "Comment".to_string(), |c| format!("Comment of {}", when(c.created))),
         Target::Project(_) => "Project description".to_string(),
         Target::RepoNotes(_) => "This repository's role".to_string(),
     };
     let changed = board.changed(edit);
-    let modified = if changed { " •" } else { "" };
 
     // Long lines wrap; the cursor's line is kept in view while typing.
     let (row, col) = edit.editor.cursor();
@@ -98,7 +98,14 @@ pub(super) fn draw(
     } else {
         vec![action("save", "Close", Kind::Secondary, KeyCode::Esc, cx)]
     };
-    dialog(format!("{what}{modified}"), content, buttons).w(px(EDITOR_WIDTH)).h(relative(0.8))
+    dialog(title(what, changed, edit.changed_on_disk), content, buttons).w(px(EDITOR_WIDTH)).h(relative(0.8))
+}
+
+/// The editor's title: what it edits, the mark that `kb` changed it, then the dot for unsaved changes, kept last as
+/// the one that comes and goes while typing.
+pub(super) fn title(what: String, modified: bool, changed_on_disk: bool) -> String {
+    let title = titled(what, changed_on_disk);
+    if modified { format!("{title} •") } else { title }
 }
 
 /// What the editor's text belongs to: the entry, the project or the repository.

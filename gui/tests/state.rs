@@ -378,6 +378,427 @@ fn comments_and_descriptions_are_written_from_the_editor() {
 }
 
 #[test]
+fn the_editor_doesnt_replace_unseen_what_kb_wrote_while_it_was_open() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["feature"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    let saving = |f: &mut Fixture| {
+        f.board.message = None;
+        f.press(KeyCode::Esc);
+    };
+
+    // An agent describes the task while the user does: the user's save stops and says so, the editor still open.
+    f.press(KeyCode::Char('m'));
+    f.type_text("mine");
+    // enter is a new line, not a save (ctrl+enter is).
+    f.press(KeyCode::Enter);
+    assert!(matches!(f.board.mode, Mode::Edit(_)));
+    f.press(KeyCode::Backspace);
+    kb(&f).set_description(1, "the agent's plan").unwrap();
+    f.board.reload().unwrap();
+    saving(&mut f);
+    assert!(matches!(f.board.mode, Mode::Edit(_)), "kept open with the text typed");
+    assert_eq!(
+        f.board.message(),
+        Some("#1's description changed meanwhile: save again to replace it with yours, ctrl+d to keep it")
+    );
+    assert_eq!(f.on_disk(1).description, "the agent's plan", "not replaced unseen");
+
+    // Changed again before the second save: said again, still not replaced.
+    kb(&f).set_description(1, "the agent's new plan").unwrap();
+    f.board.reload().unwrap();
+    saving(&mut f);
+    assert!(matches!(f.board.mode, Mode::Edit(_)));
+    assert_eq!(f.on_disk(1).description, "the agent's new plan");
+
+    // Saved again with nothing new on disk: the user's replaces it.
+    saving(&mut f);
+    assert!(matches!(f.board.mode, Mode::Normal));
+    assert_eq!(f.board.message(), Some("description saved"));
+    assert_eq!(f.on_disk(1).description, "mine");
+
+    // ctrl+d after being told keeps the agent's.
+    f.press(KeyCode::Char('m'));
+    f.type_text(" too");
+    kb(&f).set_description(1, "theirs").unwrap();
+    f.board.reload().unwrap();
+    saving(&mut f);
+    f.board.on_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL));
+    assert!(matches!(f.board.mode, Mode::Normal));
+    assert_eq!(f.on_disk(1).description, "theirs");
+
+    // Typed and put back is nothing of the user's: what the agent wrote meanwhile stays, and the editor says Close.
+    f.press(KeyCode::Char('m'));
+    f.type_text("x");
+    f.press(KeyCode::Backspace);
+    kb(&f).set_description(1, "theirs, again").unwrap();
+    f.board.reload().unwrap();
+    assert!(matches!(&f.board.mode, Mode::Edit(edit) if !f.board.changed(edit)), "Close, not Save");
+    saving(&mut f);
+    assert!(matches!(f.board.mode, Mode::Normal));
+    assert_eq!(f.on_disk(1).description, "theirs, again");
+    kb(&f).set_description(1, "theirs").unwrap();
+    f.board.reload().unwrap();
+
+    // Unchanged on disk, a save is a save, as before.
+    f.press(KeyCode::Char('m'));
+    f.type_text(" and more");
+    saving(&mut f);
+    assert_eq!(f.on_disk(1).description, "theirs and more");
+
+    // A comment the agent edited meanwhile, the same.
+    kb(&f).add_comment(1, "first").unwrap();
+    f.board.reload().unwrap();
+    f.board.open_editor(Target::Comment(k(1), 0));
+    f.type_text(", mine");
+    kb(&f).update_comment(1, 0, "first, the agent's").unwrap();
+    f.board.reload().unwrap();
+    saving(&mut f);
+    assert_eq!(
+        f.board.message(),
+        Some("#1's comment changed meanwhile: save again to replace it with yours, ctrl+d to keep it")
+    );
+    assert_eq!(f.on_disk(1).comments[0].body, "first, the agent's");
+    saving(&mut f);
+    assert_eq!(f.on_disk(1).comments[0].body, "first, mine");
+
+    // A new comment adds to what's there: nothing to replace, so nothing to stop for.
+    f.press(KeyCode::Char('c'));
+    f.type_text("second");
+    kb(&f).add_comment(1, "the agent's").unwrap();
+    f.board.reload().unwrap();
+    saving(&mut f);
+    assert!(matches!(f.board.mode, Mode::Normal));
+    let bodies: Vec<_> = f.on_disk(1).comments.into_iter().map(|c| c.body).collect();
+    assert_eq!(bodies, ["first, mine", "the agent's", "second"]);
+}
+
+#[test]
+fn an_open_dialog_says_until_closed_that_kb_changed_what_it_edits() {
+    use kanbrain_core::brain::Brain;
+    use kanbrain_core::model::Comment;
+    let mut f = Fixture::new(&["Fix login", "Other"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    let reload = |f: &mut Fixture| {
+        f.board.message = None;
+        f.board.reload().unwrap();
+    };
+    let marked = |f: &Fixture| match &f.board.mode {
+        Mode::Edit(edit) => edit.changed_on_disk,
+        Mode::Form(form) => form.changed_on_disk,
+        _ => panic!("the dialog closed"),
+    };
+
+    // The description editor: a comment, or another entry changed, isn't what it edits.
+    f.board.select(k(1));
+    f.press(KeyCode::Char('m'));
+    kb(&f).add_comment(1, "on it").unwrap();
+    kb(&f).set_description(2, "not this one").unwrap();
+    reload(&mut f);
+    assert!(!marked(&f));
+    assert_eq!(f.board.message(), None);
+    kb(&f).set_description(1, "the agent's plan").unwrap();
+    reload(&mut f);
+    assert!(marked(&f));
+    assert_eq!(f.board.message(), Some("#1's description changed on disk"));
+    // Said once, though it changes again; marked until closed, even once it's back as it was.
+    kb(&f).set_description(1, "the agent's newer plan").unwrap();
+    reload(&mut f);
+    assert_eq!(f.board.message(), None);
+    kb(&f).set_description(1, "").unwrap();
+    reload(&mut f);
+    assert!(marked(&f));
+    assert_eq!(f.board.message(), None);
+    f.press(KeyCode::Esc);
+    f.press(KeyCode::Char('m'));
+    assert!(!marked(&f), "a dialog opened again starts unmarked");
+
+    // The task's status counts in any of its editors: the agent may have finished it.
+    f.press(KeyCode::Esc);
+    f.board.open_editor(Target::NewComment(k(1)));
+    kb(&f).set_status(1, Status::Doing).unwrap();
+    reload(&mut f);
+    assert!(marked(&f));
+    assert_eq!(f.board.message(), Some("#1's status changed on disk"));
+    f.press(KeyCode::Esc);
+
+    // A comment's editor: that comment's text, not another's.
+    kb(&f).add_comment(1, "second").unwrap();
+    f.board.reload().unwrap();
+    f.board.open_editor(Target::Comment(k(1), 0));
+    kb(&f).update_comment(1, 1, "second, edited").unwrap();
+    reload(&mut f);
+    assert!(!marked(&f));
+    kb(&f).update_comment(1, 0, "on it, edited").unwrap();
+    reload(&mut f);
+    assert!(marked(&f));
+    assert_eq!(f.board.message(), Some("#1's comment changed on disk"));
+    f.press(KeyCode::Esc);
+    // Another put at its index, its text the same: the one before it deleted.
+    let mut task = f.on_disk(2);
+    let at = now() - chrono::Duration::minutes(5);
+    task.comments = ["first", "same", "same"]
+        .into_iter()
+        .zip(0..)
+        .map(|(body, s)| Comment::new(at + chrono::Duration::seconds(s), body.into(), Author::Agent))
+        .collect();
+    Store::at(f.dir.path()).unwrap().save(&mut task).unwrap();
+    f.board.reload().unwrap();
+    f.board.open_editor(Target::Comment(k(2), 1));
+    kb(&f).delete_comment(2, 0).unwrap();
+    reload(&mut f);
+    assert!(marked(&f));
+    f.press(KeyCode::Esc);
+
+    // The form: its title, tags, related entries and the task's status, together when they came together.
+    f.press(KeyCode::Char('e'));
+    kb(&f).add_comment(1, "third").unwrap();
+    reload(&mut f);
+    assert!(!marked(&f));
+    let mut brain = kb(&f);
+    brain.update(1, "Fix the SSO login", vec!["auth".into()]).unwrap();
+    brain.set_status(1, Status::Done).unwrap();
+    reload(&mut f);
+    assert!(marked(&f));
+    assert_eq!(f.board.message(), Some("#1's title, tags and status changed on disk"));
+    f.press(KeyCode::Esc);
+    f.press(KeyCode::Char('e'));
+    kb(&f).toggle_link(1, 2).unwrap();
+    reload(&mut f);
+    assert_eq!(f.board.message(), Some("#1's related entries changed on disk"));
+    // Said once here too; kept through a save that stops.
+    f.press(KeyCode::Char('!'));
+    kb(&f).update(1, "Fix it", vec!["auth".into()]).unwrap();
+    reload(&mut f);
+    assert_eq!(f.board.message(), None);
+    f.press(KeyCode::Enter);
+    assert!(marked(&f));
+    f.press(KeyCode::Esc);
+    // A related entry taken out, none added.
+    f.press(KeyCode::Char('e'));
+    kb(&f).toggle_link(1, 2).unwrap();
+    reload(&mut f);
+    assert!(marked(&f));
+    assert_eq!(f.board.message(), Some("#1's related entries changed on disk"));
+}
+
+#[test]
+fn what_kb_changed_in_an_open_dialog_isnt_replaced_by_what_else_is_said() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["Fix login"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    let reload = |f: &mut Fixture| {
+        f.board.message = None;
+        f.board.reload().unwrap();
+    };
+    // Said beside what the next key does: `catch_up` reads the brains right before it, which is when it's found.
+    f.board.select(k(1));
+    f.press(KeyCode::Char('e'));
+    kb(&f).set_status(1, Status::Doing).unwrap();
+    reload(&mut f);
+    f.press(KeyCode::Char('!'));
+    f.press(KeyCode::Enter);
+    assert_eq!(f.board.message(), Some("#1 saved · #1's status changed on disk"));
+    // Nor is it lost to a file found skipped by the same read.
+    f.press(KeyCode::Char('m'));
+    kb(&f).set_description(1, "theirs").unwrap();
+    std::fs::write(f.dir.path().join("0009-broken.md"), "# Broken\n").unwrap();
+    reload(&mut f);
+    let said = f.board.message().unwrap();
+    assert!(said.contains("#1's description changed on disk") && said.contains("0009-broken.md"), "{said}");
+}
+
+#[test]
+fn an_open_verdict_says_kb_decided_meanwhile() {
+    use kanbrain_core::brain::{Brain, NewEntry};
+    let mut f = Fixture::new(&["cache"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    let redis = kb(&f).propose(1, NewEntry { title: "Use Redis".into(), ..Default::default() }).unwrap();
+    f.board.reload().unwrap();
+    f.board.select(k(redis));
+    f.press(KeyCode::Char('j'));
+    kb(&f).resolve(redis, DecisionState::Accepted, "").unwrap();
+    f.board.message = None;
+    f.board.reload().unwrap();
+    assert!(matches!(&f.board.mode, Mode::Edit(edit) if edit.changed_on_disk));
+    assert_eq!(f.board.message(), Some(format!("#{redis}'s verdict changed on disk").as_str()));
+}
+
+#[test]
+fn an_open_form_says_kb_swapped_a_related_entry() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["Fix login", "Other", "Third"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    kb(&f).toggle_link(1, 2).unwrap();
+    f.board.reload().unwrap();
+    f.board.select(k(1));
+    f.press(KeyCode::Char('e'));
+    // As many related entries as before, but another one.
+    let mut brain = kb(&f);
+    brain.toggle_link(1, 2).unwrap();
+    brain.toggle_link(1, 3).unwrap();
+    f.board.message = None;
+    f.board.reload().unwrap();
+    assert!(matches!(&f.board.mode, Mode::Form(form) if form.changed_on_disk));
+    assert_eq!(f.board.message(), Some("#1's related entries changed on disk"));
+}
+
+#[test]
+fn opening_what_an_agent_is_working_on_says_so() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["Fix login", "Mine"]);
+    let mut agent = Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    agent.author = Author::Agent;
+    agent.set_status(1, Status::Doing).unwrap();
+    agent.add_comment(1, "on it").unwrap();
+    f.board.reload().unwrap();
+    let opening = |f: &mut Fixture, open: &dyn Fn(&mut Board)| {
+        f.board.message = None;
+        open(&mut f.board);
+        let said = f.board.message().map(str::to_string);
+        assert!(!matches!(f.board.mode, Mode::Normal), "opened");
+        f.board.mode = Mode::Normal;
+        said
+    };
+    let working = Some("#1 is being worked on by an agent".to_string());
+
+    // The form, its description and its comments: what's saved may cross what the agent writes next.
+    f.board.select(k(1));
+    assert_eq!(opening(&mut f, &|b| press(b, KeyCode::Char('e'))), working, "the form");
+    assert_eq!(opening(&mut f, &|b| press(b, KeyCode::Char('m'))), working, "the description");
+    assert_eq!(opening(&mut f, &|b| b.open_editor(Target::Comment(k(1), 0))), working, "a comment");
+    // A new comment crosses nothing: it's how to tell the agent.
+    assert_eq!(opening(&mut f, &|b| press(b, KeyCode::Char('c'))), None, "a new comment");
+
+    // A task a person started, or one the agent parked, isn't being worked on by an agent.
+    f.board.select(k(2));
+    f.board.set_status(k(2), Status::Doing);
+    assert_eq!(opening(&mut f, &|b| press(b, KeyCode::Char('e'))), None, "the user's");
+    let mut agent = Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    agent.author = Author::Agent;
+    agent.set_status(1, Status::Parked).unwrap();
+    f.board.reload().unwrap();
+    f.board.select(k(1));
+    assert_eq!(opening(&mut f, &|b| press(b, KeyCode::Char('e'))), None, "parked");
+}
+
+#[test]
+fn a_new_entrys_form_has_nothing_on_disk_to_mark() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["Fix login"]);
+    f.press(KeyCode::Char('n'));
+    Brain::open(Store::at(f.dir.path()).unwrap()).unwrap().update(1, "Renamed", Vec::new()).unwrap();
+    f.board.reload().unwrap();
+    assert!(matches!(&f.board.mode, Mode::Form(form) if !form.changed_on_disk));
+}
+
+#[test]
+fn the_editor_doesnt_save_a_comment_over_another_moved_to_its_place_meanwhile() {
+    use kanbrain_core::brain::Brain;
+    use kanbrain_core::model::Comment;
+    type Meanwhile = fn(&mut Brain);
+    let mut f = Fixture::new(&["feature"]);
+    // Written in one second, as an agent's quick comments are, with the same text: neither tells them apart.
+    let at = now() - chrono::Duration::minutes(5);
+    let mut task = f.on_disk(1);
+    for _ in 0..3 {
+        task.comments.push(Comment::new(at, "ok".into(), Author::Agent));
+    }
+    let bodies = |f: &Fixture| f.on_disk(1).comments.into_iter().map(|c| c.body).collect::<Vec<_>>();
+    let cases: [(usize, Meanwhile, &[&str]); 5] = [
+        // Another window of the app, or a sync, takes it out: the next is at its index now.
+        (0, |kb| kb.delete_comment(1, 0).unwrap(), &["ok", "ok"]),
+        // One before it taken out.
+        (1, |kb| kb.delete_comment(1, 0).unwrap(), &["ok", "ok"]),
+        // The next one edited, then this one taken out: the edited one is at its index.
+        (
+            0,
+            |kb| {
+                kb.update_comment(1, 1, "edited").unwrap();
+                kb.delete_comment(1, 0).unwrap();
+            },
+            &["edited", "ok"],
+        ),
+        // The last taken out and another written after: the new one is at its index.
+        (
+            2,
+            |kb| {
+                kb.delete_comment(1, 2).unwrap();
+                kb.add_comment(1, "new").unwrap();
+            },
+            &["ok", "ok", "new"],
+        ),
+        // Another one edited: the comments aren't as the editor found them, so it can't tell which is which.
+        (
+            1,
+            |kb| {
+                kb.update_comment(1, 0, "edited").unwrap();
+            },
+            &["edited", "ok", "ok"],
+        ),
+    ];
+    for (index, meanwhile, left) in cases {
+        Store::at(f.dir.path()).unwrap().save(&mut task.clone()).unwrap();
+        f.board.reload().unwrap();
+        f.board.open_editor(Target::Comment(k(1), index));
+        f.type_text(", edited");
+        meanwhile(&mut Brain::open(Store::at(f.dir.path()).unwrap()).unwrap());
+        f.board.reload().unwrap();
+        for _ in 0..2 {
+            f.board.message = None;
+            f.press(KeyCode::Esc);
+            assert!(matches!(f.board.mode, Mode::Edit(_)), "kept open, to copy the text from");
+            assert_eq!(
+                f.board.message(),
+                Some("#1's comments changed around this one meanwhile: copy your text, then ctrl+d"),
+                "editing {index}, {left:?}"
+            );
+        }
+        assert_eq!(bodies(&f), left, "no comment saved over");
+        f.board.discard_edit();
+    }
+
+    // The last one replaced in its file by one written when it was, by someone else; or by the same author, later.
+    let replacements = [
+        Comment::new(at, "new".into(), Author::Human),
+        Comment::new(at + chrono::Duration::seconds(1), "new".into(), Author::Agent),
+    ];
+    for replacement in replacements {
+        let store = Store::at(f.dir.path()).unwrap();
+        store.save(&mut task.clone()).unwrap();
+        f.board.reload().unwrap();
+        f.board.open_editor(Target::Comment(k(1), 2));
+        f.type_text(", edited");
+        let mut replaced = f.on_disk(1);
+        replaced.comments[2] = replacement;
+        store.save(&mut replaced).unwrap();
+        f.board.reload().unwrap();
+        for _ in 0..2 {
+            f.board.message = None;
+            f.press(KeyCode::Esc);
+            assert!(
+                f.board.message().is_some_and(|m| m.contains("changed around this one")),
+                "{:?}",
+                f.board.message()
+            );
+        }
+        assert_eq!(bodies(&f), ["ok", "ok", "new"], "no comment saved over");
+        f.board.discard_edit();
+    }
+
+    // A comment written after it, as an agent goes on, changes nothing around it: it's saved.
+    Store::at(f.dir.path()).unwrap().save(&mut task.clone()).unwrap();
+    f.board.reload().unwrap();
+    f.board.open_editor(Target::Comment(k(1), 0));
+    f.type_text(", mine");
+    Brain::open(Store::at(f.dir.path()).unwrap()).unwrap().add_comment(1, "the agent's").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Esc);
+    assert!(matches!(f.board.mode, Mode::Normal));
+    assert_eq!(bodies(&f), ["ok, mine", "ok", "ok", "the agent's"]);
+}
+
+#[test]
 fn capital_c_picks_a_comment_to_edit_or_delete() {
     let mut f = Fixture::new(&["feature"]);
     f.press(KeyCode::Char('C'));
@@ -505,8 +926,17 @@ fn a_dialog_on_an_entry_deleted_meanwhile_closes() {
         store.delete(&f.on_disk(2)).unwrap();
         f.board.reload_changed(&[f.dir.path().to_path_buf()]).unwrap();
         assert!(matches!(f.board.mode, Mode::Normal), "{open}: closed, not left taking the keys unseen");
-        assert_eq!(f.board.message(), Some("closed: #2 was deleted meanwhile"));
+        assert_eq!(f.board.message(), Some("closed: #2 is gone, deleted or moved meanwhile"));
     }
+    // Named with its repository when several are shown: "#1" alone could be any of them.
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    board.select(Key::new(1, 1));
+    press(&mut board, KeyCode::Char('e'));
+    let api = Store::at(code.path().join("api/.brain")).unwrap();
+    api.delete(&api.load().unwrap().0[0]).unwrap();
+    board.reload().unwrap();
+    assert_eq!(board.message(), Some("closed: shop/api #1 is gone, deleted or moved meanwhile"));
 }
 
 #[test]
@@ -921,6 +1351,65 @@ fn the_project_description_is_shared_by_its_repositories() {
     press(&mut board, KeyCode::Char('!'));
     press(&mut board, KeyCode::Esc);
     assert_eq!(board.brain(2).project.as_ref().unwrap().description, "An online shop.!", "web sees api's edit");
+}
+
+#[test]
+fn a_project_description_or_role_editor_says_kb_changed_it() {
+    use kanbrain_core::projects;
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    let api = code.path().join("api/.brain");
+    let marked = |board: &Board| matches!(&board.mode, Mode::Edit(edit) if edit.changed_on_disk);
+    board.open_editor(Target::Project(1));
+    projects::write_description(central.path(), "shop", "A shop, described by kb.").unwrap();
+    board.message = None;
+    board.reload().unwrap();
+    assert!(marked(&board));
+    assert_eq!(board.message(), Some("the project's description changed on disk"));
+    board.discard_edit();
+
+    board.open_editor(Target::RepoNotes(1));
+    let card = projects::read_repo_card(&api).unwrap();
+    projects::write_repo_card(&api, &projects::RepoCard { notes: "The API, says kb.".into(), ..card }).unwrap();
+    board.message = None;
+    board.reload().unwrap();
+    assert!(marked(&board));
+    assert_eq!(board.message(), Some("this repository's role changed on disk"));
+}
+
+#[test]
+fn the_editor_doesnt_replace_unseen_a_project_description_or_role_kb_wrote_meanwhile() {
+    use kanbrain_core::projects;
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    let api = code.path().join("api/.brain");
+    let saving = |board: &mut Board| {
+        board.message = None;
+        press(board, KeyCode::Esc);
+    };
+    board.open_editor(Target::Project(1));
+    press(&mut board, KeyCode::Char('!'));
+    projects::write_description(central.path(), "shop", "A shop, described by kb.").unwrap();
+    board.reload().unwrap();
+    saving(&mut board);
+    assert_eq!(
+        board.message(),
+        Some("the project's description changed meanwhile: save again to replace it with yours, ctrl+d to keep it")
+    );
+    saving(&mut board);
+    assert_eq!(board.brain(2).project.as_ref().unwrap().description, "An online shop.!");
+
+    board.open_editor(Target::RepoNotes(1));
+    press(&mut board, KeyCode::Char('?'));
+    let card = projects::read_repo_card(&api).unwrap();
+    projects::write_repo_card(&api, &projects::RepoCard { notes: "The API, says kb.".into(), ..card }).unwrap();
+    board.reload().unwrap();
+    saving(&mut board);
+    assert_eq!(
+        board.message(),
+        Some("this repository's role changed meanwhile: save again to replace it with yours, ctrl+d to keep it")
+    );
+    assert_eq!(projects::read_repo_card(&api).unwrap().notes, "The API, says kb.");
 }
 
 #[test]
@@ -1811,6 +2300,108 @@ fn a_task_waiting_on_a_decision_is_answered_by_deciding_with_or_without_a_commen
 }
 
 #[test]
+fn the_reject_or_accept_editor_doesnt_overturn_unseen_a_verdict_kb_gave_while_it_was_open() {
+    use kanbrain_core::brain::{Brain, NewEntry};
+    let mut f = Fixture::new(&["cache", "queue"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    let mut agent = kb(&f);
+    agent.author = Author::Agent;
+    let redis = agent.propose(1, NewEntry { title: "Use Redis".into(), ..Default::default() }).unwrap();
+    let kafka = agent.propose(2, NewEntry { title: "Use Kafka".into(), ..Default::default() }).unwrap();
+    f.board.reload().unwrap();
+    let saving = |f: &mut Fixture| {
+        f.board.message = None;
+        f.press(KeyCode::Esc);
+    };
+    let said = |f: &Fixture, id| f.on_disk(id).comments.len();
+
+    // Accepted by kb while the user writes why it's rejected: the save stops and says so, the editor still open.
+    f.board.select(k(redis));
+    f.press(KeyCode::Char('j'));
+    f.type_text("too costly");
+    kb(&f).resolve(redis, DecisionState::Accepted, "").unwrap();
+    f.board.reload().unwrap();
+    let before = said(&f, redis);
+    saving(&mut f);
+    assert!(matches!(&f.board.mode, Mode::Edit(edit) if edit.editor.text() == "too costly"), "kept, with the reason");
+    assert_eq!(
+        f.board.message(),
+        Some(format!("#{redis} was accepted meanwhile: save again to reject it anyway, ctrl+d to leave it").as_str())
+    );
+    assert_eq!(f.on_disk(redis).decision, DecisionState::Accepted, "not overturned unseen");
+    assert_eq!(said(&f, redis), before);
+    // Saved again, knowing it: the user's verdict.
+    saving(&mut f);
+    assert!(matches!(f.board.mode, Mode::Normal));
+    assert_eq!(f.on_disk(redis).decision, DecisionState::Rejected);
+    assert_eq!(f.board.message(), Some(format!("#{redis} rejected").as_str()));
+    assert_eq!(said(&f, redis), before + 1, "with the reason");
+
+    // Proposed again meanwhile, the same.
+    f.board.select(k(redis));
+    f.press(KeyCode::Char('Y'));
+    f.type_text("fine after all");
+    kb(&f).resolve(redis, DecisionState::Proposed, "reworked").unwrap();
+    f.board.reload().unwrap();
+    saving(&mut f);
+    assert_eq!(
+        f.board.message(),
+        Some(
+            format!("#{redis} was proposed again meanwhile: save again to accept it anyway, ctrl+d to leave it")
+                .as_str()
+        )
+    );
+    assert_eq!(f.on_disk(redis).decision, DecisionState::Proposed);
+    saving(&mut f);
+    assert_eq!(f.on_disk(redis).decision, DecisionState::Accepted);
+
+    // Given the same verdict meanwhile: nothing a save can give, however many times, but the text typed is the user's
+    // to copy.
+    for (key, verdict, word) in [('j', DecisionState::Rejected, "reason"), ('Y', DecisionState::Accepted, "comment")] {
+        kb(&f).resolve(kafka, DecisionState::Proposed, "again").unwrap();
+        f.board.reload().unwrap();
+        f.board.select(k(kafka));
+        f.press(KeyCode::Char(key));
+        f.type_text("mine");
+        kb(&f).resolve(kafka, verdict, "theirs").unwrap();
+        f.board.reload().unwrap();
+        let before = said(&f, kafka);
+        for _ in 0..2 {
+            saving(&mut f);
+            assert!(matches!(f.board.mode, Mode::Edit(_)));
+            assert_eq!(
+                f.board.message(),
+                Some(format!("#{kafka} was {} meanwhile: copy your {word}, then ctrl+d", verdict.as_str()).as_str())
+            );
+        }
+        assert_eq!(said(&f, kafka), before, "the verdict was theirs");
+        f.board.discard_edit();
+    }
+
+    // Given it, then proposed again: the save stops again, saying so, rather than giving the reason over the new
+    // proposal unseen.
+    kb(&f).resolve(kafka, DecisionState::Proposed, "again").unwrap();
+    f.board.reload().unwrap();
+    f.board.select(k(kafka));
+    f.press(KeyCode::Char('j'));
+    f.type_text("mine");
+    kb(&f).resolve(kafka, DecisionState::Rejected, "theirs").unwrap();
+    f.board.reload().unwrap();
+    saving(&mut f);
+    kb(&f).resolve(kafka, DecisionState::Proposed, "reworked").unwrap();
+    f.board.reload().unwrap();
+    saving(&mut f);
+    assert_eq!(
+        f.board.message(),
+        Some(
+            format!("#{kafka} was proposed again meanwhile: save again to reject it anyway, ctrl+d to leave it")
+                .as_str()
+        )
+    );
+    assert_eq!(f.on_disk(kafka).decision, DecisionState::Proposed, "not rejected unseen");
+}
+
+#[test]
 fn the_details_buttons_act_on_the_entry_from_the_calendar_too() {
     let mut f = Fixture::new(&["a task"]);
     f.board.switch_tab(Tab::Calendar);
@@ -2069,6 +2660,12 @@ fn an_edit_saves_only_what_was_changed_in_the_form_and_keeps_what_kb_changed_mea
     let Mode::Form(form) = &f.board.mode else { panic!("the form is open") };
     let at = f.board.form_link_options(form).iter().position(|&(key, _)| key == k(2)).unwrap();
     f.board.toggle_form_link(at);
+    // Both changed the title: the first save stops and says what it is now, saving nothing; the second replaces it.
+    f.board.message = None;
+    f.press(KeyCode::Enter);
+    assert!(matches!(f.board.mode, Mode::Form(_)), "kept open with what was typed");
+    assert_eq!(f.board.message(), Some("#1's title changed meanwhile, to “Fix SSO”: save again to replace it"));
+    assert_eq!((f.on_disk(1).title.as_str(), tags(&f).len()), ("Fix SSO", 3), "nothing saved");
     f.press(KeyCode::Enter);
     assert_eq!(f.on_disk(1).title, "Fix the SSO login now", "the title typed");
     assert_eq!(tags(&f), ["bug", "ui", "db"], "auth taken out in the form, db added by the agent");

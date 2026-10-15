@@ -2,13 +2,13 @@
 
 use super::{
     Board, CommentPicker, Confirm, Edit, Form, Key, LinkPicker, Mode, NextUndo, Picker, QuickAdd, Request, Tab, Target,
-    WhereFor, WherePicker,
+    WhereFor, WherePicker, changed_on_disk,
 };
 use crate::text::editor::{LineInput, TextEditor};
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveTime};
 use kanbrain_core::cli::update;
-use kanbrain_core::model::{DecisionState, Kind, Status};
+use kanbrain_core::model::{Author, Comment, DecisionState, Kind, Status};
 use kanbrain_core::period::{Period, Unit};
 use kanbrain_core::store::{self, Change};
 use std::path::Path;
@@ -159,13 +159,84 @@ impl Board {
     /// Opens the editor on `target` from Manage project on `back`, which closing it goes back to.
     pub fn open_editor_from(&mut self, target: Target, back: Option<usize>) {
         let Some(text) = self.text_of(target) else { return };
-        self.mode = Mode::Edit(Edit { editor: TextEditor::new(text), target, back });
+        let (editor, base) = (TextEditor::new(text), text.to_string());
+        let comments = match target {
+            Target::Comment(key, _) => self.task(key).map(|t| t.comments.clone()).unwrap_or_default(),
+            _ => Vec::new(),
+        };
+        let decision = match target {
+            Target::Reject(key) | Target::Accept(key) => self.task(key).map(|t| t.decision),
+            _ => None,
+        };
+        let status = target.key().and_then(|key| self.task(key)).map(|t| t.status);
+        self.mode = Mode::Edit(Edit { editor, target, back, base, comments, decision, status, changed_on_disk: false });
+        // A new comment crosses nothing the agent writes: it's how to tell it.
+        if let Target::Description(key) | Target::Comment(key, _) = target {
+            self.say_agent_working(key);
+        }
     }
 
-    /// Whether the editor's text differs from what its target holds: typed and put back as it was is no change, to
-    /// save, to say was saved, or to mark in its title.
+    /// Says, on opening the form or an editor on a task an agent has in doing, that it's being worked on: what's
+    /// saved may cross what the agent writes next. It only warns, since the user may be correcting the agent.
+    pub(super) fn say_agent_working(&mut self, key: Key) {
+        if self.task(key).is_some_and(|t| t.is_task() && t.status == Status::Doing && t.started_by() == Author::Agent) {
+            self.notify(format!("{} is being worked on by an agent", self.entry_name(key)));
+        }
+    }
+
+    /// Whether the comment at the editor's index is still the one it opened on: the others are as they were, but
+    /// for any written after them, and the one there was written when it was, by the same author. Anything but a
+    /// comment is.
+    fn same_comment(&self, edit: &Edit) -> bool {
+        fn others(comments: &[Comment], index: usize) -> impl Iterator<Item = &Comment> {
+            comments.iter().enumerate().filter(move |&(at, _)| at != index).map(|(_, comment)| comment)
+        }
+        let Target::Comment(key, index) = edit.target else { return true };
+        let (Some(task), Some(then)) = (self.task(key), edit.comments.get(index)) else { return false };
+        task.comments.get(index).is_some_and(|now| now.created == then.created && now.author == then.author)
+            && others(&edit.comments, index).eq(others(&task.comments, index).take(edit.comments.len() - 1))
+    }
+
+    /// What `kb` changed, since the editor opened, of what it edits: its text (or which comment is at its index), the
+    /// entry's status and a decision's verdict being given, said for the status bar; `None` if nothing.
+    pub(super) fn edit_changed_on_disk(&self, edit: &Edit) -> Option<String> {
+        // Another comment edited isn't what it edits, unlike for a save (`same_comment`): one put at its index is.
+        let moved = match edit.target {
+            Target::Comment(key, index) => {
+                let at = |comments: &[Comment]| comments.get(index).map(|c| (c.created, c.author));
+                self.task(key).map(|t| at(&t.comments)) != Some(at(&edit.comments))
+            }
+            _ => false,
+        };
+        let text = moved || self.text_of(edit.target) != Some(edit.base.as_str());
+        let Some(key) = edit.target.key() else {
+            return text.then(|| format!("{} changed on disk", self.text_name(edit.target)));
+        };
+        let what = if matches!(edit.target, Target::Description(_)) { "description" } else { "comment" };
+        let status = self.task(key).map(|t| t.status) != edit.status;
+        // Only a verdict's editor has one, which its save gives.
+        let verdict = edit.decision.is_some() && self.task(key).map(|t| t.decision) != edit.decision;
+        changed_on_disk(&self.entry_name(key), &[(text, what), (status, "status"), (verdict, "verdict")])
+    }
+
+    /// What the editor's text is, to say what changed meanwhile.
+    fn text_name(&self, target: Target) -> String {
+        match target {
+            Target::Description(key) => format!("{}'s description", self.entry_name(key)),
+            Target::NewComment(key) | Target::Comment(key, _) | Target::Reject(key) | Target::Accept(key) => {
+                format!("{}'s comment", self.entry_name(key))
+            }
+            Target::Project(_) => "the project's description".into(),
+            Target::RepoNotes(_) => "this repository's role".into(),
+        }
+    }
+
+    /// Whether the editor holds a change of the user's: its text differs from the one it started from (`Edit::base`)
+    /// and from what its target holds. Typed and put back as it was is no change, to save, to say was saved, or to
+    /// mark in its title, even once `kb` changed the target meanwhile.
     pub fn changed(&self, edit: &Edit) -> bool {
-        edit.editor.modified && self.text_of(edit.target) != Some(edit.editor.text().as_str())
+        let text = edit.editor.text();
+        edit.editor.modified && text != edit.base && self.text_of(edit.target) != Some(text.as_str())
     }
 
     /// What `target` holds now: the text the editor starts from, and saving the same is no change.
@@ -182,7 +253,7 @@ impl Board {
     }
 
     /// Writes the editor's text to its target, if it changed.
-    pub(super) fn save_edit(&mut self, edit: &Edit) {
+    pub(super) fn save_edit(&mut self, mut edit: Edit) {
         let answers = self.answers(edit.target);
         let text = edit.editor.text();
         // A comment or a reason is something said: closing with none says so, rather than closing as if it was
@@ -202,7 +273,57 @@ impl Board {
                 _ => {}
             };
         }
-        if !self.changed(edit) {
+        if !self.changed(&edit) {
+            return;
+        }
+        // What `kb` wrote meanwhile isn't replaced unseen: the save stops, the editor open, and says so; saved again
+        // with nothing new there, it replaces it.
+        if let Target::Comment(key, _) = edit.target
+            && !self.same_comment(&edit)
+        {
+            let name = self.entry_name(key);
+            self.notify(format!("{name}'s comments changed around this one meanwhile: copy your text, then ctrl+d"));
+            self.mode = Mode::Edit(edit);
+            return;
+        }
+        if let Some(now) = self.text_of(edit.target)
+            && now != edit.base
+        {
+            edit.base = now.to_string();
+            self.notify(format!(
+                "{} changed meanwhile: save again to replace it with yours, ctrl+d to keep it",
+                self.text_name(edit.target)
+            ));
+            self.mode = Mode::Edit(edit);
+            return;
+        }
+        let giving = match edit.target {
+            Target::Reject(key) => Some((key, "reject", DecisionState::Rejected, "reason")),
+            Target::Accept(key) => Some((key, "accept", DecisionState::Accepted, "comment")),
+            Target::Description(_)
+            | Target::NewComment(_)
+            | Target::Comment(..)
+            | Target::Project(_)
+            | Target::RepoNotes(_) => None,
+        };
+        if let Some((key, verb, verdict, word)) = giving
+            && let Some(now) = self.task(key).map(|t| t.decision)
+            && (Some(now) != edit.decision || now == verdict)
+        {
+            let was = match now {
+                DecisionState::Proposed => "proposed again",
+                now => now.as_str(),
+            };
+            let name = self.entry_name(key);
+            // Given the verdict the user was writing, `resolve` does nothing: the text would be lost while saying
+            // it's done. Where it stood is kept all the same, so a change after it stops the save again.
+            if now == verdict {
+                self.notify(format!("{name} was {was} meanwhile: copy your {word}, then ctrl+d"));
+            } else {
+                self.notify(format!("{name} was {was} meanwhile: save again to {verb} it anyway, ctrl+d to leave it"));
+            }
+            edit.decision = Some(now);
+            self.mode = Mode::Edit(edit);
             return;
         }
         let saved = match edit.target {

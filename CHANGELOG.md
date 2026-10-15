@@ -5,6 +5,47 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-16
+
+### Added
+
+- The kanban app's edit form and text editor say, as soon as it happens, that `kb` changed what they edit while open:
+  their title reads `· changed on disk` until closed, and the status bar says what (`#1's title and status changed on
+  disk`). The form counts its entry's title, tags, related entries and status; the editor its text (a comment moved
+  to its place included), the task's status and, rejecting or accepting, the decision's verdict, not new comments
+  (`Board::after_load`, `Edit::changed_on_disk`, `Form::changed_on_disk`). What a read finds (this, or a file
+  skipped) is said once, so the key that read for doesn't replace it: its message goes beside it (`#1 saved · #1's
+  status changed on disk`; `Board::notify_found`).
+- Opening the edit form, the description or a comment of a task an agent has in doing says so in the status bar
+  (`#1 is being worked on by an agent`): what's saved may cross what it writes next. It only warns; a new comment, how
+  to tell the agent, doesn't (`Board::say_agent_working`).
+
+### Changed
+
+- The section `kb init` writes in `CLAUDE.md`/`AGENTS.md` (`init::SECTION`) tells agents to give a pull request,
+  issue, CI run, commit or page named in a comment or body its link (`[PR #39](URL)`, not just `PR #39`), so it opens
+  from the board; `kb update` brings it to every project (`init --all`), `kb init` to one.
+
+### Fixed
+
+- A dialog the kanban app closes because its entry is gone names it with its repository when several are shown, and
+  says it may have moved: `closed: shop/api #1 is gone, deleted or moved meanwhile` (it said `#1 was deleted
+  meanwhile`, also after a `kb move`).
+- The kanban app's text editor doesn't replace unseen what `kb` wrote while it was open: a description (an agent's
+  `kb describe`), comment, project description or repository role that changed meanwhile stops the save, the editor
+  left open with the text typed and the status bar saying so (`… changed meanwhile: save again to replace it with
+  yours, ctrl+d to keep it`); saved again with nothing newer there, it replaces it (`Edit::base`). It replaced it,
+  unsaid, even with nothing typed but put back. A comment isn't saved over another that a deletion meanwhile put at
+  its place, though written in the same second with the same text: with the entry's other comments not as the
+  editor found them (but for new ones after them), the save stops for good (`… comments changed around this one
+  meanwhile`; `Edit::comments`, `Board::same_comment`), and the editor's title names the comment it opened. The edit
+  form does the same for a title both changed (`… title changed meanwhile, to “…”`), which v0.5.0 replaced.
+- The kanban app's reject and accept-with-a-comment editor doesn't overturn unseen a verdict `kb` gave while it was
+  open: it flipped a decision an agent's `kb accept` accepted meanwhile to rejected, saying only `#N rejected`. The save
+  stops and says so (`#N was accepted meanwhile: save again to reject it anyway, ctrl+d to leave it`); given the
+  verdict being written, it stops for good (`… copy your reason, then ctrl+d`), where it dropped the reason or
+  comment unsaid while saying `#N rejected` (`Edit::decision`).
+
 ## [0.5.0] - 2026-10-15
 
 ### Added
@@ -380,7 +421,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/singudotdev/kanbrain/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/singudotdev/kanbrain/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/singudotdev/kanbrain/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/singudotdev/kanbrain/compare/v0.4.0...v0.4.1

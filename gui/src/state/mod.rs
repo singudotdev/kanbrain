@@ -184,8 +184,9 @@ pub struct Board {
     pub request: Option<Request>,
     /// A newer release's version, once the window found one out.
     pub available: Option<String>,
-    /// Status bar message and when it was set; it expires after `MESSAGE_TTL`.
-    message: Option<(String, Instant)>,
+    /// Status bar message, when it was set (it expires after `MESSAGE_TTL`), and whether it's what a read of the
+    /// brains found rather than what an action did: said only once, so the action that read for goes beside it.
+    message: Option<(String, Instant, bool)>,
     /// The files the last change wrote, as they were before and after, for `u` to put back.
     last_change: Vec<Change>,
     /// What `u` does next to `last_change`.
@@ -238,17 +239,26 @@ impl Board {
 
     /// Shows `msg` in the status bar for a few seconds.
     pub fn notify(&mut self, msg: impl Into<String>) {
+        self.say(&msg.into(), false);
+    }
+
+    /// Shows what a read of the brains found (a file skipped, `kb` changing what a dialog edits), which the action
+    /// that read for, said next, doesn't replace: it's said only once.
+    fn notify_found(&mut self, msg: impl Into<String>) {
+        self.say(&msg.into(), true);
+    }
+
+    /// Shows `msg`, after what a read found just before, if that's what's shown.
+    fn say(&mut self, msg: &str, found: bool) {
         // Plain text: the command line's messages, which these often are, quote names in markdown's backticks.
-        let mut msg = msg.into().replace('`', "");
-        // What a read just found skipped stays beside what the action that read says: it's said only once.
-        if let Some((said, at)) = &self.message
-            && said.starts_with(SKIPPED)
+        let mut msg = msg.replace('`', "");
+        if let Some((said, at, true)) = &self.message
             && at.elapsed() < Duration::from_secs(1)
             && *said != msg
         {
             msg = format!("{msg} · {said}");
         }
-        self.message = Some((msg, Instant::now()));
+        self.message = Some((msg, Instant::now(), found));
     }
 
     /// Shows what went wrong in the status bar, with its causes.
@@ -258,7 +268,7 @@ impl Board {
 
     /// The status bar message, while it hasn't expired.
     pub fn message(&self) -> Option<&str> {
-        self.message.as_ref().filter(|(_, at)| at.elapsed() < MESSAGE_TTL).map(|(msg, _)| msg.as_str())
+        self.message.as_ref().filter(|(_, at, _)| at.elapsed() < MESSAGE_TTL).map(|(msg, ..)| msg.as_str())
     }
 
     /// Re-reads every brain, and the list of projects, which may have gained or lost one. The
@@ -293,7 +303,7 @@ impl Board {
         let open = !matches!(self.mode, Mode::Normal);
         self.mode = std::mem::replace(&mut self.mode, Mode::Normal).remap(to).unwrap_or(Mode::Normal);
         if open && matches!(self.mode, Mode::Normal) {
-            self.notify("closed: its project is gone");
+            self.notify_found("closed: its project is gone");
         }
         self.after_load();
         Ok(())
@@ -332,8 +342,10 @@ impl Board {
             && self.task(key).is_none()
         {
             self.mode = Mode::Normal;
-            self.notify(format!("closed: #{} was deleted meanwhile", key.id));
+            // A `kb move` takes it out of this brain as a delete does.
+            self.notify_found(format!("closed: {} is gone, deleted or moved meanwhile", self.entry_name(key)));
         }
+        self.mark_changed_on_disk();
         let left_out = self.skipped.iter().map(|s| s.said.clone());
         // Named with their brain: two repositories may skip files of one name.
         let files = self.sources.iter().flat_map(|s| {
@@ -342,10 +354,28 @@ impl Board {
         let now: Vec<String> = left_out.chain(files).collect();
         let new: Vec<&str> = now.iter().filter(|w| !self.warned.contains(w)).map(String::as_str).collect();
         if !new.is_empty() {
-            self.notify(format!("{SKIPPED}{}", new.join("; ")));
+            self.notify_found(format!("{SKIPPED}{}", new.join("; ")));
         }
         self.warned = now;
         self.keep_selection();
+    }
+
+    /// Marks the open edit form or editor once `kb` changed what it edits, and says what, once: the save that follows
+    /// is the user's call, made knowing it.
+    fn mark_changed_on_disk(&mut self) {
+        let said = match &self.mode {
+            Mode::Edit(edit) if !edit.changed_on_disk => self.edit_changed_on_disk(edit),
+            Mode::Form(form) if !form.changed_on_disk => self.form_changed_on_disk(form),
+            _ => None,
+        };
+        let Some(said) = said else { return };
+        match &mut self.mode {
+            Mode::Edit(edit) => edit.changed_on_disk = true,
+            Mode::Form(form) => form.changed_on_disk = true,
+            // Only an edit or a form says what changed.
+            _ => return,
+        }
+        self.notify_found(said);
     }
 
     /// Tasks in a column, filtered by the scope and the search, most recently moved there first; the
@@ -516,4 +546,12 @@ impl Board {
         options.sort_by_key(|&(key, t)| (!linked.contains(&key), key.src != src, std::cmp::Reverse(t.id)));
         options
     }
+}
+
+/// "#1's title and status changed on disk", naming the fields of `name`'s entry that changed; `None` if none did.
+fn changed_on_disk(name: &str, fields: &[(bool, &str)]) -> Option<String> {
+    let changed: Vec<&str> = fields.iter().filter(|(changed, _)| *changed).map(|(_, field)| *field).collect();
+    let (last, rest) = changed.split_last()?;
+    let fields = if rest.is_empty() { (*last).to_string() } else { format!("{} and {last}", rest.join(", ")) };
+    Some(format!("{name}'s {fields} changed on disk"))
 }

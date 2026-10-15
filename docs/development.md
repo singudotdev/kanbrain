@@ -38,6 +38,10 @@ All the tests, the kanban app's too:
 cargo test --workspace
 ```
 
+Keep `TMPDIR` (and a mutation run's worktree) out of any folder with a `.brain` above it, as this repository has
+once kanbrain's own tasks are kept in it: `kb` takes the nearest `.brain` above where it runs, so the command line's
+tests, run in temporary folders, would write into it. They stop first, saying so, a `TMPDIR` that links there too.
+
 Lints, which must be warning-free (pedantic is on, see below):
 
 ```sh
@@ -369,8 +373,8 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | `tags` | no color repeats until the palette is used up, `tags.md` round trip, custom colors |
 | `period`, `export` | period bounds and stepping, report tables |
 | `enums` | generated `ALL` / `position` / `next`, `parse` as the inverse of `as_str` |
-| `state` (gui) | the board driven by keys over a temporary folder: the palette offering only what works now, moving between cards and columns, moving cards, drops, quick add, the form, the tags it offers and picks and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, nothing asked once your task stops, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from Manage project, the update offered once a newer release is found and refused while an agent works, the details' buttons acting on the entry from the calendar too, the form's tags highlight after a paste, a cut or a reload, an edit saving only what was changed in the form over what `kb` changed meanwhile (also when the list of brains changes while it's open), a brain found while the board acts locked and read again under its lock |
-| `dialogs` (gui) | the delete question naming the entry, what removing one repository or several says, Manage project scrolling to the repository it's opened from, the editor naming what its text belongs to |
+| `state` (gui) | the board driven by keys over a temporary folder: the palette offering only what works now, moving between cards and columns, moving cards, drops, quick add, the form, the tags it offers and picks and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, nothing asked once your task stops, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from Manage project, the update offered once a newer release is found and refused while an agent works, the details' buttons acting on the entry from the calendar too, the form's tags highlight after a paste, a cut or a reload, an edit saving only what was changed in the form over what `kb` changed meanwhile (also when the list of brains changes while it's open), a save stopping over a title, description, comment, project description or role `kb` changed meanwhile, a comment moved meanwhile not saved over another, a verdict `kb` gave meanwhile not overturned unseen, an open form or editor marked, and said once, when `kb` changed what it edits or the task's status, opening one on a task an agent has in doing saying so, a brain found while the board acts locked and read again under its lock |
+| `dialogs` (gui) | the delete question naming the entry, what removing one repository or several says, Manage project scrolling to the repository it's opened from, the editor naming what its text belongs to, the form's and editor's titles marked `changed on disk`, the editor's unsaved dot kept last |
 | `keys` (gui) | no key running two things on one tab; what the menu offers named and described; every key in `docs/keybindings.md` on its tabs |
 | `editor` (gui) | line editing (split/join), unicode, wrapping; one-line cursor editing, line breaks pasted into one line (a lone `\r` too) as spaces; selecting, copying and replacing; mouse selection by character, word and line |
 | `markdown` (gui) | inline styles and link ranges, kept line breaks, heading levels, numbered and task lists, nesting, code, quotes, tables, rules |
@@ -427,7 +431,7 @@ Mesa's software Vulkan, and keeps the screenshots as the run's artifacts.
 again: a change no test notices is behavior nothing guards. CI runs it on each push's and pull request's diff and
 fails on a mutant no test catches. `.cargo/mutants.toml` lists what no test can tell apart (starting the installer,
 a hover style), each with why; anything else missed is a test to write. Locally, run it from a clean checkout
-(`git worktree add`): it copies the working tree as it is when it starts.
+(`git worktree add`) outside the repository (see `TMPDIR` above): it copies the working tree as it is when it starts.
 
 ### Agents, end to end
 
@@ -446,6 +450,7 @@ Code headless on small throwaway projects, one per scenario, and judges what lan
 | `answered` | in a new session, picks up the task whose question was answered, and applies the answer |
 | `full` | with the user's own task running, starts its own beside it, does the work, and leaves the user's alone |
 | `parallel` | asked for three independent changes by subagents, gives each its own task, running at once, each commented on |
+| `links` | told of a pull request by its URL, names it on the board with its link each time |
 | `repos` | with two repositories, leaves the other one's work there as a task, linked to the task here |
 | `resume` | in a new session, picks up the task that was running, from its last comment |
 | `edit` | without the section, told to edit a task's file in `.brain/`, is refused by the hook and marks it done with `kb` |
