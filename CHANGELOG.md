@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-16
+
 ### Added
 
 - The kanban app's edit form and text editor say, as soon as it happens, that `kb` changed what they edit while open:
@@ -419,7 +421,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/singudotdev/kanbrain/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/singudotdev/kanbrain/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/singudotdev/kanbrain/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/singudotdev/kanbrain/compare/v0.4.0...v0.4.1
