@@ -146,8 +146,10 @@ pub enum ProjectChange {
 #[non_exhaustive]
 pub enum ProjectPart {
     /// `describe`: the project's description, on the card all its repositories share.
+    #[non_exhaustive]
     Description,
     /// `notes`: this repository's role among the project's, in its `.brain/project.md`.
+    #[non_exhaustive]
     Notes,
 }
 
@@ -156,8 +158,10 @@ pub enum ProjectPart {
 #[non_exhaustive]
 pub enum TagChange {
     /// `+TAG`: added after its others, unless it has it.
+    #[non_exhaustive]
     Add(String),
     /// `-TAG`: removed, if it has it.
+    #[non_exhaustive]
     Remove(String),
 }
 
@@ -166,8 +170,10 @@ pub enum TagChange {
 #[non_exhaustive]
 pub enum Text {
     /// The words after the id, joined by spaces.
+    #[non_exhaustive]
     Given(String),
     /// Read stdin to the end.
+    #[non_exhaustive]
     Stdin,
 }
 

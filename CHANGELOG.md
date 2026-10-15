@@ -19,10 +19,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - **Breaking:** for `kanbrain-core`'s Rust API only, what the command line parses to is `#[non_exhaustive]`:
-  `cli::Command`, `cli::EntryCommand` and `cli::ProjectChange` and each of their variants, `cli::ProjectPart`,
-  `cli::Text`, `cli::EntryArgs`, `cli::AddArgs`, `cli::ListArgs` and `cli::ReportArgs`. A new command, or a new
-  option of one, is no longer a breaking change of the crate; outside it, a `match` on them needs `_` and `..`, and
-  only the crate builds them. `kb`, the kanban app and the data are unchanged, and nothing needs migrating.
+  `cli::Command`, `cli::EntryCommand`, `cli::ProjectChange`, `cli::ProjectPart`, `cli::TagChange` and `cli::Text`
+  and each of their variants, `cli::EntryArgs`, `cli::AddArgs`, `cli::ListArgs` and `cli::ReportArgs`. A new
+  command, or a new option of one, is no longer a breaking change of the crate; outside it, a `match` on them needs
+  `_` and `..`, and only the crate builds them. `kb`, the kanban app and the data are unchanged, and nothing needs
+  migrating.
 
 ### Fixed
 

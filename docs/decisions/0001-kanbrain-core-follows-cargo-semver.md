@@ -20,10 +20,12 @@ that any `match` outside the crate must cover, so adding it broke the crate's AP
 - A release's number follows the stricter of the two: a break of `kb`, the app or the data, or of `kanbrain-core`'s
   API as `cargo semver-checks -p kanbrain-core --baseline-rev vLAST` reports it, takes the breaking slot (`y` in
   `0.y.z`).
-- What the command line parses to (`cli::Command`, `cli::EntryCommand`, `cli::ProjectChange` and each of their
-  variants, their parts, the options' structs) is `#[non_exhaustive]` from v0.5.0, so a new command, or a new option
-  of one, is additive for the crate too, as it is for `kb`. The variants are marked as well as the enums: a field
-  added to a variant (`wait`'s `--timeout` was one) breaks a pattern on it unless the variant is.
+- What the command line parses to (`cli::Command`, `cli::EntryCommand`, `cli::ProjectChange` and their parts
+  `cli::ProjectPart`, `cli::TagChange` and `cli::Text`, each with its variants; the options' structs) is
+  `#[non_exhaustive]` from v0.5.0, so a new command, or a new option of one, is additive for the crate too, as it is
+  for `kb`. The variants are marked as well as the enums: a field added to a variant (`project rename`'s `--` was
+  one, in v0.4.0) breaks a pattern on it unless the variant is. What `kb hook`, `kb completions` and `kb complete`
+  take is left as it is: those types are private to `cli`, and no other crate can name them.
 
 ## Consequences
 
