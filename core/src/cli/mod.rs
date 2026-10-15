@@ -604,14 +604,7 @@ fn run_entries(store: Store, central: &Path, mut args: EntryArgs) -> Result<()> 
 /// line, say), or named as one (`0007-title.md`); markdown of other names, or dated (`2024-01-15.md`), with no id is
 /// left unsaid: a central brain kept in a notes vault holds many.
 fn say_skipped(brain: &Brain) {
-    let entry_file = |warning: &&String| {
-        let digits = warning.chars().take_while(char::is_ascii_digit).count();
-        let named = digits >= 4
-            && warning[digits..]
-                .strip_prefix('-')
-                .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_lowercase()));
-        named || !warning.contains("missing `- id:` line")
-    };
+    let entry_file = |warning: &&String| store::entry_named(warning) || !warning.contains(crate::model::MISSING_ID);
     for warning in brain.warnings.iter().filter(entry_file) {
         eprintln!("kb: skipped {warning}; fix the file or remove it");
     }
