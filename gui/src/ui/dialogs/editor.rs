@@ -1,6 +1,6 @@
 //! The multi-line editor for a description, a comment or a project's text.
 
-use super::dialog;
+use super::{dialog, titled};
 use crate::state::{Board, Edit, Target};
 use crate::text::event::KeyCode;
 use crate::ui::caret::caret;
@@ -37,7 +37,6 @@ pub(super) fn draw(
         Target::RepoNotes(_) => "This repository's role".to_string(),
     };
     let changed = board.changed(edit);
-    let modified = if changed { " •" } else { "" };
 
     // Long lines wrap; the cursor's line is kept in view while typing.
     let (row, col) = edit.editor.cursor();
@@ -99,7 +98,14 @@ pub(super) fn draw(
     } else {
         vec![action("save", "Close", Kind::Secondary, KeyCode::Esc, cx)]
     };
-    dialog(format!("{what}{modified}"), content, buttons).w(px(EDITOR_WIDTH)).h(relative(0.8))
+    dialog(title(what, changed, edit.changed_on_disk), content, buttons).w(px(EDITOR_WIDTH)).h(relative(0.8))
+}
+
+/// The editor's title: what it edits, the mark that `kb` changed it, then the dot for unsaved changes, kept last as
+/// the one that comes and goes while typing.
+pub(super) fn title(what: String, modified: bool, changed_on_disk: bool) -> String {
+    let title = titled(what, changed_on_disk);
+    if modified { format!("{title} •") } else { title }
 }
 
 /// What the editor's text belongs to: the entry, the project or the repository.

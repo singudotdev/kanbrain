@@ -1,6 +1,6 @@
 //! The new / edit form: the project a new entry goes in, its title and tags, related entries and column.
 
-use super::{DIALOG_WIDTH, check, dialog, labeled, list_box};
+use super::{DIALOG_WIDTH, check, dialog, labeled, list_box, titled};
 use crate::state::{Board, COLUMNS, Field, Form, FormTarget, Picker};
 use crate::text::editor::LineInput;
 use crate::text::event::KeyCode;
@@ -69,7 +69,7 @@ pub(super) fn draw(board: &Board, form: &Form, scroll: &Scrolls, follow: bool, c
             .tooltip(widgets::tooltip("Shortcut: Enter (outside the related field)"))
             .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.act(cx, Board::save_form))),
     ];
-    dialog(title, content, buttons).w(px(DIALOG_WIDTH))
+    dialog(titled(title, form.changed_on_disk), content, buttons).w(px(DIALOG_WIDTH))
 }
 
 /// Where a new task starts: To do · Doing · Parked · Done, the one picked highlighted. Clicked, or with

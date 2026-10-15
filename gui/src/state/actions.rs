@@ -2,7 +2,7 @@
 
 use super::{
     Board, CommentPicker, Confirm, Edit, Form, Key, LinkPicker, Mode, NextUndo, Picker, QuickAdd, Request, Tab, Target,
-    WhereFor, WherePicker,
+    WhereFor, WherePicker, changed_on_disk,
 };
 use crate::text::editor::{LineInput, TextEditor};
 use anyhow::Result;
@@ -168,7 +168,8 @@ impl Board {
             Target::Reject(key) | Target::Accept(key) => self.task(key).map(|t| t.decision),
             _ => None,
         };
-        self.mode = Mode::Edit(Edit { editor, target, back, base, comments, decision });
+        let status = target.key().and_then(|key| self.task(key)).map(|t| t.status);
+        self.mode = Mode::Edit(Edit { editor, target, back, base, comments, decision, status, changed_on_disk: false });
     }
 
     /// Whether the comment at the editor's index is still the one it opened on: the others are as they were, but
@@ -182,6 +183,28 @@ impl Board {
         let (Some(task), Some(then)) = (self.task(key), edit.comments.get(index)) else { return false };
         task.comments.get(index).is_some_and(|now| now.created == then.created && now.author == then.author)
             && others(&edit.comments, index).eq(others(&task.comments, index).take(edit.comments.len() - 1))
+    }
+
+    /// What `kb` changed, since the editor opened, of what it edits: its text (or which comment is at its index), the
+    /// entry's status and a decision's verdict being given, said for the status bar; `None` if nothing.
+    pub(super) fn edit_changed_on_disk(&self, edit: &Edit) -> Option<String> {
+        // Another comment edited isn't what it edits, unlike for a save (`same_comment`): one put at its index is.
+        let moved = match edit.target {
+            Target::Comment(key, index) => {
+                let at = |comments: &[Comment]| comments.get(index).map(|c| (c.created, c.author));
+                self.task(key).map(|t| at(&t.comments)) != Some(at(&edit.comments))
+            }
+            _ => false,
+        };
+        let text = moved || self.text_of(edit.target) != Some(edit.base.as_str());
+        let Some(key) = edit.target.key() else {
+            return text.then(|| format!("{} changed on disk", self.text_name(edit.target)));
+        };
+        let what = if matches!(edit.target, Target::Description(_)) { "description" } else { "comment" };
+        let status = self.task(key).map(|t| t.status) != edit.status;
+        // Only a verdict's editor has one, which its save gives.
+        let verdict = edit.decision.is_some() && self.task(key).map(|t| t.decision) != edit.decision;
+        changed_on_disk(&self.entry_name(key), &[(text, what), (status, "status"), (verdict, "verdict")])
     }
 
     /// What the editor's text is, to say what changed meanwhile.

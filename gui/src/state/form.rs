@@ -1,6 +1,6 @@
 //! The new / edit form and the quick-add field: what typing in them and saving them changes.
 
-use super::{Board, Field, Form, FormTarget, Key, Mode, QuickAdd, Tab, WhereFor};
+use super::{Board, Field, Form, FormTarget, Key, Mode, QuickAdd, Tab, WhereFor, changed_on_disk};
 use crate::text::editor::LineInput;
 use anyhow::Result;
 use kanbrain_core::brain::NewEntry;
@@ -40,6 +40,24 @@ impl Board {
         }
         let Mode::Form(form) = &mut self.mode else { return };
         form.put_tag(tag);
+    }
+
+    /// What `kb` changed, since the edit form opened, of its entry's title, tags, related entries and status, said for
+    /// the status bar; `None` if nothing, or on a new entry's form.
+    pub(super) fn form_changed_on_disk(&self, form: &Form) -> Option<String> {
+        let (FormTarget::Edit(key), Some(opened)) = (form.target, &form.opened) else { return None };
+        let now = self.task(key)?;
+        let related = self.related_keys(key);
+        let relinked = related.len() != opened.links.len() || related.iter().any(|k| !opened.links.contains(k));
+        changed_on_disk(
+            &self.entry_name(key),
+            &[
+                (now.title != opened.title, "title"),
+                (now.tags != opened.tags, "tags"),
+                (relinked, "related entries"),
+                (now.status != opened.status, "status"),
+            ],
+        )
     }
 
     /// Opens the form for changing the selected entry's title and tags.
