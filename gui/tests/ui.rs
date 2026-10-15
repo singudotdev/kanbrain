@@ -849,11 +849,8 @@ fn a_list_counts_the_rows_out_of_view_from_its_scroll_or_the_highlight() {
 /// Draws the frames the window asked for since, as the platform would: tests have no frame loop. A few at most,
 /// so a window that never stops asking fails the test instead of hanging it.
 fn next_frames(cx: &mut gpui::VisualTestContext) {
-    for _ in 0..10 {
-        if cx.update(gpui::Window::simulate_next_frame) == 0 {
-            break;
-        }
-    }
+    let settled = (0..10).any(|_| cx.update(gpui::Window::simulate_next_frame) == 0);
+    assert!(settled, "the window still asks for frames after 10: it redraws for ever");
     cx.run_until_parked();
 }
 
