@@ -10,7 +10,7 @@
 # - the kanban app gets its launcher with the logo: an application menu entry and icon on Linux, an app bundle on
 #   macOS. `kb` stands in for the app, which takes the same commands, so GPUI needn't be built.
 #
-# CI runs it on every push (the `installers` job). It needs cargo and python3, and touches nothing outside a
+# CI runs it when a change touches it (the `installers` job). It needs cargo and python3, and touches nothing outside a
 # temporary folder.
 set -euo pipefail
 

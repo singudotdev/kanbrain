@@ -9,8 +9,8 @@
 # - purging deletes the central brain's files and kanbrain's locks and backups in the cache, keeping files it
 #   didn't create though named like its own, and refusing the user profile however it's written.
 #
-# CI runs it on every push (the `installers` job), as an administrator: hence KANBRAIN_ALLOW_ADMIN. It needs
-# cargo and python.
+# CI runs it when a change touches it (the `installers` job), as an administrator: hence KANBRAIN_ALLOW_ADMIN. It
+# needs cargo and python.
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 cargo build -q --release --manifest-path "$repo/Cargo.toml" --bin kb
