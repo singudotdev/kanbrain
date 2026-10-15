@@ -69,18 +69,36 @@ fn refuse_brain_write(file: &Path, central: &Path) -> Option<String> {
     })
 }
 
-/// Whether `file` is in a brain's folder: a project's `.brain/`, or the central brain. A link to one counts,
-/// through the nearest of `file`'s folders that exists (a file being created doesn't yet).
+/// Whether `file` is one of a brain's: anything in a project's `.brain/`, or what kanbrain keeps in the central
+/// brain ([`central_owned`]). The central brain may be a notes vault, or hold repositories: its other files are the
+/// agent's to write. A link to either counts, through the nearest of `file`'s folders that exists (a file being
+/// created doesn't yet).
 fn in_brain(file: &Path, central: &Path) -> bool {
-    let central_real = central.canonicalize().ok();
-    let inside = |path: &Path| {
-        path.ancestors().any(|dir| {
-            dir.file_name().is_some_and(|name| name == store::PROJECT_DIR)
-                || dir == central
-                || central_real.as_deref() == Some(dir)
-        })
+    let centrals = [Some(central.to_path_buf()), central.canonicalize().ok()];
+    let owned = |path: &Path| {
+        path.ancestors().any(|dir| dir.file_name().is_some_and(|name| name == store::PROJECT_DIR))
+            || centrals.iter().flatten().any(|c| path.strip_prefix(c).is_ok_and(central_owned))
     };
-    inside(file) || file.ancestors().find_map(|dir| dir.canonicalize().ok()).is_some_and(|real| inside(&real))
+    owned(file) || real_path(file).is_some_and(|real| owned(&real))
+}
+
+/// Whether `rel`, a path inside the central brain, is kanbrain's: a file at its top (an entry, `tags.md`,
+/// `projects.md`, `last-id`, `format`: `Store::load` reads every `.md` there), or anything in the project cards'
+/// or reports' folders.
+fn central_owned(rel: &Path) -> bool {
+    let mut parts = rel.components();
+    let Some(first) = parts.next().map(std::path::Component::as_os_str) else { return false };
+    if parts.next().is_some() {
+        return first == projects::CARDS_DIR || first == store::REPORTS_DIR;
+    }
+    Path::new(first).extension().is_some_and(|ext| ext == "md")
+        || first == store::LAST_ID_FILE
+        || first == crate::migrate::FORMAT_FILE
+}
+
+/// `file` with its links resolved: its nearest folder that exists, canonical, then the rest of the path.
+fn real_path(file: &Path) -> Option<PathBuf> {
+    file.ancestors().find_map(|dir| Some(dir.canonicalize().ok()?.join(file.strip_prefix(dir).ok()?)))
 }
 
 /// `prompt`'s and `stop`'s reminders, for the project the session runs in (`cwd`).
