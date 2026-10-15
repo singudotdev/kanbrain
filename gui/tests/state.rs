@@ -2329,6 +2329,28 @@ fn the_reject_or_accept_editor_doesnt_overturn_unseen_a_verdict_kb_gave_while_it
         assert_eq!(said(&f, kafka), before, "the verdict was theirs");
         f.board.discard_edit();
     }
+
+    // Given it, then proposed again: the save stops again, saying so, rather than giving the reason over the new
+    // proposal unseen.
+    kb(&f).resolve(kafka, DecisionState::Proposed, "again").unwrap();
+    f.board.reload().unwrap();
+    f.board.select(k(kafka));
+    f.press(KeyCode::Char('j'));
+    f.type_text("mine");
+    kb(&f).resolve(kafka, DecisionState::Rejected, "theirs").unwrap();
+    f.board.reload().unwrap();
+    saving(&mut f);
+    kb(&f).resolve(kafka, DecisionState::Proposed, "reworked").unwrap();
+    f.board.reload().unwrap();
+    saving(&mut f);
+    assert_eq!(
+        f.board.message(),
+        Some(
+            format!("#{kafka} was proposed again meanwhile: save again to reject it anyway, ctrl+d to leave it")
+                .as_str()
+        )
+    );
+    assert_eq!(f.on_disk(kafka).decision, DecisionState::Proposed, "not rejected unseen");
 }
 
 #[test]
