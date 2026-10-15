@@ -8,8 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 
 - A fourth Claude Code hook, `kb hook edit` (`PreToolUse` on `Edit|Write|MultiEdit`, `cli::claude::HOOKS`): an agent
-  about to write a file in a brain's folder, a project's `.brain/` or the central brain, also through a link, is
-  refused (`permissionDecision: deny`) and told to make the change with `kb`, or tell the user what to change
+  about to write a brain's file, anything in a project's `.brain/` or kanbrain's own in the central brain (its
+  entries, `projects/`, `reports/`; not a notes vault's other files), also through a link, is refused
+  (`permissionDecision: deny`) and told to make the change with `kb`, or tell the user what to change
   (`cli::hook::refuse_brain_write`). Writing the files itself skipped the brain's lock, the numbering of new
   entries and the format. `kb update` adds it to every project (`init --all`).
 

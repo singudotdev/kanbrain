@@ -40,7 +40,7 @@ pub const REGISTRY_FILE: &str = "projects.md";
 /// In a repository's `.brain/`: the project it belongs to (the `#` title) and notes about it.
 pub const PROJECT_FILE: &str = "project.md";
 /// In the central brain: the projects' cards, one `<name>.md` each.
-const CARDS_DIR: &str = "projects";
+pub(crate) const CARDS_DIR: &str = "projects";
 /// What the central brain is called where projects are listed; no project can take the name.
 pub const CENTRAL: &str = "central";
 

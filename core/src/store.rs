@@ -20,10 +20,10 @@ pub const PROJECT_DIR: &str = ".brain";
 /// The highest id the folder has given an entry, so ids are never handed out twice: a link to a deleted
 /// entry, left in a file edited by hand or in a copy that was offline, would otherwise point at the
 /// unrelated entry that took its number. Not markdown, so it's never read as an entry.
-const LAST_ID_FILE: &str = "last-id";
+pub(crate) const LAST_ID_FILE: &str = "last-id";
 
 /// Subfolder for markdown report exports; never read back.
-const REPORTS_DIR: &str = "reports";
+pub(crate) const REPORTS_DIR: &str = "reports";
 
 /// The data folder where tasks are stored.
 #[derive(Debug)]

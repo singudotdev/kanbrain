@@ -123,13 +123,26 @@ fn an_agent_writing_a_brains_files_is_sent_to_kb() {
         edit(&root, ".brain/0002-new.md".as_ref(), central.path()).is_some(),
         "a new one, from the session's folder"
     );
-    let card = central.path().join("projects/shop.md");
-    assert!(edit(&root, &card, central.path()).is_some(), "the central brain's");
+    for owned in ["projects/shop.md", "0001-plan.md", "tags.md", "projects.md", "last-id", "format", "reports/x.md"] {
+        assert!(edit(&root, &central.path().join(owned), central.path()).is_some(), "the central brain's {owned}");
+    }
 
     assert_eq!(edit(&root, &root.join("src/main.rs"), central.path()), None, "the code is the agent's to edit");
     assert_eq!(edit(&root, &root.join("CLAUDE.md"), central.path()), None, "and the section's file");
     assert_eq!(edit(&root, &root.join("docs/.brainstorm.md"), central.path()), None, "only a folder named .brain");
     assert_eq!(hook(HookEvent::Edit, "not json", central.path()), None, "nothing to refuse without a path");
+}
+
+#[test]
+fn the_central_brain_kept_in_a_notes_vault_leaves_the_vaults_own_files_to_the_agent() {
+    let (central, _code, root) = project();
+    let vault = central.path();
+    assert_eq!(edit(&root, &vault.join("daily/2026-10-15.md"), vault), None, "a note of the vault's");
+    let code = vault.join("code/app");
+    std::fs::create_dir_all(code.join(".brain")).unwrap();
+    assert_eq!(edit(&code, &code.join("src/main.rs"), vault), None, "a repository kept in it");
+    assert!(edit(&code, &code.join(".brain/0001-plan.md"), vault).is_some(), "but not that repository's brain");
+    assert_eq!(edit(&root, vault, vault), None, "nor the folder itself");
 }
 
 #[cfg(unix)]
