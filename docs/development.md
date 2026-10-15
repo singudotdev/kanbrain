@@ -40,7 +40,7 @@ cargo test --workspace
 
 Keep `TMPDIR` (and a mutation run's worktree) out of any folder with a `.brain` above it, as this repository has
 once kanbrain's own tasks are kept in it: `kb` takes the nearest `.brain` above where it runs, so the command line's
-tests, run in temporary folders, would write into it. They stop first, saying so.
+tests, run in temporary folders, would write into it. They stop first, saying so, a `TMPDIR` that links there too.
 
 Lints, which must be warning-free (pedantic is on, see below):
 
