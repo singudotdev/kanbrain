@@ -136,7 +136,11 @@ status bar says what the title is now; saving again replaces it. Once `kb` chang
 status of the entry being edited, the form's title says **· changed on disk** until it's closed, and the status bar
 says what changed (an agent may have finished or parked the task: saving doesn't move it back). Opening the form, the
 description or a comment of a task an agent has in doing, the status bar says **#N is being worked on by an agent**:
-nothing stops you, but what you save may cross what it writes next. In the tags field, the tags already used by entries
+nothing stops you, but what you save may cross what it writes next. Saving such a change asks **Tell the agent?**:
+`enter` (**Save and tell**) saves and adds your comment saying what changed (`Changed the title and tags: <note>`),
+with the note you type there if any; `ctrl+enter` (**Just save**) only saves; `esc` goes back. Claude Code's hook
+gives the agent your comment with its next step (see [For coding agents](agents.md)), as it does any comment of
+yours on its task. In the tags field, the tags already used by entries
 of the same kind (task tags for a task, note tags for a note) drop down below it, each with how many use it, so you can
 reuse the same names: those it holds are left out, and while you type a tag, only those containing it show, the first
 starting with it highlighted, or a line saying it'll be a new one. A click, or `↓` `↑` and `enter`, puts the tag in

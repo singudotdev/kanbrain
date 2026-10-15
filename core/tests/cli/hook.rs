@@ -93,10 +93,103 @@ fn a_task_an_agent_started_and_never_commented_on_is_reminded_once() {
     // Another session's, as far as this one knows: never told to finish what it didn't start.
     assert!(stop.contains("If you started it") && stop.contains("if you didn't, leave it alone"), "{stop}");
     assert!(!stop.contains("since you started it"), "{stop}");
+    // The user's comment says nothing of where the agent stands: still reminded.
+    brain.author = Author::Human;
+    brain.add_comment(task, "use Redis for it").unwrap();
+    brain.author = Author::Agent;
+    let stop = hook(HookEvent::Stop, &input(&root, false), central.path()).expect("a reminder");
+    assert!(stop.contains(&format!("`kb comment {task}`")), "{stop}");
     brain.add_comment(other, "expiry set to a day").unwrap();
     assert_eq!(hook(HookEvent::Stop, &input(&root, true), central.path()), None, "once a turn");
     brain.add_comment(task, "sessions cached; next: expiry").unwrap();
     assert_eq!(hook(HookEvent::Stop, &input(&root, false), central.path()), None);
+}
+
+/// A task an agent started at `start`, with `comments` (who, how many seconds after the start) in that order.
+fn running(comments: &[(Author, i64)]) -> Task {
+    let start = crate::model::now();
+    let mut task = Task::new(1, "Cache sessions".into(), start - chrono::Duration::hours(1));
+    task.set_status(Status::Doing, start, Author::Agent);
+    task.start_session(start);
+    for &(author, after) in comments {
+        let created = start + chrono::Duration::seconds(after);
+        task.comments.push(crate::model::Comment::new(created, "…".into(), author));
+    }
+    task
+}
+
+#[test]
+fn what_counts_as_since_the_agent_started_goes_by_the_second_it_did() {
+    // Times are to the second: a comment the same second as the start comes after it.
+    assert!(!uncommented(&running(&[(Author::Agent, 0)])), "commented as it started");
+    assert!(uncommented(&running(&[(Author::Agent, -300)])), "only from a run before");
+    assert!(uncommented(&running(&[(Author::Agent, -300), (Author::Human, 5)])), "the user's isn't the agent's");
+    assert!(unanswered(&running(&[(Author::Human, 0)])));
+    assert!(!unanswered(&running(&[(Author::Human, -300)])), "read when it started");
+    // By their order, not their times: the agent answered the user's comment the same second.
+    assert!(!unanswered(&running(&[(Author::Human, 5), (Author::Agent, 5)])));
+    assert!(unanswered(&running(&[(Author::Agent, 5), (Author::Human, 5)])));
+    assert!(unanswered(&running(&[(Author::Agent, 5), (Author::Human, 5), (Author::Human, 9)])));
+}
+
+/// What `kb hook tool` says before an agent's tool call from `cwd`.
+fn tool(cwd: &Path, central: &Path) -> Option<String> {
+    let input = json!({ "hook_event_name": "PreToolUse", "cwd": cwd, "tool_name": "Bash" }).to_string();
+    hook(HookEvent::Tool, &input, central)
+}
+
+#[test]
+fn the_users_comment_on_an_agents_task_reaches_it_before_its_next_tool_call_until_it_answers() {
+    let (central, _code, root) = project();
+    let mut brain = crate::brain::Brain::open(Store::at(root.join(".brain")).unwrap()).unwrap();
+    let new = |title: &str| crate::brain::NewEntry { title: title.into(), start: true, ..Default::default() };
+    brain.author = Author::Agent;
+    let task = brain.add(new("Cache sessions")).unwrap();
+    brain.add_comment(task, "on it").unwrap();
+    assert_eq!(tool(&root, central.path()), None, "nothing new: costs nothing");
+
+    brain.author = Author::Human;
+    brain.add_comment(task, "use Redis for it").unwrap();
+    let said = tool(&root, central.path()).expect("told");
+    let said: Value = serde_json::from_str(&said).unwrap();
+    let output = &said["hookSpecificOutput"];
+    assert_eq!(output["hookEventName"], "PreToolUse");
+    assert!(output.get("permissionDecision").is_none(), "it never blocks the tool: {said}");
+    let context = output["additionalContext"].as_str().unwrap();
+    assert!(context.contains(&format!("#{task} Cache sessions")), "{context}");
+    assert!(context.contains(&format!("`kb show {task}`")) && context.contains(&format!("`kb comment {task}`")));
+    assert!(!context.contains("  "), "one line, as the agent reads it: {context}");
+    assert!(tool(&root, central.path()).is_some(), "again with every call, until it answers");
+
+    // The agent's comment after it answers it.
+    brain.author = Author::Agent;
+    brain.add_comment(task, "switching to Redis").unwrap();
+    assert_eq!(tool(&root, central.path()), None);
+
+    // What the user wrote before the agent started it, it read when it did; a task the user runs isn't the agent's.
+    brain.author = Author::Human;
+    let before = brain.add(crate::brain::NewEntry { title: "Expire sessions".into(), ..Default::default() }).unwrap();
+    brain.add_comment(before, "a day is enough").unwrap();
+    // Written a while before, as it would be: times are to the second.
+    let mut earlier = brain.task(before).unwrap().clone();
+    earlier.comments[0].created -= chrono::Duration::minutes(5);
+    brain.store.save(&mut earlier).unwrap();
+    let mut brain = crate::brain::Brain::open(Store::at(root.join(".brain")).unwrap()).unwrap();
+    brain.author = Author::Human;
+    let users = brain.add(new("The user's")).unwrap();
+    brain.add_comment(users, "note to self").unwrap();
+    brain.author = Author::Agent;
+    brain.set_status(before, Status::Doing).unwrap();
+    assert_eq!(tool(&root, central.path()), None);
+    // Nor once the agent stopped working on it.
+    brain.author = Author::Human;
+    brain.add_comment(before, "and log it").unwrap();
+    assert!(tool(&root, central.path()).is_some());
+    brain.author = Author::Agent;
+    brain.set_status(before, Status::Parked).unwrap();
+    assert_eq!(tool(&root, central.path()), None);
+    // Outside a project, nothing.
+    assert_eq!(hook(HookEvent::Tool, "{}", central.path()), None);
 }
 
 /// What `kb hook edit` says when an agent's Edit, run from `cwd`, is about to write `file`.

@@ -1,4 +1,4 @@
-//! `kb hook prompt|stop|edit`: what Claude Code's hooks run so that an agent describes the project (and,
+//! `kb hook prompt|stop|edit|tool`: what Claude Code's hooks run so that an agent describes the project (and,
 //! with several repositories, this one's role) before anything else, and keeps to `kb` for the brain's files.
 //! Asked to in the section and in `context`, agents still skipped describing it on their first turn; these have
 //! Claude Code remind them:
@@ -13,6 +13,10 @@
 //!
 //! Once the project is described and the tasks the agent started commented on, they print nothing, so they cost
 //! nothing.
+//!
+//! `tool` (`PreToolUse`, on every tool) tells an agent of the user's comment on a task it's working on, made since it
+//! last commented there, until it does: a person who changed the task, or asks for something else, is heard before
+//! the agent's next step rather than at the end of its turn.
 //!
 //! `edit` (`PreToolUse`, on the tools that write files) refuses instead: an agent about to write a brain's file is
 //! sent to `kb`. The section tells it so, yet an agent seeing markdown files may edit them: that skips the brain's
@@ -36,18 +40,21 @@ named_enum! {
         Stop => "stop",
         /// `PreToolUse`: the agent is about to write a file.
         Edit => "edit",
+        /// `PreToolUse`, on every tool: the agent is about to use one.
+        Tool => "tool",
     }
 }
 
 /// What to print for `event`, given the JSON Claude Code sent (`input`) and the central brain: `None` when there's
 /// nothing to remind or refuse, as for `prompt` and `stop` outside a project. Malformed input reads as empty, so a
-/// hook never breaks a session: `prompt` and `stop` fall back to the folder it runs in, `here`, and let the turn end;
-/// `edit`, with no path, refuses nothing.
+/// hook never breaks a session: `prompt`, `stop` and `tool` fall back to the folder it runs in, `here`, and let the
+/// turn or the tool call go on; `edit`, with no path, refuses nothing.
 pub fn respond(event: HookEvent, input: &str, central: &Path, here: &Path) -> Option<String> {
     let input: Value = serde_json::from_str(input).unwrap_or(Value::Null);
     let cwd = input["cwd"].as_str().map_or_else(|| here.to_path_buf(), PathBuf::from);
     match event {
         HookEvent::Edit => refuse_brain_write(&written(input["tool_input"]["file_path"].as_str()?, &cwd), central),
+        HookEvent::Tool => tell_of_comments(&cwd),
         HookEvent::Prompt | HookEvent::Stop => remind(event, &input, &cwd, central),
     }
 }
@@ -182,13 +189,50 @@ fn remind(event: HookEvent, input: &Value, cwd: &Path, central: &Path) -> Option
     })
 }
 
-/// Whether `task` runs because an agent started it, and nobody has commented on it since. A task the
-/// user started isn't the agent's to report on.
+/// `tool`'s word to an agent about to use a tool: the user commented on a task an agent is working on since the agent
+/// last did, or since it started it. Said before every tool call until the agent comments, as context and never a
+/// block: a person who changed the task, or asks for something else, is heard mid-work rather than at the turn's end.
+fn tell_of_comments(cwd: &Path) -> Option<String> {
+    let dir = store::find_project(cwd)?;
+    // A brain that can't be read only loses the word, never the tool call.
+    let (tasks, _) = Store::at(&dir).and_then(|s| s.load()).ok()?;
+    let told: Vec<String> = tasks
+        .iter()
+        .filter(|task| unanswered(task))
+        .map(|task| {
+            // Which session started it isn't known, as for `stop`'s reminder.
+            format!(
+                "kanbrain: the user commented on #{0} {1}, which an agent is working on, after its last comment \
+                 there. If it's yours, `kb show {0}` to read it, then `kb comment {0}` what you'll do about it, \
+                 before going on; if it isn't, leave it alone.",
+                task.id, task.title
+            )
+        })
+        .collect();
+    (!told.is_empty()).then(|| {
+        json!({ "hookSpecificOutput": { "hookEventName": "PreToolUse", "additionalContext": told.join("\n") } })
+            .to_string()
+    })
+}
+
+/// Whether `task` runs because an agent started it, and a person commented on it after the agent last did and since
+/// it started it: what the user wrote before, the agent read when it did. After, by the comments' order rather than
+/// their times, which are to the second, as an agent's and the user's often are.
+fn unanswered(task: &Task) -> bool {
+    let Some(started) = task.history.last().filter(|c| c.to == Status::Doing && c.by == Author::Agent) else {
+        return false;
+    };
+    let mut after_agents = task.comments.iter().rev().take_while(|c| c.author != Author::Agent);
+    task.is_running() && after_agents.any(|c| c.author == Author::Human && c.created >= started.at)
+}
+
+/// Whether `task` runs because an agent started it, and no agent has commented on it since. A task the
+/// user started isn't the agent's to report on, and the user's comment doesn't say where the agent stands.
 fn uncommented(task: &Task) -> bool {
     let Some(started) = task.history.last().filter(|c| c.to == Status::Doing && c.by == Author::Agent) else {
         return false;
     };
-    task.is_running() && task.comments.iter().all(|c| c.created < started.at)
+    task.is_running() && task.comments.iter().filter(|c| c.author == Author::Agent).all(|c| c.created < started.at)
 }
 
 /// What an agent still has to write about the project: its description and, in a project of several

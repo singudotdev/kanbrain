@@ -59,6 +59,26 @@ fn an_agent_session_runs_through_the_binary() {
 }
 
 #[test]
+fn context_brings_a_projects_hooks_up_to_date() {
+    let (central, repo) = (tempdir(), tempdir());
+    let run = |args: &[&str]| kb(repo.path(), central.path(), args, "");
+    ok(&run(&["init", "demo"]));
+    let settings = repo.path().join(".claude/settings.local.json");
+    // As an older release wrote them: without the hook a newer one added.
+    let full = std::fs::read_to_string(&settings).unwrap();
+    let older = full.replace("kb hook tool", "date");
+    std::fs::write(&settings, &older).unwrap();
+    ok(&run(&["context"]));
+    let now = std::fs::read_to_string(&settings).unwrap();
+    assert!(now.contains("\"kb hook tool\"") && now.contains("\"date\""), "added, the rest kept: {now}");
+    // Taken out with `deinit`: not written anew, the user's own left as it is.
+    ok(&run(&["deinit"]));
+    ok(&run(&["context"]));
+    let left = std::fs::read_to_string(&settings).unwrap();
+    assert!(!left.contains("kb ") && left.contains("\"date\""), "{left}");
+}
+
+#[test]
 fn show_json_names_the_links_from_other_repositories() {
     let (central, code) = (tempdir(), tempdir());
     let (api, web) = (code.path().join("api"), code.path().join("web"));

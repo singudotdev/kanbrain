@@ -5,6 +5,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Claude Code hook `kb hook tool` (`PreToolUse`, every tool; `claude::HOOKS`, `hook::tell_of_comments`): an agent
+  working on a task you commented on since its last comment there is told, with each step, to `kb show` it and
+  `kb comment` what it'll do about it, until it does. Context, never a block; it only reads the brain (about a
+  millisecond; 6 ms with 500 entries).
+- The kanban app asks **Tell the agent?** when saving the form, the description or a comment of a task an agent has
+  in doing (`Mode::Tell`, `Telling`, `Board::tell_agent`): `enter` saves and adds your comment saying what changed,
+  with an optional note (`Changed the title and tags: …`); `ctrl+enter` just saves; `esc` goes back. One undo takes
+  both back.
+- `kb context` brings a project's Claude Code hooks up to date where kanbrain's are already there
+  (`claude::update_hooks`), so a release's new hook reaches every project with its next session.
+
+### Changed
+
+- `kb hook stop` reminds an agent of a task it started and left uncommented even after the user commented on it:
+  only the agent's own comments say where it stands (`hook::uncommented`).
+
 ## [0.5.1] - 2026-10-16
 
 ### Added

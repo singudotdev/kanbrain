@@ -683,6 +683,169 @@ fn opening_what_an_agent_is_working_on_says_so() {
 }
 
 #[test]
+fn saving_what_an_agent_is_working_on_asks_whether_to_tell_it() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["Fix login", "Mine"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    let mut agent = kb(&f);
+    agent.author = Author::Agent;
+    agent.set_status(1, Status::Doing).unwrap();
+    agent.add_comment(1, "on it").unwrap();
+    f.board.reload().unwrap();
+    let ctrl_enter = |f: &mut Fixture| f.board.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL));
+    let last = |f: &Fixture| f.on_disk(1).comments.last().map(|c| (c.body.clone(), c.author)).unwrap();
+    let asked = |f: &Fixture| match &f.board.mode {
+        Mode::Tell(tell) => Some(tell.pending.what()),
+        _ => None,
+    };
+
+    // The form: asked before anything is written; `esc` goes back to it as it was.
+    f.board.select(k(1));
+    f.press(KeyCode::Char('e'));
+    f.press(KeyCode::End);
+    f.type_text("!");
+    f.press(KeyCode::Enter);
+    assert_eq!(asked(&f), Some("its title, tags or related entries"));
+    assert_eq!(f.on_disk(1).title, "Fix login", "nothing written yet");
+    f.press(KeyCode::Esc);
+    assert!(matches!(&f.board.mode, Mode::Form(form) if form.title.text() == "Fix login!"));
+    // `enter` tells it, with the note: the user's comment says what changed.
+    f.press(KeyCode::Enter);
+    f.type_text("keep it short");
+    f.press(KeyCode::Enter);
+    assert!(matches!(f.board.mode, Mode::Normal));
+    assert_eq!(f.on_disk(1).title, "Fix login!");
+    assert_eq!(last(&f), ("Changed the title: keep it short".to_string(), Author::Human));
+    assert_eq!(f.board.message(), Some("#1 saved; the agent is told"));
+    // Saved and told in one go: one undo takes both back.
+    f.press(KeyCode::Char('u'));
+    assert_eq!(f.on_disk(1).title, "Fix login");
+    assert_eq!(last(&f).0, "on it");
+
+    // `ctrl+enter` just saves.
+    f.press(KeyCode::Char('e'));
+    f.press(KeyCode::Tab);
+    f.type_text("auth");
+    f.press(KeyCode::Enter);
+    assert_eq!(asked(&f), Some("its title, tags or related entries"));
+    ctrl_enter(&mut f);
+    assert_eq!(f.on_disk(1).tags, ["auth"]);
+    assert_eq!(last(&f).0, "on it", "not told");
+    assert_eq!(f.board.message(), Some("#1 saved"));
+
+    // The description and a comment, without a note.
+    f.press(KeyCode::Char('m'));
+    f.type_text("the plan");
+    f.press(KeyCode::Esc);
+    assert_eq!(asked(&f), Some("its description"));
+    f.press(KeyCode::Enter);
+    assert_eq!(f.on_disk(1).description, "the plan");
+    assert_eq!(last(&f).0, "Changed the description.");
+    assert_eq!(f.board.message(), Some("description saved; the agent is told"));
+    f.board.open_editor(Target::Comment(k(1), 0));
+    f.type_text(", noted");
+    f.press(KeyCode::Esc);
+    assert_eq!(asked(&f), Some("a comment"));
+    f.press(KeyCode::Enter);
+    assert_eq!(f.on_disk(1).comments[0].body, "on it, noted");
+    assert_eq!(last(&f).0, "Changed a comment.");
+
+    // A save that stops over what `kb` changed meanwhile tells nothing: the form is back, to save again.
+    f.press(KeyCode::Char('e'));
+    f.press(KeyCode::End);
+    f.type_text("?");
+    f.press(KeyCode::Enter);
+    kb(&f).update(1, "Fix the login", vec!["auth".into()]).unwrap();
+    f.board.reload().unwrap();
+    let said = f.on_disk(1).comments.len();
+    f.press(KeyCode::Enter);
+    assert!(matches!(f.board.mode, Mode::Form(_)), "stopped");
+    assert_eq!(f.on_disk(1).comments.len(), said);
+    f.press(KeyCode::Esc);
+
+    // Nothing asked: a new comment (it's how to tell the agent), a save that changes nothing, a task a person runs.
+    f.press(KeyCode::Char('c'));
+    f.type_text("one more thing");
+    f.press(KeyCode::Esc);
+    assert!(matches!(f.board.mode, Mode::Normal));
+    assert_eq!(last(&f).0, "one more thing");
+    f.press(KeyCode::Char('e'));
+    f.press(KeyCode::Enter);
+    assert!(matches!(f.board.mode, Mode::Normal));
+    f.board.set_status(k(2), Status::Doing);
+    f.board.select(k(2));
+    f.press(KeyCode::Char('e'));
+    f.type_text("!");
+    f.press(KeyCode::Enter);
+    assert!(matches!(f.board.mode, Mode::Normal));
+}
+
+#[test]
+fn the_question_hears_kb_meanwhile_and_its_button_just_saves() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["Fix login"]);
+    let kb = |f: &Fixture| {
+        let mut agent = Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+        agent.author = Author::Agent;
+        agent
+    };
+    kb(&f).set_status(1, Status::Doing).unwrap();
+    f.board.reload().unwrap();
+    f.board.select(k(1));
+    let comments = |f: &Fixture| f.on_disk(1).comments.len();
+
+    // Just save, from its button.
+    f.press(KeyCode::Char('m'));
+    f.type_text("the plan");
+    f.press(KeyCode::Esc);
+    f.board.just_save();
+    assert!(matches!(f.board.mode, Mode::Normal));
+    assert_eq!(f.on_disk(1).description, "the plan");
+    assert_eq!(comments(&f), 0);
+
+    // The agent finishes it while the question is open: marked and said as in the form, and not told after all.
+    f.press(KeyCode::Char('e'));
+    f.press(KeyCode::End);
+    f.type_text("!");
+    f.press(KeyCode::Enter);
+    kb(&f).set_status(1, Status::Done).unwrap();
+    f.board.message = None;
+    f.board.reload().unwrap();
+    assert_eq!(f.board.message(), Some("#1's status changed on disk"));
+    assert!(
+        matches!(&f.board.mode, Mode::Tell(tell) if matches!(&tell.pending, Pending::Form(form) if form.changed_on_disk))
+    );
+    f.press(KeyCode::Enter);
+    assert_eq!(f.on_disk(1).title, "Fix login!");
+    assert_eq!(comments(&f), 0);
+    assert_eq!(
+        f.board.message(),
+        Some("#1 saved; not told: no agent is working on it now · #1's status changed on disk")
+    );
+}
+
+#[test]
+fn the_question_closes_with_its_entry_gone() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["Fix login"]);
+    let mut agent = Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    agent.author = Author::Agent;
+    agent.set_status(1, Status::Doing).unwrap();
+    f.board.reload().unwrap();
+    f.board.select(k(1));
+    f.press(KeyCode::Char('m'));
+    f.type_text("the plan");
+    f.press(KeyCode::Esc);
+    assert!(matches!(f.board.mode, Mode::Tell(_)));
+    f.board.reload().unwrap();
+    assert!(matches!(f.board.mode, Mode::Tell(_)), "kept across a reload");
+    Store::at(f.dir.path()).unwrap().delete(&f.on_disk(1)).unwrap();
+    f.board.reload().unwrap();
+    assert!(matches!(f.board.mode, Mode::Normal));
+    assert_eq!(f.board.message(), Some("closed: #1 is gone, deleted or moved meanwhile"));
+}
+
+#[test]
 fn a_new_entrys_form_has_nothing_on_disk_to_mark() {
     use kanbrain_core::brain::Brain;
     let mut f = Fixture::new(&["Fix login"]);

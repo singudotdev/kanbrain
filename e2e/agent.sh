@@ -310,6 +310,40 @@ assert all(url in x for x in named), "each time with its link: " + str(named)
 '
 fi
 
+# The user comments on the agent's task while it works: the hook tells the agent before its next step, and it
+# answers on the task and does what was asked, in the same session.
+if wanted told; then
+    dir="$work/told"
+    app "$dir" told
+    described "$dir"
+    (cd "$dir" && KANBRAIN_AUTHOR=human python3 - <<'EOF') &
+import json, subprocess, time
+
+def kb(*args):
+    return subprocess.run(["kb", *args], capture_output=True, text=True, check=True).stdout
+
+for _ in range(600):
+    for summary in json.loads(kb("list", "doing", "--json")):
+        kb("comment", str(summary["id"]), "Also have GET /health return the number of notes, as \"count\".")
+        raise SystemExit
+    time.sleep(1)
+EOF
+    commenter=$!
+    agent "$dir" "Add a GET /health endpoint that returns {\"status\": \"ok\"}."
+    kill "$commenter" 2>/dev/null || true
+    wait "$commenter" || true
+    check told "$dir" '
+# show --json names only an agent as a comment author: one without is the user.
+users = lambda comments: [i for i, c in enumerate(comments) if "author" not in c]
+asked = [t for t in tasks if users(t.get("comments", []))]
+assert asked, "the user commented on the task: " + str([(t["title"], t.get("status")) for t in tasks])
+comments = asked[0]["comments"]
+at = max(users(comments))
+assert any(c.get("author") == "agent" for c in comments[at + 1:]), "the agent answered on the task: " + str(comments)
+assert "count" in open("app.py").read(), "and did what was asked"
+'
+fi
+
 # A project of two repositories: work the other one needs becomes a task there, linked to this one's.
 if wanted repos; then
     api="$work/repos/api"
