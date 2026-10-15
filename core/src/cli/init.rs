@@ -327,8 +327,9 @@ fn write_agent_files(root: &Path, targets: &[&str]) -> Result<Vec<(bool, String)
                 true,
                 format!(
                     "added kanbrain's hooks to {}: Claude Code reads `kb context` when a session starts and \
-                     after compaction, and reminds an agent with every prompt and at the end of its turn to \
-                     describe the project while it isn't",
+                     after compaction, reminds an agent with every prompt and at the end of its turn to \
+                     describe the project while it isn't, and sends it to `kb` when it would write the brain's \
+                     files itself",
                     claude::SETTINGS
                 ),
             ),

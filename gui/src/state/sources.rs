@@ -547,18 +547,40 @@ impl Board {
         Ok(registered.eq(shown))
     }
 
-    /// Takes every brain's write lock (see `Store::lock`), in order, so two windows never wait on each other.
-    /// One that can't be taken (an unwritable cache folder) is said in the status bar and skipped, rather than
-    /// keeping the board from working.
-    pub fn lock_brains(&mut self) -> Vec<BrainLock> {
+    /// Takes the write lock (see `Store::lock`) of every brain whose folder isn't in `tried` yet, in order, so two
+    /// windows never wait on each other, and adds the folder there. One that can't be taken (an unwritable cache
+    /// folder) is said in the status bar and skipped, rather than keeping the board from working; and not tried again
+    /// in the same input, where the central brain's taken after a repository's would invert that order.
+    pub fn lock_brains(&mut self, tried: &mut Vec<PathBuf>) -> Vec<BrainLock> {
         let mut locks = Vec::with_capacity(self.sources.len());
         for src in 0..self.sources.len() {
-            match self.sources[src].brain.store.lock() {
+            let store = &self.sources[src].brain.store;
+            if tried.iter().any(|dir| dir == store.dir()) {
+                continue;
+            }
+            tried.push(store.dir().to_path_buf());
+            match store.lock() {
                 Ok(lock) => locks.push(lock),
                 Err(e) => self.notify_error(&e),
             }
         }
         locks
+    }
+
+    /// Takes, into `locks`, the lock of each brain not `tried` yet in this input: one catching up found (a project
+    /// added meanwhile), read before its lock was taken, which a `kb` may have written to since. With any taken,
+    /// reads every brain again under the locks, so the input acts on what's there. A project registered during
+    /// that read too is locked as well, and read again at the next input.
+    pub fn lock_found_brains(&mut self, locks: &mut Vec<BrainLock>, tried: &mut Vec<PathBuf>) {
+        let before = locks.len();
+        locks.extend(self.lock_brains(tried));
+        if locks.len() == before {
+            return;
+        }
+        if let Err(e) = self.reload() {
+            self.notify_error(&e);
+        }
+        locks.extend(self.lock_brains(tried));
     }
 
     /// The data folders to watch: every brain's, and the central brain's project cards.

@@ -195,6 +195,11 @@ fn t_takes_a_task_back_to_to_do_and_hash_alone_filters_the_reports_tags() {
         matches!(f.board.mode, Mode::Normal) && !f.board.all_done,
         "f is the board's, for done tasks; not a second tag filter"
     );
+    for tab in [Tab::Notes, Tab::Decisions] {
+        f.board.switch_tab(tab);
+        f.press(KeyCode::Char('f'));
+        assert!(!f.board.all_done, "nor on {tab:?}, where it would change the board unseen");
+    }
     f.press(KeyCode::Char('#'));
     assert!(matches!(f.board.mode, Mode::Tags(_)));
 }
@@ -1138,6 +1143,46 @@ fn the_form_suggests_only_the_tags_containing_the_one_typed() {
 }
 
 #[test]
+fn pasting_or_cutting_in_the_tags_field_highlights_as_typing_does() {
+    let mut f = Fixture::new(&["login bug", "slow page"]);
+    let brain = f.board.brain_mut(0);
+    brain.update(1, "login bug", vec!["auth".into(), "prod".into()]).unwrap();
+    brain.update(2, "slow page", vec!["perf".into(), "prod".into()]).unwrap();
+    let sel = |f: &Fixture| {
+        let Mode::Form(form) = &f.board.mode else { panic!("the form is open") };
+        form.tag_sel.clone()
+    };
+    f.press(KeyCode::Char('n'));
+    f.type_text("x");
+    f.press(KeyCode::Tab);
+    f.board.paste("pe");
+    assert_eq!(sel(&f).as_deref(), Some("perf"), "pasted, the start of a tag is highlighted");
+    f.board.select_all();
+    assert_eq!(f.board.cut().as_deref(), Some("pe"));
+    assert_eq!(sel(&f), None, "cut, nothing is typed: enter saves");
+    f.board.paste("prod");
+    assert_eq!(sel(&f), None, "a whole tag pasted: enter saves it as typed");
+}
+
+#[test]
+fn the_tags_highlight_stays_on_its_tag_when_a_reload_adds_one_ahead() {
+    let mut f = Fixture::new(&["login bug", "slow page"]);
+    f.board.brain_mut(0).update(2, "slow page", vec!["perf".into(), "speed".into()]).unwrap();
+    f.press(KeyCode::Char('n'));
+    f.type_text("x");
+    f.press(KeyCode::Tab);
+    f.type_text("pe");
+    // Another writer (an agent's `kb`) tags a task `ape`, which sorts ahead of `perf` and contains `pe`.
+    let mut task = f.on_disk(1);
+    task.tags = vec!["ape".into()];
+    Store::at(f.dir.path()).unwrap().save(&mut task).unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Enter);
+    let Mode::Form(form) = &f.board.mode else { panic!("the form is open") };
+    assert_eq!(form.tags.text(), "perf, ", "enter picks the tag highlighted, not the one now in its row");
+}
+
+#[test]
 fn the_form_picks_tags_from_its_list() {
     let mut f = Fixture::new(&["login bug", "slow page"]);
     let brain = f.board.brain_mut(0);
@@ -1145,7 +1190,7 @@ fn the_form_picks_tags_from_its_list() {
     brain.update(2, "slow page", vec!["perf".into(), "prod".into()]).unwrap();
     let form = |f: &Fixture| {
         let Mode::Form(form) = &f.board.mode else { panic!("the form is open") };
-        (f.board.form_tags(form).1, form.tag_sel, form.tags.text().to_string())
+        (f.board.form_tags(form).1, form.tag_sel.clone(), form.tags.text().to_string())
     };
     let owned = |tags: &[(&str, usize)]| tags.iter().map(|&(t, n)| (t.to_string(), n)).collect::<Vec<_>>();
     f.press(KeyCode::Char('n'));
@@ -1157,10 +1202,10 @@ fn the_form_picks_tags_from_its_list() {
     assert_eq!(form(&f).1, None, "a whole tag typed is taken as it is");
     (0..3).for_each(|_| f.press(KeyCode::Backspace));
     assert_eq!(form(&f).0, owned(&[("perf", 1), ("prod", 2)]));
-    assert_eq!(form(&f).1, Some(0), "part of one highlights the first");
+    assert_eq!(form(&f).1.as_deref(), Some("perf"), "part of one highlights the first");
     f.press(KeyCode::Down);
     f.press(KeyCode::Down);
-    assert_eq!(form(&f).1, Some(1), "the last stays highlighted");
+    assert_eq!(form(&f).1.as_deref(), Some("prod"), "the last stays highlighted");
     f.press(KeyCode::Up);
     f.press(KeyCode::Up);
     assert_eq!(form(&f).1, None, "up off the first leaves the list");
@@ -1169,8 +1214,10 @@ fn the_form_picks_tags_from_its_list() {
     f.press(KeyCode::Enter);
     assert_eq!((form(&f).1, form(&f).2), (None, "perf, ".to_string()), "enter picks it, ready for the next");
     assert_eq!(form(&f).0, owned(&[("auth", 1), ("prod", 2)]), "what the field holds isn't offered again");
-    f.board.choose_form_tag(1);
+    f.board.choose_form_tag("prod");
     assert_eq!(form(&f).2, "perf, prod, ", "a click picks one too");
+    f.board.choose_form_tag("ape");
+    assert_eq!(form(&f).2, "perf, prod, ", "but not one the list no longer holds");
     f.type_text("zz");
     assert!(form(&f).0.is_empty(), "nothing to pick");
     f.press(KeyCode::Down);
@@ -1193,7 +1240,7 @@ fn enter_saves_the_form_unless_the_start_of_a_tag_was_typed() {
     brain.update(2, "slow page", vec!["prod".into()]).unwrap();
     let sel = |f: &Fixture| {
         let Mode::Form(form) = &f.board.mode else { panic!("the form is open") };
-        form.tag_sel
+        form.tag_sel.clone()
     };
     f.board.selected = Some(Key { src: 0, id: 2 });
     f.press(KeyCode::Char('e'));
@@ -1203,11 +1250,11 @@ fn enter_saves_the_form_unless_the_start_of_a_tag_was_typed() {
     assert_eq!(sel(&f), None, "moving the cursor into a tag held highlights nothing, though #project starts with pro");
     f.press(KeyCode::End);
     f.type_text(" pro");
-    assert_eq!(sel(&f), Some(0), "typing the start of #project does");
+    assert_eq!(sel(&f).as_deref(), Some("project"), "typing the start of #project does");
     let Mode::Form(form) = &mut f.board.mode else { panic!("the form is open") };
-    form.tag_sel = Some(1);
+    form.tag_sel = Some("gone".into());
     f.press(KeyCode::Enter);
-    assert_eq!(f.on_disk(2).tags, ["prod", "pro"], "a highlight past the list (one row) is none: enter saves");
+    assert_eq!(f.on_disk(2).tags, ["prod", "pro"], "a highlighted tag no longer listed is none: enter saves");
 
     f.press(KeyCode::Char('n'));
     f.type_text("x");
@@ -1417,7 +1464,7 @@ fn the_user_answers_questions_and_decides_on_proposals() {
 #[test]
 fn while_the_board_acts_a_kb_run_meanwhile_waits() {
     let mut f = Fixture::new(&["feature"]);
-    let locks = f.board.lock_brains();
+    let locks = f.board.lock_brains(&mut Vec::new());
     assert_eq!(locks.len(), f.board.sources.len(), "every brain's");
     let dir = f.board.brain(0).store.dir().to_path_buf();
     let (taken, waiting) = std::sync::mpsc::channel();
@@ -1429,6 +1476,44 @@ fn while_the_board_acts_a_kb_run_meanwhile_waits() {
     assert!(waiting.recv_timeout(std::time::Duration::from_millis(200)).is_err(), "it waits for the board");
     drop(locks);
     assert!(waiting.recv_timeout(std::time::Duration::from_secs(5)).is_ok(), "and goes on once released");
+    other.join().unwrap();
+}
+
+#[test]
+fn a_brain_found_while_the_board_acts_is_locked_and_read_under_its_lock() {
+    use kanbrain_core::{brain::Brain, projects};
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    let mut tried = Vec::new();
+    let mut locks = board.lock_brains(&mut tried);
+    // Catching up finds a project registered meanwhile, read before its lock was taken.
+    let shop = code.path().join("shop/.brain");
+    std::fs::create_dir_all(&shop).unwrap();
+    projects::register(central.path(), "shop", &shop).unwrap();
+    board.reload_changed(&[board.sources[0].brain.store.dir().to_path_buf()]).unwrap();
+    let src = board.src_at(&shop).expect("found");
+    // A `kb` writing to it between that read and the lock.
+    let new = |title: &str| kanbrain_core::brain::NewEntry { title: title.into(), ..Default::default() };
+    Brain::open(Store::at(&shop).unwrap()).unwrap().add(new("Ship it")).unwrap();
+    assert!(board.brain(src).task(1).is_none(), "not read yet");
+
+    board.lock_found_brains(&mut locks, &mut tried);
+    assert_eq!(locks.len(), board.sources.len(), "its lock too");
+    assert_eq!(tried.len(), board.sources.len(), "each brain tried once, the central one first");
+    assert_eq!(tried[0], board.brain(0).store.dir());
+    let src = board.src_at(&shop).unwrap();
+    assert_eq!(board.brain(src).task(1).unwrap().title, "Ship it", "read again under it");
+    let mut again = Vec::new();
+    board.lock_found_brains(&mut again, &mut tried);
+    assert!(again.is_empty(), "none found since: nothing more to take");
+    let (taken, waiting) = std::sync::mpsc::channel();
+    let other = std::thread::spawn(move || {
+        let _lock = Store::at(&shop).unwrap().lock().unwrap();
+        taken.send(()).unwrap();
+    });
+    assert!(waiting.recv_timeout(std::time::Duration::from_millis(200)).is_err(), "a kb run waits for the board");
+    drop(locks);
+    assert!(waiting.recv_timeout(std::time::Duration::from_secs(5)).is_ok());
     other.join().unwrap();
 }
 

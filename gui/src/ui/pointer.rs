@@ -13,7 +13,7 @@ use gpui::{
 use std::rc::Rc;
 
 /// A place text is typed into, to know which one a drag started in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TextBox {
     /// The search box.
     Search,

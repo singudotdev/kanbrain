@@ -713,6 +713,47 @@ fn the_form_lists_its_tags_while_typing_them_and_a_click_picks_one(cx: &mut gpui
 }
 
 #[gpui::test]
+fn a_click_on_the_tags_list_puts_the_tag_clicked_though_a_reload_moved_it(cx: &mut gpui::TestAppContext) {
+    let (view, cx, dir) = window(cx, &["a", "b"]);
+    view.update(cx, |view, cx| {
+        view.board.brain_mut(0).update(1, "a", vec!["perf".into(), "speed".into()]).unwrap();
+        cx.notify();
+    });
+    cx.simulate_keystrokes("n tab p e");
+    cx.run_until_parked();
+    let perf = cx.debug_bounds("tag option 0").expect("listed first").center();
+    // Another program tags an entry with one sorting ahead, which the click's catching up reads.
+    let store = Store::at(dir.path()).unwrap();
+    let mut other = store.load().unwrap().0.into_iter().find(|t| t.id == 2).unwrap();
+    other.tags = vec!["ape".into()];
+    store.save(&mut other).unwrap();
+    cx.simulate_click(perf, gpui::Modifiers::none());
+    view.read_with(cx, |view, _| {
+        let Mode::Form(form) = &view.board.mode else { panic!("the form is open") };
+        assert_eq!(form.tags.text(), "perf, ", "the tag clicked, not the row's new one");
+    });
+}
+
+#[gpui::test]
+fn the_forms_tags_list_follows_its_highlight(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    view.update(cx, |view, cx| {
+        view.board.brain_mut(0).update(1, "a", (1..=9).map(|i| format!("tag{i}")).collect()).unwrap();
+        cx.notify();
+    });
+    // Nine tags, six rows shown: the last highlighted is scrolled to.
+    cx.simulate_keystrokes("n tab");
+    (0..9).for_each(|_| cx.simulate_keystrokes("down"));
+    next_frames(cx);
+    let list = cx.debug_bounds("tag-options-list").expect("the tags drop down under the field");
+    let bottom_row = cx.debug_bounds("tag option 8").expect("the last row is drawn");
+    assert!(
+        bottom_row.bottom() <= list.bottom() + px(1.),
+        "the highlight scrolled into view: {bottom_row:?} in {list:?}"
+    );
+}
+
+#[gpui::test]
 fn a_comments_buttons_stay_in_the_details_however_long_its_heading(cx: &mut gpui::TestAppContext) {
     let (view, cx, _dir) = window(cx, &["a"]);
     view.update(cx, |view, cx| {
@@ -844,4 +885,69 @@ fn a_list_counts_the_rows_out_of_view_from_its_scroll_or_the_highlight() {
     assert_eq!(hidden(12, 9, 8, 0., true), (2, 2), "the highlight below the view scrolls it just enough");
     assert_eq!(hidden(12, 1, 8, ROW_HEIGHT * 4., true), (1, 3), "and above it, just enough too");
     assert_eq!(hidden(12, 11, 8, ROW_HEIGHT * 4., false), (4, 0));
+}
+
+/// Draws the frames the window asked for since, as the platform would: tests have no frame loop. A few at most,
+/// so a window that never stops asking fails the test instead of hanging it.
+fn next_frames(cx: &mut gpui::VisualTestContext) {
+    let settled = (0..10).any(|_| cx.update(gpui::Window::simulate_next_frame) == 0);
+    assert!(settled, "the window still asks for frames after 10: it redraws for ever");
+    cx.run_until_parked();
+}
+
+/// Where a click at `x` in the form's title field, then `x` typed, puts it: the character shown there. The `x` is
+/// taken out again.
+fn type_at(view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext, x: gpui::Pixels) -> usize {
+    next_frames(cx);
+    let field = cx.debug_bounds("title").expect("the form's title field");
+    cx.simulate_click(gpui::point(x, field.center().y), gpui::Modifiers::none());
+    cx.simulate_keystrokes("x");
+    let at = view.read_with(cx, |view, _| {
+        let crate::state::Mode::Form(form) = &view.board.mode else { panic!("the form stays open") };
+        form.title.text().find('x').expect("typed")
+    });
+    cx.simulate_keystrokes("backspace");
+    cx.run_until_parked();
+    at
+}
+
+#[gpui::test]
+fn a_line_longer_than_its_field_scrolls_to_keep_the_cursor_in_view(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &[]);
+    cx.simulate_keystrokes("n");
+    let long = format!("{}end", "word ".repeat(60));
+    let keys: Vec<String> = long.chars().map(|c| if c == ' ' { "space".into() } else { c.to_string() }).collect();
+    cx.simulate_keystrokes(&keys.join(" "));
+    cx.run_until_parked();
+    let field = cx.debug_bounds("title").expect("the form's title field");
+    assert_eq!(
+        type_at(&view, cx, field.right() - gpui::px(9.)),
+        long.len(),
+        "the end shows, by the right edge (inside its 8-pixel padding)"
+    );
+    // Moved left past the left edge, only as far as the cursor: what's left of it starts there.
+    cx.simulate_keystrokes(&["left"; 100].join(" "));
+    cx.run_until_parked();
+    assert_eq!(type_at(&view, cx, field.left() + gpui::px(9.)), long.len() - 100, "the cursor shows, by the left edge");
+    // Moving inside what shows doesn't scroll.
+    cx.simulate_keystrokes("home");
+    cx.simulate_keystrokes(&["right"; 10].join(" "));
+    cx.run_until_parked();
+    assert_eq!(type_at(&view, cx, field.left() + gpui::px(9.)), 0, "the start shows, with the cursor in it");
+}
+
+#[gpui::test]
+fn a_field_typed_past_its_edge_a_key_at_a_time_stops_redrawing(cx: &mut gpui::TestAppContext) {
+    let (_view, cx, _dir) = window(cx, &[]);
+    cx.simulate_keystrokes("n");
+    // Each length lays the end out a little differently against the field's edge: one of them, where the field
+    // can't scroll as far as its padding asks, redrew for ever.
+    for key in "iiiiiiiiiiwwwwwwwwwwmmmmmmmmmmlilili".chars().cycle().take(120) {
+        cx.simulate_keystrokes(&key.to_string());
+        next_frames(cx);
+    }
+    for _ in 0..120 {
+        cx.simulate_keystrokes("backspace");
+        next_frames(cx);
+    }
 }

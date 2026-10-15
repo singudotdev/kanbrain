@@ -35,7 +35,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | `/` | **search** titles and tags, on every tab; `#tag` matches tags only (several `#tags`: entries with all of them) |
 | `#` | **filter by tags**, on every tab: a dropdown of the tags of what the tab shows, with a search box; each pick adds or takes out `#tag` in the search box, and it stays open for several (`esc` closes) |
 | `esc` | close the details; with them closed, clear the search (words and tags) |
-| `f` | show every done task, or only the latest 20 |
+| `f` | on the board, show every done task, or only the latest 20 |
 | `1` `2` `3` `4` `5` / `tab` / `shift+tab` | Board, Notes, Decisions, Report, Calendar; `tab` the next, `shift+tab` the previous |
 | `I` | **manage the project** shown, or with **All** of the selected card's project: description, repositories with their roles, tasks per status, what's running, this week's time; with buttons to rename, move and remove them and add a repository |
 | `E` | **edit the description** of the project shown, or with **All** of the selected card's project, shared by its repositories |
@@ -82,7 +82,7 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | --- | --- |
 | search box | type to filter; `enter` or `esc` stop typing and keep the filter |
 | quick add | `enter` adds the task and keeps the field open for the next; `esc` closes it |
-| new / edit form | `tab` (`shift+tab` back) moves between project (new entries), title, tags, related and, for a new task, its column, selecting the field's text so typing replaces it; `enter` saves; `esc` cancels. In **Project**: type to search, `↑` `↓` move, `enter` picks it and goes on to the title. In **Tags**: the tags in use drop down, filtered by the one typed; typing a tag's start highlights it, `↓` `↑` move, `enter` or a click puts the highlighted one in place of what's typed; with none highlighted, `enter` saves. In **Related**: type to search, `↑` `↓` move, `enter` checks or unchecks; the Save button saves. On **Column**: `←` `→` pick it |
+| new / edit form | `tab` (`shift+tab` back) moves between project (new entries), title, tags, related and, for a new task, its column, selecting the field's text so typing replaces it; `enter` saves; `esc` cancels. In **Project**: type to search, `↑` `↓` move, `enter` picks it and goes on to the title. In **Tags**: the tags in use drop down, filtered by the one typed; typing a tag's start highlights it, `↓` `↑` move, `enter` puts the highlighted one in place of what's typed, a click the one clicked; with none highlighted, `enter` saves. In **Related**: type to search, `↑` `↓` move, `enter` checks or unchecks; the Save button saves. On **Column**: `←` `→` pick it |
 | text editor (descriptions, comments, answers, a decision's reason, a project's description and notes) | `enter` new line; `esc` or `ctrl+enter` **save** (the button says what: **Answer**, **Add comment**, **Accept**, **Reject**, **Save**); **Discard changes** (`ctrl+d`) throws the edit away; with nothing typed, `esc` or **Close** closes it |
 | link picker | type to search; `↑` `↓` move; `enter` links or unlinks; `esc` closes |
 | comments (`C`) | `↑` `↓` move; `enter` edits the highlighted comment; `x` deletes it, after asking; `esc` closes |

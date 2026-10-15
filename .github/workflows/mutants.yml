@@ -1,6 +1,7 @@
 # Mutation testing of each change: every line a push or pull request changes is altered (`==` for `!=`, a body for
 # `Ok(())`…) and the tests run again; a change no test notices is a behavior nothing guards. `.cargo/mutants.toml`
-# lists what's left out, and why.
+# lists what's left out, and why. Only when Rust changed, and not for a tree a passing run already checked (see
+# .github/plan.sh).
 name: Mutants
 
 on:
@@ -10,7 +11,7 @@ on:
 
 permissions:
   contents: read
-  # To find the last run that passed (`gh run list`).
+  # To find the run a tree passed in, and the last commit whose run passed (.github/plan.sh).
   actions: read
 
 # Queued, not cancelled as ci.yml's runs are. A push waiting may still be replaced by a newer one: each run tests the
@@ -25,8 +26,33 @@ env:
   GUI_LINUX_DEPS: libfontconfig-dev libwayland-dev libx11-xcb-dev libxkbcommon-x11-dev libvulkan1
 
 jobs:
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      mutants: ${{ steps.plan.outputs.mutants }}
+      base: ${{ steps.plan.outputs.base }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+        run: .github/plan.sh mutants
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mutants-tree-${{ steps.plan.outputs.tree }}
+          path: .github/plan.sh
+          retention-days: 90
+          overwrite: true
+
   mutants:
     name: mutation testing of the change (${{ matrix.shard }}/8)
+    needs: plan
+    if: needs.plan.outputs.mutants == 'true'
     runs-on: ubuntu-latest
     # Each shard takes an eighth of the mutants: minutes for a usual push, under the limit for a release's many
     # commits, which one runner alone could take more than six hours over.
@@ -49,18 +75,11 @@ jobs:
           tool: cargo-mutants@27.1.0
       - name: Mutants of the changed lines
         env:
-          GH_TOKEN: ${{ github.token }}
-          PR_BASE: ${{ github.event.pull_request.base.sha }}
-          BEFORE: ${{ github.event.before }}
+          # The last commit on the branch pushed to, or on the pull request's base, whose push run passed
+          # (.github/plan.sh).
+          BASE: ${{ needs.plan.outputs.base }}
           SHARD: ${{ matrix.shard }}
         run: |
-          BASE=$PR_BASE
-          if [ -z "$BASE" ]; then
-            # From the last commit on this branch whose run passed, else the push before this one.
-            BASE=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow mutants.yml --branch "$GITHUB_REF_NAME" --event push \
-              --status success --limit 1 --json headSha --jq '.[0].headSha // empty')
-            if [ -z "$BASE" ] || ! git merge-base --is-ancestor "$BASE" HEAD 2>/dev/null; then BASE=$BEFORE; fi
-          fi
           # A branch's first push has no commit before it: its parent stands in.
           if ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then BASE=HEAD~1; fi
           echo "testing the lines changed since $BASE"

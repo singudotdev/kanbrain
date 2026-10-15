@@ -1,6 +1,7 @@
-//! `kb hook prompt|stop`: what Claude Code's hooks run so that an agent describes the project (and,
-//! with several repositories, this one's role) before anything else. Asked to in the section and in
-//! `context`, agents still skipped it on their first turn; these have Claude Code remind them:
+//! `kb hook prompt|stop|edit`: what Claude Code's hooks run so that an agent describes the project (and,
+//! with several repositories, this one's role) before anything else, and keeps to `kb` for the brain's files.
+//! Asked to in the section and in `context`, agents still skipped describing it on their first turn; these have
+//! Claude Code remind them:
 //!
 //! - `prompt` (`UserPromptSubmit`): while something is missing, every prompt arrives with the request
 //!   to write it first;
@@ -12,13 +13,18 @@
 //!
 //! Once the project is described and the tasks the agent started commented on, they print nothing, so they cost
 //! nothing.
+//!
+//! `edit` (`PreToolUse`, on the tools that write files) refuses instead: an agent about to write a brain's file is
+//! sent to `kb`. The section tells it so, yet an agent seeing markdown files may edit them: that skips the brain's
+//! lock (the board and other agents write there too), the numbering of new entries and the format `kb` keeps.
 
 use crate::enums::named_enum;
 use crate::model::{Author, Status, Task};
 use crate::projects::{self, ProjectInfo};
 use crate::store::{self, Store};
 use serde_json::{Value, json};
-use std::path::{Path, PathBuf};
+use std::fs;
+use std::path::{Component, Path, PathBuf};
 
 named_enum! {
     /// Which hook is asking, as `kb hook NAME` names it.
@@ -28,56 +34,152 @@ named_enum! {
         Prompt => "prompt",
         /// `Stop`: the agent is about to end its turn.
         Stop => "stop",
+        /// `PreToolUse`: the agent is about to write a file.
+        Edit => "edit",
     }
 }
 
-/// What to print for `event`, given the JSON Claude Code sent (`input`) and the central brain: `None`
-/// outside a project, or when there's nothing to remind. Malformed input reads as empty, so a hook never
-/// breaks a session: it falls back to the folder it runs in, `here`, and lets the turn end.
+/// What to print for `event`, given the JSON Claude Code sent (`input`) and the central brain: `None` when there's
+/// nothing to remind or refuse, as for `prompt` and `stop` outside a project. Malformed input reads as empty, so a
+/// hook never breaks a session: `prompt` and `stop` fall back to the folder it runs in, `here`, and let the turn end;
+/// `edit`, with no path, refuses nothing.
 pub fn respond(event: HookEvent, input: &str, central: &Path, here: &Path) -> Option<String> {
     let input: Value = serde_json::from_str(input).unwrap_or(Value::Null);
     let cwd = input["cwd"].as_str().map_or_else(|| here.to_path_buf(), PathBuf::from);
-    let dir = store::find_project(&cwd)?;
-    let project = projects::info(&dir, Some(central))?;
-    let missing = missing(&project).join("; and ");
     match event {
-        HookEvent::Prompt if missing.is_empty() => None,
-        HookEvent::Prompt => Some(format!(
-            "kanbrain: this project isn't described yet. Before anything else in this turn, read the README \
-             and manifests and write {missing}. Then go on with the request."
-        )),
-        HookEvent::Stop if input["stop_hook_active"].as_bool() == Some(true) => None,
-        HookEvent::Stop => {
-            let mut reminders = Vec::new();
-            if !missing.is_empty() {
-                reminders.push(format!(
-                    "kanbrain: the project still isn't described. Before ending this turn, read the README and \
-                     manifests and write {missing}."
-                ));
-            }
-            // A brain that can't be read only loses the reminder, never the turn.
-            let tasks = Store::at(&dir).and_then(|s| s.load()).map(|(tasks, _)| tasks).unwrap_or_default();
-            // Each one: with subagents, an agent may have several running.
-            reminders.extend(tasks.iter().filter(|t| uncommented(t)).map(|task| {
-                // Which session started it isn't known, so the agent of another, or one that crashed, is told
-                // apart by the agent reading this: never told to finish a task it didn't start.
-                format!(
-                    "kanbrain: #{0} {1} is in doing with no comment since an agent started it. If you started it, \
-                     before ending this turn `kb comment {0}` what changed and what's next, or `kb done {0}` if \
-                     it's finished; if you didn't, leave it alone.",
-                    task.id, task.title
-                )
-            }));
-            // As additional context rather than `decision: "block"`: the turn goes on all the same, but
-            // Claude Code shows it as a reminder instead of a hook error.
-            (!reminders.is_empty()).then(|| {
-                json!({
-                    "hookSpecificOutput": { "hookEventName": "Stop", "additionalContext": reminders.join("\n") },
-                })
-                .to_string()
-            })
+        HookEvent::Edit => refuse_brain_write(&written(input["tool_input"]["file_path"].as_str()?, &cwd), central),
+        HookEvent::Prompt | HookEvent::Stop => remind(event, &input, &cwd, central),
+    }
+}
+
+/// `edit`'s answer to an agent about to write `file`: refused, and sent to `kb`, when it's in a brain's folder.
+fn refuse_brain_write(file: &Path, central: &Path) -> Option<String> {
+    in_brain(file, central).then(|| {
+        json!({
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": "kanbrain: a brain's files are written only through `kb`, which takes \
+                    the brain's lock (the board and other agents write there too), numbers new entries and keeps \
+                    their format. Make this change with `kb` (`kb --help` lists the commands); if none makes it, \
+                    tell the user what to change instead of editing the file.",
+            },
+        })
+        .to_string()
+    })
+}
+
+/// Whether `file` is one of a brain's: anything in a project's `.brain/`, or what kanbrain keeps in the central
+/// brain ([`central_owned`]). The central brain may be a notes vault, or hold repositories: its other files are the
+/// agent's to write. A link to either counts, through the nearest of `file`'s folders that exists (a file being
+/// created doesn't yet).
+fn in_brain(file: &Path, central: &Path) -> bool {
+    let canonical = central.canonicalize().ok();
+    let centrals = [Some(central), canonical.as_deref()];
+    let owned = |path: &Path| {
+        path.ancestors().any(|dir| dir.file_name().is_some_and(|name| name == store::PROJECT_DIR))
+            || centrals.into_iter().flatten().any(|c| path.strip_prefix(c).is_ok_and(|rel| central_owned(c, rel)))
+    };
+    owned(file) || real_path(file).is_some_and(|real| owned(&real))
+}
+
+/// Whether `rel`, a path inside the central brain `central`, is kanbrain's: `tags.md`, `projects.md`, `last-id`,
+/// `format`, an entry, or anything in the project cards' or reports' folders. An entry is a file at the top named as
+/// one (`0007-title.md`), or one `Store::load` reads as an entry or reports broken: the vault's other notes, there
+/// too, aren't.
+fn central_owned(central: &Path, rel: &Path) -> bool {
+    let mut parts = rel.components();
+    let Some(first) = parts.next().map(Component::as_os_str) else { return false };
+    if parts.next().is_some() {
+        return first == projects::CARDS_DIR || first == store::REPORTS_DIR;
+    }
+    let kanbrains = [store::TAGS_FILE, projects::REGISTRY_FILE, store::LAST_ID_FILE, crate::migrate::FORMAT_FILE];
+    let name = first.to_string_lossy();
+    if kanbrains.contains(&&*name) {
+        return true;
+    }
+    let path = central.join(rel);
+    // Only a file is read: a pipe, or a link to a device, would hold the hook.
+    let text = fs::metadata(&path).is_ok_and(|meta| meta.is_file()).then(|| store::read_text(&path).ok()).flatten();
+    // As `Store::load` reads it and `kb` reports it (`say_skipped`): an entry, or a broken one.
+    let entry = |text: &str| Task::from_markdown(text).err().is_none_or(|error| error != crate::model::MISSING_ID);
+    name.ends_with(".md") && (store::entry_named(&name) || text.is_some_and(|text| entry(&text)))
+}
+
+/// The file an edit of `path` writes, as Claude Code finds it: `~` is the home folder, a relative path is in the
+/// session's folder `cwd` (Claude Code gives it absolute), and `..` is resolved as text ([`lexical`]).
+fn written(path: &str, cwd: &Path) -> PathBuf {
+    let home = |rest: &str| dirs::home_dir().map(|home| home.join(rest));
+    let path = match path.strip_prefix("~/").or_else(|| (path == "~").then_some("")) {
+        Some(rest) => home(rest).unwrap_or_else(|| cwd.join(path)),
+        None => cwd.join(path),
+    };
+    lexical(&path)
+}
+
+/// `path` with its `..` resolved as text, as Claude Code resolves the path it writes: through the folder named, which
+/// needn't exist, rather than where a link in it leads. (`components` already drops a `.` inside the path.)
+fn lexical(path: &Path) -> PathBuf {
+    let mut resolved = PathBuf::new();
+    for part in path.components() {
+        if part == Component::ParentDir {
+            resolved.pop();
+        } else {
+            resolved.push(part);
         }
     }
+    resolved
+}
+
+/// `file` with its links resolved: its nearest folder that exists, canonical, then the rest of the path.
+fn real_path(file: &Path) -> Option<PathBuf> {
+    file.ancestors().find_map(|dir| Some(dir.canonicalize().ok()?.join(file.strip_prefix(dir).ok()?)))
+}
+
+/// `prompt`'s and `stop`'s reminders, for the project the session runs in (`cwd`).
+fn remind(event: HookEvent, input: &Value, cwd: &Path, central: &Path) -> Option<String> {
+    let dir = store::find_project(cwd)?;
+    let project = projects::info(&dir, Some(central))?;
+    let missing = missing(&project).join("; and ");
+    if event == HookEvent::Prompt {
+        return (!missing.is_empty()).then(|| {
+            format!(
+                "kanbrain: this project isn't described yet. Before anything else in this turn, read the README \
+                 and manifests and write {missing}. Then go on with the request."
+            )
+        });
+    }
+    if input["stop_hook_active"].as_bool() == Some(true) {
+        return None;
+    }
+    let mut reminders = Vec::new();
+    if !missing.is_empty() {
+        reminders.push(format!(
+            "kanbrain: the project still isn't described. Before ending this turn, read the README and \
+             manifests and write {missing}."
+        ));
+    }
+    // A brain that can't be read only loses the reminder, never the turn.
+    let tasks = Store::at(&dir).and_then(|s| s.load()).map(|(tasks, _)| tasks).unwrap_or_default();
+    // Each one: with subagents, an agent may have several running.
+    reminders.extend(tasks.iter().filter(|t| uncommented(t)).map(|task| {
+        // Which session started it isn't known, so the agent of another, or one that crashed, is told
+        // apart by the agent reading this: never told to finish a task it didn't start.
+        format!(
+            "kanbrain: #{0} {1} is in doing with no comment since an agent started it. If you started it, \
+             before ending this turn `kb comment {0}` what changed and what's next, or `kb done {0}` if \
+             it's finished; if you didn't, leave it alone.",
+            task.id, task.title
+        )
+    }));
+    // As additional context rather than `decision: "block"`: the turn goes on all the same, but
+    // Claude Code shows it as a reminder instead of a hook error.
+    (!reminders.is_empty()).then(|| {
+        json!({
+            "hookSpecificOutput": { "hookEventName": "Stop", "additionalContext": reminders.join("\n") },
+        })
+        .to_string()
+    })
 }
 
 /// Whether `task` runs because an agent started it, and nobody has commented on it since. A task the

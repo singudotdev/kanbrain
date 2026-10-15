@@ -5,6 +5,34 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-15
+
+### Added
+
+- A fourth Claude Code hook, `kb hook edit` (`PreToolUse` on `Edit|Write|MultiEdit`, `cli::claude::HOOKS`): an agent
+  about to write a brain's file, anything in a project's `.brain/` or kanbrain's own in the central brain (its
+  entries, `tags.md`, `projects.md`, `last-id`, `format`, `projects/`, `reports/`; not a notes vault's other notes),
+  also through a link, `~` or `..`, is refused (`permissionDecision: deny`) and told to make the change with `kb`, or
+  tell the user what to change (`cli::hook::refuse_brain_write`). Writing the files itself skipped the brain's lock,
+  the numbering of new entries and the format. `kb update` adds it to every project (`init --all`).
+
+### Fixed
+
+- A one-line field of the kanban app (a title, a search box, a name) scrolls sideways to keep the cursor in view: a
+  line longer than the field was typed past its edge, unseen (`caret::keep_in_view`, `widgets::FieldScrolls`).
+- Pasting into or cutting from the kanban app's form's tags field highlights its list as typing does
+  (`Board::retag`, `Board::tag_highlight`): a highlight left from before could be picked by enter instead of what
+  was pasted.
+- The kanban app's form keeps its tags list's highlight on the same tag when the list reloads (`Form::tag_sel` holds
+  the tag, not its row), and a click puts the tag clicked (`Board::choose_form_tag`): a tag another program added
+  ahead of it moved the rows, and enter or the click picked another one.
+- The kanban app holds the lock of a brain it finds while it acts, as of every other: a project registered
+  meanwhile was read, and could be written to, without it, so a `kb` run then could write over it or be written
+  over. Its lock is taken after catching up, and every brain read again under the locks
+  (`Board::lock_found_brains`).
+- `f` acts on the kanban app's board only: on the notes or decisions it showed every done task, or only the latest,
+  on the board, unseen (`keys::ACTIONS`, `Tabs::Board`; `When::OnBoard` is gone, as nothing checked it on a key).
+
 ## [0.4.1] - 2026-10-14
 
 ### Added
@@ -24,7 +52,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   (`dropdown::list`, `menu::draw`), and a dialog's list sits in a bordered box (`dialogs::list_box`): the link
   picker, comments, which project and the command palette now too.
 
-
 ### Fixed
 
 - `kb init --all` (run by the installer and `kb update`) renames a registry's only project named `Central`, or one
@@ -37,6 +64,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   by folder, though a reload reordered the brains meanwhile (`Board::drop_dragged`).
 - `kb init`'s message and `docs/agents.md` say the `Stop` hook reminds an agent to describe the project, as it does,
   rather than holding the turn.
+
 ## [0.4.0] - 2026-10-14
 
 ### Added
@@ -312,7 +340,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/singudotdev/kanbrain/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/singudotdev/kanbrain/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/singudotdev/kanbrain/compare/v0.3.5...v0.4.0
 [0.3.5]: https://github.com/singudotdev/kanbrain/compare/v0.3.4...v0.3.5

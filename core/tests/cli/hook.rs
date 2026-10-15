@@ -27,7 +27,7 @@ fn input(cwd: &Path, stop_hook_active: bool) -> String {
 }
 
 #[test]
-fn an_undescribed_project_is_asked_for_with_every_prompt_and_holds_the_turn_once() {
+fn an_undescribed_project_is_asked_for_with_every_prompt_and_reminded_once_a_turn() {
     let (central, _code, root) = project();
     let prompt = hook(HookEvent::Prompt, &input(&root, false), central.path()).expect("it asks");
     assert!(
@@ -97,4 +97,87 @@ fn a_task_an_agent_started_and_never_commented_on_is_reminded_once() {
     assert_eq!(hook(HookEvent::Stop, &input(&root, true), central.path()), None, "once a turn");
     brain.add_comment(task, "sessions cached; next: expiry").unwrap();
     assert_eq!(hook(HookEvent::Stop, &input(&root, false), central.path()), None);
+}
+
+/// What `kb hook edit` says when an agent's Edit, run from `cwd`, is about to write `file`.
+fn edit(cwd: &Path, file: &Path, central: &Path) -> Option<String> {
+    let input = json!({
+        "hook_event_name": "PreToolUse",
+        "cwd": cwd,
+        "tool_name": "Edit",
+        "tool_input": { "file_path": file },
+    });
+    hook(HookEvent::Edit, &input.to_string(), central)
+}
+
+#[test]
+fn an_agent_writing_a_brains_files_is_sent_to_kb() {
+    let (central, _code, root) = project();
+    let refused = edit(&root, &root.join(".brain/0001-fix-login.md"), central.path()).expect("refused");
+    let out: Value = serde_json::from_str(&refused).unwrap();
+    assert_eq!(out["hookSpecificOutput"]["hookEventName"], "PreToolUse");
+    assert_eq!(out["hookSpecificOutput"]["permissionDecision"], "deny");
+    let why = out["hookSpecificOutput"]["permissionDecisionReason"].as_str().unwrap();
+    assert!(why.contains("`kb --help`") && why.contains("tell the user"), "{why}");
+    assert!(
+        edit(&root, ".brain/0002-new.md".as_ref(), central.path()).is_some(),
+        "a new one, from the session's folder"
+    );
+    for owned in ["projects/shop.md", "0001-plan.md", "tags.md", "projects.md", "last-id", "format", "reports/x.md"] {
+        assert!(edit(&root, &central.path().join(owned), central.path()).is_some(), "the central brain's {owned}");
+    }
+
+    assert_eq!(edit(&root, &root.join("src/main.rs"), central.path()), None, "the code is the agent's to edit");
+    assert_eq!(edit(&root, &root.join("CLAUDE.md"), central.path()), None, "and the section's file");
+    assert_eq!(edit(&root, &root.join("docs/.brainstorm.md"), central.path()), None, "only a folder named .brain");
+    // `..` is resolved as Claude Code resolves it, before anything is looked up.
+    assert_eq!(edit(&root, &root.join(".brain/../src/main.rs"), central.path()), None, "out of .brain again");
+    let back_in = central.path().join("nosuch/../0009-new.md");
+    assert!(edit(&root, &back_in, central.path()).is_some(), "into the central brain through a folder not there");
+    assert_eq!(hook(HookEvent::Edit, "not json", central.path()), None, "nothing to refuse without a path");
+}
+
+#[test]
+fn the_central_brain_kept_in_a_notes_vault_leaves_the_vaults_own_files_to_the_agent() {
+    let (central, _code, root) = project();
+    let vault = central.path();
+    assert_eq!(edit(&root, &vault.join("daily/2026-10-15.md"), vault), None, "a note of the vault's");
+    std::fs::write(vault.join("Inbox.md"), "# Inbox\n\n- buy milk\n").unwrap();
+    assert_eq!(edit(&root, &vault.join("Inbox.md"), vault), None, "at its top too");
+    assert_eq!(edit(&root, &vault.join("2026-10-15.md"), vault), None, "and a new one, dated");
+    std::fs::write(vault.join("plan.md"), "# Plan\n\n- id: 3\n- type: task\n").unwrap();
+    assert!(edit(&root, &vault.join("plan.md"), vault).is_some(), "but an entry renamed by hand is kanbrain's");
+    std::fs::write(vault.join("hand.md"), "# Hand\n\n- id : 12\n").unwrap();
+    assert!(edit(&root, &vault.join("hand.md"), vault).is_some(), "as `Store::load` reads one, spaced as it may be");
+    std::fs::write(vault.join("users.md"), "# Users\n\n## Notes\n- id: user-123 migrated\n").unwrap();
+    assert_eq!(edit(&root, &vault.join("users.md"), vault), None, "an `- id:` that isn't an entry's");
+    let code = vault.join("code/app");
+    std::fs::create_dir_all(code.join(".brain")).unwrap();
+    assert_eq!(edit(&code, &code.join("src/main.rs"), vault), None, "a repository kept in it");
+    assert!(edit(&code, &code.join(".brain/0001-plan.md"), vault).is_some(), "but not that repository's brain");
+    assert_eq!(edit(&root, vault, vault), None, "nor the folder itself");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_brain_reached_through_a_link_is_a_brain_still() {
+    let (central, code, root) = project();
+    let link = code.path().join("notes");
+    std::os::unix::fs::symlink(root.join(".brain"), &link).unwrap();
+    assert!(edit(&root, &link.join("0001-fix-login.md"), central.path()).is_some());
+    let central_link = code.path().join("central");
+    std::os::unix::fs::symlink(central.path(), &central_link).unwrap();
+    assert!(edit(&root, &central_link.join("0001-plan.md"), central.path()).is_some());
+    // And the central brain set through a link (`KANBRAIN_DIR`), written at its real path.
+    let real = central.path().canonicalize().unwrap().join("0001-plan.md");
+    assert!(edit(&root, &real, &central_link).is_some());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_pipe_in_the_central_brain_is_not_read() {
+    let (central, _code, root) = project();
+    let pipe = central.path().join("pipe.md");
+    assert!(std::process::Command::new("mkfifo").arg(&pipe).status().unwrap().success());
+    assert_eq!(edit(&root, &pipe, central.path()), None, "and the hook returns, though nothing writes to it");
 }

@@ -3,8 +3,8 @@
 //! - [`entries`]: commands that read or change entries by id, for agents and scripts.
 //! - [`mod@init`]: a project's `.brain/`, and the section telling its agents about it; `deinit` undoes it.
 //! - [`claude`]: the Claude Code hooks `init` adds: the context at each session start, and [`hook`]'s checks.
-//! - [`hook`]: `kb hook prompt|stop`, which hold an agent to describing an undescribed project first, and
-//!   to commenting on the tasks it started.
+//! - [`hook`]: `kb hook prompt|stop|edit`, which hold an agent to describing an undescribed project first, to
+//!   commenting on the tasks it started, and to `kb` for the brain's files.
 //! - [`completions`]: `kb completions SHELL`, tab completion, and the ids, projects and tags it offers.
 //! - [`update`]: `kb update` and the app's, the latest release over this one, through the installer, once no
 //!   agent is working.
@@ -149,10 +149,10 @@ usage:
   {pad}           stop this folder (or --project NAME) being a project: unregister it, remove its
   {pad}           section from CLAUDE.md / AGENTS.md, the other repositories' links to it and, with
   {pad}           its last repository, the project's card; its .brain/ is kept unless --purge
-  {name} hook prompt|stop
+  {name} hook prompt|stop|edit
   {pad}           what the Claude Code hooks `init` adds run: they hold an agent to describing an
-  {pad}           undescribed project first, and to commenting on the tasks it started (they read the
-  {pad}           hook's JSON on stdin)
+  {pad}           undescribed project first, to commenting on the tasks it started, and to `kb` for
+  {pad}           the brain's files (they read the hook's JSON on stdin)
   {name} status    print the running tasks, in whichever project, and how many wait for an answer
   {pad}           (for status bars)
   {name} report [{units}] [--group {groups}] [--tag TAG] [--save]
@@ -213,7 +213,7 @@ pub enum Command {
     /// `deinit [--purge]`: undo `init` for the current directory's project, or the one `--project` names;
     /// `true` also deletes its `.brain/`.
     Deinit(bool),
-    /// `hook prompt|stop`: what Claude Code's hooks run (see [`hook`]).
+    /// `hook prompt|stop|edit`: what Claude Code's hooks run (see [`hook`]).
     Hook(hook::HookEvent),
     /// `status`: print the running tasks for status bars.
     Status,
@@ -604,14 +604,7 @@ fn run_entries(store: Store, central: &Path, mut args: EntryArgs) -> Result<()> 
 /// line, say), or named as one (`0007-title.md`); markdown of other names, or dated (`2024-01-15.md`), with no id is
 /// left unsaid: a central brain kept in a notes vault holds many.
 fn say_skipped(brain: &Brain) {
-    let entry_file = |warning: &&String| {
-        let digits = warning.chars().take_while(char::is_ascii_digit).count();
-        let named = digits >= 4
-            && warning[digits..]
-                .strip_prefix('-')
-                .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_lowercase()));
-        named || !warning.contains("missing `- id:` line")
-    };
+    let entry_file = |warning: &&String| store::entry_named(warning) || !warning.contains(crate::model::MISSING_ID);
     for warning in brain.warnings.iter().filter(entry_file) {
         eprintln!("kb: skipped {warning}; fix the file or remove it");
     }

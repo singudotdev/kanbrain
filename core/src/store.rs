@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
 /// Tag color assignments; lives next to the task files but isn't a task.
-const TAGS_FILE: &str = "tags.md";
+pub(crate) const TAGS_FILE: &str = "tags.md";
 
 /// A project's own data folder, found by walking up from the current directory like `.git`.
 pub const PROJECT_DIR: &str = ".brain";
@@ -20,10 +20,10 @@ pub const PROJECT_DIR: &str = ".brain";
 /// The highest id the folder has given an entry, so ids are never handed out twice: a link to a deleted
 /// entry, left in a file edited by hand or in a copy that was offline, would otherwise point at the
 /// unrelated entry that took its number. Not markdown, so it's never read as an entry.
-const LAST_ID_FILE: &str = "last-id";
+pub(crate) const LAST_ID_FILE: &str = "last-id";
 
 /// Subfolder for markdown report exports; never read back.
-const REPORTS_DIR: &str = "reports";
+pub(crate) const REPORTS_DIR: &str = "reports";
 
 /// The data folder where tasks are stored.
 #[derive(Debug)]
@@ -488,6 +488,14 @@ pub(crate) fn write_file(path: &Path, text: &str) -> Result<()> {
 /// The name `task`'s file is saved under: `0005-fix-login.md`.
 pub(crate) fn file_name(task: &Task) -> String {
     format!("{:04}-{}.md", task.id, slugify(&task.title))
+}
+
+/// Whether `name` starts as [`file_name`] names an entry: four digits or more, `-`, a lowercase ASCII letter (a slug's).
+/// A slug starting with a digit is left out, so that a notes vault's `2026-10-15.md` isn't taken for one.
+pub(crate) fn entry_named(name: &str) -> bool {
+    let digits = name.chars().take_while(char::is_ascii_digit).count();
+    digits >= 4
+        && name[digits..].strip_prefix('-').is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_lowercase()))
 }
 
 /// Whether two file names in one folder are the same but for case, which a case-insensitive file system (macOS,

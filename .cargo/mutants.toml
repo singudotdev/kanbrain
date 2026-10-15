@@ -12,13 +12,19 @@ exclude_re = [
     'gui/src/update\.rs:.*replace (install|install_after_exit|install_now) -> Result',
     # The hover style of a list row: the window tests have no pointer to hover with.
     'gui/src/ui/list\.rs:.*delete ! in row',
-    # The highlight of the form's tags list: a color, and the window tests read bounds, not colors (the state tests
-    # check which row it is, `Form::tag_sel`).
-    'gui/src/ui/dialogs/form\.rs:.*replace == with != in tags_field',
+    # The highlight of the form's tags list (by its line, so the row the list follows stays tested): a color, and the
+    # window tests read bounds, not colors (the state tests check which tag it is, `Form::tag_sel`).
+    'gui/src/ui/dialogs/form\.rs:168:.*replace == with != in tags_field',
     # Runs the user's editor and waits for it: the choice of editor (`editor_of`) is what tests check.
     'gui/src/ui/mod\.rs:.*(replace open_editor -> Result| in open_editor$)',
     # A leftover exactly CUT_WRITE_AGE old, to the nanosecond, is the only one `>=` would delete too.
     'core/src/store\.rs:.*replace > with >= in forget_cut_writes',
+    # Where a one-line field scrolls for its cursor: the cursor exactly on an edge, or exactly SLACK past it, to the
+    # sub-pixel, is the only place these tell apart.
+    'gui/src/ui/caret\.rs:.*replace (> with >=|< with <=|<= with <) in keep_in_view',
+    # Which row of the editor draws the cursor (`index == row`, by its line, so the selection's rows stay tested):
+    # painted, and the window tests read bounds, not what's painted.
+    'gui/src/ui/dialogs/editor\.rs:56:.*replace == with != in draw',
     # A message exactly one second after a skipped read's, to the nanosecond, is the only one `<=` would join.
     'gui/src/state/mod\.rs:.*replace < with <= in Board::notify',
     # Downloads the installer from GitHub and runs it: the installer is checked by e2e/install.sh, not by tests.

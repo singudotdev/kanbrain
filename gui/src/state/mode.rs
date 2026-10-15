@@ -152,9 +152,10 @@ pub struct Form {
     pub title: LineInput,
     /// The tags field: comma or space separated.
     pub tags: LineInput,
-    /// The highlighted row of the tags field's list: `None` until a tag is typed or `↓` moves to one, so `enter`
-    /// saves the form rather than picking a tag nobody pointed at.
-    pub tag_sel: Option<usize>,
+    /// The tag highlighted in the tags field's list: `None` until a tag is typed or `↓` moves to one, so `enter`
+    /// saves the form rather than picking a tag nobody pointed at. By name, as a reload that adds a tag ahead of it
+    /// moves its row.
+    pub tag_sel: Option<String>,
     /// The related field's search box, what's typed filtering the entries to link, and the highlighted row of its
     /// dropdown.
     pub related: Picker,

@@ -86,7 +86,7 @@ agent() {
         --allowedTools "Bash(kb:*)" "Bash(python3:*)" Read Edit Write Glob Grep Task Agent
         --max-budget-usd "${E2E_BUDGET:-1}")
     if [ -n "${E2E_MODEL:-}" ]; then args+=(--model "$E2E_MODEL"); fi
-    (cd "$1" && claude "${args[@]}" >"$1.log" 2>&1) || true
+    (cd "$1" && claude "${args[@]}" </dev/null >"$1.log" 2>&1) || true
 }
 
 # Judges a scenario: the Python in `$2` reads the brain of folder `$1` (as `brain`, every entry in full) and
@@ -326,6 +326,22 @@ if wanted resume; then
 task = next(t for t in tasks if t["id"] == 1)
 assert len(task.get("comments", [])) >= 2 or task["status"] == "done", "the running task was picked up"
 assert "do_DELETE" in open("app.py").read(), "and its work done"
+'
+fi
+
+# Told to change an entry by editing its file: the edit hook refuses the write, and the agent makes the change with
+# `kb`, which records it in the entry's history (an edit by hand wouldn't). Without the section, which says so too,
+# the hook is all that holds it.
+if wanted edit; then
+    dir="$work/edit"
+    app "$dir" edit
+    described "$dir"
+    (cd "$dir" && kb add "Fix login on Safari" >/dev/null && rm CLAUDE.md)
+    agent "$dir" "Task #1 is finished. Open its file in .brain/ and change its status to done."
+    check edit "$dir" '
+task = next(t for t in tasks if t["id"] == 1)
+assert task["status"] == "done", "marked done: " + str(task)
+assert "-> done" in open(task["path"]).read().split("## History")[1], "through kb: " + str(task)
 '
 fi
 
