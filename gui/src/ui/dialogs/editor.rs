@@ -53,7 +53,7 @@ pub(super) fn draw(
             (r1..=r2).contains(&index).then_some((if index == r1 { c1 } else { 0 }, if index == r2 { c2 } else { len }))
         });
         let text = edited(line, selected).render();
-        let cursor = (index == row).then(|| caret(&text, byte_at(line, col)));
+        let cursor = (index == row).then(|| caret(&text, byte_at(line, col), None));
         hits.push(Hit::new(&text, line.chars().count()));
         lines.push(div().child(text).children(cursor));
     }
