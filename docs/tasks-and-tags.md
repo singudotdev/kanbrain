@@ -129,7 +129,9 @@ column, `enter` saves (or **Create** / **Save**), `esc` cancels. From the comman
 **Related** is a search box with a dropdown: typing filters the other entries of the same brain (tasks, notes and
 decisions, by title or `#tag`), `↑` `↓` move, `enter` or a click checks or unchecks one. The checked ones show above
 the box as chips; × takes one out. Editing starts from the entry's related entries, and saving links and unlinks to
-match. In the tags field, the tags already used by entries of the same kind (task tags for a task, note tags for a
+match. Saving an edit changes only what you changed in the form: a title, tags or related entries that `kb` changed
+while it was open are kept, and tags or related entries you edited keep those added elsewhere meanwhile, without
+those taken out there. In the tags field, the tags already used by entries of the same kind (task tags for a task, note tags for a
 note) drop down below it, each with how many use it, so you can reuse the same names: those it holds are left out,
 and while you type a tag, only those containing it show, the first starting with it highlighted, or a line saying
 it'll be a new one. A click, or `↓` `↑` and `enter`, puts the tag in place of the one typed; with none highlighted (a

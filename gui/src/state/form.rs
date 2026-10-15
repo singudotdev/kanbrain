@@ -65,16 +65,25 @@ impl Board {
         match form.target {
             FormTarget::New(src, kind, status) => self.create(src, kind, title, tags, form.links, status),
             FormTarget::Edit(key) => {
-                // Saved as it was, it's no change, as in the editors: nothing written, nothing said.
                 let related = self.related_keys(key);
-                let same_links = related.len() == form.links.len() && related.iter().all(|k| form.links.contains(k));
+                // Only what was changed in the form, over the entry as it is now: `kb` may have changed it since.
+                let (title, tags, links) = match (&form.opened, self.task(key)) {
+                    (Some(opened), Some(now)) => (
+                        if title == opened.title { now.title.clone() } else { title },
+                        merged(&opened.tags, &tags, &now.tags),
+                        merged(&opened.links, &form.links, &related),
+                    ),
+                    _ => (title, tags, form.links),
+                };
+                // Saved as it was, it's no change, as in the editors: nothing written, nothing said.
+                let same_links = related.len() == links.len() && related.iter().all(|k| links.contains(k));
                 if self.task(key).is_some_and(|t| t.title == title && t.tags == tags) && same_links {
                     return;
                 }
                 let result = self.brain_mut(key.src).update(key.id, &title, tags);
                 let saved = result.is_ok();
                 self.report_error(result);
-                let result = self.relate_only(key, &form.links);
+                let result = self.relate_only(key, &links);
                 let related = result.is_ok();
                 self.report_error(result);
                 // As every other edit says it was saved.
@@ -193,4 +202,16 @@ impl Board {
         self.create(add.src, Kind::Task, title, Vec::new(), Vec::new(), add.status);
         self.mode = Mode::QuickAdd(QuickAdd { src: add.src, status: add.status, title: LineInput::default() });
     }
+}
+
+/// A list the form edited, merged with the changes made to it elsewhere since the form `opened` it: the form's
+/// `edited` list, as edited (its order too), without what was taken out elsewhere, and with what was added elsewhere
+/// after it. Unedited, it's the list as it is `now`.
+fn merged<T: Clone + PartialEq>(opened: &[T], edited: &[T], now: &[T]) -> Vec<T> {
+    if edited == opened {
+        return now.to_vec();
+    }
+    let kept = edited.iter().filter(|item| !opened.contains(item) || now.contains(item));
+    let added = now.iter().filter(|item| !opened.contains(item) && !edited.contains(item));
+    kept.chain(added).cloned().collect()
 }

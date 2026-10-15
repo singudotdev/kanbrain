@@ -30,6 +30,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   (`__kb_words`, `__kb_using` in `kb completions fish`): it went by any word on the line, so `kb project rename `,
   `kb list todo ` or `kb add Fix the show ` offered ids, `kb project describe ` the project's words again, and
   `kb --project central ` no command. `kb report ` offers the periods, which were offered as `--save`'s value.
+- The kanban app's edit form saves only what was changed in it, over the entry as it is then (`Form::opened`,
+  `form::merged`): a title, tags or related entries that `kb` changed while it was open (`kb rename`, `kb tag`,
+  `kb link`) were written back as the form had found them, even saved untouched. Tags and related entries edited
+  in it keep those added elsewhere meanwhile, without those taken out; an edited title replaces the one `kb` gave
+  it.
 
 ## [0.4.2] - 2026-10-15
 
