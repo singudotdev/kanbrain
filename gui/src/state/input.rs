@@ -290,18 +290,35 @@ impl Board {
             }
             _ => {
                 let changed = form.active_mut().is_some_and(|input| input.on_key(key));
-                // Typing the start of a tag highlights it, for enter to pick. One only containing what's typed isn't
-                // highlighted, nor a whole one typed, nor anything as the cursor merely moves: enter then saves, as a
-                // new tag typed must.
+                // Not as the cursor merely moves.
                 if changed && form.field == Field::Tags {
-                    let typed = form.typed_tag();
-                    let tags = self.form_tags(&form).1;
-                    let partial = !typed.is_empty() && !tags.iter().any(|(tag, _)| *tag == typed);
-                    form.tag_sel =
-                        partial.then(|| tags.iter().position(|(tag, _)| tag.starts_with(typed.as_str()))).flatten();
+                    form.tag_sel = self.tag_highlight(&form);
                 }
                 self.mode = Mode::Form(form);
             }
+        }
+    }
+
+    /// What the tags field's list highlights for what's typed, for enter to pick: the first tag starting with the
+    /// tag being typed. One only containing it isn't highlighted, nor a whole one typed: enter then saves, as a new
+    /// tag typed must.
+    fn tag_highlight(&self, form: &Form) -> Option<usize> {
+        let typed = form.typed_tag();
+        let tags = self.form_tags(form).1;
+        let partial = !typed.is_empty() && !tags.iter().any(|(tag, _)| *tag == typed);
+        partial.then(|| tags.iter().position(|(tag, _)| tag.starts_with(typed.as_str()))).flatten()
+    }
+
+    /// After the tags field's text changed other than by a key (pasted, cut): its list's highlight follows, as
+    /// typing it would.
+    fn retag(&mut self) {
+        let Mode::Form(form) = &self.mode else { return };
+        if form.field != Field::Tags {
+            return;
+        }
+        let sel = self.tag_highlight(form);
+        if let Mode::Form(form) = &mut self.mode {
+            form.tag_sel = sel;
         }
     }
 
@@ -325,7 +342,7 @@ impl Board {
                 form.tag_sel = sel.checked_sub(1);
                 true
             }
-            // A highlight past the list (pasted text or a reload shortened it) is none: enter saves.
+            // A highlight past the list (a reload shortened it) is none: enter saves.
             (KeyCode::Enter, Some(sel)) if sel < count => {
                 form.put_tag(&tags[sel].0);
                 true
@@ -445,6 +462,7 @@ impl Board {
             Some(Typing::Text(editor)) => _ = editor.delete_selection(),
             None => {}
         }
+        self.retag();
         self.keep_selection();
         Some(text)
     }
@@ -456,6 +474,7 @@ impl Board {
             Some(Typing::Text(editor)) => editor.insert(text),
             None => {}
         }
+        self.retag();
         self.keep_selection();
     }
 }
