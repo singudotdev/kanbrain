@@ -21,7 +21,6 @@ pub(super) fn draw(
     follow: bool,
     cx: &mut Context<BrainView>,
 ) -> Div {
-    let task = edit.target.key().and_then(|key| board.task(key));
     let name = edited_name(board, edit.target);
     let what = match edit.target {
         Target::Description(_) => "Description".to_string(),
@@ -29,8 +28,10 @@ pub(super) fn draw(
         Target::NewComment(_) => "New comment".to_string(),
         Target::Reject(_) => "Why it's rejected".to_string(),
         Target::Accept(_) => "Accepted, with a comment".to_string(),
-        Target::Comment(_, index) => task
-            .and_then(|t| t.comments.get(index))
+        // As it opened: another may be at its index now.
+        Target::Comment(_, index) => edit
+            .comments
+            .get(index)
             .map_or_else(|| "Comment".to_string(), |c| format!("Comment of {}", when(c.created))),
         Target::Project(_) => "Project description".to_string(),
         Target::RepoNotes(_) => "This repository's role".to_string(),

@@ -3,7 +3,7 @@
 use super::Key;
 use crate::text::editor::{LineInput, Pointer, TextEditor};
 use crate::text::event::{KeyCode, KeyEvent};
-use kanbrain_core::model::{Kind, Status, Task};
+use kanbrain_core::model::{Comment, Kind, Status, Task};
 use std::path::PathBuf;
 
 /// The dialog or field that takes the keys; `Normal` leaves them to the board.
@@ -176,8 +176,8 @@ pub struct Form {
     pub opened: Option<Opened>,
 }
 
-/// An edited entry's title, tags and related entries when its form opened. A field equal to it is unchanged in the
-/// form, however it got there, and saves what the entry has then.
+/// An edited entry's title, tags and related entries when its form opened (its title as a save that stopped found
+/// it). A field equal to it is unchanged in the form, however it got there, and saves what the entry has then.
 #[derive(Debug)]
 pub struct Opened {
     /// As saved, on one line: the form's title, trimmed, is compared with it.
@@ -492,6 +492,12 @@ pub struct Edit {
     pub target: Target,
     /// Manage project, on this brain, when it was opened from there: where closing it goes back to.
     pub back: Option<usize>,
+    /// The text a save replaces: the target's when the editor opened, or as a save that stopped found it. Another
+    /// text there is a change made meanwhile (`kb describe`), which a save doesn't replace unseen.
+    pub base: String,
+    /// For a comment, the entry's comments when the editor opened: one deleted, moved or edited meanwhile may put
+    /// another at its index, which comments written in one second, with one text, don't tell apart.
+    pub comments: Vec<Comment>,
 }
 
 /// What the text editor edits.

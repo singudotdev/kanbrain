@@ -49,17 +49,18 @@ impl Board {
                 }
             },
             Mode::Edit(mut edit) => {
-                let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+                let (ctrl, back) = (key.modifiers.contains(KeyModifiers::CONTROL), edit.back);
                 if ctrl && key.code == KeyCode::Char('d') {
                     // Discard changes; the mode is already taken.
                     self.notify("changes discarded");
                 } else if edit.editor.on_key(key) == Outcome::Save || (ctrl && key.code == KeyCode::Enter) {
-                    self.save_edit(&edit);
+                    // A save that stops puts the editor back.
+                    self.save_edit(edit);
                 } else {
                     self.mode = Mode::Edit(edit);
                     return;
                 }
-                self.back_to_manage(edit.back);
+                self.back_to_manage(back);
             }
             Mode::Confirm(confirm) => match key.code {
                 KeyCode::Char('y') | KeyCode::Enter => self.confirm(confirm),

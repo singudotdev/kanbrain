@@ -65,6 +65,25 @@ impl Board {
         match form.target {
             FormTarget::New(src, kind, status) => self.create(src, kind, title, tags, form.links, status),
             FormTarget::Edit(key) => {
+                // A title `kb` changed meanwhile too isn't replaced unseen: the save stops, the form open, and says
+                // what it is now; saved again with no newer one, the form's replaces it.
+                let renamed = match (&form.opened, self.task(key)) {
+                    (Some(opened), Some(now))
+                        if title != opened.title && now.title != opened.title && title != now.title =>
+                    {
+                        Some(now.title.clone())
+                    }
+                    _ => None,
+                };
+                if let Some(now) = renamed {
+                    let name = self.entry_name(key);
+                    self.notify(format!("{name}'s title changed meanwhile, to “{now}”: save again to replace it"));
+                    if let Some(opened) = &mut form.opened {
+                        opened.title = now;
+                    }
+                    self.mode = Mode::Form(form);
+                    return;
+                }
                 let related = self.related_keys(key);
                 // Only what was changed in the form, over the entry as it is now: `kb` may have changed it since.
                 let (title, tags, links) = match (&form.opened, self.task(key)) {

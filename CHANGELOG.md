@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- The kanban app's text editor doesn't replace unseen what `kb` wrote while it was open: a description (an agent's
+  `kb describe`), comment, project description or repository role that changed meanwhile stops the save, the editor
+  left open with the text typed and the status bar saying so (`… changed meanwhile: save again to replace it with
+  yours, ctrl+d to keep it`); saved again with nothing newer there, it replaces it (`Edit::base`). It replaced it,
+  unsaid, even with nothing typed but put back. A comment isn't saved over another that a deletion meanwhile put at
+  its place, though written in the same second with the same text: with the entry's other comments not as the
+  editor found them (but for new ones after them), the save stops for good (`… comments changed around this one
+  meanwhile`; `Edit::comments`, `Board::same_comment`), and the editor's title names the comment it opened. The edit
+  form does the same for a title both changed (`… title changed meanwhile, to “…”`), which v0.5.0 replaced.
+
 ## [0.5.0] - 2026-10-15
 
 ### Added
