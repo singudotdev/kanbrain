@@ -174,6 +174,9 @@ pub struct Form {
     /// On an edit, the entry as the form opened it, so saving changes only what was changed in the form: what `kb`
     /// changed meanwhile is kept.
     pub opened: Option<Opened>,
+    /// On an edit, `kb` changed one of the fields, or the task's status, since it opened: the title says so until
+    /// it's closed, as a change put back is still one that happened.
+    pub changed_on_disk: bool,
 }
 
 /// An edited entry's title, tags and related entries when its form opened (its title as a save that stopped found
@@ -186,6 +189,8 @@ pub struct Opened {
     pub tags: Vec<String>,
     /// Naming brains by index, as `Form::links` does: a change to the list of brains remaps both (`Mode::remap`).
     pub links: Vec<Key>,
+    /// The task's: an agent may have finished or parked it meanwhile, which the form doesn't change.
+    pub status: Status,
 }
 
 impl Form {
@@ -199,7 +204,8 @@ impl Form {
     /// The form for changing the title, tags and related entries of `task`, which `key` names;
     /// `related` are the ids it's related to now.
     pub fn edit(key: Key, task: &Task, related: Vec<Key>) -> Self {
-        let opened = Opened { title: task.title.clone(), tags: task.tags.clone(), links: related.clone() };
+        let opened =
+            Opened { title: task.title.clone(), tags: task.tags.clone(), links: related.clone(), status: task.status };
         Self {
             opened: Some(opened),
             ..Self::filled(FormTarget::Edit(key), &task.title, &task.tags.join(", "), related)
@@ -219,6 +225,7 @@ impl Form {
             field: Field::Title,
             title_missed: false,
             opened: None,
+            changed_on_disk: false,
         }
     }
 
@@ -502,6 +509,11 @@ pub struct Edit {
     /// `kb` deciding meanwhile isn't overturned unseen. A stop over the verdict being given leaves it, so it stops
     /// every time.
     pub decision: Option<DecisionState>,
+    /// The entry's status when the editor opened: an agent may have finished or parked the task meanwhile.
+    pub status: Option<Status>,
+    /// `kb` changed the text, or the entry's status, since the editor opened: the title says so until it's closed,
+    /// as a change put back is still one that happened.
+    pub changed_on_disk: bool,
 }
 
 /// What the text editor edits.

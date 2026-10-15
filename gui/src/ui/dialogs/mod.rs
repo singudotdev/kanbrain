@@ -29,6 +29,11 @@ const DIALOG_WIDTH: f32 = 520.;
 /// Width of the link picker and the command palette.
 const WIDE_WIDTH: f32 = 620.;
 
+/// A form's or editor's title, saying while it's open that `kb` changed what it edits (`changed_on_disk`).
+fn titled(title: String, changed_on_disk: bool) -> String {
+    if changed_on_disk { format!("{title} · changed on disk") } else { title }
+}
+
 /// The dialog of the current mode, if it has one.
 pub fn draw(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<BrainView>) -> Option<Div> {
     let dialog = match &board.mode {

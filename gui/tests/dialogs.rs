@@ -37,6 +37,16 @@ fn manage_project_scrolls_to_the_block_of_the_repository_its_opened_from() {
 }
 
 #[test]
+fn a_dialog_whose_entry_kb_changed_says_so_in_its_title() {
+    assert_eq!(titled("Edit #1".into(), true), "Edit #1 · changed on disk");
+    assert_eq!(titled("Edit #1".into(), false), "Edit #1");
+    // The editor's unsaved-changes dot stays last, after the mark, rather than between two separators.
+    assert_eq!(editor::title("Description".into(), true, true), "Description · changed on disk •");
+    assert_eq!(editor::title("Description".into(), true, false), "Description •");
+    assert_eq!(editor::title("Description".into(), false, true), "Description · changed on disk");
+}
+
+#[test]
 fn the_editor_names_what_its_text_belongs_to() {
     let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     for repo in ["api", "web"] {

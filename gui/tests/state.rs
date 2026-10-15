@@ -474,6 +474,186 @@ fn the_editor_doesnt_replace_unseen_what_kb_wrote_while_it_was_open() {
 }
 
 #[test]
+fn an_open_dialog_says_until_closed_that_kb_changed_what_it_edits() {
+    use kanbrain_core::brain::Brain;
+    use kanbrain_core::model::Comment;
+    let mut f = Fixture::new(&["Fix login", "Other"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    let reload = |f: &mut Fixture| {
+        f.board.message = None;
+        f.board.reload().unwrap();
+    };
+    let marked = |f: &Fixture| match &f.board.mode {
+        Mode::Edit(edit) => edit.changed_on_disk,
+        Mode::Form(form) => form.changed_on_disk,
+        _ => panic!("the dialog closed"),
+    };
+
+    // The description editor: a comment, or another entry changed, isn't what it edits.
+    f.board.select(k(1));
+    f.press(KeyCode::Char('m'));
+    kb(&f).add_comment(1, "on it").unwrap();
+    kb(&f).set_description(2, "not this one").unwrap();
+    reload(&mut f);
+    assert!(!marked(&f));
+    assert_eq!(f.board.message(), None);
+    kb(&f).set_description(1, "the agent's plan").unwrap();
+    reload(&mut f);
+    assert!(marked(&f));
+    assert_eq!(f.board.message(), Some("#1's description changed on disk"));
+    // Said once, though it changes again; marked until closed, even once it's back as it was.
+    kb(&f).set_description(1, "the agent's newer plan").unwrap();
+    reload(&mut f);
+    assert_eq!(f.board.message(), None);
+    kb(&f).set_description(1, "").unwrap();
+    reload(&mut f);
+    assert!(marked(&f));
+    assert_eq!(f.board.message(), None);
+    f.press(KeyCode::Esc);
+    f.press(KeyCode::Char('m'));
+    assert!(!marked(&f), "a dialog opened again starts unmarked");
+
+    // The task's status counts in any of its editors: the agent may have finished it.
+    f.press(KeyCode::Esc);
+    f.board.open_editor(Target::NewComment(k(1)));
+    kb(&f).set_status(1, Status::Doing).unwrap();
+    reload(&mut f);
+    assert!(marked(&f));
+    assert_eq!(f.board.message(), Some("#1's status changed on disk"));
+    f.press(KeyCode::Esc);
+
+    // A comment's editor: that comment's text, not another's.
+    kb(&f).add_comment(1, "second").unwrap();
+    f.board.reload().unwrap();
+    f.board.open_editor(Target::Comment(k(1), 0));
+    kb(&f).update_comment(1, 1, "second, edited").unwrap();
+    reload(&mut f);
+    assert!(!marked(&f));
+    kb(&f).update_comment(1, 0, "on it, edited").unwrap();
+    reload(&mut f);
+    assert!(marked(&f));
+    assert_eq!(f.board.message(), Some("#1's comment changed on disk"));
+    f.press(KeyCode::Esc);
+    // Another put at its index, its text the same: the one before it deleted.
+    let mut task = f.on_disk(2);
+    let at = now() - chrono::Duration::minutes(5);
+    task.comments = ["first", "same", "same"]
+        .into_iter()
+        .zip(0..)
+        .map(|(body, s)| Comment::new(at + chrono::Duration::seconds(s), body.into(), Author::Agent))
+        .collect();
+    Store::at(f.dir.path()).unwrap().save(&mut task).unwrap();
+    f.board.reload().unwrap();
+    f.board.open_editor(Target::Comment(k(2), 1));
+    kb(&f).delete_comment(2, 0).unwrap();
+    reload(&mut f);
+    assert!(marked(&f));
+    f.press(KeyCode::Esc);
+
+    // The form: its title, tags, related entries and the task's status, together when they came together.
+    f.press(KeyCode::Char('e'));
+    kb(&f).add_comment(1, "third").unwrap();
+    reload(&mut f);
+    assert!(!marked(&f));
+    let mut brain = kb(&f);
+    brain.update(1, "Fix the SSO login", vec!["auth".into()]).unwrap();
+    brain.set_status(1, Status::Done).unwrap();
+    reload(&mut f);
+    assert!(marked(&f));
+    assert_eq!(f.board.message(), Some("#1's title, tags and status changed on disk"));
+    f.press(KeyCode::Esc);
+    f.press(KeyCode::Char('e'));
+    kb(&f).toggle_link(1, 2).unwrap();
+    reload(&mut f);
+    assert_eq!(f.board.message(), Some("#1's related entries changed on disk"));
+    // Said once here too; kept through a save that stops.
+    f.press(KeyCode::Char('!'));
+    kb(&f).update(1, "Fix it", vec!["auth".into()]).unwrap();
+    reload(&mut f);
+    assert_eq!(f.board.message(), None);
+    f.press(KeyCode::Enter);
+    assert!(marked(&f));
+    f.press(KeyCode::Esc);
+    // A related entry taken out, none added.
+    f.press(KeyCode::Char('e'));
+    kb(&f).toggle_link(1, 2).unwrap();
+    reload(&mut f);
+    assert!(marked(&f));
+    assert_eq!(f.board.message(), Some("#1's related entries changed on disk"));
+}
+
+#[test]
+fn what_kb_changed_in_an_open_dialog_isnt_replaced_by_what_else_is_said() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["Fix login"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    let reload = |f: &mut Fixture| {
+        f.board.message = None;
+        f.board.reload().unwrap();
+    };
+    // Said beside what the next key does: `catch_up` reads the brains right before it, which is when it's found.
+    f.board.select(k(1));
+    f.press(KeyCode::Char('e'));
+    kb(&f).set_status(1, Status::Doing).unwrap();
+    reload(&mut f);
+    f.press(KeyCode::Char('!'));
+    f.press(KeyCode::Enter);
+    assert_eq!(f.board.message(), Some("#1 saved · #1's status changed on disk"));
+    // Nor is it lost to a file found skipped by the same read.
+    f.press(KeyCode::Char('m'));
+    kb(&f).set_description(1, "theirs").unwrap();
+    std::fs::write(f.dir.path().join("0009-broken.md"), "# Broken\n").unwrap();
+    reload(&mut f);
+    let said = f.board.message().unwrap();
+    assert!(said.contains("#1's description changed on disk") && said.contains("0009-broken.md"), "{said}");
+}
+
+#[test]
+fn an_open_verdict_says_kb_decided_meanwhile() {
+    use kanbrain_core::brain::{Brain, NewEntry};
+    let mut f = Fixture::new(&["cache"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    let redis = kb(&f).propose(1, NewEntry { title: "Use Redis".into(), ..Default::default() }).unwrap();
+    f.board.reload().unwrap();
+    f.board.select(k(redis));
+    f.press(KeyCode::Char('j'));
+    kb(&f).resolve(redis, DecisionState::Accepted, "").unwrap();
+    f.board.message = None;
+    f.board.reload().unwrap();
+    assert!(matches!(&f.board.mode, Mode::Edit(edit) if edit.changed_on_disk));
+    assert_eq!(f.board.message(), Some(format!("#{redis}'s verdict changed on disk").as_str()));
+}
+
+#[test]
+fn an_open_form_says_kb_swapped_a_related_entry() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["Fix login", "Other", "Third"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    kb(&f).toggle_link(1, 2).unwrap();
+    f.board.reload().unwrap();
+    f.board.select(k(1));
+    f.press(KeyCode::Char('e'));
+    // As many related entries as before, but another one.
+    let mut brain = kb(&f);
+    brain.toggle_link(1, 2).unwrap();
+    brain.toggle_link(1, 3).unwrap();
+    f.board.message = None;
+    f.board.reload().unwrap();
+    assert!(matches!(&f.board.mode, Mode::Form(form) if form.changed_on_disk));
+    assert_eq!(f.board.message(), Some("#1's related entries changed on disk"));
+}
+
+#[test]
+fn a_new_entrys_form_has_nothing_on_disk_to_mark() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["Fix login"]);
+    f.press(KeyCode::Char('n'));
+    Brain::open(Store::at(f.dir.path()).unwrap()).unwrap().update(1, "Renamed", Vec::new()).unwrap();
+    f.board.reload().unwrap();
+    assert!(matches!(&f.board.mode, Mode::Form(form) if !form.changed_on_disk));
+}
+
+#[test]
 fn the_editor_doesnt_save_a_comment_over_another_moved_to_its_place_meanwhile() {
     use kanbrain_core::brain::Brain;
     use kanbrain_core::model::Comment;
@@ -1123,6 +1303,30 @@ fn the_project_description_is_shared_by_its_repositories() {
     press(&mut board, KeyCode::Char('!'));
     press(&mut board, KeyCode::Esc);
     assert_eq!(board.brain(2).project.as_ref().unwrap().description, "An online shop.!", "web sees api's edit");
+}
+
+#[test]
+fn a_project_description_or_role_editor_says_kb_changed_it() {
+    use kanbrain_core::projects;
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    let api = code.path().join("api/.brain");
+    let marked = |board: &Board| matches!(&board.mode, Mode::Edit(edit) if edit.changed_on_disk);
+    board.open_editor(Target::Project(1));
+    projects::write_description(central.path(), "shop", "A shop, described by kb.").unwrap();
+    board.message = None;
+    board.reload().unwrap();
+    assert!(marked(&board));
+    assert_eq!(board.message(), Some("the project's description changed on disk"));
+    board.discard_edit();
+
+    board.open_editor(Target::RepoNotes(1));
+    let card = projects::read_repo_card(&api).unwrap();
+    projects::write_repo_card(&api, &projects::RepoCard { notes: "The API, says kb.".into(), ..card }).unwrap();
+    board.message = None;
+    board.reload().unwrap();
+    assert!(marked(&board));
+    assert_eq!(board.message(), Some("this repository's role changed on disk"));
 }
 
 #[test]

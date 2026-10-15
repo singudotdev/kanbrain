@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- The kanban app's edit form and text editor say, as soon as it happens, that `kb` changed what they edit while open:
+  their title reads `· changed on disk` until closed, and the status bar says what (`#1's title and status changed on
+  disk`). The form counts its entry's title, tags, related entries and status; the editor its text (a comment moved
+  to its place included), the task's status and, rejecting or accepting, the decision's verdict, not new comments
+  (`Board::after_load`, `Edit::changed_on_disk`, `Form::changed_on_disk`). What a read finds (this, or a file
+  skipped) is said once, so the key that read for doesn't replace it: its message goes beside it (`#1 saved · #1's
+  status changed on disk`; `Board::notify_found`).
+
 ### Changed
 
 - The section `kb init` writes in `CLAUDE.md`/`AGENTS.md` (`init::SECTION`) tells agents to give a pull request,
