@@ -480,10 +480,10 @@ run passed; with none in a pull request's base, every job runs.
 
 | Changed | Jobs |
 |---|---|
-| `core/`, or a file built into it (`tag-changelog/`, `install.sh`, `docs/agents.md`, `docs/cli.md`, the logo) | all but the licenses |
+| `core/`, or a file built into it or its tests (`tag-changelog/`, `docs/agents.md`, `docs/cli.md`) | all but the licenses |
 | `cli/`, or the README (a test reads its commands) | lints, tests, minimum Rust version, installers, upgrade |
-| `gui/`, or `docs/keybindings.md` | lints, tests, the app started |
-| `xtask/` | lints, licenses |
+| `gui/`, or a file built into it or its tests (`docs/keybindings.md`, the logo, `install.sh`) | lints, tests, the app started; its fonts the licenses too |
+| `xtask/` | lints, tests, licenses |
 | a script (`*.sh`, `*.ps1`) | the installers (with `shellcheck` and PSScriptAnalyzer); `e2e/upgrade.sh` and `e2e/smoke-app.*` their own job too |
 | the workflows, `Cargo.toml`, `Cargo.lock`, the toolchain or tools' configuration | everything |
 | only documentation | nothing |
