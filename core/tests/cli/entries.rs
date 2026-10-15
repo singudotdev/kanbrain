@@ -117,6 +117,43 @@ fn project_lists_the_repositorys_role_only_where_there_are_several() {
 }
 
 #[test]
+fn tag_takes_signed_tags_in_order() {
+    let args = parse(&["tag", "#4", "+UI,#bug", "--json", "-wip", "+c++"]).unwrap();
+    assert!(args.json);
+    let (add, remove) = (|t: &str| TagChange::Add(t.into()), |t: &str| TagChange::Remove(t.into()));
+    assert_eq!(args.command, EntryCommand::Tag(4, vec![add("ui"), add("bug"), remove("wip"), add("c++")]));
+    let error = |args: &[&str]| parse(args).unwrap_err().to_string();
+    assert_eq!(error(&["tag", "4"]), "tag needs what to change: +TAG adds a tag, -TAG removes one");
+    assert_eq!(error(&["tag", "4", "ui"]), "`ui`: +TAG adds a tag, -TAG removes one");
+    assert_eq!(error(&["tag", "4", "+#"]), "`+#` names no tag");
+    assert_eq!(error(&["tag", "4", "--ui"]), "unknown tag option `--ui`: +TAG adds a tag, -TAG removes one");
+    assert_eq!(error(&["tag", "4", "+ui", "--"]), "unexpected argument `--`", "tag takes no text");
+    assert_eq!(error(&["tag", "+ui"]), "`+ui` isn't an entry id");
+}
+
+#[test]
+fn tag_saves_only_a_change_and_colors_a_new_tag() {
+    let dir = tempfile::tempdir().unwrap();
+    let open = || Brain::open(crate::store::Store::at(dir.path()).unwrap()).unwrap();
+    let mut brain = open();
+    let new = NewEntry {
+        kind: Kind::Note,
+        title: "Login flow".into(),
+        tags: vec!["a".into(), "b".into()],
+        ..NewEntry::default()
+    };
+    let id = brain.add(new).unwrap();
+    let (add, remove) = (|t: &str| TagChange::Add(t.into()), |t: &str| TagChange::Remove(t.into()));
+    assert!(retag(&mut brain, id, &[add("c"), remove("a"), add("b")]).unwrap(), "a note's tags too");
+    let saved = open();
+    assert_eq!(saved.entry(id).unwrap().tags, ["b", "c"], "added at the end, once");
+    assert!(saved.tag_colors.get("c").is_some(), "as the app's form saves them");
+    assert!(!retag(&mut brain, id, &[add("b"), remove("a")]).unwrap(), "nothing to change");
+    assert!(!retag(&mut brain, id, &[add("a"), remove("a")]).unwrap(), "in order: added, then removed");
+    assert!(retag(&mut brain, 9, &[add("a")]).unwrap_err().to_string().contains("no entry #9"));
+}
+
+#[test]
 fn questions_proposals_and_verdicts() {
     assert_eq!(parse(&["ask", "4", "-"]).unwrap().command, EntryCommand::Ask(4, Text::Stdin));
     let EntryCommand::Propose(4, decision) = parse(&["propose", "4", "--body", "-", "Use", "Redis"]).unwrap().command

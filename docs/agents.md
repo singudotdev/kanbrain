@@ -86,9 +86,9 @@ The user follows them live on a kanban board: keep it showing what you're doing 
   picture changes (a service added, another storage), not after every change. With several repositories, this
   one's role too: `project notes -`. How to build, test and run this repository, and its code style, go in this
   file, outside this section: add them as you learn them.
-- Also: `show ID` (one entry in full), `describe ID TEXT`, `link ID OTHER…` (an id here, or `REPO#ID` in another
-  repository of the project); `-` reads text from stdin. Never edit the files in `.brain/` by hand: `kb` keeps
-  them consistent.
+- Also: `show ID` (one entry in full), `describe ID TEXT`, `tag ID +TAG -TAG` (add or remove tags),
+  `link ID OTHER…` (an id here, or `REPO#ID` in another repository of the project); `-` reads text from stdin.
+  Never edit the files in `.brain/` by hand: `kb` keeps them consistent.
 ```
 
 It's read every session, so it's short, yet it's the whole CLI an agent needs; `context` gives the state. It's
@@ -217,6 +217,7 @@ hand.
 | `propose ID [--tag T]… [--link ID]… [--body TEXT\|-] TITLE…` | creates a proposed decision linked to task `ID`, which asks about it and is parked; prints both |
 | `accept ID [TEXT…\|-]` / `reject ID TEXT…\|-` | accepts or rejects a decision, with why (needed to reject), and answers a question that names it (`#ID`) |
 | `describe ID TEXT…\|-` | replaces the description |
+| `tag ID +TAG\|-TAG…` | adds tags to an entry (`+TAG`) or removes them (`-TAG`), in order; a word may name several (`+ui,bug`) |
 | `link ID OTHER…` | links an entry to others: an id here, or `REPO#ID` in another repository of the project |
 | `project [describe\|notes TEXT…\|-]` | shows the project's description (shared by its repositories) and this repository's role, or replaces one |
 | `project rename NAME…` / `repo NAME` / `move PROJECT…` / `remove [--purge]` | renames the project or this repository, moves this repository to another project, or takes the project out (see [Managing a project](cli.md#managing-a-project)); only when the user asks |
@@ -224,14 +225,15 @@ hand.
 `-` reads the text from stdin, for multi-line markdown; nothing there is refused rather than saved as empty. Ids may be written `12` or `#12`.
 
 Errors go to stderr with a non-zero exit code and say what's wrong: `no entry #12`,
-`#3 is a note: only tasks have a status`, `the comment is empty`, `the reason is empty`. A status move or a verdict
-that changes nothing (`kb done 3` on a done task, `kb accept 5` on an accepted decision) succeeds and says so on
-stderr: `#3 was already done: nothing changed`.
+`#3 is a note: only tasks have a status`, `the comment is empty`, `the reason is empty`. A status move, a verdict or
+tags that change nothing (`kb done 3` on a done task, `kb accept 5` on an accepted decision, `kb tag 3 +ui` on a
+task tagged `ui`) succeed and say so on stderr, such as `#3 was already done: nothing changed` or
+`#3's tags were already so: nothing changed`.
 
 ## JSON
 
-For scripts, `show`, `add`, the status moves, `comment`, `describe`, `link`, `ask`, `propose`, `accept` and
-`reject` print the entry as one line of JSON with `--json` (shown here spread out):
+For scripts, `show`, `add`, the status moves, `comment`, `describe`, `tag`, `link`, `ask`, `propose`, `accept`
+and `reject` print the entry as one line of JSON with `--json` (shown here spread out):
 
 ```json
 {

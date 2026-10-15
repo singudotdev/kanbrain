@@ -218,7 +218,8 @@ Tags group related work, e.g. `prod`, `support`, `meeting`, `feature`, or a clie
 - An entry can have any number of tags, or none.
 - Tags are shown wherever an entry appears: cards, lists, the details, dialogs and `kb list`.
 
-To change an entry's tags, select it and press `e` (or **Edit title and tags**).
+To change an entry's tags, select it and press `e` (or **Edit title and tags**); from the command line,
+`kb tag ID +TAG -TAG` adds or removes them.
 
 ### Tag colors
 

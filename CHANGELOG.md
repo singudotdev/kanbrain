@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- `kb tag ID +TAG|-TAG…` adds tags to an entry or removes them, in order, as the kanban app's form saves them
+  (`Brain::update`, tag colors included); tags already so write nothing and say `nothing changed` on stderr
+  (`cli::entries::retag`). With `--json`, and tab completion of `+TAG` and `-TAG` in bash, zsh and fish. The agents'
+  section names it (`init --all`).
+
 ### Changed
 
 - **Breaking:** for `kanbrain-core`'s Rust API only, what the command line parses to is `#[non_exhaustive]`:
