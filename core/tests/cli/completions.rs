@@ -56,3 +56,12 @@ fn every_word_project_takes_is_offered() {
     let script = script(Shell::Bash, "kb");
     assert!(script.contains(PROJECT) && script.contains("deinit) reply=\"--purge\""), "{script}");
 }
+
+#[test]
+fn fish_offers_tag_the_id_then_signed_tags() {
+    let script = script(Shell::Fish, "kb");
+    let lines: Vec<_> = script.lines().filter(|l| l.contains("__fish_seen_subcommand_from tag;")).collect();
+    assert_eq!(lines.len(), 2, "{script}");
+    assert!(lines[0].contains("-eq (contains -i -- tag") && lines[0].contains("kb complete ids"), "{}", lines[0]);
+    assert!(lines[1].contains("-gt (contains -i -- tag") && lines[1].contains(r#"sed "s/^/+/; p; s/^+/-/""#));
+}

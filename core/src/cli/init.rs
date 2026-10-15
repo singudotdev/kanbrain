@@ -67,9 +67,9 @@ The user follows them live on a kanban board: keep it showing what you're doing 
   picture changes (a service added, another storage), not after every change. With several repositories, this
   one's role too: `project notes -`. How to build, test and run this repository, and its code style, go in this
   file, outside this section: add them as you learn them.
-- Also: `show ID` (one entry in full), `describe ID TEXT`, `link ID OTHER…` (an id here, or `REPO#ID` in another
-  repository of the project); `-` reads text from stdin. Never edit the files in `.brain/` by hand: `kb` keeps
-  them consistent.";
+- Also: `show ID` (one entry in full), `describe ID TEXT`, `tag ID +TAG -TAG` (add or remove tags),
+  `link ID OTHER…` (an id here, or `REPO#ID` in another repository of the project); `-` reads text from stdin.
+  Never edit the files in `.brain/` by hand: `kb` keeps them consistent.";
 
 /// Makes `root` a repository of project `name` (else the one its card names, else one named after
 /// the folder), named `repo` in it (else as [`projects::repo_name`] picks): creates its `.brain/` and card,

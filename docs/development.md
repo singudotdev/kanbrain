@@ -165,7 +165,7 @@ core/src/            kanbrain-core: shared by both programs
 │   ├── mod.rs       Program (the binary's name), Command parsing, `--project`, `list`, `status`, `report`, `path`, usage
 │   ├── claude.rs    the Claude Code hooks `init` merges into .claude/settings.local.json (and `deinit` takes out)
 │   ├── hook.rs      `kb hook prompt|stop|edit`: the hooks' checks that hold an agent to describing the project first, and to `kb` for the brain's files
-│   ├── entries.rs   agent commands by id: `add`, `show`, `search`, status changes, `comment`, `ask`, `propose`, `accept`/`reject`, `describe`, `link`, `context`
+│   ├── entries.rs   agent commands by id: `add`, `show`, `search`, status changes, `comment`, `ask`, `propose`, `accept`/`reject`, `describe`, `tag`, `link`, `context`
 │   ├── completions.rs `completions bash|zsh|fish`: the scripts, and `complete`, the ids, projects and tags they offer
 │   ├── update.rs    `update`, and the app's: the latest release asked for, the installer run again for the apps beside this one, into the same folder (a macOS bundle's says which), once no agent has a task in doing
 │   ├── init.rs      `init`: the repository's .brain/ and card, its registration, the "Project memory" section in CLAUDE.md / AGENTS.md; `init --all` refreshes every registered repository's; `deinit` undoes it

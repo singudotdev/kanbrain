@@ -26,6 +26,7 @@ const COMMANDS: &[&str] = &[
     "accept",
     "reject",
     "describe",
+    "tag",
     "link",
     "project",
     "context",
@@ -39,7 +40,8 @@ const COMMANDS: &[&str] = &[
     "completions",
 ];
 
-/// The commands whose first argument is an entry's id; `link` takes more after it.
+/// The commands whose first argument is an entry's id; `link` takes more after it. `tag` is apart: the id, then signed
+/// tags.
 const BY_ID: &str = "show start park done todo comment ask wait propose accept reject describe link";
 
 named_enum! {
@@ -121,6 +123,22 @@ pub fn script(shell: Shell, program: &str) -> String {
         *)
             case $cmd in
                 "") reply="{commands} --project" ;;
+                tag)
+                    # The id first, then +TAG and -TAG; options don't count as either.
+                    local given=0 j
+                    for ((j = i + 1; j < COMP_CWORD; j++)); do
+                        case ${{COMP_WORDS[j]}} in
+                            --project) ((j++)) ;;
+                            --*) ;;
+                            *) ((given++)) ;;
+                        esac
+                    done
+                    if ((given == 0)); then
+                        reply=$({program} complete ids "${{words[@]}}" | cut -f1)
+                    else
+                        reply=$({program} complete tags "${{words[@]}}" | sed 's/^/+/; p; s/^+/-/')
+                    fi
+                    ;;
                 {by_id}) reply=$({program} complete ids "${{words[@]}}" | cut -f1) ;;
                 add) reply="--note --decision --tag --link --body --start --json" ;;
                 list) reply="{statuses} all notes decisions --tag --json" ;;
@@ -142,12 +160,14 @@ complete -F {function} {program}
         Shell::Bash => bash,
         Shell::Zsh => format!("autoload -U +X bashcompinit && bashcompinit\n{bash}"),
         Shell::Fish => format!(
-            r"complete -c {program} -f
+            r#"complete -c {program} -f
 complete -c {program} -n __fish_use_subcommand -a '{commands}'
 complete -c {program} -l project -x -a '({program} complete projects)'
 complete -c {program} -l tag -x -a '({program} complete tags (commandline -opc)[2..])'
 complete -c {program} -l json
 complete -c {program} -n '__fish_seen_subcommand_from {BY_ID}' -a '({program} complete ids (commandline -opc)[2..])'
+complete -c {program} -n '__fish_seen_subcommand_from tag; and test (count (commandline -opc)) -eq (contains -i -- tag (commandline -opc))' -a '({program} complete ids (commandline -opc)[2..])'
+complete -c {program} -n '__fish_seen_subcommand_from tag; and test (count (commandline -opc)) -gt (contains -i -- tag (commandline -opc))' -a '({program} complete tags (commandline -opc)[2..] | sed "s/^/+/; p; s/^+/-/")'
 complete -c {program} -n '__fish_seen_subcommand_from add' -l link -x -a '({program} complete ids (commandline -opc)[2..])'
 complete -c {program} -n '__fish_seen_subcommand_from add' -l note -l decision -l start -l body
 complete -c {program} -n '__fish_seen_subcommand_from list' -a '{statuses} all notes decisions'
@@ -160,7 +180,7 @@ complete -c {program} -n '__fish_seen_subcommand_from init' -l repo -x
 complete -c {program} -n '__fish_seen_subcommand_from deinit' -l purge
 complete -c {program} -n '__fish_seen_subcommand_from wait' -l timeout -x
 complete -c {program} -n '__fish_seen_subcommand_from completions' -a '{shells}'
-"
+"#
         ),
     }
 }

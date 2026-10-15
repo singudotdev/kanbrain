@@ -1,6 +1,6 @@
 //! Commands that read or change entries by id, for agents and scripts: `add`, `show`, `search`,
-//! `start`/`park`/`done`/`todo`, `comment`, `ask`, `wait`, `propose`, `accept`/`reject`, `describe`, `link`
-//! and `context`. Each prints a short confirmation, or with `--json`, the entry (or entries) as JSON.
+//! `start`/`park`/`done`/`todo`, `comment`, `ask`, `wait`, `propose`, `accept`/`reject`, `describe`, `tag`,
+//! `link` and `context`. Each prints a short confirmation, or with `--json`, the entry (or entries) as JSON.
 
 use super::manage;
 use crate::api::ApiError;
@@ -45,6 +45,8 @@ pub const USAGE: &str = "\
             accept or reject a decision, with why (needed to reject); answers a question that names it (#ID)
   describe ID TEXT…|-
             replace the description
+  tag ID +TAG|-TAG…
+            add tags to an entry (+TAG) or remove them (-TAG), in order
   link ID OTHER…
             link an entry to others: an id here, or REPO#ID in another repository of the project
   project [describe|notes TEXT…|-]
@@ -99,6 +101,9 @@ pub enum EntryCommand {
     /// `describe ID TEXT…|-`.
     #[non_exhaustive]
     Describe(u32, Text),
+    /// `tag ID +TAG|-TAG…`: tags added and removed, in order.
+    #[non_exhaustive]
+    Tag(u32, Vec<TagChange>),
     /// `link ID OTHER…`: ids here, and `REPO#ID` in the project's other repositories.
     #[non_exhaustive]
     Link(u32, Vec<u32>, Vec<RepoLink>),
@@ -139,6 +144,16 @@ pub enum ProjectPart {
     Description,
     /// `notes`: this repository's role among the project's, in its `.brain/project.md`.
     Notes,
+}
+
+/// A change `tag` makes to an entry's tags.
+#[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum TagChange {
+    /// `+TAG`: added after its others, unless it has it.
+    Add(String),
+    /// `-TAG`: removed, if it has it.
+    Remove(String),
 }
 
 /// Text given on the command line, or `-` to read it from stdin (for multi-line markdown).
@@ -185,6 +200,7 @@ impl EntryArgs {
             | EntryCommand::Search(_)
             | EntryCommand::SetStatus(..)
             | EntryCommand::Wait(..)
+            | EntryCommand::Tag(..)
             | EntryCommand::Link(..)
             | EntryCommand::Context
             | EntryCommand::Project(_) => None,
@@ -261,6 +277,10 @@ impl EntryArgs {
                 let (id, text) = id_and_text(&mut rest, "describe needs the description")?;
                 EntryCommand::Describe(id, text)
             }
+            ("tag", None) => {
+                let id = first_id(&mut rest)?;
+                EntryCommand::Tag(id, tag_changes(std::mem::take(&mut rest))?)
+            }
             ("link", None) => {
                 let id = first_id(&mut rest)?;
                 let (others, repo_links) = typed_links(&std::mem::take(&mut rest).join(" "))?;
@@ -324,6 +344,12 @@ impl EntryArgs {
             }
             EntryCommand::Describe(id, text) => {
                 brain.set_description(id, &text.read()?)?;
+                id
+            }
+            EntryCommand::Tag(id, changes) => {
+                if !retag(&mut brain, id, &changes)? {
+                    eprintln!("#{id}'s tags were already so: nothing changed");
+                }
                 id
             }
             EntryCommand::Link(id, others, repo_links) => {
@@ -437,6 +463,54 @@ fn typed_links(value: &str) -> Result<(Vec<u32>, Vec<RepoLink>)> {
         bail!("`{word}` isn't an entry id (12 or #12) or another repository's entry (REPO#ID)");
     }
     Ok(parse_links(value))
+}
+
+/// What `tag` says a word after the id has to be.
+const TAG_SIGNS: &str = "+TAG adds a tag, -TAG removes one";
+
+/// The words after `tag`'s id as changes, in order. A word may name several tags (`+ui,#bug`), read as `add --tag`
+/// reads them.
+fn tag_changes(words: Vec<String>) -> Result<Vec<TagChange>> {
+    let mut changes = Vec::new();
+    for word in words {
+        let change = match word.as_bytes() {
+            // Not an option `--` ends: `tag` takes no text.
+            [b'-', b'-'] => bail!("unexpected argument `--`"),
+            [b'-', b'-', ..] => bail!("unknown tag option `{word}`: {TAG_SIGNS}"),
+            [b'+', ..] => TagChange::Add,
+            [b'-', ..] => TagChange::Remove,
+            _ => bail!("`{word}`: {TAG_SIGNS}"),
+        };
+        let tags = parse_tags(&word[1..]);
+        if tags.is_empty() {
+            bail!("`{word}` names no tag");
+        }
+        changes.extend(tags.into_iter().map(change));
+    }
+    if changes.is_empty() {
+        bail!("tag needs what to change: {TAG_SIGNS}");
+    }
+    Ok(changes)
+}
+
+/// Makes `changes` to entry `id`'s tags and saves them as the kanban app's form does, colors included; returns
+/// whether they changed, as nothing is written when they didn't.
+fn retag(brain: &mut Brain, id: u32, changes: &[TagChange]) -> Result<bool> {
+    let entry = brain.entry(id)?;
+    let mut tags = entry.tags.clone();
+    for change in changes {
+        match change {
+            TagChange::Add(tag) if !tags.contains(tag) => tags.push(tag.clone()),
+            TagChange::Add(_) => {}
+            TagChange::Remove(tag) => tags.retain(|t| t != tag),
+        }
+    }
+    if tags == entry.tags {
+        return Ok(false);
+    }
+    let title = entry.title.clone();
+    brain.update(id, &title, tags)?;
+    Ok(true)
 }
 
 /// The first argument as an entry id (`12` or `#12`).
