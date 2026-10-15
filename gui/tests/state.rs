@@ -2048,6 +2048,86 @@ fn a_task_waiting_on_a_decision_is_answered_by_deciding_with_or_without_a_commen
 }
 
 #[test]
+fn the_reject_or_accept_editor_doesnt_overturn_unseen_a_verdict_kb_gave_while_it_was_open() {
+    use kanbrain_core::brain::{Brain, NewEntry};
+    let mut f = Fixture::new(&["cache", "queue"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    let mut agent = kb(&f);
+    agent.author = Author::Agent;
+    let redis = agent.propose(1, NewEntry { title: "Use Redis".into(), ..Default::default() }).unwrap();
+    let kafka = agent.propose(2, NewEntry { title: "Use Kafka".into(), ..Default::default() }).unwrap();
+    f.board.reload().unwrap();
+    let saving = |f: &mut Fixture| {
+        f.board.message = None;
+        f.press(KeyCode::Esc);
+    };
+    let said = |f: &Fixture, id| f.on_disk(id).comments.len();
+
+    // Accepted by kb while the user writes why it's rejected: the save stops and says so, the editor still open.
+    f.board.select(k(redis));
+    f.press(KeyCode::Char('j'));
+    f.type_text("too costly");
+    kb(&f).resolve(redis, DecisionState::Accepted, "").unwrap();
+    f.board.reload().unwrap();
+    let before = said(&f, redis);
+    saving(&mut f);
+    assert!(matches!(&f.board.mode, Mode::Edit(edit) if edit.editor.text() == "too costly"), "kept, with the reason");
+    assert_eq!(
+        f.board.message(),
+        Some(format!("#{redis} was accepted meanwhile: save again to reject it anyway, ctrl+d to leave it").as_str())
+    );
+    assert_eq!(f.on_disk(redis).decision, DecisionState::Accepted, "not overturned unseen");
+    assert_eq!(said(&f, redis), before);
+    // Saved again, knowing it: the user's verdict.
+    saving(&mut f);
+    assert!(matches!(f.board.mode, Mode::Normal));
+    assert_eq!(f.on_disk(redis).decision, DecisionState::Rejected);
+    assert_eq!(f.board.message(), Some(format!("#{redis} rejected").as_str()));
+    assert_eq!(said(&f, redis), before + 1, "with the reason");
+
+    // Proposed again meanwhile, the same.
+    f.board.select(k(redis));
+    f.press(KeyCode::Char('Y'));
+    f.type_text("fine after all");
+    kb(&f).resolve(redis, DecisionState::Proposed, "reworked").unwrap();
+    f.board.reload().unwrap();
+    saving(&mut f);
+    assert_eq!(
+        f.board.message(),
+        Some(
+            format!("#{redis} was proposed again meanwhile: save again to accept it anyway, ctrl+d to leave it")
+                .as_str()
+        )
+    );
+    assert_eq!(f.on_disk(redis).decision, DecisionState::Proposed);
+    saving(&mut f);
+    assert_eq!(f.on_disk(redis).decision, DecisionState::Accepted);
+
+    // Given the same verdict meanwhile: nothing a save can give, however many times, but the text typed is the user's
+    // to copy.
+    for (key, verdict, word) in [('j', DecisionState::Rejected, "reason"), ('Y', DecisionState::Accepted, "comment")] {
+        kb(&f).resolve(kafka, DecisionState::Proposed, "again").unwrap();
+        f.board.reload().unwrap();
+        f.board.select(k(kafka));
+        f.press(KeyCode::Char(key));
+        f.type_text("mine");
+        kb(&f).resolve(kafka, verdict, "theirs").unwrap();
+        f.board.reload().unwrap();
+        let before = said(&f, kafka);
+        for _ in 0..2 {
+            saving(&mut f);
+            assert!(matches!(f.board.mode, Mode::Edit(_)));
+            assert_eq!(
+                f.board.message(),
+                Some(format!("#{kafka} was {} meanwhile: copy your {word}, then ctrl+d", verdict.as_str()).as_str())
+            );
+        }
+        assert_eq!(said(&f, kafka), before, "the verdict was theirs");
+        f.board.discard_edit();
+    }
+}
+
+#[test]
 fn the_details_buttons_act_on_the_entry_from_the_calendar_too() {
     let mut f = Fixture::new(&["a task"]);
     f.board.switch_tab(Tab::Calendar);

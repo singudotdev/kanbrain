@@ -184,7 +184,9 @@ comment, delete it. A description, comment, project description or role that `kb
 (an agent's `kb describe`) isn't replaced unseen: the save stops, the editor stays open with your text, and the status
 bar says so; saving again replaces it, `ctrl+d` keeps theirs. A comment isn't saved over another: if this comment was
 deleted or replaced meanwhile, or the entry's other comments changed (one deleted or edited; new ones after them are
-fine), the save stops for good: copy your text, then `ctrl+d`.
+fine), the save stops for good: copy your text, then `ctrl+d`. Writing why you reject or accept a decision that `kb`
+decided meanwhile (an agent's `kb accept` or `kb reject`), the save stops the same way: saving again gives your
+verdict; if it's the one you were giving, it stops for good, since it's already said.
 Markdown headings inside descriptions and comments are moved down a level when saved (`##` → `###` in a description,
 `##`/`###` → `####` in a comment), because those levels mark sections and comments in the task file.
 
