@@ -7,8 +7,8 @@ use super::{BrainView, byte_at, edited};
 use crate::state::Board;
 use crate::text::editor::LineInput;
 use gpui::{
-    AnyView, App as GpuiApp, Context, Div, ElementId, FontWeight, SharedString, Stateful, Window, div, prelude::*, px,
-    rgb, rgba, transparent_black,
+    AnyView, App as GpuiApp, Context, Div, ElementId, FontWeight, Global, ScrollHandle, SharedString, Stateful, Window,
+    div, point, prelude::*, px, rgb, rgba, transparent_black,
 };
 use kanbrain_core::model::{Asked, DecisionState, Status, Task};
 
@@ -98,6 +98,12 @@ pub fn segmented(segments: impl IntoIterator<Item = Stateful<Div>>) -> Div {
         .children(segments)
 }
 
+/// Each one-line field's sideways scroll, by the field.
+#[derive(Default)]
+struct FieldScrolls(std::collections::HashMap<TextBox, ScrollHandle>);
+
+impl Global for FieldScrolls {}
+
 /// A one-line text field: the text with its cursor while `active`, else the text or `placeholder`.
 /// The mouse places the cursor and selects, and first makes it the field being typed into.
 pub fn text_field(
@@ -118,7 +124,12 @@ pub fn text_field(
     };
     let text = content.render();
     let hit = Hit::new(&text, input.text().chars().count());
-    let cursor = active.then(|| caret(&text, byte_at(input.text(), input.cursor())));
+    // Each field keeps its scroll from frame to frame; one not typed into shows its start.
+    let scroll = cx.default_global::<FieldScrolls>().0.entry(which).or_default().clone();
+    if !active {
+        scroll.set_offset(point(px(0.), px(0.)));
+    }
+    let cursor = active.then(|| caret(&text, byte_at(input.text(), input.cursor()), Some(scroll.clone())));
     let field = div()
         .id(which.id())
         .flex()
@@ -130,7 +141,8 @@ pub fn text_field(
         .border_1()
         .border_color(rgb(if active { ACCENT } else { BORDER }))
         .whitespace_nowrap()
-        .overflow_hidden()
+        .overflow_x_scroll()
+        .track_scroll(&scroll)
         .debug_selector(|| which.id().to_string())
         .child(text)
         .children(cursor);

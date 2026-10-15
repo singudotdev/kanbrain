@@ -845,3 +845,55 @@ fn a_list_counts_the_rows_out_of_view_from_its_scroll_or_the_highlight() {
     assert_eq!(hidden(12, 1, 8, ROW_HEIGHT * 4., true), (1, 3), "and above it, just enough too");
     assert_eq!(hidden(12, 11, 8, ROW_HEIGHT * 4., false), (4, 0));
 }
+
+/// Draws the frames the window asked for since, as the platform would: tests have no frame loop. A few at most,
+/// so a window that never stops asking fails the test instead of hanging it.
+fn next_frames(cx: &mut gpui::VisualTestContext) {
+    for _ in 0..10 {
+        if cx.update(gpui::Window::simulate_next_frame) == 0 {
+            break;
+        }
+    }
+    cx.run_until_parked();
+}
+
+/// Where a click at `x` in the form's title field, then `x` typed, puts it: the character shown there. The `x` is
+/// taken out again.
+fn type_at(view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext, x: gpui::Pixels) -> usize {
+    next_frames(cx);
+    let field = cx.debug_bounds("title").expect("the form's title field");
+    cx.simulate_click(gpui::point(x, field.center().y), gpui::Modifiers::none());
+    cx.simulate_keystrokes("x");
+    let at = view.read_with(cx, |view, _| {
+        let crate::state::Mode::Form(form) = &view.board.mode else { panic!("the form stays open") };
+        form.title.text().find('x').expect("typed")
+    });
+    cx.simulate_keystrokes("backspace");
+    cx.run_until_parked();
+    at
+}
+
+#[gpui::test]
+fn a_line_longer_than_its_field_scrolls_to_keep_the_cursor_in_view(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &[]);
+    cx.simulate_keystrokes("n");
+    let long = format!("{}end", "word ".repeat(60));
+    let keys: Vec<String> = long.chars().map(|c| if c == ' ' { "space".into() } else { c.to_string() }).collect();
+    cx.simulate_keystrokes(&keys.join(" "));
+    cx.run_until_parked();
+    let field = cx.debug_bounds("title").expect("the form's title field");
+    assert_eq!(
+        type_at(&view, cx, field.right() - gpui::px(9.)),
+        long.len(),
+        "the end shows, by the right edge (inside its 8-pixel padding)"
+    );
+    // Moved left past the left edge, only as far as the cursor: what's left of it starts there.
+    cx.simulate_keystrokes(&["left"; 100].join(" "));
+    cx.run_until_parked();
+    assert_eq!(type_at(&view, cx, field.left() + gpui::px(9.)), long.len() - 100, "the cursor shows, by the left edge");
+    // Moving inside what shows doesn't scroll.
+    cx.simulate_keystrokes("home");
+    cx.simulate_keystrokes(&["right"; 10].join(" "));
+    cx.run_until_parked();
+    assert_eq!(type_at(&view, cx, field.left() + gpui::px(9.)), 0, "the start shows, with the cursor in it");
+}
