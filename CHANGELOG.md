@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-15
+
 ### Added
 
 - A fourth Claude Code hook, `kb hook edit` (`PreToolUse` on `Edit|Write|MultiEdit`, `cli::claude::HOOKS`): an agent
@@ -335,7 +337,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/singudotdev/kanbrain/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/singudotdev/kanbrain/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/singudotdev/kanbrain/compare/v0.3.5...v0.4.0
 [0.3.5]: https://github.com/singudotdev/kanbrain/compare/v0.3.4...v0.3.5
