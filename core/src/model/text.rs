@@ -23,7 +23,8 @@ pub fn counted(n: usize, one: &str, many: &str) -> String {
 /// A title on one line, as its file's `# ` line holds it: line breaks typed into it (`kb add $'Plan\nSteps'`) become
 /// spaces, rather than lines the file would read as something else, and the ends are trimmed.
 pub fn one_line(title: &str) -> String {
-    title.lines().map(str::trim).filter(|line| !line.is_empty()).collect::<Vec<_>>().join(" ")
+    // A lone `\r` is a line break too, as markdown reads it, though `str::lines` keeps it.
+    title.split(['\n', '\r']).map(str::trim).filter(|line| !line.is_empty()).collect::<Vec<_>>().join(" ")
 }
 
 /// `Fix: prod login!` → `fix-prod-login`; ASCII only so the name works on every file system.

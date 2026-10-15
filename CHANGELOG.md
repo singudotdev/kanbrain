@@ -35,6 +35,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `kb link`) were written back as the form had found them, even saved untouched. Tags and related entries edited
   in it keep those added elsewhere meanwhile, without those taken out; an edited title replaces the one `kb` gave
   it.
+- A lone carriage return (`\r`, as `kb add "$(printf 'a\rb')"` gives) is a line break in a title, as markdown
+  reads it: it becomes a space like a line feed does, typed (`model::one_line`), pasted into the kanban app
+  (`LineInput::insert`, which dropped it) or already in a file (`Task::from_markdown`). It was kept, so the file's
+  `# ` line read as two lines to markdown, and `kb list` printed it raw. A project name with one is refused, as
+  with a line feed (`projects::check_name`).
 
 ## [0.4.2] - 2026-10-15
 
