@@ -39,9 +39,9 @@ hand.
 Run `kb init` in the project again. It updates the "Project memory" section in `CLAUDE.md` / `AGENTS.md`, which
 says that kanbrain is the only place for the project's tasks, that "todos" or a plan mean kanbrain tasks
 rather than the agent's built-in to-do list, and that the board is watched live. For Claude Code it also refreshes
-the hooks that hand the agent the context and hold it to describing an undescribed project (see
-[For coding agents](agents.md)). Sections written by older versions said less. Check that the agent works in the
-repository itself (or a folder below it), where it reads that file.
+the hooks that hand the agent the context, remind it to describe an undescribed project and send it to `kb` for the
+brain's files (see [For coding agents](agents.md)). Sections written by older versions said less. Check that the
+agent works in the repository itself (or a folder below it), where it reads that file.
 
 ### How do I remove a project?
 

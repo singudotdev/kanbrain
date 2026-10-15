@@ -47,7 +47,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   (`dropdown::list`, `menu::draw`), and a dialog's list sits in a bordered box (`dialogs::list_box`): the link
   picker, comments, which project and the command palette now too.
 
-
 ### Fixed
 
 - `kb init --all` (run by the installer and `kb update`) renames a registry's only project named `Central`, or one
@@ -60,6 +59,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   by folder, though a reload reordered the brains meanwhile (`Board::drop_dragged`).
 - `kb init`'s message and `docs/agents.md` say the `Stop` hook reminds an agent to describe the project, as it does,
   rather than holding the turn.
+
 ## [0.4.0] - 2026-10-14
 
 ### Added

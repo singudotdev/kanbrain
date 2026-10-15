@@ -40,10 +40,10 @@ kb init        # creates .brain/ and tells the project's agents about it
 
    Agents skipped describing the project when only the section and `context` asked them to; with these, Claude
    Code reminds them on their first turn. Once it's described and the tasks the agent started commented on,
-   both print nothing and cost nothing. An explicit
+   `prompt` and `stop` print nothing and cost nothing. An explicit
    instruction from you still wins: told to use no tools, the agent says it couldn't describe the project and stops.
 
-`kb deinit` undoes all four, except that `.brain/` is kept: see [Command line](cli.md#kb-deinit).
+`kb deinit` undoes all three, except that `.brain/` is kept: see [Command line](cli.md#kb-deinit).
 
 The section reads:
 

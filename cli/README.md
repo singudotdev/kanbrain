@@ -28,8 +28,9 @@ kb init
 
 This creates `.brain/`, the project's data folder (commit it to share the memory, or ignore it to keep it local),
 registers the project, and writes a short section into `CLAUDE.md` / `AGENTS.md` telling the agents how to use `kb`.
-For Claude Code it also adds hooks that hand the agent `kb context` at the start of each session. `kb deinit` undoes
-it and keeps the data.
+For Claude Code it also adds hooks that hand the agent `kb context` at the start of each session, remind it to
+describe an undescribed project, and send it to `kb` when it tries to write the brain's files itself. `kb deinit`
+undoes it and keeps the data.
 
 ## How an agent uses it
 
