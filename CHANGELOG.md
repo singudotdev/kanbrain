@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-15
+
 ### Added
 
 - `kb tag ID +TAG|-TAG…` adds tags to an entry or removes them, in order, as the kanban app's form saves them
@@ -378,7 +380,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/singudotdev/kanbrain/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/singudotdev/kanbrain/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/singudotdev/kanbrain/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/singudotdev/kanbrain/compare/v0.3.5...v0.4.0
