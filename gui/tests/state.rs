@@ -926,8 +926,17 @@ fn a_dialog_on_an_entry_deleted_meanwhile_closes() {
         store.delete(&f.on_disk(2)).unwrap();
         f.board.reload_changed(&[f.dir.path().to_path_buf()]).unwrap();
         assert!(matches!(f.board.mode, Mode::Normal), "{open}: closed, not left taking the keys unseen");
-        assert_eq!(f.board.message(), Some("closed: #2 was deleted meanwhile"));
+        assert_eq!(f.board.message(), Some("closed: #2 is gone, deleted or moved meanwhile"));
     }
+    // Named with its repository when several are shown: "#1" alone could be any of them.
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    board.select(Key::new(1, 1));
+    press(&mut board, KeyCode::Char('e'));
+    let api = Store::at(code.path().join("api/.brain")).unwrap();
+    api.delete(&api.load().unwrap().0[0]).unwrap();
+    board.reload().unwrap();
+    assert_eq!(board.message(), Some("closed: shop/api #1 is gone, deleted or moved meanwhile"));
 }
 
 #[test]

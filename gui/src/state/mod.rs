@@ -342,7 +342,8 @@ impl Board {
             && self.task(key).is_none()
         {
             self.mode = Mode::Normal;
-            self.notify_found(format!("closed: #{} was deleted meanwhile", key.id));
+            // A `kb move` takes it out of this brain as a delete does.
+            self.notify_found(format!("closed: {} is gone, deleted or moved meanwhile", self.entry_name(key)));
         }
         self.mark_changed_on_disk();
         let left_out = self.skipped.iter().map(|s| s.said.clone());

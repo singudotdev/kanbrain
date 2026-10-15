@@ -510,8 +510,8 @@ pub struct Edit {
     pub decision: Option<DecisionState>,
     /// The entry's status when the editor opened: an agent may have finished or parked the task meanwhile.
     pub status: Option<Status>,
-    /// `kb` changed the text, or the entry's status, since the editor opened: the title says so until it's closed,
-    /// as a change put back is still one that happened.
+    /// `kb` changed the text, the entry's status or the verdict being given since the editor opened: the title says
+    /// so until it's closed, as a change put back is still one that happened.
     pub changed_on_disk: bool,
 }
 

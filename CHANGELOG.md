@@ -22,10 +22,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - The section `kb init` writes in `CLAUDE.md`/`AGENTS.md` (`init::SECTION`) tells agents to give a pull request,
   issue, CI run, commit or page named in a comment or body its link (`[PR #39](URL)`, not just `PR #39`), so it opens
-  from the board; `kb init` refreshes the section in place.
+  from the board; `kb update` brings it to every project (`init --all`), `kb init` to one.
 
 ### Fixed
 
+- A dialog the kanban app closes because its entry is gone names it with its repository when several are shown, and
+  says it may have moved: `closed: shop/api #1 is gone, deleted or moved meanwhile` (it said `#1 was deleted
+  meanwhile`, also after a `kb move`).
 - The kanban app's text editor doesn't replace unseen what `kb` wrote while it was open: a description (an agent's
   `kb describe`), comment, project description or repository role that changed meanwhile stops the save, the editor
   left open with the text typed and the status bar saying so (`… changed meanwhile: save again to replace it with
