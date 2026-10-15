@@ -19,6 +19,11 @@ exclude_re = [
     'gui/src/ui/mod\.rs:.*(replace open_editor -> Result| in open_editor$)',
     # A leftover exactly CUT_WRITE_AGE old, to the nanosecond, is the only one `>=` would delete too.
     'core/src/store\.rs:.*replace > with >= in forget_cut_writes',
+    # Where a one-line field scrolls for its cursor: the cursor exactly on an edge, or exactly SLACK past it, to the
+    # sub-pixel, is the only place these tell apart.
+    'gui/src/ui/caret\.rs:.*replace (> with >=|< with <=|<= with <) in keep_in_view',
+    # Which row of the editor draws the cursor: painted, and the window tests read bounds, not what's painted.
+    'gui/src/ui/dialogs/editor\.rs:.*replace == with != in draw',
     # A message exactly one second after a skipped read's, to the nanosecond, is the only one `<=` would join.
     'gui/src/state/mod\.rs:.*replace < with <= in Board::notify',
     # Downloads the installer from GitHub and runs it: the installer is checked by e2e/install.sh, not by tests.
