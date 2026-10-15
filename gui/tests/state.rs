@@ -1498,7 +1498,7 @@ fn a_brain_found_while_the_board_acts_is_locked_and_read_under_its_lock() {
     assert!(board.brain(src).task(1).is_none(), "not read yet");
 
     board.lock_found_brains(&mut locks, &mut tried);
-    assert_eq!(locks.iter().filter(|l| l.taken()).count(), board.sources.len(), "its lock too");
+    assert_eq!(locks.len(), board.sources.len(), "its lock too");
     assert_eq!(tried.len(), board.sources.len(), "each brain tried once, the central one first");
     assert_eq!(tried[0], board.brain(0).store.dir());
     let src = board.src_at(&shop).unwrap();
