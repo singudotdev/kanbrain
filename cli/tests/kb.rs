@@ -20,6 +20,17 @@ fn kb(dir: &Path, central: &Path, args: &[&str], stdin: &str) -> Output {
     child.wait_with_output().unwrap()
 }
 
+/// A temporary folder to run `kb` in. Without a `.brain` of its own, `kb` takes the nearest one above it rather than
+/// the central brain the test gives: one above the temporary folders (`TMPDIR` inside a repository using kanbrain)
+/// would take the test's writes, so the test stops before any.
+fn tempdir() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    if let Some(above) = dir.path().ancestors().skip(1).map(|d| d.join(".brain")).find(|brain| brain.is_dir()) {
+        panic!("{} is above the temporary folders and would take kb's writes: set TMPDIR elsewhere", above.display());
+    }
+    dir
+}
+
 /// What a command that must succeed printed.
 fn ok(output: &Output) -> String {
     assert!(output.status.success(), "failed: {}", String::from_utf8_lossy(&output.stderr));
@@ -28,7 +39,7 @@ fn ok(output: &Output) -> String {
 
 #[test]
 fn an_agent_session_runs_through_the_binary() {
-    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, repo) = (tempdir(), tempdir());
     let run = |args: &[&str], stdin: &str| kb(repo.path(), central.path(), args, stdin);
     ok(&run(&["init", "demo"], ""));
     assert!(std::fs::read_to_string(repo.path().join("CLAUDE.md")).unwrap().contains("## Project memory: kanbrain"));
@@ -47,7 +58,7 @@ fn an_agent_session_runs_through_the_binary() {
 
 #[test]
 fn show_json_names_the_links_from_other_repositories() {
-    let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, code) = (tempdir(), tempdir());
     let (api, web) = (code.path().join("api"), code.path().join("web"));
     for repo in [&api, &web] {
         std::fs::create_dir(repo).unwrap();
@@ -61,7 +72,7 @@ fn show_json_names_the_links_from_other_repositories() {
 
 #[test]
 fn list_gives_a_sync_conflict_copy_an_id_of_its_own() {
-    let (central, dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, dir) = (tempdir(), tempdir());
     ok(&kb(dir.path(), central.path(), &["add", "First"], ""));
     let first = std::fs::read_dir(central.path())
         .unwrap()
@@ -73,7 +84,7 @@ fn list_gives_a_sync_conflict_copy_an_id_of_its_own() {
 
 #[test]
 fn errors_go_to_stderr_with_a_failing_exit_code() {
-    let (central, dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, dir) = (tempdir(), tempdir());
     let run = |args: &[&str]| kb(dir.path(), central.path(), args, "");
     let missing = run(&["show", "9"]);
     assert!(!missing.status.success() && missing.stdout.is_empty());
@@ -122,7 +133,7 @@ fn errors_go_to_stderr_with_a_failing_exit_code() {
 
 #[test]
 fn an_empty_stdin_for_a_dash_is_refused_and_overwrites_nothing() {
-    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, repo) = (tempdir(), tempdir());
     let run = |args: &[&str], stdin: &str| kb(repo.path(), central.path(), args, stdin);
     ok(&run(&["init", "demo"], ""));
     ok(&run(&["add", "--body", "keep me", "Fix login"], ""));
@@ -139,7 +150,7 @@ fn an_empty_stdin_for_a_dash_is_refused_and_overwrites_nothing() {
 
 #[test]
 fn tag_adds_and_removes_and_says_when_nothing_changed() {
-    let (central, dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, dir) = (tempdir(), tempdir());
     let run = |args: &[&str]| kb(dir.path(), central.path(), args, "");
     ok(&run(&["add", "--tag", "auth", "Fix", "login"]));
     let changed = run(&["tag", "1", "+bug", "-auth"]);
@@ -156,7 +167,7 @@ fn tag_adds_and_removes_and_says_when_nothing_changed() {
 
 #[test]
 fn rename_changes_the_title_and_says_when_nothing_changed() {
-    let (central, dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, dir) = (tempdir(), tempdir());
     let run = |args: &[&str]| kb(dir.path(), central.path(), args, "");
     ok(&run(&["add", "--tag", "auth", "Fix", "login"]));
     let changed = run(&["rename", "1", "Fix", "the", "SSO", "login"]);
@@ -193,7 +204,7 @@ fn bash_completes(dir: &Path, central: &Path, line: &[&str]) -> String {
 #[cfg(unix)]
 #[test]
 fn bash_completes_tag_with_the_id_then_signed_tags() {
-    let (central, dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, dir) = (tempdir(), tempdir());
     ok(&kb(dir.path(), central.path(), &["add", "--tag", "ui", "--tag", "bug", "Fix", "login"], ""));
     let completes = |line: &[&str]| bash_completes(dir.path(), central.path(), line);
     assert_eq!(completes(&["kb", "tag", ""]), "1", "the id first");
@@ -206,7 +217,7 @@ fn bash_completes_tag_with_the_id_then_signed_tags() {
 
 #[test]
 fn words_that_look_like_options_are_text_after_a_double_dash_or_inside_it() {
-    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, repo) = (tempdir(), tempdir());
     let run = |args: &[&str], stdin: &str| kb(repo.path(), central.path(), args, stdin);
     ok(&run(&["init", "demo"], ""));
     assert_eq!(
@@ -231,7 +242,7 @@ fn words_that_look_like_options_are_text_after_a_double_dash_or_inside_it() {
 
 #[test]
 fn files_that_dont_read_as_entries_are_named_on_stderr() {
-    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, repo) = (tempdir(), tempdir());
     let run = |args: &[&str]| kb(repo.path(), central.path(), args, "");
     ok(&run(&["init", "demo"]));
     std::fs::write(repo.path().join(".brain/0007-broken.md"), "# Broken\n\nno id line\n").unwrap();
@@ -246,7 +257,7 @@ fn files_that_dont_read_as_entries_are_named_on_stderr() {
 
 #[test]
 fn renaming_a_project_takes_the_new_name_only_and_central_is_no_project() {
-    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, repo) = (tempdir(), tempdir());
     let run = |args: &[&str]| kb(repo.path(), central.path(), args, "");
     ok(&run(&["init", "shop"]));
     let out = run(&["project", "rename", "shop", "store"]);
@@ -261,8 +272,7 @@ fn renaming_a_project_takes_the_new_name_only_and_central_is_no_project() {
 
 #[test]
 fn project_reaches_a_registered_brain_from_any_folder() {
-    let (central, repo, elsewhere) =
-        (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, repo, elsewhere) = (tempdir(), tempdir(), tempdir());
     ok(&kb(repo.path(), central.path(), &["init", "demo"], ""));
     ok(&kb(repo.path(), central.path(), &["add", "In", "the", "repo"], ""));
     let from_elsewhere = ok(&kb(elsewhere.path(), central.path(), &["list", "--project", "demo"], ""));
@@ -285,7 +295,7 @@ fn project_reaches_a_registered_brain_from_any_folder() {
 
 #[test]
 fn the_hooks_hold_an_agent_to_describing_the_project() {
-    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, repo) = (tempdir(), tempdir());
     ok(&kb(repo.path(), central.path(), &["init", "demo"], ""));
     let input = format!("{{\"cwd\": {:?}}}", repo.path().display().to_string());
     let asked = ok(&kb(repo.path(), central.path(), &["hook", "prompt"], &input));
@@ -296,7 +306,7 @@ fn the_hooks_hold_an_agent_to_describing_the_project() {
 
 #[test]
 fn the_edit_hook_sends_an_agent_writing_the_brain_to_kb() {
-    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, repo) = (tempdir(), tempdir());
     ok(&kb(repo.path(), central.path(), &["init", "demo"], ""));
     let cwd = format!("{:?}", repo.path().display().to_string());
     let input = |file: &str| {
@@ -310,7 +320,7 @@ fn the_edit_hook_sends_an_agent_writing_the_brain_to_kb() {
 #[cfg(unix)]
 #[test]
 fn the_edit_hook_reads_a_tilde_as_the_home_folder() {
-    let home = tempfile::tempdir().unwrap();
+    let home = tempdir();
     let central = home.path().join("notes");
     std::fs::create_dir(&central).unwrap();
     let input = r#"{"cwd": "/", "tool_input": {"file_path": "~/notes/tags.md"}}"#;
@@ -329,7 +339,7 @@ fn the_edit_hook_reads_a_tilde_as_the_home_folder() {
 
 #[test]
 fn a_command_waiting_for_its_stdin_holds_up_no_other() {
-    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, repo) = (tempdir(), tempdir());
     ok(&kb(repo.path(), central.path(), &["init", "demo"], ""));
     ok(&kb(repo.path(), central.path(), &["add", "Shared"], ""));
     let mut typing = Command::new(env!("CARGO_BIN_EXE_kb"))
@@ -354,7 +364,7 @@ fn a_command_waiting_for_its_stdin_holds_up_no_other() {
 
 #[test]
 fn repositories_registered_at_once_are_all_kept() {
-    let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, code) = (tempdir(), tempdir());
     let children: Vec<_> = (0..8)
         .map(|n| {
             let repo = code.path().join(format!("repo{n}"));
@@ -380,7 +390,7 @@ fn repositories_registered_at_once_are_all_kept() {
 #[test]
 fn a_project_change_waits_for_the_central_brain_before_locking_its_own() {
     use kanbrain_core::store::Store;
-    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, repo) = (tempdir(), tempdir());
     ok(&kb(repo.path(), central.path(), &["init", "demo"], ""));
     // As the app does: the central brain first, then the repositories.
     let central_lock = Store::at(central.path()).unwrap().lock().unwrap();
@@ -406,7 +416,7 @@ fn a_project_change_waits_for_the_central_brain_before_locking_its_own() {
 
 #[test]
 fn commands_run_in_parallel_lose_nothing() {
-    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, repo) = (tempdir(), tempdir());
     ok(&kb(repo.path(), central.path(), &["init", "demo"], ""));
     ok(&kb(repo.path(), central.path(), &["add", "Shared"], ""));
     // As an agent's subagents would: all at once, each adding a task and commenting on the same one.
@@ -450,7 +460,7 @@ fn the_crates_readme_lists_the_same_commands_as_the_repositorys() {
 
 #[test]
 fn init_says_so_when_kb_isnt_on_the_path() {
-    let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (central, repo) = (tempdir(), tempdir());
     let init = |path: &std::ffi::OsStr| {
         let mut init = Command::new(env!("CARGO_BIN_EXE_kb"));
         init.args(["init", "demo"]).current_dir(repo.path()).env("KANBRAIN_DIR", central.path()).env("PATH", path);
