@@ -1,13 +1,13 @@
 //! Commands that read or change entries by id, for agents and scripts: `add`, `show`, `search`,
-//! `start`/`park`/`done`/`todo`, `comment`, `ask`, `wait`, `propose`, `accept`/`reject`, `describe`, `tag`,
-//! `link` and `context`. Each prints a short confirmation, or with `--json`, the entry (or entries) as JSON.
+//! `start`/`park`/`done`/`todo`, `comment`, `ask`, `wait`, `propose`, `accept`/`reject`, `describe`, `rename`,
+//! `tag`, `link` and `context`. Each prints a short confirmation, or with `--json`, the entry (or entries) as JSON.
 
 use super::manage;
 use crate::api::ApiError;
 use crate::api::json::{Entry, Summary};
 use crate::api::text::line;
 use crate::brain::{Brain, NewEntry};
-use crate::model::{Asked, DecisionState, Kind, RepoLink, Status, Task, not_a_link, parse_links, parse_tags};
+use crate::model::{Asked, DecisionState, Kind, RepoLink, Status, Task, not_a_link, one_line, parse_links, parse_tags};
 use crate::projects::ProjectInfo;
 use anyhow::{Context, Result, anyhow, bail};
 use serde::Serialize;
@@ -45,6 +45,8 @@ pub const USAGE: &str = "\
             accept or reject a decision, with why (needed to reject); answers a question that names it (#ID)
   describe ID TEXT…|-
             replace the description
+  rename ID TITLE…
+            replace the title (and its file's name)
   tag ID +TAG|-TAG…
             add tags to an entry (+TAG) or remove them (-TAG), in order
   link ID OTHER…
@@ -101,6 +103,9 @@ pub enum EntryCommand {
     /// `describe ID TEXT…|-`.
     #[non_exhaustive]
     Describe(u32, Text),
+    /// `rename ID TITLE…`.
+    #[non_exhaustive]
+    Rename(u32, String),
     /// `tag ID +TAG|-TAG…`: tags added and removed, in order.
     #[non_exhaustive]
     Tag(u32, Vec<TagChange>),
@@ -200,6 +205,7 @@ impl EntryArgs {
             | EntryCommand::Search(_)
             | EntryCommand::SetStatus(..)
             | EntryCommand::Wait(..)
+            | EntryCommand::Rename(..)
             | EntryCommand::Tag(..)
             | EntryCommand::Link(..)
             | EntryCommand::Context
@@ -277,6 +283,10 @@ impl EntryArgs {
                 let (id, text) = id_and_text(&mut rest, "describe needs the description")?;
                 EntryCommand::Describe(id, text)
             }
+            ("rename", None) => {
+                let id = first_id(&mut rest)?;
+                EntryCommand::Rename(id, new_title(std::mem::take(&mut rest))?)
+            }
             ("tag", None) => {
                 let id = first_id(&mut rest)?;
                 EntryCommand::Tag(id, tag_changes(std::mem::take(&mut rest))?)
@@ -344,6 +354,12 @@ impl EntryArgs {
             }
             EntryCommand::Describe(id, text) => {
                 brain.set_description(id, &text.read()?)?;
+                id
+            }
+            EntryCommand::Rename(id, title) => {
+                if !retitle(&mut brain, id, &title)? {
+                    eprintln!("#{id} already had that title: nothing changed");
+                }
                 id
             }
             EntryCommand::Tag(id, changes) => {
@@ -463,6 +479,38 @@ fn typed_links(value: &str) -> Result<(Vec<u32>, Vec<RepoLink>)> {
         bail!("`{word}` isn't an entry id (12 or #12) or another repository's entry (REPO#ID)");
     }
     Ok(parse_links(value))
+}
+
+/// The words after `rename`'s id as the title, as `add` takes its own: `--` makes every word after it the title's,
+/// however it starts.
+fn new_title(words: Vec<String>) -> Result<String> {
+    let mut title = Vec::new();
+    let mut words = words.into_iter();
+    while let Some(word) = words.next() {
+        match word.as_str() {
+            "--" => title.extend(words.by_ref()),
+            other if other.starts_with("--") => bail!("unknown rename option `{other}`"),
+            _ => title.push(word),
+        }
+    }
+    let title = title.join(" ");
+    if title.trim().is_empty() {
+        bail!("rename needs the new title");
+    }
+    Ok(title)
+}
+
+/// Saves `title`, on one line, as entry `id`'s, as the kanban app's form does (its file is renamed after it); returns
+/// whether it changed, as nothing is written when it didn't.
+fn retitle(brain: &mut Brain, id: u32, title: &str) -> Result<bool> {
+    let entry = brain.entry(id)?;
+    let title = one_line(title);
+    if title == entry.title {
+        return Ok(false);
+    }
+    let tags = entry.tags.clone();
+    brain.update(id, &title, tags)?;
+    Ok(true)
 }
 
 /// What `tag` says a word after the id has to be.

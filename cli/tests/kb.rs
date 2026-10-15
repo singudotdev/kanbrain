@@ -154,6 +154,23 @@ fn tag_adds_and_removes_and_says_when_nothing_changed() {
     assert!(misused.contains("usage:\n  kb tag ID +TAG|-TAG…\n"), "{misused}");
 }
 
+#[test]
+fn rename_changes_the_title_and_says_when_nothing_changed() {
+    let (central, dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let run = |args: &[&str]| kb(dir.path(), central.path(), args, "");
+    ok(&run(&["add", "--tag", "auth", "Fix", "login"]));
+    let changed = run(&["rename", "1", "Fix", "the", "SSO", "login"]);
+    assert_eq!(ok(&changed), "#1 Fix the SSO login (todo) #auth\n");
+    assert!(changed.stderr.is_empty(), "a change says nothing more");
+    let same = run(&["rename", "#1", "Fix", "the", "SSO", "login"]);
+    assert_eq!(String::from_utf8_lossy(&same.stderr), "#1 already had that title: nothing changed\n");
+    assert_eq!(ok(&same), "#1 Fix the SSO login (todo) #auth\n", "stdout keeps the entry's line");
+    let json = ok(&run(&["rename", "1", "--json", "Fix", "SSO"]));
+    assert!(json.starts_with("{\"id\":1,") && json.contains(r#""title":"Fix SSO""#), "{json}");
+    let misused = String::from_utf8(run(&["rename", "1"]).stderr).unwrap();
+    assert!(misused.contains("usage:\n  kb rename ID TITLE…\n"), "{misused}");
+}
+
 /// What bash's completion of `kb` offers for `line` (its last word being completed), in `dir`.
 #[cfg(unix)]
 fn bash_completes(dir: &Path, central: &Path, line: &[&str]) -> String {
@@ -184,6 +201,7 @@ fn bash_completes_tag_with_the_id_then_signed_tags() {
     assert_eq!(completes(&["kb", "tag", "1", ""]), "+bug -bug +ui -ui");
     assert_eq!(completes(&["kb", "tag", "1", "+ui", "-b"]), "-bug");
     assert_eq!(completes(&["kb", "show", ""]), "1");
+    assert_eq!(completes(&["kb", "rename", ""]), "1");
 }
 
 #[test]

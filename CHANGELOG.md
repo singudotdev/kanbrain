@@ -11,6 +11,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   (`Brain::update`, tag colors included); tags already so write nothing and say `nothing changed` on stderr
   (`cli::entries::retag`). With `--json`, and tab completion of `+TAG` and `-TAG` in bash, zsh and fish. The agents'
   section names it (`init --all`).
+- `kb rename ID TITLE…` replaces an entry's title, as the kanban app's form saves it (`Brain::update`: on one line,
+  its file renamed after it); the same title writes nothing and says `nothing changed` on stderr
+  (`cli::entries::retitle`). With `--json`, `--` before a title that starts with `--`, and tab completion of the id.
+  The agents' section names it (`init --all`).
 
 ### Changed
 

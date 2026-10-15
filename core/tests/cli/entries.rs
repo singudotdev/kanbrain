@@ -132,6 +132,42 @@ fn tag_takes_signed_tags_in_order() {
 }
 
 #[test]
+fn rename_takes_the_words_as_the_title() {
+    let rename = |args: &[&str]| parse(args).unwrap().command;
+    assert_eq!(rename(&["rename", "#4", "Fix", "the", "login"]), EntryCommand::Rename(4, "Fix the login".into()));
+    assert_eq!(
+        rename(&["rename", "4", "--", "--verbose", "breaks"]),
+        EntryCommand::Rename(4, "--verbose breaks".into())
+    );
+    assert_eq!(rename(&["rename", "4", "-", "x"]), EntryCommand::Rename(4, "- x".into()), "a dash is a word");
+    assert!(parse(&["rename", "4", "x", "--json"]).unwrap().json);
+    let error = |args: &[&str]| parse(args).unwrap_err().to_string();
+    assert_eq!(error(&["rename", "4"]), "rename needs the new title");
+    assert_eq!(error(&["rename", "4", " "]), "rename needs the new title");
+    assert_eq!(error(&["rename", "4", "--start", "x"]), "unknown rename option `--start`");
+    assert_eq!(error(&["rename", "x", "y"]), "`x` isn't an entry id");
+}
+
+#[test]
+fn rename_saves_only_a_change_and_renames_the_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let open = || Brain::open(crate::store::Store::at(dir.path()).unwrap()).unwrap();
+    let mut brain = open();
+    let new =
+        NewEntry { kind: Kind::Decision, title: "Use SQL".into(), tags: vec!["db".into()], ..NewEntry::default() };
+    let id = brain.add(new).unwrap();
+    assert!(retitle(&mut brain, id, "Use markdown\nfiles ").unwrap(), "a decision's title too");
+    let saved = open();
+    let entry = saved.entry(id).unwrap();
+    assert_eq!((entry.title.as_str(), entry.tags.as_slice()), ("Use markdown files", &["db".to_string()][..]));
+    let names: Vec<_> = std::fs::read_dir(dir.path()).unwrap().flatten().map(|e| e.file_name()).collect();
+    assert!(names.iter().any(|n| n.to_string_lossy().ends_with("-use-markdown-files.md")), "{names:?}");
+    assert!(!names.iter().any(|n| n.to_string_lossy().contains("use-sql")), "{names:?}");
+    assert!(!retitle(&mut brain, id, " Use markdown files").unwrap(), "the same once on one line");
+    assert!(retitle(&mut brain, 9, "x").unwrap_err().to_string().contains("no entry #9"));
+}
+
+#[test]
 fn tag_saves_only_a_change_and_colors_a_new_tag() {
     let dir = tempfile::tempdir().unwrap();
     let open = || Brain::open(crate::store::Store::at(dir.path()).unwrap()).unwrap();

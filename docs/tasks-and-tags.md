@@ -123,7 +123,8 @@ entry also has **Project**, the brain it goes to: the one the filter or the sele
 A new task also has a
 **Column**, To do unless you pick another: a column's `+` opens the form with that column picked, and **+ New task**
 and `n` with To do. A task created in Doing starts its clock. `tab` moves between the fields, `←` `→` pick the
-column, `enter` saves (or **Create** / **Save**), `esc` cancels.
+column, `enter` saves (or **Create** / **Save**), `esc` cancels. From the command line,
+`kb rename ID TITLE` changes an entry's title.
 
 **Related** is a search box with a dropdown: typing filters the other entries of the same brain (tasks, notes and
 decisions, by title or `#tag`), `↑` `↓` move, `enter` or a click checks or unchecks one. The checked ones show above
