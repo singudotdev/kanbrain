@@ -498,8 +498,8 @@ pub(crate) fn file_name(task: &Task) -> String {
     format!("{:04}-{}.md", task.id, slugify(&task.title))
 }
 
-/// Whether `name` starts as [`file_name`] names an entry: four digits or more, `-`, a letter. A slug starting with a
-/// digit is left out, so that a notes vault's `2026-10-15.md` isn't taken for one.
+/// Whether `name` starts as [`file_name`] names an entry: four digits or more, `-`, a lowercase ASCII letter (a slug's).
+/// A slug starting with a digit is left out, so that a notes vault's `2026-10-15.md` isn't taken for one.
 pub(crate) fn entry_named(name: &str) -> bool {
     let digits = name.chars().take_while(char::is_ascii_digit).count();
     digits >= 4

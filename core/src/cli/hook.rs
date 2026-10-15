@@ -39,15 +39,15 @@ named_enum! {
     }
 }
 
-/// What to print for `event`, given the JSON Claude Code sent (`input`) and the central brain: `None` when
-/// there's nothing to remind or refuse, as for `prompt` and `stop` outside a project. Malformed input reads as empty, so a hook
-/// never breaks a session: it falls back to the folder it runs in, `here`, and lets the turn end.
+/// What to print for `event`, given the JSON Claude Code sent (`input`) and the central brain: `None` when there's
+/// nothing to remind or refuse, as for `prompt` and `stop` outside a project. Malformed input reads as empty, so a
+/// hook never breaks a session: `prompt` and `stop` fall back to the folder it runs in, `here`, and let the turn end;
+/// `edit`, with no path, refuses nothing.
 pub fn respond(event: HookEvent, input: &str, central: &Path, here: &Path) -> Option<String> {
     let input: Value = serde_json::from_str(input).unwrap_or(Value::Null);
     let cwd = input["cwd"].as_str().map_or_else(|| here.to_path_buf(), PathBuf::from);
     match event {
-        // Claude Code gives the path absolute; joined to the session's folder in case it isn't.
-        HookEvent::Edit => refuse_brain_write(&lexical(&cwd.join(input["tool_input"]["file_path"].as_str()?)), central),
+        HookEvent::Edit => refuse_brain_write(&written(input["tool_input"]["file_path"].as_str()?, &cwd), central),
         HookEvent::Prompt | HookEvent::Stop => remind(event, &input, &cwd, central),
     }
 }
@@ -84,9 +84,9 @@ fn in_brain(file: &Path, central: &Path) -> bool {
 }
 
 /// Whether `rel`, a path inside the central brain `central`, is kanbrain's: `tags.md`, `projects.md`, `last-id`,
-/// `format`, an entry, or anything in the project cards' or reports' folders. An entry is a file at the top holding
-/// a `- id:` line, as `Store::load` reads them, or one yet to be written named as one (`0007-title.md`): the vault's
-/// other notes, there too, aren't.
+/// `format`, an entry, or anything in the project cards' or reports' folders. An entry is a file at the top named as
+/// one (`0007-title.md`), or one `Store::load` reads as an entry or reports broken: the vault's other notes, there
+/// too, aren't.
 fn central_owned(central: &Path, rel: &Path) -> bool {
     let mut parts = rel.components();
     let Some(first) = parts.next().map(Component::as_os_str) else { return false };
@@ -95,25 +95,37 @@ fn central_owned(central: &Path, rel: &Path) -> bool {
     }
     let kanbrains = [store::TAGS_FILE, projects::REGISTRY_FILE, store::LAST_ID_FILE, crate::migrate::FORMAT_FILE];
     let name = first.to_string_lossy();
-    kanbrains.contains(&&*name)
-        || name.ends_with(".md")
-            && match fs::read_to_string(central.join(rel)) {
-                Ok(text) => text.lines().any(|line| line.trim_start().starts_with("- id:")),
-                Err(_) => store::entry_named(&name),
-            }
+    if kanbrains.contains(&&*name) {
+        return true;
+    }
+    let path = central.join(rel);
+    // Only a file is read: a pipe, or a link to a device, would hold the hook.
+    let text = fs::metadata(&path).is_ok_and(|meta| meta.is_file()).then(|| store::read_text(&path).ok()).flatten();
+    // As `Store::load` reads it and `kb` reports it (`say_skipped`): an entry, or a broken one.
+    let entry = |text: &str| Task::from_markdown(text).err().is_none_or(|error| error != crate::model::MISSING_ID);
+    name.ends_with(".md") && (store::entry_named(&name) || text.is_some_and(|text| entry(&text)))
 }
 
-/// `path` with its `.` and `..` resolved as text, as Claude Code resolves the path it writes: through the folder
-/// named, which needn't exist, rather than where a link in it leads.
+/// The file an edit of `path` writes, as Claude Code finds it: `~` is the home folder, a relative path is in the
+/// session's folder `cwd` (Claude Code gives it absolute), and `..` is resolved as text ([`lexical`]).
+fn written(path: &str, cwd: &Path) -> PathBuf {
+    let home = |rest: &str| dirs::home_dir().map(|home| home.join(rest));
+    let path = match path.strip_prefix("~/").or_else(|| (path == "~").then_some("")) {
+        Some(rest) => home(rest).unwrap_or_else(|| cwd.join(path)),
+        None => cwd.join(path),
+    };
+    lexical(&path)
+}
+
+/// `path` with its `..` resolved as text, as Claude Code resolves the path it writes: through the folder named, which
+/// needn't exist, rather than where a link in it leads. (`components` already drops a `.` inside the path.)
 fn lexical(path: &Path) -> PathBuf {
     let mut resolved = PathBuf::new();
     for part in path.components() {
-        match part {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                resolved.pop();
-            }
-            _ => resolved.push(part),
+        if part == Component::ParentDir {
+            resolved.pop();
+        } else {
+            resolved.push(part);
         }
     }
     resolved

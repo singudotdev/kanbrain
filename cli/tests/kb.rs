@@ -240,6 +240,26 @@ fn the_edit_hook_sends_an_agent_writing_the_brain_to_kb() {
     assert_eq!(ok(&kb(repo.path(), central.path(), &["hook", "edit"], &input("src/lib.rs"))), "", "the code is fine");
 }
 
+#[cfg(unix)]
+#[test]
+fn the_edit_hook_reads_a_tilde_as_the_home_folder() {
+    let home = tempfile::tempdir().unwrap();
+    let central = home.path().join("notes");
+    std::fs::create_dir(&central).unwrap();
+    let input = r#"{"cwd": "/", "tool_input": {"file_path": "~/notes/tags.md"}}"#;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_kb"))
+        .args(["hook", "edit"])
+        .env("KANBRAIN_DIR", &central)
+        .env("HOME", home.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(input.as_bytes()).unwrap();
+    let refused = String::from_utf8(child.wait_with_output().unwrap().stdout).unwrap();
+    assert!(refused.contains("\"permissionDecision\":\"deny\""), "{refused}");
+}
+
 #[test]
 fn a_command_waiting_for_its_stdin_holds_up_no_other() {
     let (central, repo) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());

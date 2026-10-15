@@ -27,7 +27,7 @@ fn input(cwd: &Path, stop_hook_active: bool) -> String {
 }
 
 #[test]
-fn an_undescribed_project_is_asked_for_with_every_prompt_and_holds_the_turn_once() {
+fn an_undescribed_project_is_asked_for_with_every_prompt_and_reminded_once_a_turn() {
     let (central, _code, root) = project();
     let prompt = hook(HookEvent::Prompt, &input(&root, false), central.path()).expect("it asks");
     assert!(
@@ -147,6 +147,10 @@ fn the_central_brain_kept_in_a_notes_vault_leaves_the_vaults_own_files_to_the_ag
     assert_eq!(edit(&root, &vault.join("2026-10-15.md"), vault), None, "and a new one, dated");
     std::fs::write(vault.join("plan.md"), "# Plan\n\n- id: 3\n- type: task\n").unwrap();
     assert!(edit(&root, &vault.join("plan.md"), vault).is_some(), "but an entry renamed by hand is kanbrain's");
+    std::fs::write(vault.join("hand.md"), "# Hand\n\n- id : 12\n").unwrap();
+    assert!(edit(&root, &vault.join("hand.md"), vault).is_some(), "as `Store::load` reads one, spaced as it may be");
+    std::fs::write(vault.join("users.md"), "# Users\n\n## Notes\n- id: user-123 migrated\n").unwrap();
+    assert_eq!(edit(&root, &vault.join("users.md"), vault), None, "an `- id:` that isn't an entry's");
     let code = vault.join("code/app");
     std::fs::create_dir_all(code.join(".brain")).unwrap();
     assert_eq!(edit(&code, &code.join("src/main.rs"), vault), None, "a repository kept in it");
@@ -167,4 +171,13 @@ fn a_brain_reached_through_a_link_is_a_brain_still() {
     // And the central brain set through a link (`KANBRAIN_DIR`), written at its real path.
     let real = central.path().canonicalize().unwrap().join("0001-plan.md");
     assert!(edit(&root, &real, &central_link).is_some());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_pipe_in_the_central_brain_is_not_read() {
+    let (central, _code, root) = project();
+    let pipe = central.path().join("pipe.md");
+    assert!(std::process::Command::new("mkfifo").arg(&pipe).status().unwrap().success());
+    assert_eq!(edit(&root, &pipe, central.path()), None, "and the hook returns, though nothing writes to it");
 }
