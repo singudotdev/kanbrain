@@ -26,9 +26,9 @@ exclude_re = [
     # painted, and the window tests read bounds, not what's painted.
     'gui/src/ui/dialogs/editor\.rs:56:.*replace == with != in draw',
     # A message exactly one second after what a read found, to the nanosecond, is the only one `<=` would join.
-    'gui/src/state/mod\.rs:.*replace < with <= in Board::say',
+    'gui/src/state/mod\.rs:.*replace < with <= in Board::say$',
     # A message read exactly MESSAGE_TTL after it was set, to the nanosecond, is the only one `<=` would still show.
-    'gui/src/state/mod\.rs:.*replace < with <= in Board::message',
+    'gui/src/state/mod\.rs:.*replace < with <= in Board::message$',
     # Downloads the installer from GitHub and runs it: the installer is checked by e2e/install.sh, not by tests.
     'core/src/cli/update\.rs:.*(replace run_installer -> Result| in run_installer$)',
 ]
