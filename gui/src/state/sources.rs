@@ -567,20 +567,20 @@ impl Board {
         locks
     }
 
-    /// Takes, into `locks`, the lock of each brain the thread doesn't hold yet: one catching up found (a project
+    /// Takes, into `locks`, the lock of each brain not `tried` yet in this input: one catching up found (a project
     /// added meanwhile), read before its lock was taken, which a `kb` may have written to since. With any taken,
     /// reads every brain again under the locks, so the input acts on what's there. A project registered during
     /// that read too is locked as well, and read again at the next input.
     pub fn lock_found_brains(&mut self, locks: &mut Vec<BrainLock>, tried: &mut Vec<PathBuf>) {
         let before = locks.len();
-        locks.extend(self.lock_brains(tried).into_iter().filter(BrainLock::taken));
+        locks.extend(self.lock_brains(tried));
         if locks.len() == before {
             return;
         }
         if let Err(e) = self.reload() {
             self.notify_error(&e);
         }
-        locks.extend(self.lock_brains(tried).into_iter().filter(BrainLock::taken));
+        locks.extend(self.lock_brains(tried));
     }
 
     /// The data folders to watch: every brain's, and the central brain's project cards.

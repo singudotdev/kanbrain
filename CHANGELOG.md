@@ -29,7 +29,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The kanban app holds the lock of a brain it finds while it acts, as of every other: a project registered
   meanwhile was read, and could be written to, without it, so a `kb` run then could write over it or be written
   over. Its lock is taken after catching up, and every brain read again under the locks
-  (`Board::lock_found_brains`, `BrainLock::taken`).
+  (`Board::lock_found_brains`).
 - `f` acts on the kanban app's board only: on the notes or decisions it showed every done task, or only the latest,
   on the board, unseen (`keys::ACTIONS`, `Tabs::Board`; `When::OnBoard` is gone, as nothing checked it on a key).
 
