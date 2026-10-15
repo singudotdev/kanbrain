@@ -31,12 +31,15 @@ impl Board {
         (kind, tags)
     }
 
-    /// Puts the tags field's option at `index` in place of the tag being typed.
-    pub fn choose_form_tag(&mut self, index: usize) {
+    /// Puts `tag`, clicked in the tags field's list, in place of the tag being typed. By name: catching up before the
+    /// click acts may move its row, or take it out of the list, and then it's left alone.
+    pub fn choose_form_tag(&mut self, tag: &str) {
         let Mode::Form(form) = &self.mode else { return };
-        let Some((tag, _)) = self.form_tags(form).1.into_iter().nth(index) else { return };
+        if !self.form_tags(form).1.iter().any(|(listed, _)| listed == tag) {
+            return;
+        }
         let Mode::Form(form) = &mut self.mode else { return };
-        form.put_tag(&tag);
+        form.put_tag(tag);
     }
 
     /// Opens the form for changing the selected entry's title and tags.

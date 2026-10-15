@@ -302,11 +302,11 @@ impl Board {
     /// What the tags field's list highlights for what's typed, for enter to pick: the first tag starting with the
     /// tag being typed. One only containing it isn't highlighted, nor a whole one typed: enter then saves, as a new
     /// tag typed must.
-    fn tag_highlight(&self, form: &Form) -> Option<usize> {
+    fn tag_highlight(&self, form: &Form) -> Option<String> {
         let typed = form.typed_tag();
         let tags = self.form_tags(form).1;
         let partial = !typed.is_empty() && !tags.iter().any(|(tag, _)| *tag == typed);
-        partial.then(|| tags.iter().position(|(tag, _)| tag.starts_with(typed.as_str()))).flatten()
+        partial.then(|| tags.into_iter().map(|(tag, _)| tag).find(|tag| tag.starts_with(typed.as_str()))).flatten()
     }
 
     /// After the tags field's text changed other than by a key (pasted, cut): its list's highlight follows, as
@@ -326,29 +326,22 @@ impl Board {
     /// `enter` picks the highlighted tag. Returns whether the list took `key`; it doesn't when there's nothing to
     /// pick, or nothing highlighted for `↑` and `enter`, which then switch fields and save as elsewhere.
     fn key_form_tags(&mut self, form: &mut Form, key: KeyEvent) -> bool {
-        let (_, tags) = self.form_tags(form);
-        let count = tags.len();
-        match (key.code, form.tag_sel) {
-            (_, _) if count == 0 => false,
-            (KeyCode::Down, None) => {
-                form.tag_sel = Some(0);
-                true
-            }
-            (KeyCode::Down, Some(sel)) => {
-                form.tag_sel = Some((sel + 1).min(count - 1));
-                true
-            }
-            (KeyCode::Up, Some(sel)) => {
-                form.tag_sel = sel.checked_sub(1);
-                true
-            }
-            // A highlight past the list (a reload shortened it) is none: enter saves.
-            (KeyCode::Enter, Some(sel)) if sel < count => {
+        let (_, mut tags) = self.form_tags(form);
+        // A tag a reload took out of the list is highlighted no more: enter saves.
+        let sel = form.tag_sel.as_ref().and_then(|sel| tags.iter().position(|(tag, _)| tag == sel));
+        let at = match (key.code, sel) {
+            (_, _) if tags.is_empty() => return false,
+            (KeyCode::Down, None) => Some(0),
+            (KeyCode::Down, Some(sel)) => Some((sel + 1).min(tags.len() - 1)),
+            (KeyCode::Up, Some(sel)) => sel.checked_sub(1),
+            (KeyCode::Enter, Some(sel)) => {
                 form.put_tag(&tags[sel].0);
-                true
+                return true;
             }
-            _ => false,
-        }
+            _ => return false,
+        };
+        form.tag_sel = at.map(|at| tags.swap_remove(at).0);
+        true
     }
 
     /// The form's project field: arrows move in its dropdown, typing filters it, enter picks the
