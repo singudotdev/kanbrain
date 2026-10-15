@@ -2024,6 +2024,82 @@ fn whats_skipped_is_said_with_its_repository_with_what_follows_and_again_on_r() 
 }
 
 #[test]
+fn an_edit_saves_only_what_was_changed_in_the_form_and_keeps_what_kb_changed_meanwhile() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["Fix login", "Other", "Third"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    let mut brain = kb(&f);
+    brain.update(1, "Fix login", vec!["auth".into(), "wip".into()]).unwrap();
+    brain.link(1, &[3], &[]).unwrap();
+    f.board.reload().unwrap();
+    let related = |f: &Fixture| {
+        let mut keys = f.board.related_keys(k(1));
+        keys.sort_by_key(|k| k.id);
+        keys
+    };
+    let tags = |f: &Fixture| f.on_disk(1).tags;
+
+    // Saved untouched while an agent renamed it, retagged it and changed what it's related to: nothing of theirs
+    // is undone.
+    f.board.select(k(1));
+    f.press(KeyCode::Char('e'));
+    let mut brain = kb(&f);
+    brain.update(1, "Fix the SSO login", vec!["bug".into(), "auth".into()]).unwrap();
+    brain.link(1, &[2], &[]).unwrap();
+    brain.toggle_link(1, 3).unwrap();
+    f.board.reload().unwrap();
+    f.board.message = None;
+    f.press(KeyCode::Enter);
+    assert!(matches!(f.board.mode, Mode::Normal));
+    assert_eq!(f.board.message(), None, "nothing of the form's to save: nothing said");
+    assert_eq!(f.on_disk(1).title, "Fix the SSO login");
+    assert_eq!(tags(&f), ["bug", "auth"], "theirs, in their order");
+    assert_eq!(related(&f), [k(2)]);
+
+    // What the form changed is saved, over what the agent did to the same field; the rest of theirs stays.
+    f.press(KeyCode::Char('e'));
+    let mut brain = kb(&f);
+    brain.update(1, "Fix SSO", vec!["bug".into(), "auth".into(), "db".into()]).unwrap();
+    brain.link(1, &[3], &[]).unwrap();
+    f.board.reload().unwrap();
+    f.type_text(" now");
+    f.press(KeyCode::Tab);
+    f.type_text("bug, ui");
+    // #2 unchecked in the Related field.
+    let Mode::Form(form) = &f.board.mode else { panic!("the form is open") };
+    let at = f.board.form_link_options(form).iter().position(|&(key, _)| key == k(2)).unwrap();
+    f.board.toggle_form_link(at);
+    f.press(KeyCode::Enter);
+    assert_eq!(f.on_disk(1).title, "Fix the SSO login now", "the title typed");
+    assert_eq!(tags(&f), ["bug", "ui", "db"], "auth taken out in the form, db added by the agent");
+    assert_eq!(related(&f), [k(3)], "#2 unrelated in the form, #3 related by the agent");
+}
+
+#[test]
+fn an_edit_forms_entry_as_opened_follows_its_brain_when_the_list_of_brains_changes() {
+    use kanbrain_core::brain::Brain;
+    let (central, code) = projects();
+    let blog = code.path().join("blog/.brain");
+    let mut brain = Brain::open(Store::at(&blog).unwrap()).unwrap();
+    let new = |title: &str| kanbrain_core::brain::NewEntry { title: title.into(), ..Default::default() };
+    let (second, third) = (brain.add(new("draft")).unwrap(), brain.add(new("photos")).unwrap());
+    brain.link(1, &[second], &[]).unwrap();
+    let mut board = Board::open(central.path(), None).unwrap();
+    let src = |board: &Board| board.sources.iter().position(|s| s.label.as_deref() == Some("blog")).unwrap();
+    board.select(Key::new(src(&board), 1));
+    press(&mut board, KeyCode::Char('e'));
+    // An agent relates it to another entry instead, and a repository listed before blog leaves: blog's index moves.
+    let mut brain = Brain::open(Store::at(&blog).unwrap()).unwrap();
+    brain.toggle_link(1, second).unwrap();
+    brain.link(1, &[third], &[]).unwrap();
+    kanbrain_core::projects::unregister(central.path(), &code.path().join("api/.brain")).unwrap();
+    board.reload().unwrap();
+    press(&mut board, KeyCode::Enter);
+    let related: Vec<_> = board.related_keys(Key::new(src(&board), 1)).iter().map(|k| k.id).collect();
+    assert_eq!(related, [third], "saved untouched: the agent's links kept");
+}
+
+#[test]
 fn an_edit_whose_links_fail_isnt_said_saved() {
     let mut f = Fixture::new(&["Fix login"]);
     f.board.select(k(1));
