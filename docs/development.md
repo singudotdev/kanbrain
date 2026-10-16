@@ -180,7 +180,7 @@ core/src/            kanbrain-core: shared by both programs
 │   ├── text.rs      entries as compact text for agents: `show`, one-line answers, capped `search`
 │   └── context.rs   the markdown summary agents read first: the project's card, capped sections, latest comments
 ├── model/           the domain
-│   ├── mod.rs       Task (any entry), Kind, Status, StatusChange, Session, Comment
+│   ├── mod.rs       Task (any entry), Kind, Status, StatusChange, Session, Comment, Activity (changes, logged)
 │   ├── markdown.rs  the task file format: writing and parsing
 │   ├── text.rs      tags, slugs, heading rules for user text
 │   └── time.rs      timestamps, ages (`5m`, `3h`, `2d`), durations (`1h 05m`, `00:42:17`), time covered by overlapping spans

@@ -141,6 +141,7 @@ The output is kept small so it doesn't waste the agent's context, and the CLI co
 | `kb describe ID TEXT` | replace the description |
 | `kb rename ID TITLE` | replace the title |
 | `kb tag ID +TAG\|-TAG…` | add tags to an entry, or remove them |
+| `kb tag OLD NEW` | rename a tag in every entry that has it |
 | `kb link ID OTHER…` | link entries to each other (`REPO#ID`: in another repository of the project) |
 | `kb project [describe\|notes TEXT\|-]` | show or rewrite the project's description and this repository's role |
 | `kb project rename\|repo\|move\|remove` | rename the project or this repository, move it to another project, or remove the project |
