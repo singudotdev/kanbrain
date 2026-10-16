@@ -2735,6 +2735,14 @@ fn deleting_a_comment_deletes_the_one_asked_about_wherever_it_is_now() {
             Some("not deleted: #1's comment was edited or deleted meanwhile"),
         ),
     ];
+    // Emptied meanwhile: nothing there to ask about, and the list stays.
+    f.board.brain_mut(0).add_comment(1, "only").unwrap();
+    f.press(KeyCode::Char('C'));
+    Brain::open(Store::at(f.dir.path()).unwrap()).unwrap().delete_comment(1, 0).unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Char('x'));
+    assert!(matches!(f.board.mode, Mode::Comments(_)), "{:?}", f.board.mode);
+    f.press(KeyCode::Esc);
     for (meanwhile, left, said) in cases {
         let mut task = f.on_disk(1);
         task.comments = ["a", "b", "c"].map(|body| Comment::new(now(), body.into(), Author::Human)).to_vec();
