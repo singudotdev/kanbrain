@@ -250,6 +250,12 @@ impl Board {
     /// What `kb` changed, since the editor opened, of what it edits: its text (or which comment is at its index), the
     /// entry's status and a decision's verdict being given, said for the status bar; `None` if nothing.
     pub(super) fn edit_changed_on_disk(&self, edit: &Edit) -> Option<String> {
+        self.edit_changed_but(edit, "")
+    }
+
+    /// What [`edit_changed_on_disk`](Self::edit_changed_on_disk) says but for `field`, which a save that stops over
+    /// it is about to say.
+    fn edit_changed_but(&self, edit: &Edit, field: &str) -> Option<String> {
         // Another comment edited isn't what it edits, unlike for a save (`same_comment`): one put at its index is.
         let moved = match edit.target {
             Target::Comment(key, index) => {
@@ -258,15 +264,16 @@ impl Board {
             }
             _ => false,
         };
-        let text = moved || self.text_of(edit.target) != Some(edit.base.as_str());
+        let word = text_word(edit.target);
+        let text = word != field && (moved || self.text_of(edit.target) != Some(edit.base.as_str()));
         let Some(key) = edit.target.key() else {
             return text.then(|| format!("{} changed on disk", self.text_name(edit.target)));
         };
-        let what = if matches!(edit.target, Target::Description(_)) { "description" } else { "comment" };
-        let status = self.task(key).map(|t| t.status) != edit.status;
+        let status = field != "status" && self.task(key).map(|t| t.status) != edit.status;
         // Only a verdict's editor has one, which its save gives.
-        let verdict = edit.decision.is_some() && self.task(key).map(|t| t.decision) != edit.decision;
-        changed_on_disk(&self.entry_name(key), &[(text, what), (status, "status"), (verdict, "verdict")])
+        let verdict =
+            field != "verdict" && edit.decision.is_some() && self.task(key).map(|t| t.decision) != edit.decision;
+        changed_on_disk(&self.entry_name(key), &[(text, word), (status, "status"), (verdict, "verdict")])
     }
 
     /// What the editor's text is, to say what changed meanwhile.
@@ -332,6 +339,7 @@ impl Board {
             && !self.same_comment(&edit)
         {
             let name = self.entry_name(key);
+            self.unsay_found(self.edit_changed_on_disk(&edit), self.edit_changed_but(&edit, text_word(edit.target)));
             self.notify(format!("{name}'s comments changed around this one meanwhile: copy your text, then ctrl+d"));
             self.mode = Mode::Edit(edit);
             return;
@@ -339,7 +347,9 @@ impl Board {
         if let Some(now) = self.text_of(edit.target)
             && now != edit.base
         {
-            edit.base = now.to_string();
+            let now = now.to_string();
+            self.unsay_found(self.edit_changed_on_disk(&edit), self.edit_changed_but(&edit, text_word(edit.target)));
+            edit.base = now;
             self.notify(format!(
                 "{} changed meanwhile: save again to replace it with yours, ctrl+d to keep it",
                 self.text_name(edit.target)
@@ -347,7 +357,10 @@ impl Board {
             self.mode = Mode::Edit(edit);
             return;
         }
+        // Said before the verdict it stops over is taken in.
+        let found = (self.edit_changed_on_disk(&edit), self.edit_changed_but(&edit, "verdict"));
         if let Some(stop) = self.verdict_meanwhile(&mut edit) {
+            self.unsay_found(found.0, found.1);
             self.notify(stop);
             self.mode = Mode::Edit(edit);
             return;
@@ -485,8 +498,16 @@ impl Board {
                     .and_then(|()| self.drop_links_from_other_repos(key))
                     .map(|()| format!("deleted {name}"))
             }
-            Confirm::DeleteComment(key, index) => {
-                self.brain_mut(key.src).delete_comment(key.id, index).map(|()| "comment deleted".into())
+            Confirm::DeleteComment(key, comment) => {
+                // Two the same are one to delete as much as the other.
+                match self.task(key).and_then(|t| t.comments.iter().position(|c| *c == comment)) {
+                    Some(index) => {
+                        self.brain_mut(key.src).delete_comment(key.id, index).map(|()| "comment deleted".into())
+                    }
+                    None => {
+                        Ok(format!("not deleted: {}'s comment was edited or deleted meanwhile", self.entry_name(key)))
+                    }
+                }
             }
             Confirm::Update => {
                 self.request = Some(Request::Update);
@@ -498,6 +519,13 @@ impl Board {
             Err(e) => self.notify_error(&e),
         }
         self.keep_selection();
+    }
+
+    /// Asks whether to delete comment `index` of `key`'s entry, as it is now.
+    pub fn ask_delete_comment(&mut self, key: Key, index: usize) {
+        if let Some(comment) = self.task(key).and_then(|t| t.comments.get(index)) {
+            self.mode = Mode::Confirm(Confirm::DeleteComment(key, comment.clone()));
+        }
     }
 
     /// Opens the link picker for the selected entry.
@@ -626,4 +654,9 @@ impl Board {
             Err(e) => self.notify_error(&e),
         }
     }
+}
+
+/// The text `target` edits, as what changed on disk names it.
+fn text_word(target: Target) -> &'static str {
+    if matches!(target, Target::Description(_)) { "description" } else { "comment" }
 }

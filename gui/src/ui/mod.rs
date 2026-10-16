@@ -514,6 +514,7 @@ impl BrainView {
 
 impl Render for BrainView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        widgets::next_frame(cx);
         let follow = std::mem::take(&mut self.follow);
         // The details opening or closing changes the board's width after this frame is laid out, with the
         // scroll to the selection worked out on the old one: it runs again once the new width is known.

@@ -41,8 +41,9 @@ while read -r run; do
     break
   fi
   # Only this repository's runs: a fork's pull request runs its own workflow, which could leave the artifact unchecked.
+  # An expired artifact is still listed: the tree's check is that old, and runs again.
 done < <(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$workflow-tree-$tree&per_page=20" \
-  --jq '.artifacts[].workflow_run | select(.head_repository_id == .repository_id) | .id')
+  --jq '.artifacts[] | select(.expired | not) | .workflow_run | select(.head_repository_id == .repository_id) | .id')
 
 all=false
 case "${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-}}" in release/*) all=true ;; esac

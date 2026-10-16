@@ -47,19 +47,23 @@ impl Board {
     /// What `kb` changed, since the edit form opened, of its entry's title, tags, related entries and status, said for
     /// the status bar; `None` if nothing, or on a new entry's form.
     pub(super) fn form_changed_on_disk(&self, form: &Form) -> Option<String> {
+        self.form_changed_but(form, "")
+    }
+
+    /// What [`form_changed_on_disk`](Self::form_changed_on_disk) says but for `field`, which a save that stops over
+    /// it is about to say.
+    fn form_changed_but(&self, form: &Form, field: &str) -> Option<String> {
         let (FormTarget::Edit(key), Some(opened)) = (form.target, &form.opened) else { return None };
         let now = self.task(key)?;
         let related = self.related_keys(key);
         let relinked = related.len() != opened.links.len() || related.iter().any(|k| !opened.links.contains(k));
-        changed_on_disk(
-            &self.entry_name(key),
-            &[
-                (now.title != opened.title, "title"),
-                (now.tags != opened.tags, "tags"),
-                (relinked, "related entries"),
-                (now.status != opened.status, "status"),
-            ],
-        )
+        let fields = [
+            (now.title != opened.title, "title"),
+            (now.tags != opened.tags, "tags"),
+            (relinked, "related entries"),
+            (now.status != opened.status, "status"),
+        ];
+        changed_on_disk(&self.entry_name(key), &fields.map(|(changed, name)| (changed && name != field, name)))
     }
 
     /// Opens the form for changing the selected entry's title and tags.
@@ -98,6 +102,7 @@ impl Board {
                 };
                 if let Some(now) = renamed {
                     let name = self.entry_name(key);
+                    self.unsay_found(self.form_changed_on_disk(&form), self.form_changed_but(&form, "title"));
                     self.notify(format!("{name}'s title changed meanwhile, to “{now}”: save again to replace it"));
                     if let Some(opened) = &mut form.opened {
                         opened.title = now;

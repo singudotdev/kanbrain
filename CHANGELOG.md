@@ -5,6 +5,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-16
+
+### Fixed
+
+- Pasting a text with line breaks into a one-line field (a title, tags, a search) joins its lines with one space, as
+  `kb add` does: a blank line or a line's spaces at a break left two or more. A break at either end of the paste still
+  parts it from the text beside it.
+- Deleting a comment in the kanban app deletes the one it asked about, wherever it is by then: one deleted before it
+  meanwhile (another window, a pull) made it delete the next. If that comment was edited or deleted meanwhile,
+  nothing is deleted, and the status bar says so.
+- A save that stops over what `kb` changed, right after the app said what changed on disk, says it once: what else
+  that read found stays (`#1's description changed meanwhile: … · #1's status changed on disk`).
+- A one-line field opened again starts at its start, not scrolled where it was left the last time.
+- fish offers `--tag` only after `add`, `list` and `report`; it came after `kb tag ID -` too.
+- `kb hook edit` refuses an agent's write to a central `.md` file `kb` can't read, which it reports as a broken entry,
+  and reads no file of the central brain but a top-level `.md` it's asked about.
+
 ## [0.6.0] - 2026-10-16
 
 ### Added
@@ -474,7 +491,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/singudotdev/kanbrain/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/singudotdev/kanbrain/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/singudotdev/kanbrain/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/singudotdev/kanbrain/compare/v0.5.0...v0.5.1

@@ -35,15 +35,15 @@ holding what this version knows, parsed on every read; the user chose the field,
   (both entries, whichever keeps the link), `toggle_repo_link` and `link` to another repository (only the entry whose
   `- links:` line changes, as writing the other repository's files would take its lock too), and `rename_tag`
   (`kb tag OLD NEW`, new; a tag named as an entry's id is renamed only when written `#5`, as `kb tag 5 ui` is more
-  likely `kb tag 5 +ui` mistyped, and a rename that wasn't meant changes every entry). Not what follows from something else: deleting or moving an entry, or loading dropping links
-  to one deleted by hand.
+  likely `kb tag 5 +ui` mistyped, and a rename that wasn't meant changes every entry). Not what follows from
+  something else: deleting or moving an entry, or loading dropping links to one deleted by hand.
 - `Task::thread` interleaves comments and changes by time, a change first within its second (the app's **Save and
   tell** comments after the change it tells of); the app's details list it, `kb show` its latest 10 changes (the rest
   counted, as History's), and `--json` all of `activity`.
 - `Task`, `Comment`, `StatusChange`, `Session`, `Unknown`, `Activity`, `Changed` (not its variants, which other crates
-  build for `Task::log`), the JSON shapes and `api::ApiError` are `#[non_exhaustive]` from v0.6.0, so a field or variant added later isn't breaking. `Kind`,
-  `Status`, `DecisionState`, `period::Unit` and `brain::Group` stay exhaustive: the app matches on them, and should be
-  told when one grows.
+  build for `Task::log`), the JSON shapes and `api::ApiError` are `#[non_exhaustive]` from v0.6.0, so a field or
+  variant added later isn't breaking. `Kind`, `Status`, `DecisionState`, `period::Unit` and `brain::Group` stay
+  exhaustive: the app matches on them, and should be told when one grows.
 
 ## Consequences
 

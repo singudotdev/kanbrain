@@ -937,6 +937,33 @@ fn a_line_longer_than_its_field_scrolls_to_keep_the_cursor_in_view(cx: &mut gpui
 }
 
 #[gpui::test]
+fn a_field_shown_again_starts_at_its_start_not_where_it_was_left(cx: &mut gpui::TestAppContext) {
+    let long = format!("{}end", "word ".repeat(60));
+    let (view, cx, _dir) = window(cx, &[&long]);
+    cx.simulate_keystrokes("e");
+    next_frames(cx);
+    // Left scrolled partway: the cursor 100 characters back from the end, by the left edge.
+    cx.simulate_keystrokes(&["left"; 100].join(" "));
+    next_frames(cx);
+    cx.simulate_keystrokes("escape");
+    next_frames(cx);
+    // Opened again and drawn once, before the cursor at its end is scrolled to: what a click there hits is what
+    // that frame shows.
+    view.update(cx, |view, cx| {
+        view.board.edit_selected();
+        cx.notify();
+    });
+    let field = cx.debug_bounds("title").expect("the form's title field");
+    cx.simulate_click(gpui::point(field.left() + gpui::px(9.), field.center().y), gpui::Modifiers::none());
+    cx.simulate_keystrokes("x");
+    let at = view.read_with(cx, |view, _| {
+        let crate::state::Mode::Form(form) = &view.board.mode else { panic!("the form stays open") };
+        form.title.text().find('x').expect("typed")
+    });
+    assert_eq!(at, 0, "its start, not the 203rd character it was left scrolled to");
+}
+
+#[gpui::test]
 fn a_field_typed_past_its_edge_a_key_at_a_time_stops_redrawing(cx: &mut gpui::TestAppContext) {
     let (_view, cx, _dir) = window(cx, &[]);
     cx.simulate_keystrokes("n");
