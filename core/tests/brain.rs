@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::api::ApiError;
-use crate::model::{Session, now};
+use crate::model::{Changed, Session, now};
 use tempfile::TempDir;
 
 /// A brain over a fresh folder holding `tasks`; the folder lives as long as the fixture.
@@ -504,4 +504,64 @@ fn the_largest_id_there_is_is_never_followed_by_a_reused_one() {
     let error = f.brain.add(NewEntry { title: "next".into(), ..NewEntry::default() }).unwrap_err().to_string();
     assert!(error.contains("no ids left"), "{error}");
     assert_eq!(f.reloaded().len(), 1, "nothing written over");
+}
+
+/// What `task`'s activity says, without the times.
+fn changes(task: &Task) -> Vec<(Author, Changed)> {
+    task.activity.iter().map(|a| (a.by, a.change.clone())).collect()
+}
+
+/// The words of a list, as `Changed`'s lists keep them.
+fn words(words: &[&str]) -> Vec<String> {
+    words.iter().map(ToString::to_string).collect()
+}
+
+#[test]
+fn edits_are_logged_with_who_made_them() {
+    let mut f = Fixture::with_titles(&["fix login"]);
+    f.brain.author = Author::Agent;
+    f.brain.update(1, "Fix login", vec!["ux".into()]).unwrap();
+    f.brain.update(1, "Fix login", vec!["ux".into()]).unwrap();
+    f.brain.set_description(1, "steps").unwrap();
+    f.brain.set_description(1, "steps").unwrap();
+    f.brain.add_comment(1, "a comment isn't a change to log").unwrap();
+    f.brain.set_status(1, Status::Doing).unwrap();
+    let expected = [
+        (Author::Agent, Changed::Title { from: "fix login".into(), to: "Fix login".into() }),
+        (Author::Agent, Changed::Tags { added: words(&["ux"]), removed: vec![] }),
+        (Author::Agent, Changed::Description),
+    ];
+    assert_eq!(changes(&f.reloaded()[0]), expected, "once each, on disk");
+}
+
+#[test]
+fn relating_two_entries_is_logged_in_both_whichever_keeps_the_link() {
+    let mut f = Fixture::with_titles(&["a", "b", "c"]);
+    f.brain.toggle_link(1, 2).unwrap();
+    let related = |added: &[&str], removed: &[&str]| Changed::Related { added: words(added), removed: words(removed) };
+    let on_disk = f.reloaded();
+    assert_eq!(changes(&on_disk[0]), [(Author::Human, related(&["2"], &[]))]);
+    assert_eq!(changes(&on_disk[1]), [(Author::Human, related(&["1"], &[]))], "the side without the link too");
+    assert_eq!(changes(&on_disk[2]), []);
+
+    f.brain.author = Author::Agent;
+    f.brain.link(3, &[1, 2], &[]).unwrap();
+    f.brain.link(3, &[1], &[]).unwrap();
+    let on_disk = f.reloaded();
+    assert_eq!(changes(&on_disk[2]), [(Author::Agent, related(&["1", "2"], &[]))], "what it wasn't related to, once");
+    assert_eq!(changes(&on_disk[0])[1..], [(Author::Agent, related(&["3"], &[]))]);
+    assert_eq!(changes(&on_disk[1])[1..], [(Author::Agent, related(&["3"], &[]))]);
+
+    f.brain.toggle_link(2, 3).unwrap();
+    let on_disk = f.reloaded();
+    assert_eq!(changes(&on_disk[1])[1..], [], "related and unrelated in the same second by the same author: nothing");
+    assert_eq!(changes(&on_disk[2]), [(Author::Agent, related(&["1"], &[]))]);
+}
+
+#[test]
+fn deleting_an_entry_logs_nothing_in_those_related_to_it() {
+    let mut f = Fixture::with_titles(&["a", "b"]);
+    f.brain.toggle_link(1, 2).unwrap();
+    f.brain.delete(2).unwrap();
+    assert_eq!(f.reloaded()[0].activity.len(), 1, "only the link: its going is the entry's, not a change to this one");
 }

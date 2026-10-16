@@ -1,10 +1,10 @@
 //! Entries as compact text for agents: what `show`, `search` and the write commands print. Short on purpose, since
 //! agents pay for every token they read: dates without seconds or offsets, empty sections left out, sessions as one
-//! total, and only the latest history. The full record stays in the entry's file, whose path `show` gives.
+//! total, and only the latest history. Changes to an entry go among its comments, by time, one line each. The full record stays in the entry's file, whose path `show` gives.
 
 use super::ApiError;
 use crate::brain::Brain;
-use crate::model::{Author, Comment, DecisionState, Task, counted, fmt_age, fmt_dur, now};
+use crate::model::{Author, Comment, DecisionState, Task, ThreadItem, counted, fmt_age, fmt_dur, now};
 use chrono::{DateTime, Local};
 use std::fmt::Write;
 
@@ -112,10 +112,30 @@ impl Brain {
         if !task.description.trim().is_empty() {
             writeln!(out, "\n## Description\n\n{}", task.description.trim())?;
         }
-        if !task.comments.is_empty() {
-            writeln!(out, "\n## Comments")?;
-            for comment in &task.comments {
-                writeln!(out, "\n### {}\n\n{}", comment_heading(comment), comment.body.trim())?;
+        let heading = match (task.comments.is_empty(), task.activity.is_empty()) {
+            (true, true) => None,
+            (false, true) => Some("Comments"),
+            (true, false) => Some("Changes"),
+            (false, false) => Some("Comments and changes"),
+        };
+        if let Some(heading) = heading {
+            writeln!(out, "\n## {heading}")?;
+            let mut listing = false;
+            for item in task.thread() {
+                match item {
+                    ThreadItem::Comment(_, comment) => {
+                        writeln!(out, "\n### {}\n\n{}", comment_heading(comment), comment.body.trim())?;
+                        listing = false;
+                    }
+                    // A run of changes is one list, as History's lines are.
+                    ThreadItem::Change(change) => {
+                        if !std::mem::replace(&mut listing, true) {
+                            writeln!(out)?;
+                        }
+                        let by = if change.by == Author::Agent { " (agent)" } else { "" };
+                        writeln!(out, "- {} {}{by}", when(change.at), change.change.said())?;
+                    }
+                }
             }
         }
         let related = self.related(task.id);

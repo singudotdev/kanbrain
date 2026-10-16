@@ -142,17 +142,45 @@ impl Brain {
         Ok(id)
     }
 
-    /// Saves a new title and tags (a new title also renames the file).
+    /// Saves a new title and tags (a new title also renames the file), logging what changed.
     pub fn update(&mut self, id: u32, title: &str, tags: Vec<String>) -> Result<()> {
-        let title = &one_line(title);
+        let title = one_line(title);
         if title.is_empty() {
             return Err(ApiError::Empty("title").into());
         }
         let index = self.index_of(id)?;
-        title.clone_into(&mut self.tasks[index].title);
-        self.tasks[index].tags = tags;
-        self.store.save(&mut self.tasks[index])?;
+        let (now, task) = (now(), &mut self.tasks[index]);
+        task.set_title(title, now, self.author);
+        task.set_tags(tags, now, self.author);
+        self.store.save(task)?;
         self.sync_tag_colors()
+    }
+
+    /// Renames tag `old` to `new` in every entry that has it, logging it in each; an entry that has both just loses
+    /// `old`. `new` takes `old`'s color unless it has one. Returns the ids of the entries changed, lowest first.
+    pub fn rename_tag(&mut self, old: &str, new: &str) -> Result<Vec<u32>> {
+        let has = |task: &Task| task.tags.iter().any(|t| t == old);
+        if !self.tasks.iter().any(has) {
+            return Err(ApiError::NoTag(old.to_string()).into());
+        }
+        let (now, mut renamed) = (now(), Vec::new());
+        for task in self.tasks.iter_mut().filter(|t| has(t)) {
+            let mut tags: Vec<String> = Vec::with_capacity(task.tags.len());
+            for tag in task.tags.iter().map(|t| if t == old { new } else { t }) {
+                if !tags.iter().any(|t| t == tag) {
+                    tags.push(tag.to_string());
+                }
+            }
+            task.set_tags(tags, now, self.author);
+            self.store.save(task)?;
+            renamed.push(task.id);
+        }
+        if self.tag_colors.rename(old, new) {
+            self.store.save_tag_colors(&self.tag_colors)?;
+        }
+        self.sync_tag_colors()?;
+        renamed.sort_unstable();
+        Ok(renamed)
     }
 
     /// Deletes the entry's file, after removing the links other entries have to it. The links go first:
@@ -224,15 +252,21 @@ impl Brain {
         let index = self.index_of(id)?;
         let other_index = other.find(other_id).ok_or_else(|| ApiError::NotFoundIn(to.clone()))?;
         let related = self.tasks[index].repo_links.contains(&to) || other.tasks[other_index].repo_links.contains(&back);
+        let (now, by) = (now(), self.author);
+        // Each side logs what its own `- links:` line gained or lost: like the link, a log of it in the other
+        // repository's files would be one more file of another repository written.
         if !related {
-            self.tasks[index].repo_links.push(to);
-            self.store.save(&mut self.tasks[index])?;
+            let task = &mut self.tasks[index];
+            task.relate(now, by, &[to.to_string()], &[]);
+            task.repo_links.push(to);
+            self.store.save(task)?;
             return Ok(true);
         }
         for (brain, index, link) in [(&mut *self, index, &to), (&mut *other, other_index, &back)] {
             let task = &mut brain.tasks[index];
             if task.repo_links.contains(link) {
                 task.repo_links.retain(|l| l != link);
+                task.relate(now, by, &[], &[link.to_string()]);
                 brain.store.save(task)?;
             }
         }
@@ -240,36 +274,36 @@ impl Brain {
     }
 
     /// Relates two entries, or unrelates them if they already are: the link is added to `id`, and
-    /// removed from whichever side stores it. Returns whether they are related now.
+    /// removed from whichever side stores it. Both log it. Returns whether they are related now.
     pub fn toggle_link(&mut self, id: u32, other: u32) -> Result<bool> {
         if id == other {
             return Err(ApiError::SelfLink(id).into());
         }
-        for side in [id, other] {
-            self.find(side).ok_or(ApiError::NotFound(side))?;
-        }
+        let sides = [(self.index_of(id)?, other), (self.index_of(other)?, id)];
         let related = self.are_related(id, other);
-        for (from, to) in [(id, other), (other, id)] {
-            let Some(index) = self.find(from) else { continue };
+        let now = now();
+        for (index, to) in sides {
             let task = &mut self.tasks[index];
-            let before = task.links.len();
+            let word = [to.to_string()];
             if related {
                 task.links.retain(|&l| l != to);
-            } else if from == id {
-                task.links.push(to);
+                task.relate(now, self.author, &[], &word);
+            } else {
+                if task.id == id {
+                    task.links.push(to);
+                }
+                task.relate(now, self.author, &word, &[]);
             }
-            if task.links.len() != before {
-                self.store.save(task)?;
-            }
+            self.store.save(task)?;
         }
         Ok(!related)
     }
 
-    /// Replaces the description. Returns whether `##` headings had to become `###`.
+    /// Replaces the description, logging that it changed. Returns whether `##` headings had to become `###`.
     pub fn set_description(&mut self, id: u32, text: &str) -> Result<bool> {
         let index = self.index_of(id)?;
         let (text, demoted) = sanitize_description(text);
-        self.tasks[index].description = text;
+        self.tasks[index].set_description(text, now(), self.author);
         self.store.save(&mut self.tasks[index])?;
         Ok(demoted)
     }

@@ -1,4 +1,4 @@
-//! Entries (tasks, notes and decisions), their links, status history, time-tracking sessions and comments.
+//! Entries (tasks, notes and decisions), their links, status history, time-tracking sessions, comments and activity.
 //!
 //! - [`markdown`]: reading and writing the task file format.
 //! - [`text`]: tags, file-name slugs and heading rules for user text.
@@ -80,6 +80,7 @@ named_enum! {
 
 /// One status change, as kept in the task's history.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct StatusChange {
     /// When the status changed.
     pub at: DateTime<Local>,
@@ -93,6 +94,7 @@ pub struct StatusChange {
 
 /// One continuous stretch of tracked work on a task.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Session {
     /// When the session started.
     pub start: DateTime<Local>,
@@ -126,6 +128,7 @@ impl Session {
 
 /// A timestamped comment on a task, like on a GitHub/GitLab issue.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Comment {
     /// When the comment was written.
     pub created: DateTime<Local>,
@@ -189,6 +192,7 @@ impl std::fmt::Display for RepoLink {
 /// An entry: a task, note or decision. What it is, how it's tagged and linked, and for tasks,
 /// where it stands and how it got there.
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct Task {
     /// Unique number across all kinds, also the start of the file name.
     pub id: u32,
@@ -215,6 +219,8 @@ pub struct Task {
     pub comments: Vec<Comment>,
     /// Every status change, oldest first.
     pub history: Vec<StatusChange>,
+    /// Every change to the title, tags, related entries or description, oldest first.
+    pub activity: Vec<Activity>,
     /// Tracked work, oldest first; only the last one can be open, and only while the task is `doing`.
     pub sessions: Vec<Session>,
     /// File this task was loaded from / saved to.
@@ -226,6 +232,7 @@ pub struct Task {
 /// Fields, link forms and sections a newer version wrote, kept as written: otherwise an older `kb` or app
 /// saving the entry, for a comment or a status change, would drop them from the file.
 #[derive(Clone, Debug, Default)]
+#[non_exhaustive]
 pub struct Unknown {
     /// `- key: value` lines before the first section, in file order.
     pub meta: Vec<String>,
@@ -233,6 +240,144 @@ pub struct Unknown {
     pub links: Vec<String>,
     /// Other `##` sections, each from its heading line, in file order.
     pub sections: Vec<String>,
+    /// `## Activity` items this version can't read (a newer version's kind of change), each with its lines.
+    pub activity: Vec<String>,
+}
+
+/// One change to an entry's title, tags, related entries or description, as kept in its activity: the thread shows
+/// them among the comments, like an issue's on GitHub or GitLab.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Activity {
+    /// When it was made.
+    pub at: DateTime<Local>,
+    /// Who made it.
+    pub by: Author,
+    /// What it changed.
+    pub change: Changed,
+}
+
+impl Activity {
+    /// A change `by` someone `at` a time.
+    pub fn new(at: DateTime<Local>, by: Author, change: Changed) -> Self {
+        Self { at, by, change }
+    }
+}
+
+/// What a change to an entry changed. Lists say what was added and removed rather than what was there before and
+/// after, so a change reads the same on each side of a relation, and a tag renamed in every entry says so in each.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Changed {
+    /// The title.
+    #[non_exhaustive]
+    Title {
+        /// What it was.
+        from: String,
+        /// What it became.
+        to: String,
+    },
+    /// The tags.
+    #[non_exhaustive]
+    Tags {
+        /// Tags it got.
+        added: Vec<String>,
+        /// Tags it lost.
+        removed: Vec<String>,
+    },
+    /// The related entries, whichever side keeps the link: `5` names an entry of the same brain, `shop-api#3` one of
+    /// the project's other repositories, as `- links:` writes them.
+    #[non_exhaustive]
+    Related {
+        /// Entries it was related to.
+        added: Vec<String>,
+        /// Entries it was unrelated from.
+        removed: Vec<String>,
+    },
+    /// The description: only that it changed, since one can be long.
+    Description,
+}
+
+impl Changed {
+    /// What it did, said after who did it: `changed the title from "A" to "B"`, `added the tag #ux and removed the
+    /// tag #bug`, `related it to #5 and unrelated it from shop-api#3`, `changed the description`.
+    pub fn said(&self) -> String {
+        type Name = fn(&String) -> String;
+        let (added, removed, verbs, name): (&[String], &[String], _, Name) = match self {
+            Self::Title { from, to } => return format!("changed the title from \"{from}\" to \"{to}\""),
+            Self::Description => return "changed the description".to_string(),
+            Self::Tags { added, removed } => (added, removed, ["added", "removed"], |tag| format!("#{tag}")),
+            // An entry of this brain is `#5`, one of another repository `shop-api#3`, as links are typed.
+            Self::Related { added, removed } => (added, removed, ["related it to", "unrelated it from"], |word| {
+                if word.contains('#') { word.clone() } else { format!("#{word}") }
+            }),
+        };
+        let noun = |words: &[String]| match self {
+            Self::Tags { .. } if words.len() == 1 => " the tag",
+            Self::Tags { .. } => " the tags",
+            _ => "",
+        };
+        [(verbs[0], added), (verbs[1], removed)]
+            .into_iter()
+            .filter(|(_, words)| !words.is_empty())
+            .map(|(verb, words)| {
+                format!("{verb}{} {}", noun(words), words.iter().map(name).collect::<Vec<_>>().join(", "))
+            })
+            .collect::<Vec<_>>()
+            .join(" and ")
+    }
+
+    /// Whether it changes nothing: a list with nothing added or removed, or a title back to what it was.
+    fn is_empty(&self) -> bool {
+        match self {
+            Self::Title { from, to } => from == to,
+            Self::Tags { added, removed } | Self::Related { added, removed } => added.is_empty() && removed.is_empty(),
+            Self::Description => false,
+        }
+    }
+
+    /// Takes in `next`, a later change of the same kind, as one change; `next` back when it's another kind.
+    fn absorb(&mut self, next: Changed) -> Result<(), Changed> {
+        match (self, next) {
+            (Self::Title { to, .. }, Self::Title { to: next, .. }) => *to = next,
+            (Self::Tags { added, removed }, Self::Tags { added: more, removed: fewer })
+            | (Self::Related { added, removed }, Self::Related { added: more, removed: fewer }) => {
+                combine(added, removed, more, fewer);
+            }
+            (Self::Description, Self::Description) => {}
+            (_, next) => return Err(next),
+        }
+        Ok(())
+    }
+}
+
+/// One item of an entry's thread, as the app and `kb show` list it: a comment, with its index among the comments, or a
+/// change.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ThreadItem<'a> {
+    /// A comment, and where it is in [`Task::comments`].
+    Comment(usize, &'a Comment),
+    /// A change to the title, tags, related entries or description.
+    Change(&'a Activity),
+}
+
+/// Adds `more` and `fewer` to what was `added` and `removed`: a word added and then removed, or the other way round,
+/// is neither.
+fn combine(added: &mut Vec<String>, removed: &mut Vec<String>, more: Vec<String>, fewer: Vec<String>) {
+    for word in more {
+        match removed.iter().position(|w| *w == word) {
+            Some(at) => drop(removed.remove(at)),
+            None if !added.contains(&word) => added.push(word),
+            None => {}
+        }
+    }
+    for word in fewer {
+        match added.iter().position(|w| *w == word) {
+            Some(at) => drop(added.remove(at)),
+            None if !removed.contains(&word) => removed.push(word),
+            None => {}
+        }
+    }
 }
 
 impl Task {
@@ -252,9 +397,74 @@ impl Task {
             description: String::new(),
             comments: Vec::new(),
             history: Vec::new(),
+            activity: Vec::new(),
             sessions: Vec::new(),
             path: None,
         }
+    }
+
+    /// Records `change`, made `by` someone `at` a time, in the activity. A change the same author made in the same
+    /// second to the same thing is part of it (the app saves a form's related entries one at a time), and one that
+    /// changes nothing, or undoes it, leaves nothing.
+    pub fn log(&mut self, at: DateTime<Local>, by: Author, change: Changed) {
+        let mut change = change;
+        let same_second = self.activity.iter().rposition(|a| a.at != at).map_or(0, |last| last + 1);
+        for index in (same_second..self.activity.len()).rev() {
+            if self.activity[index].by != by {
+                continue;
+            }
+            match self.activity[index].change.absorb(change) {
+                Ok(()) => {
+                    if self.activity[index].change.is_empty() {
+                        self.activity.remove(index);
+                    }
+                    return;
+                }
+                Err(other) => change = other,
+            }
+        }
+        if !change.is_empty() {
+            self.activity.push(Activity::new(at, by, change));
+        }
+    }
+
+    /// Gives the entry `title`, made `by` someone `at` a time, and logs it; returns whether it changed.
+    pub fn set_title(&mut self, title: String, at: DateTime<Local>, by: Author) -> bool {
+        if title == self.title {
+            return false;
+        }
+        let from = std::mem::replace(&mut self.title, title);
+        self.log(at, by, Changed::Title { from, to: self.title.clone() });
+        true
+    }
+
+    /// Gives the entry `tags`, made `by` someone `at` a time, and logs which it got and lost; returns whether they
+    /// changed, the order included.
+    pub fn set_tags(&mut self, tags: Vec<String>, at: DateTime<Local>, by: Author) -> bool {
+        if tags == self.tags {
+            return false;
+        }
+        let added = tags.iter().filter(|t| !self.tags.contains(t)).cloned().collect();
+        let removed = self.tags.iter().filter(|t| !tags.contains(t)).cloned().collect();
+        self.tags = tags;
+        self.log(at, by, Changed::Tags { added, removed });
+        true
+    }
+
+    /// Gives the entry `description`, made `by` someone `at` a time, and logs that it changed; returns whether it did.
+    pub fn set_description(&mut self, description: String, at: DateTime<Local>, by: Author) -> bool {
+        if description == self.description {
+            return false;
+        }
+        self.description = description;
+        self.log(at, by, Changed::Description);
+        true
+    }
+
+    /// Logs that the entry was related to the entries `added` names and unrelated from those `removed` names (see
+    /// [`Changed::Related`]), by someone `at` a time. Whichever side keeps the link, both entries log it.
+    pub fn relate(&mut self, at: DateTime<Local>, by: Author, added: &[String], removed: &[String]) {
+        self.log(at, by, Changed::Related { added: added.to_vec(), removed: removed.to_vec() });
     }
 
     /// Moves the task to `status` and records the change, made `by` someone. Returns false if it already
@@ -335,6 +545,21 @@ impl Task {
             Some(answer) => Some(Asked::Answered(answer)),
             None => Some(Asked::Waiting(question)),
         }
+    }
+
+    /// The comments and the activity together, oldest first, each in its own order. A change and a comment in the
+    /// same second go change first: the app's **Save and tell** writes the comment that tells of a change after it.
+    pub fn thread(&self) -> Vec<ThreadItem<'_>> {
+        let mut thread = Vec::with_capacity(self.comments.len() + self.activity.len());
+        let mut changes = self.activity.iter().peekable();
+        for (index, comment) in self.comments.iter().enumerate() {
+            while let Some(change) = changes.next_if(|change| change.at <= comment.created) {
+                thread.push(ThreadItem::Change(change));
+            }
+            thread.push(ThreadItem::Comment(index, comment));
+        }
+        thread.extend(changes.map(ThreadItem::Change));
+        thread
     }
 
     /// Whether this entry has a status, history and sessions (only tasks do).

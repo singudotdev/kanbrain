@@ -2,11 +2,12 @@
 //! format and the JSON can evolve independently, and timestamps read the same as in the files.
 
 use crate::brain::Brain;
-use crate::model::{Asked, Author, Comment, Kind, Task, fmt_ts, now};
+use crate::model::{Activity, Asked, Author, Changed, Comment, Kind, Task, fmt_ts, now};
 use serde::Serialize;
 
 /// An entry with everything an agent needs to act on it.
 #[derive(Debug, Serialize)]
+#[non_exhaustive]
 pub struct Entry<'a> {
     /// The id to pass to other commands.
     pub id: u32,
@@ -42,6 +43,9 @@ pub struct Entry<'a> {
     /// Oldest first.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub comments: Vec<EntryComment<'a>>,
+    /// Changes to the title, tags, related entries and description, oldest first.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub activity: Vec<EntryChange<'a>>,
     /// Tracked time in minutes, if the task was ever tracked.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tracked_minutes: Option<i64>,
@@ -55,6 +59,7 @@ pub struct Entry<'a> {
 
 /// A comment on an entry.
 #[derive(Debug, Serialize)]
+#[non_exhaustive]
 pub struct EntryComment<'a> {
     /// RFC 3339.
     pub created: String,
@@ -71,8 +76,34 @@ pub struct EntryComment<'a> {
     pub question: bool,
 }
 
+/// A change to an entry, as its `## Activity` keeps it.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct EntryChange<'a> {
+    /// RFC 3339.
+    pub at: String,
+    /// `agent` for an agent's; left out for a person's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author: Option<&'static str>,
+    /// `title`, `tags`, `related` or `description`.
+    pub changed: &'static str,
+    /// The title before; title changes only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from: Option<&'a str>,
+    /// The title after; title changes only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to: Option<&'a str>,
+    /// Tags, or related entries (`5`, `shop-api#3`), it got.
+    #[serde(skip_serializing_if = "<[String]>::is_empty")]
+    pub added: &'a [String],
+    /// Tags, or related entries, it lost.
+    #[serde(skip_serializing_if = "<[String]>::is_empty")]
+    pub removed: &'a [String],
+}
+
 /// A short form for lists and search results: no description or comments.
 #[derive(Debug, Serialize)]
+#[non_exhaustive]
 pub struct Summary<'a> {
     /// The id to pass to other commands.
     pub id: u32,
@@ -111,6 +142,7 @@ impl<'a> Entry<'a> {
             created: fmt_ts(task.created),
             description: &task.description,
             comments: task.comments.iter().map(EntryComment::new).collect(),
+            activity: task.activity.iter().map(EntryChange::new).collect(),
             tracked_minutes: (!task.sessions.is_empty()).then(|| task.total(now).num_minutes()),
             running: task.is_running(),
             path: task.path.as_ref().map(|p| p.display().to_string()),
@@ -127,6 +159,28 @@ impl<'a> EntryComment<'a> {
             body: &comment.body,
             author: (comment.author != Author::Human).then(|| comment.author.as_str()),
             question: comment.question,
+        }
+    }
+}
+
+impl<'a> EntryChange<'a> {
+    /// The JSON shape of `activity`.
+    fn new(activity: &'a Activity) -> Self {
+        let none: &[String] = &[];
+        let (changed, from, to, added, removed) = match &activity.change {
+            Changed::Title { from, to } => ("title", Some(from.as_str()), Some(to.as_str()), none, none),
+            Changed::Tags { added, removed } => ("tags", None, None, added.as_slice(), removed.as_slice()),
+            Changed::Related { added, removed } => ("related", None, None, added.as_slice(), removed.as_slice()),
+            Changed::Description => ("description", None, None, none, none),
+        };
+        Self {
+            at: fmt_ts(activity.at),
+            author: (activity.by != Author::Human).then(|| activity.by.as_str()),
+            changed,
+            from,
+            to,
+            added,
+            removed,
         }
     }
 }
