@@ -393,7 +393,7 @@ fn a_save_that_stops_over_what_kb_wrote_says_it_once() {
     assert_eq!(f.board.message(), Some(stop));
     f.board.discard_edit();
 
-    // What else the read saw is still said.
+    // What else the read saw is still said, and only that.
     f.press(KeyCode::Char('m'));
     f.type_text("mine");
     let mut brain = kb(&f);
@@ -401,7 +401,7 @@ fn a_save_that_stops_over_what_kb_wrote_says_it_once() {
     brain.set_status(1, Status::Parked).unwrap();
     f.board.reload().unwrap();
     f.press(KeyCode::Esc);
-    assert_eq!(f.board.message(), Some(format!("{stop} · #1's description and status changed on disk").as_str()));
+    assert_eq!(f.board.message(), Some(format!("{stop} · #1's status changed on disk").as_str()));
     f.board.discard_edit();
 
     // The form's title, the same.
@@ -411,7 +411,20 @@ fn a_save_that_stops_over_what_kb_wrote_says_it_once() {
     f.board.reload().unwrap();
     assert_eq!(f.board.message(), Some("#1's title changed on disk"));
     f.press(KeyCode::Enter);
-    assert_eq!(f.board.message(), Some("#1's title changed meanwhile, to “Fix SSO”: save again to replace it"));
+    let renamed = "#1's title changed meanwhile, to “Fix SSO”: save again to replace it";
+    assert_eq!(f.board.message(), Some(renamed));
+    f.press(KeyCode::Esc);
+    f.press(KeyCode::Char('e'));
+    f.type_text(" again");
+    kb(&f).update(1, "Fix SSO", vec!["auth".into()]).unwrap();
+    kb(&f).update(1, "Fix SSO 500", vec!["auth".into()]).unwrap();
+    f.board.reload().unwrap();
+    assert_eq!(f.board.message(), Some("#1's title and tags changed on disk"));
+    f.press(KeyCode::Enter);
+    assert_eq!(
+        f.board.message(),
+        Some("#1's title changed meanwhile, to “Fix SSO 500”: save again to replace it · #1's tags changed on disk")
+    );
     f.press(KeyCode::Esc);
 
     // Another comment put at the one being edited's place.

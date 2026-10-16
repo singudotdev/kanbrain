@@ -261,15 +261,18 @@ impl Board {
         self.message = Some((msg, Instant::now(), found));
     }
 
-    /// Takes `found`, what a read just said, out of the status bar: a save that stops over it is about to say it, with
-    /// what to do. What else that read found stays.
-    fn unsay_found(&mut self, found: Option<String>) {
+    /// Puts `rest` in the status bar in place of `found`, what a read just said there: a save that stops over part
+    /// of it is about to say that part, with what to do. The rest of what the read found stays.
+    fn unsay_found(&mut self, found: Option<String>, rest: Option<String>) {
         let (Some(found), Some((said, _, true))) = (found, &mut self.message) else { return };
-        let rest: Vec<&str> = said.split(" · ").filter(|part| *part != found).collect();
-        if rest.is_empty() {
+        // As `say` keeps it.
+        let (found, rest) = (found.replace('`', ""), rest.map(|rest| rest.replace('`', "")));
+        let parts: Vec<&str> =
+            said.split(" · ").filter_map(|part| if part == found { rest.as_deref() } else { Some(part) }).collect();
+        if parts.is_empty() {
             self.message = None;
         } else {
-            *said = rest.join(" · ");
+            *said = parts.join(" · ");
         }
     }
 

@@ -250,6 +250,12 @@ impl Board {
     /// What `kb` changed, since the editor opened, of what it edits: its text (or which comment is at its index), the
     /// entry's status and a decision's verdict being given, said for the status bar; `None` if nothing.
     pub(super) fn edit_changed_on_disk(&self, edit: &Edit) -> Option<String> {
+        self.edit_changed_but(edit, "")
+    }
+
+    /// What [`edit_changed_on_disk`](Self::edit_changed_on_disk) says but for `field`, which a save that stops over
+    /// it is about to say.
+    fn edit_changed_but(&self, edit: &Edit, field: &str) -> Option<String> {
         // Another comment edited isn't what it edits, unlike for a save (`same_comment`): one put at its index is.
         let moved = match edit.target {
             Target::Comment(key, index) => {
@@ -258,23 +264,16 @@ impl Board {
             }
             _ => false,
         };
-        let text = moved || self.text_of(edit.target) != Some(edit.base.as_str());
-        let Some(key) = edit.target.key() else { return text.then(|| self.text_changed_on_disk(edit.target)) };
-        let status = self.task(key).map(|t| t.status) != edit.status;
+        let word = text_word(edit.target);
+        let text = word != field && (moved || self.text_of(edit.target) != Some(edit.base.as_str()));
+        let Some(key) = edit.target.key() else {
+            return text.then(|| format!("{} changed on disk", self.text_name(edit.target)));
+        };
+        let status = field != "status" && self.task(key).map(|t| t.status) != edit.status;
         // Only a verdict's editor has one, which its save gives.
-        let verdict = edit.decision.is_some() && self.task(key).map(|t| t.decision) != edit.decision;
-        changed_on_disk(
-            &self.entry_name(key),
-            &[(text, text_word(edit.target)), (status, "status"), (verdict, "verdict")],
-        )
-    }
-
-    /// What a read says when `kb` changed only the text `target` edits.
-    fn text_changed_on_disk(&self, target: Target) -> String {
-        match target.key() {
-            Some(key) => format!("{}'s {} changed on disk", self.entry_name(key), text_word(target)),
-            None => format!("{} changed on disk", self.text_name(target)),
-        }
+        let verdict =
+            field != "verdict" && edit.decision.is_some() && self.task(key).map(|t| t.decision) != edit.decision;
+        changed_on_disk(&self.entry_name(key), &[(text, word), (status, "status"), (verdict, "verdict")])
     }
 
     /// What the editor's text is, to say what changed meanwhile.
@@ -340,7 +339,7 @@ impl Board {
             && !self.same_comment(&edit)
         {
             let name = self.entry_name(key);
-            self.unsay_found(changed_on_disk(&name, &[(true, "comment")]));
+            self.unsay_found(self.edit_changed_on_disk(&edit), self.edit_changed_but(&edit, text_word(edit.target)));
             self.notify(format!("{name}'s comments changed around this one meanwhile: copy your text, then ctrl+d"));
             self.mode = Mode::Edit(edit);
             return;
@@ -348,8 +347,9 @@ impl Board {
         if let Some(now) = self.text_of(edit.target)
             && now != edit.base
         {
-            edit.base = now.to_string();
-            self.unsay_found(Some(self.text_changed_on_disk(edit.target)));
+            let now = now.to_string();
+            self.unsay_found(self.edit_changed_on_disk(&edit), self.edit_changed_but(&edit, text_word(edit.target)));
+            edit.base = now;
             self.notify(format!(
                 "{} changed meanwhile: save again to replace it with yours, ctrl+d to keep it",
                 self.text_name(edit.target)
@@ -357,9 +357,10 @@ impl Board {
             self.mode = Mode::Edit(edit);
             return;
         }
+        // Said before the verdict it stops over is taken in.
+        let found = (self.edit_changed_on_disk(&edit), self.edit_changed_but(&edit, "verdict"));
         if let Some(stop) = self.verdict_meanwhile(&mut edit) {
-            let found = edit.target.key().and_then(|key| changed_on_disk(&self.entry_name(key), &[(true, "verdict")]));
-            self.unsay_found(found);
+            self.unsay_found(found.0, found.1);
             self.notify(stop);
             self.mode = Mode::Edit(edit);
             return;
