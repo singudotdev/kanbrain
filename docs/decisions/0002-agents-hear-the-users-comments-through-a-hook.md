@@ -39,7 +39,8 @@ for a distinction nothing needed.
 ## Consequences
 
 - The agent hears the user with its next step (the context comes next to the tool's result), in whichever session
-  works on the task. Another session's agent is told too; the wording ("if it's yours") leaves the task to the one that started it, as `stop`'s reminder does.
+  works on the task. Another session's agent is told too; the wording ("if it's yours") leaves the task to the one
+  that started it, as `stop`'s reminder does.
 - A comment the user meant only as a note to self on an agent's task reaches the agent all the same. On a task the
   agent is working on, that's taken as wanted.
 - It costs a process per tool call: about a millisecond on this repository's brain, 6 ms (median) with 500 entries.
