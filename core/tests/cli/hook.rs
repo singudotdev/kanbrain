@@ -244,6 +244,8 @@ fn the_central_brain_kept_in_a_notes_vault_leaves_the_vaults_own_files_to_the_ag
     assert!(edit(&root, &vault.join("hand.md"), vault).is_some(), "as `Store::load` reads one, spaced as it may be");
     std::fs::write(vault.join("users.md"), "# Users\n\n## Notes\n- id: user-123 migrated\n").unwrap();
     assert_eq!(edit(&root, &vault.join("users.md"), vault), None, "an `- id:` that isn't an entry's");
+    std::fs::write(vault.join("latin1.md"), b"# Caf\xe9\n").unwrap();
+    assert!(edit(&root, &vault.join("latin1.md"), vault).is_some(), "one it can't read, which `kb` says is broken");
     let code = vault.join("code/app");
     std::fs::create_dir_all(code.join(".brain")).unwrap();
     assert_eq!(edit(&code, &code.join("src/main.rs"), vault), None, "a repository kept in it");
