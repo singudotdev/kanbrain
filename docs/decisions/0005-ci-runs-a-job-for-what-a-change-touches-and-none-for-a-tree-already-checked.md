@@ -25,7 +25,8 @@ A job skipped by its `if:` reports success.
   measured from the last commit on the branch, or on a pull request's base, whose push run passed, so what a failing
   push brought is still checked by the next; a rename counts by both its paths.
 - A `release/*` branch, a change to the workflows, the plan, the toolchain, the tools' configuration or the
-  dependencies, and a change with nothing to compare against run everything.
+  dependencies, and a change with nothing to compare against run every job of `ci.yml`. Mutation testing runs
+  whenever Rust lines changed, and tests only those: with none, there's nothing for it to mutate.
 - `release.yml` refuses a tag whose commit has no passing `ci.yml` and `mutants.yml` run; a run that found its tree
   checked counts.
 
@@ -35,4 +36,5 @@ A job skipped by its `if:` reports success.
 - A job's table entry has to name every file it reads: a file built into a crate or read by its tests
   (`tag-changelog/`, `docs/agents.md`, `docs/cli.md`, the README) is listed with that crate, or a change to it would
   skip the job that checks it.
-- A tree's artifact outlives its run by 90 days; a tree checked longer ago runs again.
+- A tree's artifact outlives its run by 90 days; a tree checked longer ago runs again (the plan skips an expired
+  artifact, which GitHub still lists).
