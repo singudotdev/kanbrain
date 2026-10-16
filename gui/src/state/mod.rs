@@ -261,6 +261,18 @@ impl Board {
         self.message = Some((msg, Instant::now(), found));
     }
 
+    /// Takes `found`, what a read just said, out of the status bar: a save that stops over it is about to say it, with
+    /// what to do. What else that read found stays.
+    fn unsay_found(&mut self, found: Option<String>) {
+        let (Some(found), Some((said, _, true))) = (found, &mut self.message) else { return };
+        let rest: Vec<&str> = said.split(" · ").filter(|part| *part != found).collect();
+        if rest.is_empty() {
+            self.message = None;
+        } else {
+            *said = rest.join(" · ");
+        }
+    }
+
     /// Shows what went wrong in the status bar, with its causes.
     pub fn notify_error(&mut self, e: &anyhow::Error) {
         self.notify(format!("{e:#}"));

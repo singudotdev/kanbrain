@@ -378,6 +378,74 @@ fn comments_and_descriptions_are_written_from_the_editor() {
 }
 
 #[test]
+fn a_save_that_stops_over_what_kb_wrote_says_it_once() {
+    use kanbrain_core::brain::{Brain, NewEntry};
+    let mut f = Fixture::new(&["feature"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    // Saved within a second of the read that saw it: the stop says what that read said, and more.
+    f.press(KeyCode::Char('m'));
+    f.type_text("mine");
+    kb(&f).set_description(1, "the agent's plan").unwrap();
+    f.board.reload().unwrap();
+    assert_eq!(f.board.message(), Some("#1's description changed on disk"));
+    f.press(KeyCode::Esc);
+    let stop = "#1's description changed meanwhile: save again to replace it with yours, ctrl+d to keep it";
+    assert_eq!(f.board.message(), Some(stop));
+    f.board.discard_edit();
+
+    // What else the read saw is still said.
+    f.press(KeyCode::Char('m'));
+    f.type_text("mine");
+    let mut brain = kb(&f);
+    brain.set_description(1, "the agent's next plan").unwrap();
+    brain.set_status(1, Status::Parked).unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Esc);
+    assert_eq!(f.board.message(), Some(format!("{stop} · #1's description and status changed on disk").as_str()));
+    f.board.discard_edit();
+
+    // The form's title, the same.
+    f.press(KeyCode::Char('e'));
+    f.type_text(" now");
+    kb(&f).update(1, "Fix SSO", vec![]).unwrap();
+    f.board.reload().unwrap();
+    assert_eq!(f.board.message(), Some("#1's title changed on disk"));
+    f.press(KeyCode::Enter);
+    assert_eq!(f.board.message(), Some("#1's title changed meanwhile, to “Fix SSO”: save again to replace it"));
+    f.press(KeyCode::Esc);
+
+    // Another comment put at the one being edited's place.
+    kb(&f).add_comment(1, "first").unwrap();
+    kb(&f).add_comment(1, "second").unwrap();
+    f.board.reload().unwrap();
+    f.board.open_editor(Target::Comment(k(1), 1));
+    f.type_text(", edited");
+    kb(&f).delete_comment(1, 0).unwrap();
+    f.board.reload().unwrap();
+    assert_eq!(f.board.message(), Some("#1's comment changed on disk"));
+    f.press(KeyCode::Esc);
+    assert_eq!(f.board.message(), Some("#1's comments changed around this one meanwhile: copy your text, then ctrl+d"));
+    f.board.discard_edit();
+
+    // A verdict given meanwhile.
+    let decision = kb(&f).propose(1, NewEntry { title: "Use Redis".into(), ..Default::default() }).unwrap();
+    f.board.reload().unwrap();
+    f.board.select(k(decision));
+    f.press(KeyCode::Char('j'));
+    f.type_text("too costly");
+    kb(&f).resolve(decision, DecisionState::Accepted, "").unwrap();
+    f.board.reload().unwrap();
+    assert_eq!(f.board.message(), Some(format!("#{decision}'s verdict changed on disk").as_str()));
+    f.press(KeyCode::Esc);
+    assert_eq!(
+        f.board.message(),
+        Some(
+            format!("#{decision} was accepted meanwhile: save again to reject it anyway, ctrl+d to leave it").as_str()
+        )
+    );
+}
+
+#[test]
 fn the_editor_doesnt_replace_unseen_what_kb_wrote_while_it_was_open() {
     use kanbrain_core::brain::Brain;
     let mut f = Fixture::new(&["feature"]);

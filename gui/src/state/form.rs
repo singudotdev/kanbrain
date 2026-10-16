@@ -98,6 +98,7 @@ impl Board {
                 };
                 if let Some(now) = renamed {
                     let name = self.entry_name(key);
+                    self.unsay_found(changed_on_disk(&name, &[(true, "title")]));
                     self.notify(format!("{name}'s title changed meanwhile, to “{now}”: save again to replace it"));
                     if let Some(opened) = &mut form.opened {
                         opened.title = now;

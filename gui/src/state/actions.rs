@@ -259,14 +259,22 @@ impl Board {
             _ => false,
         };
         let text = moved || self.text_of(edit.target) != Some(edit.base.as_str());
-        let Some(key) = edit.target.key() else {
-            return text.then(|| format!("{} changed on disk", self.text_name(edit.target)));
-        };
-        let what = if matches!(edit.target, Target::Description(_)) { "description" } else { "comment" };
+        let Some(key) = edit.target.key() else { return text.then(|| self.text_changed_on_disk(edit.target)) };
         let status = self.task(key).map(|t| t.status) != edit.status;
         // Only a verdict's editor has one, which its save gives.
         let verdict = edit.decision.is_some() && self.task(key).map(|t| t.decision) != edit.decision;
-        changed_on_disk(&self.entry_name(key), &[(text, what), (status, "status"), (verdict, "verdict")])
+        changed_on_disk(
+            &self.entry_name(key),
+            &[(text, text_word(edit.target)), (status, "status"), (verdict, "verdict")],
+        )
+    }
+
+    /// What a read says when `kb` changed only the text `target` edits.
+    fn text_changed_on_disk(&self, target: Target) -> String {
+        match target.key() {
+            Some(key) => format!("{}'s {} changed on disk", self.entry_name(key), text_word(target)),
+            None => format!("{} changed on disk", self.text_name(target)),
+        }
     }
 
     /// What the editor's text is, to say what changed meanwhile.
@@ -332,6 +340,7 @@ impl Board {
             && !self.same_comment(&edit)
         {
             let name = self.entry_name(key);
+            self.unsay_found(changed_on_disk(&name, &[(true, "comment")]));
             self.notify(format!("{name}'s comments changed around this one meanwhile: copy your text, then ctrl+d"));
             self.mode = Mode::Edit(edit);
             return;
@@ -340,6 +349,7 @@ impl Board {
             && now != edit.base
         {
             edit.base = now.to_string();
+            self.unsay_found(Some(self.text_changed_on_disk(edit.target)));
             self.notify(format!(
                 "{} changed meanwhile: save again to replace it with yours, ctrl+d to keep it",
                 self.text_name(edit.target)
@@ -348,6 +358,8 @@ impl Board {
             return;
         }
         if let Some(stop) = self.verdict_meanwhile(&mut edit) {
+            let found = edit.target.key().and_then(|key| changed_on_disk(&self.entry_name(key), &[(true, "verdict")]));
+            self.unsay_found(found);
             self.notify(stop);
             self.mode = Mode::Edit(edit);
             return;
@@ -639,4 +651,9 @@ impl Board {
             Err(e) => self.notify_error(&e),
         }
     }
+}
+
+/// The text `target` edits, as what changed on disk names it.
+fn text_word(target: Target) -> &'static str {
+    if matches!(target, Target::Description(_)) { "description" } else { "comment" }
 }
