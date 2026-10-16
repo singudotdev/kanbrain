@@ -9,7 +9,7 @@ use super::{
 };
 use crate::text::editor::{LineInput, Outcome, Pointer, TextEditor};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
-use crate::text::merge::Pick;
+use crate::text::merge::{Merge, Pick};
 use kanbrain_core::model::{Kind, counted};
 
 /// Where typed text goes: a one-line field or the text editor.
@@ -159,7 +159,7 @@ impl Board {
 
     /// The conflicts a save stopped over, in place of the editor's text: `tab` and the arrows move between them, `m`,
     /// `t` and `b` pick yours, theirs or both, `enter` puts the merged text in the editor once each has a pick, and
-    /// `esc` goes back to the text as typed.
+    /// `esc` takes yours where nothing's picked and puts that in the editor.
     fn key_merge(&mut self, edit: Edit, key: KeyEvent) {
         self.mode = Mode::Edit(edit);
         // As the buttons name them, in either case (shift, caps lock); a ctrl+letter is the window's or nothing.
@@ -177,27 +177,29 @@ impl Board {
             KeyCode::Esc => return self.keep_mine(),
             _ => return,
         };
-        if let Mode::Edit(edit) = &mut self.mode
-            && let Some(merge) = &mut edit.merge
-        {
+        if let Some(merge) = self.merge_mut() {
             merge.pick(pick);
+        }
+    }
+
+    /// The conflicts shown in the editor's place, if any.
+    fn merge_mut(&mut self) -> Option<&mut Merge> {
+        match &mut self.mode {
+            Mode::Edit(edit) => edit.merge.as_mut(),
+            _ => None,
         }
     }
 
     /// Moves to the next conflict (`step` 1) or the one before (`-1`).
     fn go_to_conflict(&mut self, step: isize) {
-        if let Mode::Edit(edit) = &mut self.mode
-            && let Some(merge) = &mut edit.merge
-        {
+        if let Some(merge) = self.merge_mut() {
             merge.go(step);
         }
     }
 
     /// Picks `pick` for conflict `index`, from a click on one of its sides.
     pub fn pick_conflict(&mut self, index: usize, pick: Pick) {
-        if let Mode::Edit(edit) = &mut self.mode
-            && let Some(merge) = &mut edit.merge
-        {
+        if let Some(merge) = self.merge_mut() {
             merge.pick_at(index, pick);
         }
     }
@@ -228,9 +230,7 @@ impl Board {
     /// Takes yours in every conflict not picked yet, and puts the merged text in the editor: what `kb` changed
     /// elsewhere stays.
     pub fn keep_mine(&mut self) {
-        if let Mode::Edit(edit) = &mut self.mode
-            && let Some(merge) = &mut edit.merge
-        {
+        if let Some(merge) = self.merge_mut() {
             merge.pick_rest(Pick::Mine);
         }
         self.use_merge();

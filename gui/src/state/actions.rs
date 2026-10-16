@@ -250,7 +250,7 @@ impl Board {
     /// Whether the comment at the editor's index is still the one it opened on: the others are as they were, but
     /// for any written after them, and the one there was written when it was, by the same author. Anything but a
     /// comment is.
-    fn same_comment(&self, edit: &Edit) -> bool {
+    pub(super) fn same_comment(&self, edit: &Edit) -> bool {
         fn others(comments: &[Comment], index: usize) -> impl Iterator<Item = &Comment> {
             comments.iter().enumerate().filter(move |&(at, _)| at != index).map(|(_, comment)| comment)
         }

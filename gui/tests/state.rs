@@ -774,6 +774,75 @@ fn conflicts_kb_changes_again_while_picked_are_merged_again() {
 }
 
 #[test]
+fn conflicts_kb_changes_again_to_the_text_typed_leave_nothing_to_save() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["feature"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    kb(&f).set_description(1, "a\nb").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Char('m'));
+    f.board.select_all();
+    f.board.paste("A\nb");
+    kb(&f).set_description(1, "a2\nb").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Esc);
+    kb(&f).set_description(1, "A\nb").unwrap();
+    f.board.reload().unwrap();
+    assert_eq!(f.board.message(), Some("#1's description changed again: it's theirs as it is now, esc closes"));
+    f.press(KeyCode::Esc);
+    assert!(matches!(f.board.mode, Mode::Normal), "closed: nothing to save");
+}
+
+#[test]
+fn conflicts_of_a_comment_kb_moved_while_picked_give_back_the_text_typed() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["feature"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    for body in ["zero", "x\nq", "other"] {
+        kb(&f).add_comment(1, body).unwrap();
+    }
+    f.board.reload().unwrap();
+    f.board.open_editor(Target::Comment(k(1), 1));
+    f.board.select_all();
+    f.board.paste("x, mine\nq\nmy addition");
+    kb(&f).update_comment(1, 1, "x, theirs\nq").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Esc);
+    assert!(matches!(&f.board.mode, Mode::Edit(edit) if edit.merge.is_some()));
+    // The comment before it deleted: its index holds another, which isn't merged with.
+    kb(&f).delete_comment(1, 0).unwrap();
+    f.board.reload().unwrap();
+    let said = f.board.message().unwrap_or_default();
+    assert!(said.ends_with("#1's comments changed around this one meanwhile: copy your text, then ctrl+d"), "{said}");
+    let typed = "x, mine\nq\nmy addition";
+    assert!(matches!(&f.board.mode, Mode::Edit(edit) if edit.merge.is_none() && edit.editor.text() == typed));
+    f.press(KeyCode::Char('t'));
+    f.press(KeyCode::Esc);
+    assert!(matches!(&f.board.mode, Mode::Edit(_)), "the save stops for good");
+    let comments: Vec<_> = f.on_disk(1).comments.into_iter().map(|c| c.body).collect();
+    assert_eq!(comments, ["x, theirs\nq", "other"]);
+}
+
+#[test]
+fn a_title_kb_changes_again_after_a_stopped_save_is_the_one_saving_keeps_yours_over() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["feature"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    f.board.select(k(1));
+    f.press(KeyCode::Char('e'));
+    f.type_text(" mine");
+    kb(&f).update(1, "T1", vec![]).unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Enter);
+    kb(&f).update(1, "T2", vec![]).unwrap();
+    f.board.reload().unwrap();
+    assert!(matches!(&f.board.mode, Mode::Form(form) if form.theirs_title.as_deref() == Some("T2")));
+    f.press(KeyCode::Enter);
+    assert!(matches!(f.board.mode, Mode::Normal), "saved, as the form says");
+    assert_eq!(f.on_disk(1).title, "feature mine");
+}
+
+#[test]
 fn a_save_that_stops_after_telling_the_agent_asks_again_with_the_note() {
     use kanbrain_core::brain::Brain;
     let mut f = Fixture::new(&["feature"]);
