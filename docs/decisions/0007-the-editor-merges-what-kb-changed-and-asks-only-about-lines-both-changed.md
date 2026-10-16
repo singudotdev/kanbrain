@@ -19,8 +19,9 @@ ours, theirs, both, conflict) as data.
 ## Decision
 
 - Saving the editor over a text `kb` changed since it opened (`Edit::base`) merges the three line by line
-  (`text::merge`, on similar 3.2's `TextMerge`, with no default features: nothing of its own to build). Lines only
-  one side changed take that change, and the save goes on. Lines both changed, differently, stop it.
+  (`text::merge`, on similar 3.2's `TextMerge`, with only its `std` and `text` features, its defaults, which build
+  no other crate). Lines only one side changed take that change, and the save goes on. Lines both changed,
+  differently, stop it.
 - `similar`, like `git merge`, takes changes that only touch (a line edited, and one added right after it) for one
   conflict. Those are applied both (`untangled`): an agent adding a line under the one you edit is the usual case, and
   no line of the text both changed. Lines added at one place on both sides, or within lines the other side changed,
@@ -31,15 +32,15 @@ ours, theirs, both, conflict) as data.
 - The conflicts show in the editor's place, inside the same dialog, not in a window of their own: an agent writing
   every few seconds would leave a separate view stale, and most conflicts here are a line or a title. Each shows yours
   beside theirs, to take yours, theirs or both; the merged text then goes back into the editor, to look over and save.
-  Who changed the text, and when, comes from the activity log.
+  Who changed a description, and when, comes from the activity log; the other texts keep no such record.
 - The form keeps merging fields, and shows a title both changed under its field, to take or to keep yours.
 - Every line ends in a break for the merge, so a text's last line, which has none, is the same line as it is with
   one after it.
 
 ## Consequences
 
-- A dependency, `similar`, in the app only (Apache-2.0, which `deny.toml` allows; `Cargo.lock` lists `bstr`, one of
-  its optional features, which isn't built); `kanbrain-core` and `kb` don't change, nor does the data, so nothing
+- A dependency, `similar`, in the app only (Apache-2.0, which `deny.toml` allows; `Cargo.lock` lists `bstr`, an
+  optional dependency of it, which isn't built); `kanbrain-core` and `kb` don't change, nor does the data, so nothing
   needs migrating.
 - Saving back to back with what an agent wrote keeps both, which `save again to replace it` didn't.
 - A conflict is per region of lines: two changes on one line, even at its two ends, are one conflict.

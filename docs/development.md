@@ -139,6 +139,7 @@ The crates use the **Rust 2024 edition**. Shared versions and lints are in the w
 | `gpui_platform` | Zed 1.23.2 (git) | `gui`: GPUI's window system backends, Wayland and X11 on Linux |
 | [`image`](https://docs.rs/image) | 0.25 | `gui`: decoding the window icon (PNG) |
 | [`winresource`](https://docs.rs/winresource) | 0.1 | `gui`, Windows only, at build time: the program's icon and version in its `.exe` |
+| [`similar`](https://docs.rs/similar) | 3.2 | `gui`: the line diff and three-way merge of what the editor and `kb` changed meanwhile (`text::merge`) |
 | [`tempfile`](https://docs.rs/tempfile) | 3 | tests only: temporary data folders |
 
 The minimum supported Rust version of the core and the command line is **1.88** (`rust-version` in `core/Cargo.toml` and
@@ -229,6 +230,7 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
 ├── text/            text editing with a selection
 │   ├── mod.rs       the editors and the key presses they take, without any drawing
 │   ├── editor.rs    multi-line TextEditor (descriptions, comments), one-line LineInput (fields)
+│   ├── merge.rs     the three-way line merge of what the editor and `kb` changed meanwhile (Merge, its conflicts and picks)
 │   └── event.rs     KeyCode / KeyEvent / KeyModifiers: what GPUI keystrokes become
 └── ui/              the window: draws the Board with GPUI and turns clicks, drags and keys into its calls
     ├── mod.rs       BrainView (the root view), the window and its app id, ticking, watching, the status bar, `action` buttons, clipboard, the system's folder dialog, $EDITOR
@@ -244,6 +246,8 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
     ├── dialogs/     dialogs over the window; a delete's confirmation in mod.rs
     │   ├── form.rs     the new / edit form: project, title, tags, related entries, column
     │   ├── editor.rs   the text editor for descriptions, comments and project text
+│   ├── merge.rs    the conflicts of a merge, shown in the editor's place: yours beside theirs, to pick
+│   ├── tell.rs     Tell the agent?, asked on saving a task an agent is working on
     │   ├── pickers.rs  the link picker, which project, the command palette
     │   ├── project.rs  Manage project: description, repositories, the week's time, and the buttons that manage them
     │   ├── manage.rs   renaming a project or repository, moving a repository, removing either
