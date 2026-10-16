@@ -131,6 +131,8 @@ fn line_input_selects_copies_and_replaces() {
     assert_eq!(pasted("Fix login on ", 13, "\nSafari\n"), ("Fix login on Safari".into(), 19), "no second space");
     assert_eq!(pasted("foobar", 3, "x\n"), ("foox bar".into(), 5));
     assert_eq!(pasted("foobar", 3, " \n "), ("foo bar".into(), 4), "a break alone is a space");
+    assert_eq!(pasted("foo bar", 4, "x\n"), ("foo x bar".into(), 6), "after a space too, it ends with one");
+    assert_eq!(pasted("", 0, "a\u{1b}b\u{b}c\n"), ("abc".into(), 3), "other control characters dropped");
     assert_eq!(pasted("", 0, "  a\n"), ("  a".into(), 3), "nothing at the field's end; spaces without a break kept");
 }
 
