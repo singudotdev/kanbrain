@@ -10,8 +10,8 @@ use crate::state::{Board, COLUMNS, Confirm, Key, Mode, Target, When};
 use crate::text::event::KeyCode;
 use gpui::{ClickEvent, Context, Div, ElementId, FontWeight, ScrollHandle, Stateful, div, prelude::*, px, rgb};
 use kanbrain_core::model::{
-    Asked, Author, Comment, DecisionState, Kind as EntryKind, StatusChange, Task, counted, fmt_age, fmt_clock, fmt_dur,
-    now,
+    Activity, Asked, Author, Comment, DecisionState, Kind as EntryKind, StatusChange, Task, ThreadItem, counted,
+    fmt_age, fmt_clock, fmt_dur, now,
 };
 use kanbrain_core::period::{Period, Unit};
 
@@ -124,7 +124,7 @@ fn asked_block(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView>
                 callout
                     .border_color(rgb(theme::ACCENT))
                     .bg(rgb(theme::SELECTED))
-                    .child(dim_small(format!("{} asks, {}", who(question), when(question.created))))
+                    .child(dim_small(format!("{} asks, {}", who(question.author), when(question.created))))
                     .child(markdown::render("question", &question.body))
                     .child(buttons),
             )
@@ -137,9 +137,9 @@ fn asked_block(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView>
     }
 }
 
-/// Who wrote a comment, for people: "An agent" or "You".
-fn who(comment: &Comment) -> &'static str {
-    match comment.author {
+/// Who wrote a comment or made a change, for people: "An agent" or "You".
+fn who(author: Author) -> &'static str {
+    match author {
         Author::Agent => "An agent",
         Author::Human => "You",
     }
@@ -232,45 +232,17 @@ fn related_block(board: &Board, key: Key, cx: &mut Context<BrainView>) -> Div {
         .children(rows)
 }
 
-/// Every comment, oldest first, each with Edit and Delete; and a button to add one.
+/// The thread: every comment, each with Edit and Delete, and every change to the title, tags, related entries and
+/// description, one line each, oldest first; and a button to add a comment.
 fn comments_block(key: Key, task: &Task, cx: &mut Context<BrainView>) -> Div {
     let add = small(entry_action("add-comment", "Add", Kind::Secondary, KeyCode::Char('c'), cx));
-    let comments: Vec<_> = task
-        .comments
-        .iter()
+    let thread: Vec<_> = task
+        .thread()
+        .into_iter()
         .enumerate()
-        .map(|(index, comment)| {
-            let edited = comment.edited.map(|at| format!(" · edited {}", when(at))).unwrap_or_default();
-            let what = if comment.question { "question" } else { "comment" };
-            let by = if comment.author == Author::Agent { format!("Agent {what} · ") } else { String::new() };
-            let edit = small(widgets::button(("edit-comment", index), "Edit", Kind::Ghost))
-                .tooltip(widgets::tooltip("Shortcut: C, then Enter on it"))
-                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                    this.act(cx, |b| b.open_editor(Target::Comment(key, index)));
-                }));
-            let delete = small(widgets::button(("delete-comment", index), "Delete", Kind::Ghost))
-                .tooltip(widgets::tooltip("Shortcut: C, then x on it"))
-                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                    this.act(cx, |b| b.mode = Mode::Confirm(Confirm::DeleteComment(key, index)));
-                }));
-            div()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .p_2()
-                .rounded_md()
-                .bg(rgb(theme::BG))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_1()
-                        // It wraps rather than push the buttons past the panel's edge, as an edit's date did.
-                        .child(dim_small(format!("{by}{}{edited}", when(comment.created))).flex_1().min_w_0())
-                        .child(edit)
-                        .child(delete),
-                )
-                .child(markdown::render(format!("comment {index}"), &comment.body))
+        .map(|(at, item)| match item {
+            ThreadItem::Comment(index, comment) => comment_card(key, index, comment, cx),
+            ThreadItem::Change(change) => change_line(at, change),
         })
         .collect();
     div()
@@ -278,8 +250,51 @@ fn comments_block(key: Key, task: &Task, cx: &mut Context<BrainView>) -> Div {
         .flex_col()
         .gap_2()
         .child(section(format!("Comments ({})", task.comments.len()), [add]))
-        .when(task.comments.is_empty(), |d| d.child(dim("No comments yet.")))
-        .children(comments)
+        .when(thread.is_empty(), |d| d.child(dim("No comments yet.")))
+        .children(thread)
+}
+
+/// Comment `index` of `key`'s entry, with Edit and Delete.
+fn comment_card(key: Key, index: usize, comment: &Comment, cx: &mut Context<BrainView>) -> Div {
+    let edited = comment.edited.map(|at| format!(" · edited {}", when(at))).unwrap_or_default();
+    let what = if comment.question { "question" } else { "comment" };
+    let by = if comment.author == Author::Agent { format!("Agent {what} · ") } else { String::new() };
+    let edit = small(widgets::button(("edit-comment", index), "Edit", Kind::Ghost))
+        .tooltip(widgets::tooltip("Shortcut: C, then Enter on it"))
+        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+            this.act(cx, |b| b.open_editor(Target::Comment(key, index)));
+        }));
+    let delete = small(widgets::button(("delete-comment", index), "Delete", Kind::Ghost))
+        .tooltip(widgets::tooltip("Shortcut: C, then x on it"))
+        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+            this.act(cx, |b| b.mode = Mode::Confirm(Confirm::DeleteComment(key, index)));
+        }));
+    div()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .p_2()
+        .rounded_md()
+        .bg(rgb(theme::BG))
+        .debug_selector(move || format!("thread comment {index}"))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap_1()
+                // It wraps rather than push the buttons past the panel's edge, as an edit's date did.
+                .child(dim_small(format!("{by}{}{edited}", when(comment.created))).flex_1().min_w_0())
+                .child(edit)
+                .child(delete),
+        )
+        .child(markdown::render(format!("comment {index}"), &comment.body))
+}
+
+/// A change in the thread, the `at`th item: who did what, and when, as a line between the comments.
+fn change_line(at: usize, change: &Activity) -> Div {
+    dim_small(format!("{} {} · {}", who(change.by), change.change.said(), when(change.at)))
+        .px_2()
+        .debug_selector(move || format!("thread change {at}"))
 }
 
 /// Every status change, newest first.
