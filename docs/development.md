@@ -198,6 +198,7 @@ cli/src/main.rs      kb (the crate `kanbrain` on crates.io): runs `cli::Program`
 cli/tests/kb.rs      the binary run from outside: arguments, stdin, output, exit codes
 e2e/install.sh       install.sh end to end, from a local copy of a release (CI; install.ps1 for Windows)
 e2e/upgrade.sh       brains written by every released kb, opened by this build (CI)
+e2e/update.sh        every released kb update installing this build (CI)
 e2e/smoke-app.sh     the release app starts, stays up and idles; a screenshot (CI; smoke-app.ps1 for Windows)
 e2e/agent.sh         a real agent working with kanbrain, scenario by scenario (run by hand)
 docs/decisions/      why things are as they are, one decision a file (NNNN-title.md)
@@ -416,7 +417,15 @@ file, shows every entry as the old version did, field by field (it may add field
 Releases that took the names v0.4.0 refuses also write a project named `-dash`, one named `Central` and a repository
 named `-docs`, which `init --all` must rename to `dash`, `Central-project` and `docs` with their tasks; at least one
 release must have written each. A tag whose release isn't published yet is skipped. CI runs it when a change touches
-it; locally it needs curl, git, python3 and the tags.
+it; locally it needs curl, git, python3 and the tags. The old `kb` then writes an entry this build logged changes to,
+and must keep its `## Activity`.
+
+`e2e/update.sh` (Linux) runs every release's `kb update` before this build is released: a `curl` put first on `PATH`
+answers for GitHub, with a latest release after every one there is, this tree's `install.sh` (which releases before
+v0.4.0 fetch from `main`, later ones from the latest release) and an archive of this build's `kb`. Each release's
+`kb` writes a central brain and a project, updates, and then its folder must hold this build's `kb`, which reads the
+brains, and running `init --all` again must change no agent instructions, as the installer ran it. CI runs it in the
+same job, also when `install.sh` changes.
 
 ### The app, started
 
@@ -480,7 +489,8 @@ needs it (see below):
 - mutation testing of the change (`cargo mutants --in-diff`), failing on a mutant no test catches: its own
   workflow, `mutants.yml`, in eight shards, testing the lines changed since the last commit whose run passed, so
   every push's lines are tested though a newer push replaces a run still waiting
-- brains written by every released `kb` opened by this build (`e2e/upgrade.sh`)
+- brains written by every released `kb` opened by this build (`e2e/upgrade.sh`), and every released `kb update`
+  installing it (`e2e/update.sh`)
 - the release app started on Linux, macOS and Windows, idle under 3% of a core, its screenshot kept
   (`e2e/smoke-app.sh`, `e2e/smoke-app.ps1`)
 
@@ -492,9 +502,10 @@ run passed; with none, a push is measured from the push before it, and a pull re
 | --- | --- |
 | `core/`, or a file built into it or its tests (`tag-changelog/`, `docs/agents.md`, `docs/cli.md`) | all but the licenses |
 | `cli/`, or the README (a test reads its commands) | lints, tests, minimum Rust version, installers, upgrade |
+| `install.sh`, which every release's `kb update` runs | the installers, upgrade |
 | `gui/`, or a file built into it or its tests (`docs/keybindings.md`, the logo, `install.sh`) | lints, tests, the app started; its fonts the licenses too |
 | `xtask/` | lints, tests, licenses |
-| a script (`*.sh`, `*.ps1`), or the app's icons (`gui/icons/`, which the installers carry) | the installers (with `shellcheck` and PSScriptAnalyzer); `e2e/upgrade.sh` and `e2e/smoke-app.*` their own job too |
+| a script (`*.sh`, `*.ps1`), or the app's icons (`gui/icons/`, which the installers carry) | the installers (with `shellcheck` and PSScriptAnalyzer); `e2e/upgrade.sh`, `e2e/update.sh` and `e2e/smoke-app.*` their own job too |
 | the workflows or `.github/plan.sh`, `Cargo.toml`, `Cargo.lock`, the toolchain or tools' configuration (`.cargo/`, `rustfmt.toml`, `deny.toml`) | everything |
 | a crate's `Cargo.toml` | that crate's jobs, and the licenses |
 | only documentation | nothing |

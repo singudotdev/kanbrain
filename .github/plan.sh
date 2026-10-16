@@ -94,7 +94,7 @@ case "$workflow" in
     need test touches "$core|$cli|$gui|$xtask"
     need msrv touches "$core|$cli"
     need installers touches "$core|$cli|$scripts|^gui/icons/"
-    need upgrade touches "$core|$cli|^e2e/upgrade\.sh$"
+    need upgrade touches "$core|$cli|^e2e/upgrade\.sh$|^e2e/update\.sh$|^install\.sh$"
     need app touches "$core|$gui|^e2e/smoke-app\."
     ;;
   mutants)

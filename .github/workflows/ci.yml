@@ -139,7 +139,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # Static checks first: shellcheck is on Ubuntu's runners.
       - if: runner.os == 'Linux'
-        run: shellcheck install.sh e2e/install.sh e2e/agent.sh e2e/upgrade.sh e2e/smoke-app.sh gui/icons/make.sh .github/plan.sh
+        run: shellcheck install.sh e2e/install.sh e2e/agent.sh e2e/upgrade.sh e2e/update.sh e2e/smoke-app.sh gui/icons/make.sh .github/plan.sh
       # PowerShell's own analyzer, failing on what it rates an error.
       - if: runner.os == 'Windows'
         shell: pwsh
@@ -162,7 +162,8 @@ jobs:
         shell: powershell
         run: ./e2e/install.ps1
 
-  # Brains written by every released `kb` open with this build and lose nothing (see the script's header).
+  # Brains written by every released `kb` open with this build and lose nothing, and every released `kb update`
+  # installs it (see the scripts' headers).
   upgrade:
     name: upgrade from released versions
     needs: plan
@@ -177,6 +178,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: e2e/upgrade.sh
+      - run: e2e/update.sh
 
   # The kanban app as released starts, stays up and idles on each system; the screenshot is kept to look at.
   app-smoke:
