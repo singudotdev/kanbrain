@@ -164,7 +164,7 @@ complete -F {function} {program}
             r#"{words}complete -c {program} -f
 complete -c {program} -n 'test (count (_{function}_words)) -eq 0' -a '{commands}'
 complete -c {program} -l project -x -a '({program} complete projects)'
-complete -c {program} -l tag -x -a '({program} complete tags (commandline -opc)[2..])'
+complete -c {program} -n '_{function}_using add list report' -l tag -x -a '({program} complete tags (commandline -opc)[2..])'
 complete -c {program} -l json
 complete -c {program} -n '_{function}_using {BY_ID}' -a '({program} complete ids (commandline -opc)[2..])'
 complete -c {program} -n '_{function}_using tag; and test (count (_{function}_words)) -eq 1' -a '({program} complete ids (commandline -opc)[2..])'

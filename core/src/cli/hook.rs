@@ -105,12 +105,17 @@ fn central_owned(central: &Path, rel: &Path) -> bool {
     if kanbrains.contains(&&*name) {
         return true;
     }
+    if !name.ends_with(".md") {
+        return false;
+    }
+    if store::entry_named(&name) {
+        return true;
+    }
     let path = central.join(rel);
+    // As `Store::load` reads it and `kb` reports it (`say_skipped`): an entry, or a broken one, unreadable included.
+    let entry = |text: String| Task::from_markdown(&text).err().is_none_or(|error| error != crate::model::MISSING_ID);
     // Only a file is read: a pipe, or a link to a device, would hold the hook.
-    let text = fs::metadata(&path).is_ok_and(|meta| meta.is_file()).then(|| store::read_text(&path).ok()).flatten();
-    // As `Store::load` reads it and `kb` reports it (`say_skipped`): an entry, or a broken one.
-    let entry = |text: &str| Task::from_markdown(text).err().is_none_or(|error| error != crate::model::MISSING_ID);
-    name.ends_with(".md") && (store::entry_named(&name) || text.is_some_and(|text| entry(&text)))
+    fs::metadata(&path).ok().filter(fs::Metadata::is_file).is_some_and(|_| store::read_text(&path).map_or(true, entry))
 }
 
 /// The file an edit of `path` writes, as Claude Code finds it: `~` is the home folder, a relative path is in the

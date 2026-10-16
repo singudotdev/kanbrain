@@ -132,7 +132,7 @@ impl Mode {
             }
             Self::Confirm(confirm) => Self::Confirm(match confirm {
                 Confirm::Delete(k) => Confirm::Delete(key(k)?),
-                Confirm::DeleteComment(k, at) => Confirm::DeleteComment(key(k)?, at),
+                Confirm::DeleteComment(k, comment) => Confirm::DeleteComment(key(k)?, comment),
                 Confirm::Update => Confirm::Update,
             }),
             Self::Links(links) => Self::Links(LinkPicker { key: key(links.key)?, ..links }),
@@ -578,12 +578,13 @@ impl Target {
 }
 
 /// A delete, or the update, waiting for confirmation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Confirm {
     /// The entry.
     Delete(Key),
-    /// The entry's comment at this index.
-    DeleteComment(Key, usize),
+    /// The entry's comment, as it was when asked about: one deleted meanwhile puts another at its index, which is
+    /// not the one to delete.
+    DeleteComment(Key, Comment),
     /// Installing the newer release, which closes the app and opens the new one.
     Update,
 }

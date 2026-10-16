@@ -378,6 +378,87 @@ fn comments_and_descriptions_are_written_from_the_editor() {
 }
 
 #[test]
+fn a_save_that_stops_over_what_kb_wrote_says_it_once() {
+    use kanbrain_core::brain::{Brain, NewEntry};
+    let mut f = Fixture::new(&["feature"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    // Saved within a second of the read that saw it: the stop says what that read said, and more.
+    f.press(KeyCode::Char('m'));
+    f.type_text("mine");
+    kb(&f).set_description(1, "the agent's plan").unwrap();
+    f.board.reload().unwrap();
+    assert_eq!(f.board.message(), Some("#1's description changed on disk"));
+    f.press(KeyCode::Esc);
+    let stop = "#1's description changed meanwhile: save again to replace it with yours, ctrl+d to keep it";
+    assert_eq!(f.board.message(), Some(stop));
+    f.board.discard_edit();
+
+    // What else the read saw is still said, and only that.
+    f.press(KeyCode::Char('m'));
+    f.type_text("mine");
+    let mut brain = kb(&f);
+    brain.set_description(1, "the agent's next plan").unwrap();
+    brain.set_status(1, Status::Parked).unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Esc);
+    assert_eq!(f.board.message(), Some(format!("{stop} · #1's status changed on disk").as_str()));
+    f.board.discard_edit();
+
+    // The form's title, the same.
+    f.press(KeyCode::Char('e'));
+    f.type_text(" now");
+    kb(&f).update(1, "Fix SSO", vec![]).unwrap();
+    f.board.reload().unwrap();
+    assert_eq!(f.board.message(), Some("#1's title changed on disk"));
+    f.press(KeyCode::Enter);
+    let renamed = "#1's title changed meanwhile, to “Fix SSO”: save again to replace it";
+    assert_eq!(f.board.message(), Some(renamed));
+    f.press(KeyCode::Esc);
+    f.press(KeyCode::Char('e'));
+    f.type_text(" again");
+    kb(&f).update(1, "Fix SSO", vec!["auth".into()]).unwrap();
+    kb(&f).update(1, "Fix SSO 500", vec!["auth".into()]).unwrap();
+    f.board.reload().unwrap();
+    assert_eq!(f.board.message(), Some("#1's title and tags changed on disk"));
+    f.press(KeyCode::Enter);
+    assert_eq!(
+        f.board.message(),
+        Some("#1's title changed meanwhile, to “Fix SSO 500”: save again to replace it · #1's tags changed on disk")
+    );
+    f.press(KeyCode::Esc);
+
+    // Another comment put at the one being edited's place.
+    kb(&f).add_comment(1, "first").unwrap();
+    kb(&f).add_comment(1, "second").unwrap();
+    f.board.reload().unwrap();
+    f.board.open_editor(Target::Comment(k(1), 1));
+    f.type_text(", edited");
+    kb(&f).delete_comment(1, 0).unwrap();
+    f.board.reload().unwrap();
+    assert_eq!(f.board.message(), Some("#1's comment changed on disk"));
+    f.press(KeyCode::Esc);
+    assert_eq!(f.board.message(), Some("#1's comments changed around this one meanwhile: copy your text, then ctrl+d"));
+    f.board.discard_edit();
+
+    // A verdict given meanwhile.
+    let decision = kb(&f).propose(1, NewEntry { title: "Use Redis".into(), ..Default::default() }).unwrap();
+    f.board.reload().unwrap();
+    f.board.select(k(decision));
+    f.press(KeyCode::Char('j'));
+    f.type_text("too costly");
+    kb(&f).resolve(decision, DecisionState::Accepted, "").unwrap();
+    f.board.reload().unwrap();
+    assert_eq!(f.board.message(), Some(format!("#{decision}'s verdict changed on disk").as_str()));
+    f.press(KeyCode::Esc);
+    assert_eq!(
+        f.board.message(),
+        Some(
+            format!("#{decision} was accepted meanwhile: save again to reject it anyway, ctrl+d to leave it").as_str()
+        )
+    );
+}
+
+#[test]
 fn the_editor_doesnt_replace_unseen_what_kb_wrote_while_it_was_open() {
     use kanbrain_core::brain::Brain;
     let mut f = Fixture::new(&["feature"]);
@@ -2624,12 +2705,58 @@ fn a_comment_is_edited_and_deleted_from_the_details() {
     let bodies = |f: &Fixture| f.on_disk(1).comments.iter().map(|c| c.body.clone()).collect::<Vec<_>>();
     assert_eq!(bodies(&f), ["first try, failed", "second try"]);
     assert!(f.on_disk(1).comments[0].edited.is_some(), "it says it was edited");
-    f.board.mode = Mode::Confirm(Confirm::DeleteComment(k(1), 0));
+    f.board.ask_delete_comment(k(1), 0);
     f.press(KeyCode::Char('n'));
     assert_eq!(bodies(&f).len(), 2, "n keeps it");
-    f.board.mode = Mode::Confirm(Confirm::DeleteComment(k(1), 0));
+    f.board.ask_delete_comment(k(1), 0);
     f.press(KeyCode::Char('y'));
     assert_eq!(bodies(&f), ["second try"]);
+}
+
+#[test]
+fn deleting_a_comment_deletes_the_one_asked_about_wherever_it_is_now() {
+    use kanbrain_core::brain::Brain;
+    use kanbrain_core::model::Comment;
+    // What `kb` (or a hand, or a pull) does between the question and its answer.
+    type Meanwhile = fn(&mut Brain);
+    let mut f = Fixture::new(&["feature"]);
+    let bodies = |f: &Fixture| f.on_disk(1).comments.iter().map(|c| c.body.clone()).collect::<Vec<_>>();
+    let cases: [(Meanwhile, &[&str], Option<&str>); 3] = [
+        // One before it gone: another is at its index now.
+        (|kb| kb.delete_comment(1, 0).unwrap(), &["c"], Some("comment deleted")),
+        (
+            |kb| _ = kb.update_comment(1, 1, "b, edited").unwrap(),
+            &["a", "b, edited", "c"],
+            Some("not deleted: #1's comment was edited or deleted meanwhile"),
+        ),
+        (
+            |kb| kb.delete_comment(1, 1).unwrap(),
+            &["a", "c"],
+            Some("not deleted: #1's comment was edited or deleted meanwhile"),
+        ),
+    ];
+    // Emptied meanwhile: nothing there to ask about, and the list stays.
+    f.board.brain_mut(0).add_comment(1, "only").unwrap();
+    f.press(KeyCode::Char('C'));
+    Brain::open(Store::at(f.dir.path()).unwrap()).unwrap().delete_comment(1, 0).unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Char('x'));
+    assert!(matches!(f.board.mode, Mode::Comments(_)), "{:?}", f.board.mode);
+    f.press(KeyCode::Esc);
+    for (meanwhile, left, said) in cases {
+        let mut task = f.on_disk(1);
+        task.comments = ["a", "b", "c"].map(|body| Comment::new(now(), body.into(), Author::Human)).to_vec();
+        Store::at(f.dir.path()).unwrap().save(&mut task).unwrap();
+        f.board.reload().unwrap();
+        f.press(KeyCode::Char('C'));
+        f.press(KeyCode::Up);
+        f.press(KeyCode::Char('x'));
+        meanwhile(&mut Brain::open(Store::at(f.dir.path()).unwrap()).unwrap());
+        f.board.reload().unwrap();
+        f.board.message = None;
+        f.press(KeyCode::Char('y'));
+        assert_eq!((bodies(&f), f.board.message()), (left.iter().map(ToString::to_string).collect(), said));
+    }
 }
 
 #[test]
