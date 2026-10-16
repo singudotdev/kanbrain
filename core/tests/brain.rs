@@ -551,11 +551,20 @@ fn relating_two_entries_is_logged_in_both_whichever_keeps_the_link() {
     assert_eq!(changes(&on_disk[2]), [(Author::Agent, related(&["1", "2"], &[]))], "what it wasn't related to, once");
     assert_eq!(changes(&on_disk[0])[1..], [(Author::Agent, related(&["3"], &[]))]);
     assert_eq!(changes(&on_disk[1])[1..], [(Author::Agent, related(&["3"], &[]))]);
+}
 
-    f.brain.toggle_link(2, 3).unwrap();
+#[test]
+fn unrelating_two_entries_is_logged_in_both() {
+    // Related on disk, not through the brain: one author's link and unlink in one second would be nothing.
+    let mut a = Task::new(1, "a".into(), now());
+    a.links = vec![2];
+    let mut f = Fixture::new(vec![a, Task::new(2, "b".into(), now())]);
+    f.brain.author = Author::Agent;
+    assert!(!f.brain.toggle_link(2, 1).unwrap(), "from the side without the link");
+    let unrelated = |word: &str| [(Author::Agent, Changed::Related { added: vec![], removed: words(&[word]) })];
     let on_disk = f.reloaded();
-    assert_eq!(changes(&on_disk[1])[1..], [], "related and unrelated in the same second by the same author: nothing");
-    assert_eq!(changes(&on_disk[2]), [(Author::Agent, related(&["1"], &[]))]);
+    assert_eq!(on_disk[0].links, Vec::<u32>::new());
+    assert_eq!((changes(&on_disk[0]), changes(&on_disk[1])), (unrelated("2").to_vec(), unrelated("1").to_vec()));
 }
 
 #[test]
