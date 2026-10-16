@@ -23,6 +23,15 @@
 //!
 //! a question an agent asked
 //!
+//! ## Activity
+//!
+//! - 2026-09-24T10:50:00+02:00 title (agent)
+//!   - from: Fix login
+//!   - to: Fix login 500
+//! - 2026-09-24T10:51:00+02:00 tags: +prod -bug
+//! - 2026-09-24T10:52:00+02:00 related (agent): +5 -shop-api#3
+//! - 2026-09-24T10:53:00+02:00 description
+//!
 //! ## History
 //!
 //! - 2026-09-24T10:57:00+02:00 todo -> doing (agent)
@@ -33,15 +42,18 @@
 //! - 2026-09-25T09:30:00+02:00 -> running
 //! ```
 //!
-//! `## Sessions` is only written once the task has been tracked, so untracked files stay short. Notes and decisions
-//! have `- kind: note` / `- kind: decision` instead of `- status:`, and no History or Sessions, and a decision that
-//! isn't in force has `- decision: proposed|rejected`. What a person wrote or did carries no mark; what an agent did
-//! says `agent`. `- links:` is only written when there are links. `shop-api#3` is entry 3 of the project's `shop-api`
-//! repository. Other `- key:` lines, link words and `##` sections are kept and written back (see [`Unknown`]).
+//! `## Activity` and `## Sessions` are only written once there's something in them, so files stay short. Notes and
+//! decisions have `- kind: note` / `- kind: decision` instead of `- status:`, and no History or Sessions, and a
+//! decision that isn't in force has `- decision: proposed|rejected`. What a person wrote or did carries no mark; what
+//! an agent did says `agent`. `- links:` is only written when there are links. `shop-api#3` is entry 3 of the project's
+//! `shop-api` repository. Other `- key:` lines, link words and `##` sections are kept and written back (see
+//! [`Unknown`]).
 
 use super::text::{one_line, parse_tags};
 use super::time::{fmt_dur, fmt_ts, now, parse_ts};
-use super::{Author, Comment, DecisionState, Kind, RepoLink, Session, Status, StatusChange, Task, Unknown};
+use super::{
+    Activity, Author, Changed, Comment, DecisionState, Kind, RepoLink, Session, Status, StatusChange, Task, Unknown,
+};
 use chrono::{DateTime, Local};
 use std::fmt::Write;
 
@@ -97,6 +109,7 @@ impl Task {
             }
         }
 
+        self.write_activity(out)?;
         if self.is_task() {
             self.write_tracking(out)?;
         }
@@ -107,6 +120,29 @@ impl Task {
             writeln!(out, "{section}\n")?;
         }
         Ok(())
+    }
+
+    /// Writes the Activity section, if there's any: one item a change, what this version can't read last.
+    fn write_activity(&self, out: &mut String) -> std::fmt::Result {
+        if self.activity.is_empty() && self.unknown.activity.is_empty() {
+            return Ok(());
+        }
+        writeln!(out, "## Activity\n")?;
+        for activity in &self.activity {
+            write!(out, "- {} ", fmt_ts(activity.at))?;
+            let by = by_mark(activity.by);
+            match &activity.change {
+                // A title may say anything, ` -> ` and `(agent)` too: it has lines of its own.
+                Changed::Title { from, to } => writeln!(out, "title{by}\n  - from: {from}\n  - to: {to}")?,
+                Changed::Tags { added, removed } => writeln!(out, "tags{by}: {}", signed(added, removed))?,
+                Changed::Related { added, removed } => writeln!(out, "related{by}: {}", signed(added, removed))?,
+                Changed::Description => writeln!(out, "description{by}")?,
+            }
+        }
+        for item in &self.unknown.activity {
+            writeln!(out, "{item}")?;
+        }
+        writeln!(out)
     }
 
     /// Writes the History and Sessions sections.
@@ -175,6 +211,7 @@ impl Task {
                 // Free text keeps its original indentation, so pass the untrimmed line.
                 Section::Description => parsed.description.push(line),
                 Section::Comments => parsed.comment_line(line),
+                Section::Activity => parsed.activity_line(trimmed),
                 Section::History => parsed.history_line(trimmed)?,
                 Section::Sessions => parsed.session_line(trimmed)?,
                 Section::Other => parsed.other_line(line),
@@ -197,6 +234,8 @@ enum Section {
     Description,
     /// `## Comments`: `### <timestamp>` headings, each followed by the comment.
     Comments,
+    /// `## Activity`: one `- <time> <what>` item per change, a title's with its lines.
+    Activity,
     /// `## History`: one `- <time> <from> -> <to>` line per status change.
     History,
     /// `## Sessions`: one `- <start> -> <end> (duration)` or `- <start> -> running` line each.
@@ -211,6 +250,7 @@ impl Section {
         match heading.trim() {
             "Description" => Section::Description,
             "Comments" => Section::Comments,
+            "Activity" => Section::Activity,
             "History" => Section::History,
             "Sessions" => Section::Sessions,
             _ => Section::Other,
@@ -245,6 +285,8 @@ struct Parsed<'a> {
     comments: Vec<(Comment, Vec<&'a str>)>,
     /// In file order; sorted at the end.
     history: Vec<StatusChange>,
+    /// The `## Activity` items, each with its lines, read at the end.
+    activity: Vec<String>,
     /// In file order; sorted at the end.
     sessions: Vec<Session>,
     /// Whatever the lines above don't take.
@@ -319,6 +361,20 @@ impl<'a> Parsed<'a> {
         }
     }
 
+    /// A `- ` line at the start starts an `## Activity` item; any other line is part of the last one, blank ones
+    /// too, so text someone wrote there reads back as it was. Text before the first item is an item of its own, which
+    /// this version can't read and keeps.
+    fn activity_line(&mut self, line: &str) {
+        match self.activity.last_mut() {
+            Some(item) if !line.starts_with("- ") => {
+                item.push('\n');
+                item.push_str(line);
+            }
+            _ if line.trim().is_empty() => {}
+            _ => self.activity.push(line.to_string()),
+        }
+    }
+
     /// `- <time> <from> -> <to> [(agent)]`. The time may contain a space when typed by hand. Who moved it
     /// is only a record, so a name this version doesn't know reads as a person rather than losing the file.
     fn history_line(&mut self, line: &str) -> Result<(), String> {
@@ -353,6 +409,14 @@ impl<'a> Parsed<'a> {
     fn into_task(mut self) -> Result<Task, String> {
         let id = self.id.ok_or(MISSING_ID)?;
         self.history.sort_by_key(|c| c.at);
+        let (mut activity, mut unread) = (Vec::new(), Vec::new());
+        for item in self.activity {
+            match activity_item(&item) {
+                Some(read) => activity.push(read),
+                None => unread.push(item.trim_end().to_string()),
+            }
+        }
+        activity.sort_by_key(|a: &Activity| a.at);
         self.sessions.sort_by_key(|s| s.start);
         let next_starts: Vec<_> = self.sessions.iter().skip(1).map(|s| s.start).collect();
         for (session, next_start) in self.sessions.iter_mut().zip(next_starts) {
@@ -383,10 +447,12 @@ impl<'a> Parsed<'a> {
                 .map(|(comment, body)| Comment { body: without_blank_ends(&body), ..comment })
                 .collect(),
             history: self.history,
+            activity,
             sessions: self.sessions,
             path: None,
             unknown: Unknown {
                 sections: self.unknown.sections.into_iter().map(|s| s.trim_end().to_string()).collect(),
+                activity: unread,
                 ..self.unknown
             },
         })
@@ -442,6 +508,60 @@ fn without_blank_ends(lines: &[&str]) -> String {
     let start = lines.iter().position(|line| !blank(&line)).unwrap_or(lines.len());
     let end = lines.iter().rposition(|line| !blank(&line)).map_or(start, |at| at + 1);
     lines[start..end].join("\n").trim_end().to_string()
+}
+
+/// `+added -removed`, the words of an `## Activity` list's change.
+fn signed(added: &[String], removed: &[String]) -> String {
+    let added = added.iter().map(|word| format!("+{word}"));
+    added.chain(removed.iter().map(|word| format!("-{word}"))).collect::<Vec<_>>().join(" ")
+}
+
+/// An `## Activity` item, as [`Task::write_activity`] writes it; `None` for one this version can't read, which is
+/// kept as written rather than lose the file: what this section says is only a record.
+fn activity_item(item: &str) -> Option<Activity> {
+    let mut lines = item.lines().filter(|line| !line.trim().is_empty());
+    let (at, rest) = lines.next()?.strip_prefix("- ")?.split_once(' ')?;
+    let at = parse_ts(at)?;
+    let (head, words) = match rest.split_once(':') {
+        Some((head, words)) => (head, Some(words)),
+        None => (rest, None),
+    };
+    let (what, by) = match head.trim_end().strip_suffix(')').and_then(|head| head.rsplit_once(" (")) {
+        Some((what, by)) => (what, Author::parse(by)?),
+        None => (head.trim_end(), Author::Human),
+    };
+    let mut value = |key: &str| lines.next()?.trim_start().strip_prefix("- ")?.strip_prefix(key).map(str::trim);
+    let change = match (what, words) {
+        ("title", None) => Changed::Title { from: value("from:")?.to_string(), to: value("to:")?.to_string() },
+        ("tags", Some(words)) => {
+            let (added, removed) = signed_words(words)?;
+            Changed::Tags { added, removed }
+        }
+        ("related", Some(words)) => {
+            let (added, removed) = signed_words(words)?;
+            Changed::Related { added, removed }
+        }
+        ("description", None) => Changed::Description,
+        _ => return None,
+    };
+    lines.next().is_none().then(|| Activity::new(at, by, change))
+}
+
+/// The `+word` and `-word` words of an `## Activity` list's change; `None` when one is neither, or there's none.
+fn signed_words(words: &str) -> Option<(Vec<String>, Vec<String>)> {
+    let (mut added, mut removed) = (Vec::new(), Vec::new());
+    for word in words.split_whitespace() {
+        let (list, word) = match word.split_at_checked(1)? {
+            ("+", word) => (&mut added, word),
+            ("-", word) => (&mut removed, word),
+            _ => return None,
+        };
+        if word.is_empty() {
+            return None;
+        }
+        list.push(word.to_string());
+    }
+    (!added.is_empty() || !removed.is_empty()).then_some((added, removed))
 }
 
 /// ` (agent)` after what an agent did; nothing after what a person did, so their files read as before.

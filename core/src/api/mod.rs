@@ -11,12 +11,13 @@ pub mod json;
 pub mod text;
 
 use crate::brain::{Brain, NewEntry};
-use crate::model::{Kind, RepoLink, Status, Task, one_line};
+use crate::model::{Kind, RepoLink, Status, Task, now, one_line};
 use anyhow::Result;
 use std::fmt;
 
 /// Why an operation by id was refused, as the CLI prints it.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ApiError {
     /// No entry has this id.
     NotFound(u32),
@@ -36,6 +37,8 @@ pub enum ApiError {
     NotFoundIn(RepoLink),
     /// A person starting a task while `doing` holds the one a person started: its id.
     DoingFull(u32),
+    /// No entry has this tag.
+    NoTag(String),
 }
 
 impl fmt::Display for ApiError {
@@ -54,6 +57,7 @@ impl fmt::Display for ApiError {
             ApiError::DoingFull(id) => {
                 write!(f, "#{id} is in doing, and a person works on one task at a time: park or finish it first")
             }
+            ApiError::NoTag(tag) => write!(f, "no entry is tagged #{tag}"),
         }
     }
 }
@@ -95,7 +99,8 @@ impl Brain {
     }
 
     /// Adds links from `id` to each of `others` and of `repo_links` (entries of the project's other
-    /// repositories), skipping ones it already has.
+    /// repositories), skipping ones it already has. Each entry of this brain it wasn't related to logs it on both
+    /// sides; each link to another repository's entry that it didn't have, here only, as that file isn't written.
     pub fn link(&mut self, id: u32, others: &[u32], repo_links: &[RepoLink]) -> Result<()> {
         for &other in others {
             if other == id {
@@ -105,7 +110,15 @@ impl Brain {
         }
         self.check_repo_links(repo_links)?;
         let index = self.index_of(id)?;
+        let mut new: Vec<u32> = Vec::new();
+        for &other in others {
+            if !self.are_related(id, other) && !new.contains(&other) {
+                new.push(other);
+            }
+        }
+        let now = now();
         let task = &mut self.tasks[index];
+        let mut added: Vec<String> = new.iter().map(u32::to_string).collect();
         for &other in others {
             if !task.links.contains(&other) {
                 task.links.push(other);
@@ -114,9 +127,18 @@ impl Brain {
         for link in repo_links {
             if !task.repo_links.contains(link) {
                 task.repo_links.push(link.clone());
+                added.push(link.to_string());
             }
         }
-        self.store.save(task)
+        task.relate(now, self.author, &added, &[]);
+        self.store.save(task)?;
+        // After the entry that keeps the links: a save that fails before leaves no side saying they're related.
+        for &other in &new {
+            let back = self.index_of(other)?;
+            self.tasks[back].relate(now, self.author, &[id.to_string()], &[]);
+            self.store.save(&mut self.tasks[back])?;
+        }
+        Ok(())
     }
 
     /// Checks that each link names another repository of this project, and an entry it has.

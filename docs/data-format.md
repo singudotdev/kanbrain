@@ -99,6 +99,15 @@ Found it: nginx timeout is 5s. Root cause confirmed.
 
 Raised to 30s, monitoring.
 
+## Activity
+
+- 2026-09-24T10:35:00+02:00 title (agent)
+  - from: Fix login
+  - to: Fix login 500
+- 2026-09-24T10:36:00+02:00 tags: +prod +support -bug
+- 2026-09-24T10:41:00+02:00 related (agent): +5 -shop-api#3
+- 2026-09-24T10:50:00+02:00 description
+
 ## History
 
 - 2026-09-24T10:15:00+02:00 todo -> doing (agent)
@@ -123,6 +132,7 @@ Raised to 30s, monitoring.
 | `- created:` | creation time |
 | `## Description` | free text about the task, kept as is. Edit it with `m` in the kanban app |
 | `## Comments` | one `### <created>` heading per comment, then the comment's text, oldest first. After the time, in parentheses and separated by commas: `agent` when an agent wrote it, `question` when it's a question to the user, `answer` when it's a verdict on the decision a question asked about (which an agent may give on the user's word), `edited <time>` if it was changed later. A person's plain comment has none. A parked task whose latest question has no person's comment, nor an answer, after it waits for an answer |
+| `## Activity` | one item per change to the title, tags, related entries or description, oldest first: `- TIME WHAT`, with ` (agent)` when an agent made it. A title says what it was and became on the two lines under it, as a title may say anything; tags and related entries, what was added (`+`) and removed (`-`), related entries as `- links:` writes them; a description, only that it changed. Notes and decisions have it too. Only written once there's a change; kanbrain 0.6.0 and later write it, and older versions keep it as it is |
 | `## History` | one line per status change: `- TIME FROM -> TO`, with ` (agent)` when an agent made it. Oldest first. The latest `-> doing` line says who runs the task: a person runs one at a time, and the board shows it in cyan; an agent, any number, in green |
 | `## Sessions` | tracked time, one line per session: `- START -> END (duration)`, or `- START -> running` for the open one. Only written once the task has been in doing; the duration is informational |
 
@@ -174,6 +184,7 @@ The `- status:` line decides where the task stands; the history is only the reco
 | several tasks a person started in `doing` (e.g. from a sync) | the most recently started stays; the others are moved to `parked`, with a history line. Tasks an agent started stay |
 | missing `created` | the time of the first history line, or now |
 | other `- key:` lines, `- links:` words or `##` sections (e.g. written by a newer version, or by you) | kept and written back as they are; other sections move to the end of the file |
+| an `## Activity` item that doesn't read as one (another kind of change, a time that isn't one) | kept and written back as it is, after the others |
 | two entries with one id (a sync tool's conflict copy, or one added on two machines at once) | all but one get the next free ids: the one under its own file name keeps it, else the oldest |
 | a title on several lines (as versions before 0.4.0 wrote a title typed with line breaks) | read as one line, the lines right under it joined to it |
 | a byte-order mark at the start of a file (some Windows editors write one) | skipped |

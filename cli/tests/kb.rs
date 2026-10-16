@@ -183,8 +183,27 @@ fn tag_adds_and_removes_and_says_when_nothing_changed() {
     assert_eq!(ok(&same), "#1 Fix login (todo) #bug\n", "stdout keeps the entry's line");
     let json = ok(&run(&["tag", "1", "--json", "-bug"]));
     assert!(json.starts_with("{\"id\":1,") && json.contains(r#""tags":[]"#), "{json}");
-    let misused = String::from_utf8(run(&["tag", "1", "bug"]).stderr).unwrap();
+    let misused = String::from_utf8(run(&["tag", "1", "bug", "x"]).stderr).unwrap();
     assert!(misused.contains("usage:\n  kb tag ID +TAG|-TAG…\n"), "{misused}");
+    // Two words could be a tag renamed: an entry's id is likelier a change without its sign.
+    let unsigned = String::from_utf8(run(&["tag", "1", "bug"]).stderr).unwrap();
+    assert_eq!(unsigned, "Error: #1 is an entry: to tag it, `kb tag 1 +bug`; to rename tag #1, `kb tag '#1' bug`\n");
+}
+
+#[test]
+fn tag_renames_a_tag_in_every_entry_that_has_it() {
+    let (central, dir) = (tempdir(), tempdir());
+    let run = |args: &[&str]| kb(dir.path(), central.path(), args, "");
+    ok(&run(&["add", "--tag", "ops", "Deploy"]));
+    ok(&run(&["add", "--tag", "ui", "Login"]));
+    ok(&run(&["add", "--tag", "ops,ui", "Alerts"]));
+    assert_eq!(ok(&run(&["tag", "#ops", "infra"])), "#1 Deploy (todo) #infra\n#3 Alerts (todo) #infra #ui\n");
+    let json = ok(&run(&["tag", "--json", "infra", "platform"]));
+    assert!(json.starts_with("[{\"id\":1,") && json.contains(r#""tags":["platform","ui"]"#), "{json}");
+    // `#ops` or `#infra`, as the two fall in one second or two: the first rename then takes in the second.
+    assert!(ok(&run(&["show", "3"])).contains("added the tag #platform and removed the tag #"));
+    let none = String::from_utf8(run(&["tag", "ops", "infra"]).stderr).unwrap();
+    assert_eq!(none, "Error: no entry is tagged #ops\n");
 }
 
 #[test]

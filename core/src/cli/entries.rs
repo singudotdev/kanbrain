@@ -50,6 +50,8 @@ pub const USAGE: &str = "\
             replace the title (and its file's name)
   tag ID +TAG|-TAG…
             add tags to an entry (+TAG) or remove them (-TAG), in order
+  tag OLD NEW
+            rename a tag in every entry that has it
   link ID OTHER…
             link an entry to others: an id here, or REPO#ID in another repository of the project
   project [describe|notes TEXT…|-]
@@ -110,6 +112,9 @@ pub enum EntryCommand {
     /// `tag ID +TAG|-TAG…`: tags added and removed, in order.
     #[non_exhaustive]
     Tag(u32, Vec<TagChange>),
+    /// `tag OLD NEW`: a tag renamed in every entry; true when OLD was written `#OLD`, which no id is.
+    #[non_exhaustive]
+    RenameTag(String, String, bool),
     /// `link ID OTHER…`: ids here, and `REPO#ID` in the project's other repositories.
     #[non_exhaustive]
     Link(u32, Vec<u32>, Vec<RepoLink>),
@@ -214,6 +219,7 @@ impl EntryArgs {
             | EntryCommand::Wait(..)
             | EntryCommand::Rename(..)
             | EntryCommand::Tag(..)
+            | EntryCommand::RenameTag(..)
             | EntryCommand::Link(..)
             | EntryCommand::Context
             | EntryCommand::Project(_) => None,
@@ -294,10 +300,21 @@ impl EntryArgs {
                 let id = first_id(&mut rest)?;
                 EntryCommand::Rename(id, new_title(std::mem::take(&mut rest))?)
             }
-            ("tag", None) => {
-                let id = first_id(&mut rest)?;
-                EntryCommand::Tag(id, tag_changes(std::mem::take(&mut rest))?)
-            }
+            ("tag", None) => match std::mem::take(&mut rest).as_slice() {
+                // A word after the first that isn't a change names the tag's new name.
+                words @ [old, new] if !new.starts_with(['+', '-']) => {
+                    let (old, new) = (one_tag(old)?, one_tag(new)?);
+                    if old == new {
+                        bail!("#{old} is already its name");
+                    }
+                    EntryCommand::RenameTag(old, new, words[0].starts_with('#'))
+                }
+                words => {
+                    let mut words = words.to_vec();
+                    let id = first_id(&mut words)?;
+                    EntryCommand::Tag(id, tag_changes(words)?)
+                }
+            },
             ("link", None) => {
                 let id = first_id(&mut rest)?;
                 let (others, repo_links) = typed_links(&std::mem::take(&mut rest).join(" "))?;
@@ -375,6 +392,7 @@ impl EntryArgs {
                 }
                 id
             }
+            EntryCommand::RenameTag(old, new, hashed) => return rename_tag(&mut brain, &old, &new, hashed, json),
             EntryCommand::Link(id, others, repo_links) => {
                 brain.link(id, &others, &repo_links)?;
                 id
@@ -572,6 +590,32 @@ fn retag(brain: &mut Brain, id: u32, changes: &[TagChange]) -> Result<bool> {
     let title = entry.title.clone();
     brain.update(id, &title, tags)?;
     Ok(true)
+}
+
+/// `word` as the one tag it names (`#ops` is `ops`), for `tag OLD NEW`.
+fn one_tag(word: &str) -> Result<String> {
+    match parse_tags(word).as_slice() {
+        [tag] => Ok(tag.clone()),
+        [] => bail!("`{word}` names no tag"),
+        _ => bail!("`{word}` names several tags: tag OLD NEW renames one"),
+    }
+}
+
+/// Renames tag `old` to `new` in every entry of `brain` and prints the entries renamed, one line each (or as `search
+/// --json` lists them). `tag 5 ui`, with an entry #5, may be `tag 5 +ui` mistyped: a tag named as an id is renamed only
+/// when written `#5` (`hashed`), as a rename that wasn't meant would change every entry that has it.
+fn rename_tag(brain: &mut Brain, old: &str, new: &str, hashed: bool, json: bool) -> Result<()> {
+    if !hashed && old.parse().ok().and_then(|id| brain.task(id)).is_some() {
+        bail!("#{old} is an entry: to tag it, `kb tag {old} +{new}`; to rename tag #{old}, `kb tag '#{old}' {new}`");
+    }
+    let renamed = brain.rename_tag(old, new)?;
+    let entries = renamed.iter().filter_map(|&id| brain.task(id));
+    if json {
+        println!("{}", serde_json::to_string(&entries.map(Summary::new).collect::<Vec<_>>())?);
+    } else {
+        entries.for_each(|task| println!("{}", line(task)));
+    }
+    Ok(())
 }
 
 /// The first argument as an entry id (`12` or `#12`).
