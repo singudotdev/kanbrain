@@ -971,3 +971,33 @@ fn the_details_list_changes_among_the_comments_by_time(cx: &mut gpui::TestAppCon
     let (title, comment, description) = (top("thread change 0"), top("thread comment 0"), top("thread change 2"));
     assert!(title < comment && comment < description, "{title:?} {comment:?} {description:?}");
 }
+
+#[test]
+fn the_thread_says_who_wrote_and_who_changed() {
+    use kanbrain_core::model::{Activity, Changed, Comment};
+    let at = chrono::Local::now();
+    let when = when(at);
+    let mut comment = Comment::new(at, "x".into(), Author::Human);
+    assert_eq!(drawer::comment_label(&comment), when, "yours carry no mark");
+    comment.author = Author::Agent;
+    assert_eq!(drawer::comment_label(&comment), format!("Agent comment · {when}"));
+    comment.question = true;
+    assert_eq!(drawer::comment_label(&comment), format!("Agent question · {when}"));
+    let change = |by| Activity::new(at, by, Changed::Description);
+    assert_eq!(drawer::change_label(&change(Author::Human)), format!("You changed the description · {when}"));
+    assert_eq!(drawer::change_label(&change(Author::Agent)), format!("An agent changed the description · {when}"));
+}
+
+#[gpui::test]
+fn the_details_of_a_task_waiting_on_a_question_offer_to_answer_it(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    view.update(cx, |view, cx| {
+        view.board.brain_mut(0).author = Author::Agent;
+        view.board.brain_mut(0).ask(1, "Per IP or per account?").unwrap();
+        view.board.selected = Some(crate::state::Key::new(0, 1));
+        view.board.drawer = true;
+        cx.notify();
+    });
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("button answer").is_some(), "the question, with Answer");
+}

@@ -256,9 +256,6 @@ fn comments_block(key: Key, task: &Task, cx: &mut Context<BrainView>) -> Div {
 
 /// Comment `index` of `key`'s entry, with Edit and Delete.
 fn comment_card(key: Key, index: usize, comment: &Comment, cx: &mut Context<BrainView>) -> Div {
-    let edited = comment.edited.map(|at| format!(" · edited {}", when(at))).unwrap_or_default();
-    let what = if comment.question { "question" } else { "comment" };
-    let by = if comment.author == Author::Agent { format!("Agent {what} · ") } else { String::new() };
     let edit = small(widgets::button(("edit-comment", index), "Edit", Kind::Ghost))
         .tooltip(widgets::tooltip("Shortcut: C, then Enter on it"))
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
@@ -283,18 +280,29 @@ fn comment_card(key: Key, index: usize, comment: &Comment, cx: &mut Context<Brai
                 .items_center()
                 .gap_1()
                 // It wraps rather than push the buttons past the panel's edge, as an edit's date did.
-                .child(dim_small(format!("{by}{}{edited}", when(comment.created))).flex_1().min_w_0())
+                .child(dim_small(comment_label(comment)).flex_1().min_w_0())
                 .child(edit)
                 .child(delete),
         )
         .child(markdown::render(format!("comment {index}"), &comment.body))
 }
 
-/// A change in the thread, the `at`th item: who did what, and when, as a line between the comments.
+/// What a comment's card says above it: an agent's kind of comment, when, and when it was edited.
+pub(super) fn comment_label(comment: &Comment) -> String {
+    let edited = comment.edited.map(|at| format!(" · edited {}", when(at))).unwrap_or_default();
+    let what = if comment.question { "question" } else { "comment" };
+    let by = if comment.author == Author::Agent { format!("Agent {what} · ") } else { String::new() };
+    format!("{by}{}{edited}", when(comment.created))
+}
+
+/// A change in the thread, the `at`th item, as a line between the comments.
 fn change_line(at: usize, change: &Activity) -> Div {
-    dim_small(format!("{} {} · {}", who(change.by), change.change.said(), when(change.at)))
-        .px_2()
-        .debug_selector(move || format!("thread change {at}"))
+    dim_small(change_label(change)).px_2().debug_selector(move || format!("thread change {at}"))
+}
+
+/// What a change's line says: who did what, and when.
+pub(super) fn change_label(change: &Activity) -> String {
+    format!("{} {} · {}", who(change.by), change.change.said(), when(change.at))
 }
 
 /// Every status change, newest first.

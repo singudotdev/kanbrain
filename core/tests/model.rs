@@ -200,3 +200,14 @@ fn the_thread_has_comments_and_changes_by_time_a_change_first_in_its_second() {
         [r#"changed the title from "A" to "B""#, "0:one", "changed the description", "1:two", "added the tag #ux"]
     );
 }
+
+#[test]
+fn a_tag_or_relation_given_twice_in_one_change_is_said_once() {
+    let t0 = parse_ts("2026-10-16 10:00").unwrap();
+    let words = |w: &[&str]| w.iter().map(ToString::to_string).collect::<Vec<_>>();
+    let mut task = Task::new(1, "A".into(), t0);
+    task.relate(t0, Author::Human, &words(&["5"]), &words(&["9"]));
+    task.relate(t0, Author::Human, &words(&["5"]), &words(&["9"]));
+    let once = Changed::Related { added: words(&["5"]), removed: words(&["9"]) };
+    assert_eq!(task.activity, [Activity::new(t0, Author::Human, once)]);
+}
