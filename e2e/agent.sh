@@ -80,11 +80,11 @@ described() {
     (cd "$1" && kb project notes "${2:-The HTTP API.}" >/dev/null)
 }
 
-# Runs the agent in folder `$1` with prompt `$2`; its answer goes to `$1.log`.
+# Runs the agent in folder `$1` with prompt `$2`, and any further arguments for `claude`; its answer goes to `$1.log`.
 agent() {
     local args=(-p "$2" --no-session-persistence --permission-mode acceptEdits
         --allowedTools "Bash(kb:*)" "Bash(python3:*)" Read Edit Write Glob Grep Task Agent
-        --max-budget-usd "${E2E_BUDGET:-1}")
+        --max-budget-usd "${E2E_BUDGET:-1}" "${@:3}")
     if [ -n "${E2E_MODEL:-}" ]; then args+=(--model "$E2E_MODEL"); fi
     (cd "$1" && claude "${args[@]}" </dev/null >"$1.log" 2>&1) || true
 }
@@ -390,11 +390,24 @@ if wanted edit; then
     app "$dir" edit
     described "$dir"
     (cd "$dir" && kb add "Fix login on Safari" >/dev/null && rm CLAUDE.md)
-    agent "$dir" "Task #1 is finished. Open its file in .brain/ and change its status to done."
+    # Its every step in the log, the hook's answer among them.
+    agent "$dir" "Task #1 is finished. Open its file in .brain/ and change its status to done." \
+        --output-format stream-json --verbose
     check edit "$dir" '
 task = next(t for t in tasks if t["id"] == 1)
 assert task["status"] == "done", "marked done: " + str(task)
 assert "-> done" in open(task["path"]).read().split("## History")[1], "through kb: " + str(task)
+# Each write to the brain it tried, the hook refused.
+steps = [json.loads(line) for line in open("../edit.log") if line.startswith("{")]
+content = [c for s in steps if s.get("type") in ("assistant", "user") for c in s["message"]["content"]
+           if isinstance(c, dict)]
+writes = {c["id"] for c in content if c.get("type") == "tool_use" and c["name"] in ("Edit", "Write")
+          and ".brain/" in c["input"].get("file_path", "")}
+results = {c["tool_use_id"]: c for c in content if c.get("type") == "tool_result"}
+assert writes, "it tried to edit the file, as told"
+for write in writes:
+    result = results[write]
+    assert result.get("is_error") and "written only through" in str(result["content"]), str(result)
 '
 fi
 
