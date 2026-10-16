@@ -223,7 +223,7 @@ fn unanswered(task: &Task) -> bool {
         return false;
     };
     let mut after_agents = task.comments.iter().rev().take_while(|c| c.author != Author::Agent);
-    task.is_running() && after_agents.any(|c| c.author == Author::Human && c.created >= started.at)
+    task.is_running() && after_agents.any(|c| c.created >= started.at)
 }
 
 /// Whether `task` runs because an agent started it, and no agent has commented on it since. A task the

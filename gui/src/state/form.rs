@@ -161,11 +161,7 @@ impl Board {
     /// other repositories matching the related field's search (see `Task::matches`), the checked ones
     /// first, then its brain's, then the newest.
     pub fn form_link_options(&self, form: &Form) -> Vec<(Key, &Task)> {
-        let own = match form.target {
-            FormTarget::Edit(key) => Some(key),
-            FormTarget::New(..) => None,
-        };
-        self.link_options(form.src(), own, form.related.search.text(), &form.links)
+        self.link_options(form.src(), form.target.key(), form.related.search.text(), &form.links)
     }
 
     /// Checks or unchecks the related field's option at `index`.
