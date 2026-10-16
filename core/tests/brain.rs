@@ -543,6 +543,7 @@ fn relating_two_entries_is_logged_in_both_whichever_keeps_the_link() {
     assert_eq!(changes(&on_disk[0]), [(Author::Human, related(&["2"], &[]))]);
     assert_eq!(changes(&on_disk[1]), [(Author::Human, related(&["1"], &[]))], "the side without the link too");
     assert_eq!(changes(&on_disk[2]), []);
+    assert_eq!((&on_disk[0].links, &on_disk[1].links), (&vec![2], &vec![]), "the link is kept by the one given first");
 
     f.brain.author = Author::Agent;
     f.brain.link(3, &[1, 2], &[]).unwrap();
@@ -551,6 +552,19 @@ fn relating_two_entries_is_logged_in_both_whichever_keeps_the_link() {
     assert_eq!(changes(&on_disk[2]), [(Author::Agent, related(&["1", "2"], &[]))], "what it wasn't related to, once");
     assert_eq!(changes(&on_disk[0])[1..], [(Author::Agent, related(&["3"], &[]))]);
     assert_eq!(changes(&on_disk[1])[1..], [(Author::Agent, related(&["3"], &[]))]);
+}
+
+#[test]
+fn linking_logs_only_what_it_wasnt_related_to() {
+    // Related on disk, not through the brain: a repeat in the same second would merge into the first and not show.
+    let mut a = Task::new(1, "a".into(), now());
+    a.links = vec![3];
+    let mut f = Fixture::new(vec![a, Task::new(2, "b".into(), now()), Task::new(3, "c".into(), now())]);
+    f.brain.link(3, &[1, 2, 2], &[]).unwrap();
+    let on_disk = f.reloaded();
+    let added = |word: &str| vec![(Author::Human, Changed::Related { added: words(&[word]), removed: vec![] })];
+    assert_eq!(changes(&on_disk[0]), [], "already related");
+    assert_eq!((changes(&on_disk[1]), changes(&on_disk[2])), (added("3"), added("2")));
 }
 
 #[test]
