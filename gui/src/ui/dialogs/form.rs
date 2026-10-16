@@ -4,13 +4,14 @@ use super::{DIALOG_WIDTH, check, dialog, labeled, list_box, titled};
 use crate::state::{Board, COLUMNS, Field, Form, FormTarget, Picker};
 use crate::text::editor::LineInput;
 use crate::text::event::KeyCode;
+use crate::ui::drawer::who;
 use crate::ui::dropdown::{list, row};
 use crate::ui::pointer::TextBox;
 use crate::ui::theme::{self, ACCENT, BORDER};
 use crate::ui::widgets::{self, Kind, button, dim, dim_small, entry_pill, tag_chip, text_field};
-use crate::ui::{BrainView, Scrolls, action, truncate};
+use crate::ui::{BrainView, Scrolls, action, truncate, when};
 use gpui::{ClickEvent, Context, Div, ElementId, FontWeight, ScrollHandle, Stateful, div, prelude::*, px, rgb};
-use kanbrain_core::model::{Status, counted};
+use kanbrain_core::model::{Changed, Status, counted};
 
 /// Rows the form's related field shows before it scrolls: fewer than other lists, since it's inside
 /// the form, under its other fields.
@@ -37,6 +38,7 @@ pub(super) fn draw(board: &Board, form: &Form, scroll: &Scrolls, follow: bool, c
         .when(form.title_missed && form.title.text().trim().is_empty(), |d| {
             d.child(div().text_size(px(12.)).text_color(rgb(theme::RED)).child("A title is needed to save."))
         })
+        .children(form.theirs_title.as_deref().map(|theirs| theirs_title(board, form, theirs, cx)))
         .child(labeled(
             "Tags",
             tags_field(
@@ -70,6 +72,27 @@ pub(super) fn draw(board: &Board, form: &Form, scroll: &Scrolls, follow: bool, c
             .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.act(cx, Board::save_form))),
     ];
     dialog(titled(title, form.changed_on_disk), content, buttons).w(px(DIALOG_WIDTH))
+}
+
+/// The title `kb` gave the entry while the form changed it too: who gave it and when, as its activity says, and a
+/// button to take it, which saving again otherwise replaces with the form's.
+fn theirs_title(board: &Board, form: &Form, theirs: &str, cx: &mut Context<BrainView>) -> Div {
+    let given = form.target.key().and_then(|key| board.task(key)).and_then(|task| {
+        task.activity.iter().rev().find(|a| matches!(&a.change, Changed::Title { to, .. } if to == theirs))
+    });
+    let by = given.map(|a| format!(", by {} · {}", who(a.by).to_lowercase(), when(a.at))).unwrap_or_default();
+    let take = widgets::small(button("take-title", "Use it", Kind::Secondary))
+        .tooltip(widgets::tooltip("Shortcut: Ctrl+T"))
+        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.act(cx, Board::take_theirs_title)));
+    div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .text_size(px(12.))
+        .text_color(rgb(theme::YELLOW))
+        .debug_selector(|| "theirs-title".into())
+        .child(div().flex_1().min_w_0().child(format!("Changed meanwhile to “{theirs}”{by}. Saving keeps yours.")))
+        .child(take)
 }
 
 /// Where a new task starts: To do · Doing · Parked · Done, the one picked highlighted. Clicked, or with

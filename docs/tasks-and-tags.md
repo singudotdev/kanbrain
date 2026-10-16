@@ -131,8 +131,9 @@ decisions, by title or `#tag`), `↑` `↓` move, `enter` or a click checks or u
 box as chips; × takes one out. Editing starts from the entry's related entries, and saving links and unlinks to match.
 Saving an edit changes only what you changed in the form: a title, tags or related entries that `kb` changed while it
 was open are kept, and tags or related entries you edited keep those added elsewhere meanwhile, without those taken out
-there. A title you changed that `kb` changed too isn't replaced unseen: the save stops, the form stays open, and the
-status bar says what the title is now; saving again replaces it. Once `kb` changes the title, tags, related entries or
+there. A title you changed that `kb` changed too isn't replaced unseen: the save stops, the form stays open, and under the
+title it says what the title is now, who gave it and when; **Use it** (`ctrl+t`) puts it in the field, and saving
+again keeps yours. Once `kb` changes the title, tags, related entries or
 status of the entry being edited, the form's title says **· changed on disk** until it's closed, and the status bar
 says what changed (an agent may have finished or parked the task: saving doesn't move it back). Opening the form, the
 description or a comment of a task an agent has in doing, the status bar says **#N is being worked on by an agent**:
@@ -194,8 +195,15 @@ says **Add comment**, **Answer**, **Accept** or **Reject** when that's what savi
 **Discard changes** (`ctrl+d`) throws the edit away; until something's typed, the button is **Close**. An empty comment or
 answer adds nothing, and the status bar says so (an answer never written leaves the question waiting); to remove a
 comment, delete it. A description, comment, project description or role that `kb` changed while the editor was open
-(an agent's `kb describe`) isn't replaced unseen: the save stops, the editor stays open with your text, and the status
-bar says so; saving again replaces it, `ctrl+d` keeps theirs. A comment isn't saved over another: if this comment was
+(an agent's `kb describe`) isn't replaced unseen: the save merges the two line by line, like `git merge`. Lines only
+one of you changed take that change, and so do changes that only touch (yours to a line, theirs a line added after
+it), and the save goes on (**description saved, merged with the change made meanwhile**). Where you both changed the
+same lines, the save stops and the editor shows each conflict, your lines beside theirs, under who changed the text
+and when: `m` takes yours, `t` theirs, `b` both (or a click), `tab` and `↑` `↓` move between conflicts (`shift+tab`
+back), and **Use the result** (`enter`) puts the merged text back in the editor to look over and save. **Yours for
+the rest** (`esc`) takes yours wherever nothing's picked; what `kb` changed elsewhere stays. **Discard changes**
+(`ctrl+d`) keeps theirs. If `kb` changes the text again while you pick, the conflicts are merged again, and the
+status bar says so. A comment isn't saved over another: if this comment was
 deleted or replaced meanwhile, or the entry's other comments changed (one deleted or edited; new ones after them are
 fine), the save stops for good: copy your text, then `ctrl+d`. On a task an agent has in doing, opening its
 description or a comment says so in the status bar (see the form above). Writing why you reject or accept a decision

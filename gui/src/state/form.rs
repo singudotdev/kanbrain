@@ -90,8 +90,12 @@ impl Board {
         match form.target {
             FormTarget::New(src, kind, status) => self.create(src, kind, title, tags, form.links, status),
             FormTarget::Edit(key) => {
-                // A title `kb` changed meanwhile too isn't replaced unseen: the save stops, the form open, and says
-                // what it is now; saved again with no newer one, the form's replaces it.
+                // A save that stops, after the agent's question was answered, asks it again with the note typed.
+                if let Telling::Tell(note) = &telling {
+                    form.note.clone_from(note);
+                }
+                // A title `kb` changed meanwhile too isn't replaced unseen: the save stops, the form open, and shows
+                // what it is now, to take (`ctrl+t`); saved again with no newer one, the form's replaces it.
                 let renamed = match (&form.opened, self.task(key)) {
                     (Some(opened), Some(now))
                         if title != opened.title && now.title != opened.title && title != now.title =>
@@ -103,10 +107,13 @@ impl Board {
                 if let Some(now) = renamed {
                     let name = self.entry_name(key);
                     self.unsay_found(self.form_changed_on_disk(&form), self.form_changed_but(&form, "title"));
-                    self.notify(format!("{name}'s title changed meanwhile, to “{now}”: save again to replace it"));
+                    self.notify(format!(
+                        "{name}'s title changed meanwhile, to “{now}”: save again to keep yours, ctrl+t to take it"
+                    ));
                     if let Some(opened) = &mut form.opened {
-                        opened.title = now;
+                        opened.title.clone_from(&now);
                     }
+                    form.theirs_title = Some(now);
                     self.mode = Mode::Form(form);
                     return;
                 }
@@ -149,6 +156,24 @@ impl Board {
                 }
             }
         }
+    }
+
+    /// Puts in the title field the title `kb` gave the entry while the form changed it too, which saving then leaves
+    /// as it is.
+    pub fn take_theirs_title(&mut self) {
+        let Mode::Form(form) = &self.mode else { return };
+        let Some(title) = form.theirs_title.as_ref().and(form.target.key()).and_then(|key| self.task(key)) else {
+            return;
+        };
+        // As it is now, which a reload since the save stopped shows too: `kb` may have changed it again.
+        let title = title.title.clone();
+        let Mode::Form(form) = &mut self.mode else { return };
+        form.title = LineInput::new(&title);
+        if let Some(opened) = &mut form.opened {
+            opened.title = title;
+        }
+        form.theirs_title = None;
+        form.go_to(Field::Title);
     }
 
     /// Makes `key`'s related entries exactly `links`: links what isn't related yet, unlinks what's

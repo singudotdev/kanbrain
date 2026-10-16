@@ -25,6 +25,9 @@ chrono.workspace = true
 gpui = { git = "https://github.com/zed-industries/zed", tag = "v1.23.2", version = "0.2.2" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", tag = "v1.23.2", features = ["wayland", "x11"] }
 pulldown-cmark = { version = "0.13", default-features = false }
+# The editor's three-way merge of a text `kb` changed while it was open: `TextMerge` gives each region (changed on one
+# side, both, or in conflict) as data, where diffy's merge only writes conflict markers into the text.
+similar = { version = "3.2", default-features = false, features = ["std", "text"] }
 
 # The window's icon on X11, decoded from the PNG built in (GPUI takes it as an image::RgbaImage).
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]

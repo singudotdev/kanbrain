@@ -138,7 +138,7 @@ fn asked_block(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView>
 }
 
 /// Who wrote a comment or made a change, for people: "An agent" or "You".
-fn who(author: Author) -> &'static str {
+pub(super) fn who(author: Author) -> &'static str {
     match author {
         Author::Agent => "An agent",
         Author::Human => "You",
