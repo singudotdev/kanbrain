@@ -102,7 +102,8 @@ pub fn segmented(segments: impl IntoIterator<Item = Stateful<Div>>) -> Div {
 /// The sideways scroll of each one-line field, kept from frame to frame: GPUI builds the elements anew every frame.
 #[derive(Default)]
 struct FieldScrolls {
-    /// The frame being drawn, counted from the window's first.
+    /// How many times the board's view has been drawn, this time included: every field is drawn in it, so one it
+    /// didn't draw last time wasn't on screen.
     frame: u64,
     /// Each field's scroll, with the frame it was last drawn in: one the frame before didn't draw (a dialog's, opened
     /// again) is new on screen, and starts at its start rather than where it was left scrolled.
@@ -111,7 +112,8 @@ struct FieldScrolls {
 
 impl Global for FieldScrolls {}
 
-/// Counts a frame of the window, before anything in it is drawn: [`text_field`] tells by it a field new on screen.
+/// Counts a drawing of the board's view, before anything in it is drawn: [`text_field`] tells by it a field new on
+/// screen.
 pub(super) fn next_frame(cx: &mut GpuiApp) {
     cx.default_global::<FieldScrolls>().frame += 1;
 }

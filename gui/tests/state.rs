@@ -2727,9 +2727,13 @@ fn deleting_a_comment_deletes_the_one_asked_about_wherever_it_is_now() {
         (
             |kb| _ = kb.update_comment(1, 1, "b, edited").unwrap(),
             &["a", "b, edited", "c"],
-            Some("not deleted: #1's comment changed meanwhile"),
+            Some("not deleted: #1's comment was edited or deleted meanwhile"),
         ),
-        (|kb| kb.delete_comment(1, 1).unwrap(), &["a", "c"], Some("not deleted: #1's comment changed meanwhile")),
+        (
+            |kb| kb.delete_comment(1, 1).unwrap(),
+            &["a", "c"],
+            Some("not deleted: #1's comment was edited or deleted meanwhile"),
+        ),
     ];
     for (meanwhile, left, said) in cases {
         let mut task = f.on_disk(1);

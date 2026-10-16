@@ -504,7 +504,9 @@ impl Board {
                     Some(index) => {
                         self.brain_mut(key.src).delete_comment(key.id, index).map(|()| "comment deleted".into())
                     }
-                    None => Ok(format!("not deleted: {}'s comment changed meanwhile", self.entry_name(key))),
+                    None => {
+                        Ok(format!("not deleted: {}'s comment was edited or deleted meanwhile", self.entry_name(key)))
+                    }
                 }
             }
             Confirm::Update => {
