@@ -70,4 +70,10 @@ fn fish_goes_by_the_command_word_and_offers_tag_the_id_then_signed_tags() {
     assert_eq!(tag.len(), 2, "{script}");
     assert!(tag[0].contains("(count (__kb_words)) -eq 1") && tag[0].contains("kb complete ids"), "{}", tag[0]);
     assert!(tag[1].contains("(count (__kb_words)) -gt 1") && tag[1].contains(r#"sed "s/^/+/; p; s/^+/-/""#));
+    // Offered everywhere, `--tag` came after `kb tag 1 -`, among the tags to take off.
+    let option: Vec<_> = script.lines().filter(|l| l.contains(" -l tag ")).collect();
+    assert_eq!(
+        option,
+        ["complete -c kb -n '__kb_using add list report' -l tag -x -a '(kb complete tags (commandline -opc)[2..])'"]
+    );
 }
