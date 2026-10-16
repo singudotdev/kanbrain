@@ -349,3 +349,114 @@ fn any_text_reads_as_an_entry_or_an_error_never_a_crash() {
         let _ = Task::from_markdown(&text);
     }
 }
+
+/// A task with one change of each kind: a person's, then an agent's, a minute apart.
+fn with_activity() -> Task {
+    let t0 = parse_ts("2026-10-16 10:00").unwrap();
+    let mut task = Task::new(3, "Fix login".into(), t0);
+    let tags = |added: &[&str], removed: &[&str]| Changed::Tags {
+        added: added.iter().map(ToString::to_string).collect(),
+        removed: removed.iter().map(ToString::to_string).collect(),
+    };
+    task.activity = vec![
+        Activity::new(
+            t0,
+            Author::Human,
+            Changed::Title { from: "Fix it -> now (agent)".into(), to: "Fix login".into() },
+        ),
+        Activity::new(t0 + Duration::minutes(1), Author::Agent, tags(&["ux", "-odd"], &["bug"])),
+        Activity::new(
+            t0 + Duration::minutes(2),
+            Author::Agent,
+            Changed::Related { added: vec!["5".into(), "shop-api#3".into()], removed: vec!["9".into()] },
+        ),
+        Activity::new(t0 + Duration::minutes(3), Author::Human, Changed::Description),
+    ];
+    task
+}
+
+#[test]
+fn activity_is_written_after_the_comments_one_line_a_change() {
+    let text = with_activity().to_markdown();
+    let at = |minutes| fmt_ts(parse_ts("2026-10-16 10:00").unwrap() + Duration::minutes(minutes));
+    let expected = format!(
+        "## Comments\n\n## Activity\n\n\
+         - {} title\n  - from: Fix it -> now (agent)\n  - to: Fix login\n\
+         - {} tags (agent): +ux +-odd -bug\n\
+         - {} related (agent): +5 +shop-api#3 -9\n\
+         - {} description\n\n## History\n",
+        at(0),
+        at(1),
+        at(2),
+        at(3)
+    );
+    assert!(text.contains(&expected), "{text}");
+}
+
+#[test]
+fn activity_reads_back_as_it_was_written() {
+    let task = with_activity();
+    let back = Task::from_markdown(&task.to_markdown()).unwrap();
+    assert_eq!(back.activity, task.activity);
+    assert!(back.unknown.activity.is_empty() && back.unknown.sections.is_empty());
+    let note = Task { kind: Kind::Note, ..task };
+    assert_eq!(Task::from_markdown(&note.to_markdown()).unwrap().activity, note.activity, "notes have it too");
+}
+
+#[test]
+fn an_entry_without_activity_has_no_activity_section() {
+    let task = Task::new(3, "Fix login".into(), parse_ts("2026-10-16 10:00").unwrap());
+    assert!(!task.to_markdown().contains("## Activity"), "files stay as they were");
+}
+
+#[test]
+fn activity_an_older_version_moved_to_the_end_still_reads() {
+    // Versions before 0.6.0 keep the section as one they don't know, and write it after the others.
+    let task = with_activity();
+    let text = task.to_markdown();
+    let start = text.find("## Activity").unwrap();
+    let end = text.find("## History").unwrap();
+    let moved = format!("{}{}\n{}", &text[..start], &text[end..], &text[start..end]);
+    let back = Task::from_markdown(&moved).unwrap();
+    assert_eq!(back.activity, task.activity);
+    assert!(back.unknown.sections.is_empty(), "{moved}");
+}
+
+#[test]
+fn activity_lines_this_version_cant_read_are_kept_as_written() {
+    let lines = [
+        "- 2026-10-16T10:00:00+02:00 status (agent): todo -> doing",
+        "- 2026-10-16T10:00:00+02:00 tags (bot): +ux",
+        "- 2026-10-16 10:00 tags: +ux",
+        "- 2026-10-16T10:00:00+02:00 tags: ux",
+        "- 2026-10-16T10:00:00+02:00 tags: +",
+        "- 2026-10-16T10:00:00+02:00 tags:",
+        "- 2026-10-16T10:00:00+02:00 description: shorter",
+        "- 2026-10-16T10:00:00+02:00 title\n  - from: a",
+        "- 2026-10-16T10:00:00+02:00 title\n  - from: a\n  - to: b\n  - by: c",
+        "- 2026-10-16T10:00:00+02:00 description\n  more",
+    ];
+    let known = "- 2026-10-16T11:00:00+02:00 description (agent)";
+    let text = format!("# x\n\n- id: 1\n\n## Activity\n\n{}\n{known}\n", lines.join("\n"));
+    let task = Task::from_markdown(&text).unwrap();
+    assert_eq!(task.activity.len(), 1, "{:?}", task.activity);
+    assert_eq!((task.activity[0].by, &task.activity[0].change), (Author::Agent, &Changed::Description));
+    assert_eq!(task.unknown.activity, lines);
+    let again = task.to_markdown();
+    for line in lines {
+        assert!(again.contains(&format!("{line}\n")), "{line} kept: {again}");
+    }
+    assert_eq!(Task::from_markdown(&again).unwrap().unknown.activity, lines, "and kept again");
+}
+
+#[test]
+fn text_a_person_wrote_in_an_activity_section_is_kept() {
+    // An `## Activity` of someone's own, before 0.6.0 gave the name a meaning: prose, paragraphs, a list.
+    let prose = "Some prose I wrote\n\nA second paragraph\n  indented";
+    let text = format!("# x\n\n- id: 1\n\n## Activity\n\n{prose}\n- not a change\n");
+    let task = Task::from_markdown(&text).unwrap();
+    assert_eq!(task.unknown.activity, [prose, "- not a change"]);
+    let again = task.to_markdown();
+    assert!(again.contains(&format!("## Activity\n\n{prose}\n- not a change\n")), "{again}");
+    assert_eq!(Task::from_markdown(&again).unwrap().unknown.activity, task.unknown.activity, "and kept again");
+}

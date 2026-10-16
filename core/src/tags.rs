@@ -105,6 +105,16 @@ impl TagColors {
         self.entries.iter().find(|(t, _)| t == tag).map(|(_, c)| *c)
     }
 
+    /// Gives `new` the color of `old`, a tag renamed to it, unless it has one. Returns whether anything changed.
+    pub(crate) fn rename(&mut self, old: &str, new: &str) -> bool {
+        if self.get(new).is_some() {
+            return false;
+        }
+        let Some(entry) = self.entries.iter_mut().find(|(tag, _)| tag == old) else { return false };
+        new.clone_into(&mut entry.0);
+        true
+    }
+
     /// Gives every uncolored tag a random color among the least used ones,
     /// so colors only repeat once the whole palette is taken. Returns whether anything changed.
     pub fn assign<'a>(&mut self, tags: impl IntoIterator<Item = &'a String>) -> bool {

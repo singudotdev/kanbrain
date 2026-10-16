@@ -1,6 +1,6 @@
 use super::*;
 use crate::api::text::line;
-use crate::model::{Asked, Author, DecisionState};
+use crate::model::{Asked, Author, Changed, DecisionState};
 use crate::store::Store;
 
 /// A brain over a fresh folder; the folder lives as long as the returned guard.
@@ -156,6 +156,16 @@ fn entries_link_to_other_repositories_of_the_project_and_show_both_ways() {
     let to_api = |id| vec![RepoLink { repo: "api".into(), id }];
     web_brain.link(cart, &[], &to_api(total)).unwrap();
     assert!(web_brain.entry_text(cart).unwrap().contains("\n- api#1 expose the cart total (todo)\n"));
+    // Each logs what its own `- links:` line gained and lost: the other repository's isn't written for it.
+    let logged = |brain: &Brain, id| -> Vec<Changed> {
+        let task = Brain::open_in(Store::at(brain.store.dir()).unwrap(), central.path()).unwrap();
+        task.entry(id).unwrap().activity.iter().map(|a| a.change.clone()).collect()
+    };
+    let related = |added: &[&str], removed: &[&str]| Changed::Related {
+        added: added.iter().map(ToString::to_string).collect(),
+        removed: removed.iter().map(ToString::to_string).collect(),
+    };
+    assert_eq!(logged(&web_brain, cart), [related(&["api#1"], &[])]);
     assert!(open(&api).entry_text(total).unwrap().contains("\n- web#1 show the cart total (todo)\n"), "both ways");
 
     let error = |result: anyhow::Result<()>| result.unwrap_err().downcast::<ApiError>().unwrap();
@@ -171,6 +181,7 @@ fn entries_link_to_other_repositories_of_the_project_and_show_both_ways() {
     assert!(web_brain.entry(cart).unwrap().repo_links.is_empty(), "from the side that stored it");
     assert!(api_brain.toggle_repo_link(total, &mut web_brain, cart).unwrap(), "and again links, stored in api");
     assert_eq!(api_brain.entry(total).unwrap().repo_links, [RepoLink { repo: "web".into(), id: cart }]);
+    assert_eq!(logged(&api_brain, total), [related(&["web#1"], &[])], "only the link it keeps");
 
     // Deleted by hand in api, it's unlinked once web loads; with api's folder gone for now, links stay.
     web_brain.link(cart, &[], &to_api(total)).unwrap();
@@ -231,7 +242,50 @@ fn show_is_compact_text() {
     assert!(text.contains("## History (latest 5 of 9)"), "{text}");
     assert!(text.contains("## Related\n\n- #2 Rotate tokens (decision)"), "{text}");
     assert!(!text.contains("## Description") && !text.contains("## Comments"), "empty sections are left out");
+    assert!(!text.contains("## Changes"), "a new entry's links aren't a change: {text}");
     assert!(!text.contains("+0") && !text.contains(":00+"), "no offsets or seconds: {text}");
+}
+
+#[test]
+fn show_lists_changes_among_the_comments_by_time() {
+    let (mut brain, _dir) = brain();
+    let id = brain.add(new(Kind::Task, "Fix login")).unwrap();
+    let t0 = crate::model::parse_ts("2026-10-16 10:00").unwrap();
+    let at = |minutes| t0 + chrono::Duration::minutes(minutes);
+    let task = &mut brain.tasks[0];
+    task.set_title("Fix the login".into(), at(1), Author::Agent);
+    task.set_tags(vec!["ux".into()], at(1), Author::Human);
+    task.comments.push(crate::model::Comment::new(at(2), "why".into(), Author::Human));
+    task.relate(at(3), Author::Agent, &["shop-api#3".into()], &[]);
+    let text = brain.entry_text(id).unwrap();
+    let thread = "\n## Comments and changes\n\n\
+                  - 2026-10-16 10:01 changed the title from \"Fix login\" to \"Fix the login\" (agent)\n\
+                  - 2026-10-16 10:01 added the tag #ux\n\n\
+                  ### 2026-10-16 10:02\n\nwhy\n\n\
+                  - 2026-10-16 10:03 related it to shop-api#3 (agent)\n";
+    assert!(text.contains(thread), "{text}");
+    brain.tasks[0].comments.clear();
+    assert!(brain.entry_text(id).unwrap().contains("\n## Changes\n\n- 2026-10-16 10:01 changed the title"));
+
+    let json = serde_json::to_value(json::Entry::new(&brain, brain.entry(id).unwrap())).unwrap();
+    let fmt_ts = crate::model::fmt_ts;
+    let expected = serde_json::json!([
+        {"at": fmt_ts(at(1)), "author": "agent", "changed": "title", "from": "Fix login", "to": "Fix the login"},
+        {"at": fmt_ts(at(1)), "changed": "tags", "added": ["ux"]},
+        {"at": fmt_ts(at(3)), "author": "agent", "changed": "related", "added": ["shop-api#3"]},
+    ]);
+    assert_eq!(json["activity"], expected);
+    // `show` lists only the latest changes, as History's (the JSON, every one): an entry's every tag and link toggled
+    // would cost an agent each time.
+    for minute in 10..20 {
+        brain.tasks[0].set_description(minute.to_string(), at(minute), Author::Human);
+    }
+    let text = brain.entry_text(id).unwrap();
+    assert!(text.contains("\n## Changes (latest 10 of 13 changes)\n\n- 2026-10-16 10:10 changed the description\n"));
+    assert!(
+        !text.contains("changed the title") && !text.contains("added the tag") && !text.contains("related it"),
+        "{text}"
+    );
 }
 
 #[test]
@@ -244,7 +298,7 @@ fn json_has_backlinks_and_no_status_for_notes() {
     assert_eq!(task_json["status"], "todo");
     let note_json = serde_json::to_value(json::Entry::new(&brain, brain.entry(note).unwrap())).unwrap();
     assert!(note_json.get("status").is_none());
-    for empty in ["linked_from", "comments", "description", "running"] {
+    for empty in ["linked_from", "comments", "activity", "description", "running"] {
         assert!(note_json.get(empty).is_none(), "{empty} is left out when empty");
     }
 }

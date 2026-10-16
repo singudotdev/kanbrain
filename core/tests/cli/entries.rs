@@ -1,4 +1,5 @@
 use super::*;
+use crate::model::{Author, Changed};
 
 fn parse(args: &[&str]) -> Result<EntryArgs> {
     let (name, rest) = args.split_first().unwrap();
@@ -124,11 +125,71 @@ fn tag_takes_signed_tags_in_order() {
     assert_eq!(args.command, EntryCommand::Tag(4, vec![add("ui"), add("bug"), remove("wip"), add("c++")]));
     let error = |args: &[&str]| parse(args).unwrap_err().to_string();
     assert_eq!(error(&["tag", "4"]), "tag needs what to change: +TAG adds a tag, -TAG removes one");
-    assert_eq!(error(&["tag", "4", "ui"]), "`ui`: +TAG adds a tag, -TAG removes one");
+    assert_eq!(error(&["tag", "4", "ui", "x"]), "`ui`: +TAG adds a tag, -TAG removes one");
     assert_eq!(error(&["tag", "4", "+#"]), "`+#` names no tag");
     assert_eq!(error(&["tag", "4", "--ui"]), "unknown tag option `--ui`: +TAG adds a tag, -TAG removes one");
     assert_eq!(error(&["tag", "4", "+ui", "--"]), "unexpected argument `--`", "tag takes no text");
     assert_eq!(error(&["tag", "+ui"]), "`+ui` isn't an entry id");
+}
+
+#[test]
+fn tag_takes_two_tags_to_rename_one() {
+    let command = |args: &[&str]| parse(args).unwrap().command;
+    assert_eq!(command(&["tag", "#Ops", "infra"]), EntryCommand::RenameTag("ops".into(), "infra".into(), true));
+    assert_eq!(command(&["tag", "ops", "infra"]), EntryCommand::RenameTag("ops".into(), "infra".into(), false));
+    assert_eq!(command(&["tag", "4", "ui"]), EntryCommand::RenameTag("4".into(), "ui".into(), false), "a number too");
+}
+
+#[test]
+fn tag_takes_two_tags_to_rename_one_and_says_whats_wrong() {
+    let error = |args: &[&str]| parse(args).unwrap_err().to_string();
+    assert_eq!(error(&["tag", "ops", "ops"]), "#ops is already its name");
+    assert_eq!(error(&["tag", "ops", "#OPS"]), "#ops is already its name");
+    assert_eq!(error(&["tag", "ops", "a,b"]), "`a,b` names several tags: tag OLD NEW renames one");
+    assert_eq!(error(&["tag", "#", "b"]), "`#` names no tag");
+    assert_eq!(error(&["tag", "ops", "+infra"]), "`ops` isn't an entry id", "a change: the first word is an id");
+    assert_eq!(error(&["tag", "ops", "-infra"]), "`ops` isn't an entry id");
+}
+
+#[test]
+fn renaming_a_tag_renames_it_in_every_entry_and_keeps_its_color() {
+    let dir = tempfile::tempdir().unwrap();
+    let open = || Brain::open(crate::store::Store::at(dir.path()).unwrap()).unwrap();
+    let mut brain = open();
+    let tagged = |tags: &[&str]| NewEntry {
+        title: "x".into(),
+        tags: tags.iter().map(ToString::to_string).collect(),
+        ..NewEntry::default()
+    };
+    let a = brain.add(tagged(&["ops", "ui"])).unwrap();
+    let b = brain.add(tagged(&["infra", "ops"])).unwrap();
+    let c = brain.add(tagged(&["ui"])).unwrap();
+    let (color, infra) = (brain.tag_colors.get("ops"), brain.tag_colors.get("infra"));
+    brain.author = Author::Agent;
+    assert_eq!(brain.rename_tag("ops", "platform").unwrap(), [a, b]);
+    let saved = open();
+    assert_eq!(saved.entry(a).unwrap().tags, ["platform", "ui"], "in its place");
+    assert_eq!(saved.entry(c).unwrap().tags, ["ui"]);
+    assert_eq!(saved.tag_colors.get("platform"), color, "its color goes with it");
+    let renamed = Changed::Tags { added: vec!["platform".into()], removed: vec!["ops".into()] };
+    let logged = saved.entry(b).unwrap().activity.iter().map(|a| (a.by, a.change.clone())).collect::<Vec<_>>();
+    assert_eq!(logged, [(Author::Agent, renamed)], "each entry says so");
+    assert_eq!(saved.entry(c).unwrap().activity, []);
+
+    assert_eq!(brain.rename_tag("platform", "infra").unwrap(), [a, b]);
+    assert_eq!(open().entry(b).unwrap().tags, ["infra"], "merged into the one it had");
+    assert_eq!(open().tag_colors.get("infra"), infra, "keeps its own color");
+    let error = rename_tag(&mut brain, "ops", "x", false, false).unwrap_err().to_string();
+    assert_eq!(error, "no entry is tagged #ops");
+    // A tag named as an entry's id: renamed only when written as a tag, `#1`.
+    brain.update(c, "x", vec![a.to_string()]).unwrap();
+    let error = rename_tag(&mut brain, &a.to_string(), "x", false, false).unwrap_err().to_string();
+    assert_eq!(error, format!("#{a} is an entry: to tag it, `kb tag {a} +x`; to rename tag #{a}, `kb tag '#{a}' x`"));
+    assert_eq!(open().entry(c).unwrap().tags, [a.to_string()], "nothing renamed");
+    rename_tag(&mut brain, &a.to_string(), "x", true, false).unwrap();
+    assert_eq!(open().entry(c).unwrap().tags, ["x"]);
+    let error = rename_tag(&mut brain, "99", "x", false, false).unwrap_err().to_string();
+    assert_eq!(error, "no entry is tagged #99", "no entry #99 to mistake it for");
 }
 
 #[test]

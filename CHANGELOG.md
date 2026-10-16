@@ -5,6 +5,36 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-16
+
+### Added
+
+- Entries log who changed their title, tags, related entries or description, and when, in a new `## Activity`
+  section of their file (`Task::activity`, `model::Activity`, `Changed`): a title with what it was and became, tags
+  and related entries as what was added and removed (`+ux -bug`, `+5 -shop-api#3`), a description as changed. A
+  relation is logged on both entries; one with another repository's entry, on the entry whose file keeps the link.
+  Deleting or moving an entry logs nothing.
+- The kanban app's details list each change among the comments, by time: `An agent changed the title from "Fix
+  login" to "Fix login 500"`, `You added the tag #prod`.
+- `kb show` lists the latest 10 changes with the comments (`Comments and changes`, `(latest 10 of N changes)`);
+  `--json` gives them all in `activity` (`changed`, `from`, `to`, `added`, `removed`, `author`).
+- `kb tag OLD NEW` renames a tag in every entry that has it, giving the new tag the old one's color, and lists them
+  (`--json`: their summaries). A tag named as an entry's id is written `#5`: `kb tag 5 ui` is refused, saying to
+  write `kb tag 5 +ui` to tag entry 5 or `kb tag '#5' ui` to rename the tag.
+- `e2e/update.sh`, run by CI's upgrade job: every released `kb update` installs this build, served as the latest
+  release by a stand-in `curl`, and this build reads the brains it wrote.
+
+### Changed
+
+- **Breaking:** for `kanbrain-core`'s Rust API only, `model::Task` has an `activity` field, and `Task`, `Comment`,
+  `StatusChange`, `Session`, `Unknown`, `Activity`, `Changed`, `api::ApiError` and the JSON shapes in `api::json`
+  are `#[non_exhaustive]`, so a field or variant added later isn't breaking. Outside the crate, build them with
+  `Task::new`, `Comment::new` and `Activity::new`, change entries with `Task::set_title`, `set_tags`,
+  `set_description`, `relate` and `log` (which log), and give a `match` on `ApiError` a `_` arm. `kb`, the app and
+  the data need nothing migrated: the data format stays 1, a file without `## Activity` reads as one with nothing
+  logged, and every released version keeps the section, writing it back, on the same brain
+  ([ADR 3](docs/decisions/0003-entries-log-their-changes-in-an-activity-section.md)).
+
 ## [0.5.2] - 2026-10-16
 
 ### Added
@@ -444,7 +474,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/singudotdev/kanbrain/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/singudotdev/kanbrain/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/singudotdev/kanbrain/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/singudotdev/kanbrain/compare/v0.4.2...v0.5.0
