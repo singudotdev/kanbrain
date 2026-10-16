@@ -5,6 +5,8 @@
 //! Moving with shift held, `select_all`, or the mouse (`point`) selects text (only the desktop app does any);
 //! typing or pasting replaces the selection, and `backspace`/`delete` erase it.
 
+use kanbrain_core::model::one_line;
+
 use super::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// The text being edited, line by line, with a cursor.
@@ -360,15 +362,15 @@ impl LineInput {
     }
 
     /// Inserts `text` at the cursor, in place of the selection if any (for typing and pasting).
-    /// Line breaks (`\n`, `\r\n` or a lone `\r`, as markdown reads them) and tabs become spaces and other control
-    /// characters are dropped: the input is one line. Returns whether the text changed.
+    /// Text with line breaks (`\n`, `\r\n` or a lone `\r`, as markdown reads them) is put on one line as `kb add`
+    /// puts a title ([`one_line`]); tabs become spaces and other control characters are dropped. Returns whether the
+    /// text changed.
     pub fn insert(&mut self, text: &str) -> bool {
         let deleted = self.delete_selection();
-        let text: String = text
-            .replace("\r\n", "\n")
+        let text: String = if text.contains(['\n', '\r']) { one_line(text) } else { text.to_owned() }
             .chars()
             .filter_map(|c| match c {
-                '\n' | '\r' | '\t' => Some(' '),
+                '\t' => Some(' '),
                 c if c.is_control() => None,
                 c => Some(c),
             })

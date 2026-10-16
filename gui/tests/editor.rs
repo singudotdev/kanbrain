@@ -115,6 +115,10 @@ fn line_input_selects_copies_and_replaces() {
     input.select_all();
     input.insert("a\rb\r\nc");
     assert_eq!(input.text(), "a b c");
+    // As `kb add` takes a title: a blank line, or a line's spaces at a break, isn't a second space.
+    input.select_all();
+    input.insert("Plan\n\nsteps  \n  done\n");
+    assert_eq!((input.text(), input.cursor()), ("Plan steps done", 15));
 }
 
 #[test]
