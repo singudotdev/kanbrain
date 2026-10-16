@@ -9,6 +9,7 @@ use crate::api::text::line;
 use crate::brain::{Brain, NewEntry};
 use crate::model::{Asked, DecisionState, Kind, RepoLink, Status, Task, not_a_link, one_line, parse_links, parse_tags};
 use crate::projects::ProjectInfo;
+use crate::store;
 use anyhow::{Context, Result, anyhow, bail};
 use serde::Serialize;
 use std::io::Read;
@@ -382,6 +383,12 @@ impl EntryArgs {
             EntryCommand::Project(_) if json => bail!("project is markdown only"),
             EntryCommand::Project(change) => return run_project(&mut brain, change),
             EntryCommand::Context => {
+                // A release that adds a hook reaches the project with its next session. Never in the context's way:
+                // a session starts all the same without it.
+                let dir = brain.store.dir();
+                if let Some(root) = dir.parent().filter(|_| dir.file_name() == Some(store::PROJECT_DIR.as_ref())) {
+                    let _ = super::claude::update_hooks(root);
+                }
                 let usage = if brain.project.is_some() { "" } else { CONTEXT_USAGE };
                 println!("{}{usage}", brain.context_markdown());
                 return Ok(());

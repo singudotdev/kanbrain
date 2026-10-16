@@ -9,7 +9,12 @@
 //!   asked to, so until it's done the prompt carries the request and the turn's end repeats it.
 //!   `stop` also reminds an agent of each task it started and hasn't commented on since;
 //! - before the agent writes a file with Claude Code's tools, `kb hook edit` refuses one in a brain's folder
-//!   and sends it to `kb`, which the section already asks for.
+//!   and sends it to `kb`, which the section already asks for;
+//! - before every tool call, `kb hook tool` tells the agent of the user's comment on a task it's working on, made
+//!   since it last commented there, until it does: the user is heard mid-work.
+//!
+//! `kb context` brings a repository's hooks up to date once kanbrain's are there: a release that adds one reaches
+//! every project with its next session, without `kb init` run again in each.
 //!
 //! They go in `.claude/settings.local.json`, the repository's personal settings, since `init` runs on
 //! each machine anyway and a teammate without kanbrain installed shouldn't get failing hooks.
@@ -34,13 +39,15 @@ struct Hook {
 }
 
 /// The hooks, in the order they're written.
-const HOOKS: [Hook; 4] = [
+const HOOKS: [Hook; 5] = [
     // A new session, a resumed one, after `/clear`, and after compaction.
     Hook { event: "SessionStart", matcher: Some("startup|resume|clear|compact"), command: "kb context" },
     Hook { event: "UserPromptSubmit", matcher: None, command: "kb hook prompt" },
     Hook { event: "Stop", matcher: None, command: "kb hook stop" },
     // The tools that write files; a shell command's writes aren't seen.
     Hook { event: "PreToolUse", matcher: Some("Edit|Write|MultiEdit"), command: "kb hook edit" },
+    // Every tool: no matcher.
+    Hook { event: "PreToolUse", matcher: None, command: "kb hook tool" },
 ];
 
 /// What adding or removing the hooks did.
@@ -80,6 +87,23 @@ pub fn add_hooks(root: &Path) -> Result<Change> {
     }
     write(&path, &settings)?;
     Ok(Change::Written)
+}
+
+/// Adds what's missing of the hooks to `root`'s settings, if any of kanbrain's is there: never anew, so a
+/// repository whose hooks were taken out (`kb deinit`), or never written (`AGENTS.md` only), stays without.
+pub fn update_hooks(root: &Path) -> Result<Change> {
+    let path = root.join(SETTINGS);
+    if !path.is_file() {
+        return Ok(Change::Unchanged);
+    }
+    let hooks = read(&path)?.remove("hooks").unwrap_or(Value::Null);
+    let installed = HOOKS.iter().any(|hook| {
+        hooks[hook.event].as_array().is_some_and(|groups| groups.iter().any(|group| runs(group, hook.command)))
+    });
+    if !installed {
+        return Ok(Change::Unchanged);
+    }
+    add_hooks(root)
 }
 
 /// The matcher group written for `hook`.
@@ -130,9 +154,17 @@ pub fn remove_hooks(root: &Path) -> Result<Change> {
     Ok(Change::Written)
 }
 
-/// Whether a matcher group runs `command`.
+/// Whether a matcher group runs `command`, as written or with `kb` given by its path (`/opt/bin/kb hook tool`), as a
+/// user may have changed it: one to keep, update or remove, never to add again beside itself.
 fn runs(group: &Value, command: &str) -> bool {
-    group["hooks"].as_array().is_some_and(|hooks| hooks.iter().any(|h| h["command"] == command))
+    let args = command.strip_prefix("kb");
+    let same = |written: &str| {
+        written == command
+            || args
+                .and_then(|args| written.strip_suffix(args))
+                .is_some_and(|program| Path::new(program).file_stem().is_some_and(|stem| stem == "kb"))
+    };
+    group["hooks"].as_array().is_some_and(|hooks| hooks.iter().any(|h| h["command"].as_str().is_some_and(same)))
 }
 
 /// The settings in `path`; none yet if there's no file. A file that isn't a JSON object is refused,

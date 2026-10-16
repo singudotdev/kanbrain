@@ -4,7 +4,8 @@
 
 use super::nav::Step;
 use super::{
-    Board, COLUMNS, CommentPicker, Confirm, Field, Form, Manage, Mode, Picker, PickerKey, Tab, Target, WherePicker,
+    Board, COLUMNS, CommentPicker, Confirm, Field, Form, Manage, Mode, Picker, PickerKey, Tab, Target, Telling,
+    WherePicker,
 };
 use crate::text::editor::{LineInput, Outcome, Pointer, TextEditor};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -55,7 +56,7 @@ impl Board {
                     self.notify("changes discarded");
                 } else if edit.editor.on_key(key) == Outcome::Save || (ctrl && key.code == KeyCode::Enter) {
                     // A save that stops puts the editor back.
-                    self.save_edit(edit);
+                    self.save_edit(edit, Telling::Ask);
                 } else {
                     self.mode = Mode::Edit(edit);
                     return;
@@ -87,6 +88,15 @@ impl Board {
             Mode::Palette(picker) => self.key_palette(picker, key),
             Mode::AddProject(add) => self.key_add_project(add, key),
             Mode::Manage(manage) => self.key_manage(manage, key),
+            // `enter` tells the agent, `ctrl+enter` just saves; `esc` goes back to what was saving.
+            Mode::Tell(mut tell) => match key.code {
+                KeyCode::Esc => self.mode = tell.pending.into_mode(),
+                KeyCode::Enter => self.answer_tell(*tell, key.modifiers.contains(KeyModifiers::CONTROL)),
+                _ => {
+                    tell.note.on_key(key);
+                    self.mode = Mode::Tell(tell);
+                }
+            },
         }
     }
 
@@ -150,7 +160,7 @@ impl Board {
     }
 
     /// Reopens Manage project on `back` once the editor it opened has closed, unless that opened something else.
-    fn back_to_manage(&mut self, back: Option<usize>) {
+    pub(super) fn back_to_manage(&mut self, back: Option<usize>) {
         if let (Some(src), Mode::Normal) = (back, &self.mode)
             && src < self.sources.len()
         {
@@ -280,7 +290,7 @@ impl Board {
                 }
                 self.mode = Mode::Form(form);
             }
-            KeyCode::Enter => self.submit_form(form),
+            KeyCode::Enter => self.submit_form(form, Telling::Ask),
             KeyCode::Tab | KeyCode::Down => {
                 form.tab_to(form.next_field());
                 self.mode = Mode::Form(form);
@@ -402,6 +412,7 @@ impl Board {
             Mode::AddProject(add) => Some(Typing::Line(&mut add.picker.search)),
             Mode::Manage(manage) => manage.picker_mut().map(|picker| Typing::Line(&mut picker.search)),
             Mode::Edit(edit) => Some(Typing::Text(&mut edit.editor)),
+            Mode::Tell(tell) => Some(Typing::Line(&mut tell.note)),
             Mode::Normal | Mode::Confirm(_) | Mode::ManageProject(_) | Mode::Menu(_) | Mode::Comments(_) => None,
         }
     }
@@ -437,6 +448,7 @@ impl Board {
             }
             Mode::Palette(picker) => picker.search.selected_text().map(str::to_string),
             Mode::AddProject(add) => add.picker.search.selected_text().map(str::to_string),
+            Mode::Tell(tell) => tell.note.selected_text().map(str::to_string),
             Mode::Manage(manage) => match manage {
                 Manage::RenameProject { name: picker, .. }
                 | Manage::RenameRepo { name: picker, .. }

@@ -1,6 +1,8 @@
 //! The new / edit form and the quick-add field: what typing in them and saving them changes.
 
-use super::{Board, Field, Form, FormTarget, Key, Mode, QuickAdd, Tab, WhereFor, changed_on_disk};
+use super::{
+    Board, Field, Form, FormTarget, Key, Mode, Pending, QuickAdd, Tab, Telling, WhereFor, changed_on_disk, listed,
+};
 use crate::text::editor::LineInput;
 use anyhow::Result;
 use kanbrain_core::brain::NewEntry;
@@ -71,7 +73,7 @@ impl Board {
 
     /// Saves the form: creates the entry and selects it, or changes the one being edited.
     /// An empty title keeps the form open.
-    pub(super) fn submit_form(&mut self, mut form: Box<Form>) {
+    pub(super) fn submit_form(&mut self, mut form: Box<Form>, telling: Telling) {
         let title = form.title.text().trim().to_string();
         if title.is_empty() {
             self.notify("the title is empty");
@@ -111,12 +113,17 @@ impl Board {
                         merged(&opened.tags, &tags, &now.tags),
                         merged(&opened.links, &form.links, &related),
                     ),
-                    _ => (title, tags, form.links),
+                    _ => (title, tags, form.links.clone()),
                 };
                 // Saved as it was, it's no change, as in the editors: nothing written, nothing said.
                 let same_links = related.len() == links.len() && related.iter().all(|k| links.contains(k));
-                if self.task(key).is_some_and(|t| t.title == title && t.tags == tags) && same_links {
+                let (same_title, same_tags) =
+                    self.task(key).map_or((false, false), |t| (t.title == title, t.tags == tags));
+                if same_title && same_tags && same_links {
                     return;
+                }
+                if self.asks_to_tell(key, &telling) {
+                    return self.ask_to_tell(Pending::Form(form));
                 }
                 let result = self.brain_mut(key.src).update(key.id, &title, tags);
                 let saved = result.is_ok();
@@ -126,7 +133,14 @@ impl Board {
                 self.report_error(result);
                 // As every other edit says it was saved.
                 if saved && related {
-                    self.notify(format!("{} saved", self.entry_name(key)));
+                    let said = format!("{} saved", self.entry_name(key));
+                    let fields = [(!same_title, "title"), (!same_tags, "tags"), (!same_links, "related entries")];
+                    match (telling, listed(&fields)) {
+                        (Telling::Tell(note), Some(changed)) => {
+                            self.tell_agent(key, &format!("the {changed}"), &note, &said);
+                        }
+                        _ => self.notify(said),
+                    }
                 }
             }
         }
@@ -195,7 +209,7 @@ impl Board {
     /// the keys, so the button doesn't go through it.
     pub fn save_form(&mut self) {
         if let Mode::Form(form) = std::mem::replace(&mut self.mode, Mode::Normal) {
-            self.submit_form(form);
+            self.submit_form(form, Telling::Ask);
         }
     }
 

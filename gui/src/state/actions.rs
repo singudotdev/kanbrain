@@ -1,8 +1,8 @@
 //! Changes to entries, through the brain: each one says in the status bar what it did, or why not.
 
 use super::{
-    Board, CommentPicker, Confirm, Edit, Form, Key, LinkPicker, Mode, NextUndo, Picker, QuickAdd, Request, Tab, Target,
-    WhereFor, WherePicker, changed_on_disk,
+    Board, CommentPicker, Confirm, Edit, Form, Key, LinkPicker, Mode, NextUndo, Pending, Picker, QuickAdd, Request,
+    Tab, Target, Tell, Telling, WhereFor, WherePicker, changed_on_disk,
 };
 use crate::text::editor::{LineInput, TextEditor};
 use anyhow::Result;
@@ -179,8 +179,58 @@ impl Board {
     /// Says, on opening the form or an editor on a task an agent has in doing, that it's being worked on: what's
     /// saved may cross what the agent writes next. It only warns, since the user may be correcting the agent.
     pub(super) fn say_agent_working(&mut self, key: Key) {
-        if self.task(key).is_some_and(|t| t.is_task() && t.status == Status::Doing && t.started_by() == Author::Agent) {
+        if self.agent_working(key) {
             self.notify(format!("{} is being worked on by an agent", self.entry_name(key)));
+        }
+    }
+
+    /// Whether `key` is a task an agent has in doing.
+    pub(super) fn agent_working(&self, key: Key) -> bool {
+        self.task(key).is_some_and(|t| t.is_task() && t.status == Status::Doing && t.started_by() == Author::Agent)
+    }
+
+    /// Whether a save on `key` asks [`Tell`]'s question first: an agent is working on it, and it wasn't answered.
+    pub(super) fn asks_to_tell(&self, key: Key, telling: &Telling) -> bool {
+        *telling == Telling::Ask && self.agent_working(key)
+    }
+
+    /// Asks [`Tell`]'s question about the save `pending`, which waits for the answer.
+    pub(super) fn ask_to_tell(&mut self, pending: Pending) {
+        self.mode = Mode::Tell(Box::new(Tell { pending, note: LineInput::default() }));
+    }
+
+    /// Saves the form or editor [`Tell`] holds, telling the agent unless `just_save`.
+    pub(super) fn answer_tell(&mut self, tell: Tell, just_save: bool) {
+        let telling = if just_save { Telling::Save } else { Telling::Tell(tell.note.text().trim().to_string()) };
+        match tell.pending {
+            Pending::Form(form) => self.submit_form(form, telling),
+            Pending::Edit(edit) => {
+                let back = edit.back;
+                self.save_edit(*edit, telling);
+                self.back_to_manage(back);
+            }
+        }
+    }
+
+    /// Saves without telling the agent, from [`Tell`]'s button.
+    pub fn just_save(&mut self) {
+        if let Mode::Tell(tell) = std::mem::replace(&mut self.mode, Mode::Normal) {
+            self.answer_tell(*tell, true);
+        }
+    }
+
+    /// Tells the agent working on `key` what the user changed (`changed`, as "the title and tags"), and `note`, as the
+    /// user's comment: what `kb hook tool` brings to it with its next step. Adds to `said`, the save's message.
+    pub(super) fn tell_agent(&mut self, key: Key, changed: &str, note: &str, said: &str) {
+        // Finished or parked while the question was open: nobody would read it before the task is picked up again.
+        if !self.agent_working(key) {
+            return self.notify(format!("{said}; not told: no agent is working on it now"));
+        }
+        let comment =
+            if note.is_empty() { format!("Changed {changed}.") } else { format!("Changed {changed}: {note}") };
+        match self.brain_mut(key.src).add_comment(key.id, &comment) {
+            Ok(_) => self.notify(format!("{said}; the agent is told")),
+            Err(e) => self.notify(format!("{said}, but the agent isn't told: {e:#}")),
         }
     }
 
@@ -253,7 +303,7 @@ impl Board {
     }
 
     /// Writes the editor's text to its target, if it changed.
-    pub(super) fn save_edit(&mut self, mut edit: Edit) {
+    pub(super) fn save_edit(&mut self, mut edit: Edit, telling: Telling) {
         let answers = self.answers(edit.target);
         let text = edit.editor.text();
         // A comment or a reason is something said: closing with none says so, rather than closing as if it was
@@ -297,34 +347,23 @@ impl Board {
             self.mode = Mode::Edit(edit);
             return;
         }
-        let giving = match edit.target {
-            Target::Reject(key) => Some((key, "reject", DecisionState::Rejected, "reason")),
-            Target::Accept(key) => Some((key, "accept", DecisionState::Accepted, "comment")),
-            Target::Description(_)
-            | Target::NewComment(_)
-            | Target::Comment(..)
+        if let Some(stop) = self.verdict_meanwhile(&mut edit) {
+            self.notify(stop);
+            self.mode = Mode::Edit(edit);
+            return;
+        }
+        // What the agent working on the entry is told, if it's one it may be writing too.
+        let told = match edit.target {
+            Target::Description(key) => Some((key, "the description")),
+            Target::Comment(key, _) => Some((key, "a comment")),
+            Target::NewComment(_)
+            | Target::Reject(_)
+            | Target::Accept(_)
             | Target::Project(_)
             | Target::RepoNotes(_) => None,
         };
-        if let Some((key, verb, verdict, word)) = giving
-            && let Some(now) = self.task(key).map(|t| t.decision)
-            && (Some(now) != edit.decision || now == verdict)
-        {
-            let was = match now {
-                DecisionState::Proposed => "proposed again",
-                now => now.as_str(),
-            };
-            let name = self.entry_name(key);
-            // Given the verdict the user was writing, `resolve` does nothing: the text would be lost while saying
-            // it's done. Where it stood is kept all the same, so a change after it stops the save again.
-            if now == verdict {
-                self.notify(format!("{name} was {was} meanwhile: copy your {word}, then ctrl+d"));
-            } else {
-                self.notify(format!("{name} was {was} meanwhile: save again to {verb} it anyway, ctrl+d to leave it"));
-            }
-            edit.decision = Some(now);
-            self.mode = Mode::Edit(edit);
-            return;
+        if told.is_some_and(|(key, _)| self.asks_to_tell(key, &telling)) {
+            return self.ask_to_tell(Pending::Edit(Box::new(edit)));
         }
         let saved = match edit.target {
             Target::Description(key) => {
@@ -355,11 +394,45 @@ impl Board {
             Target::Accept(key) | Target::Reject(key) => format!("{} {what}", self.entry_name(key)),
             _ => what.to_string(),
         };
-        match saved {
-            Ok((true, said)) => self.notify(format!("{} (headings were made smaller)", what(said))),
-            Ok((false, said)) => self.notify(what(said)),
-            Err(e) => self.notify_error(&e),
+        let said = match saved {
+            Ok((true, said)) => format!("{} (headings were made smaller)", what(said)),
+            Ok((false, said)) => what(said),
+            Err(e) => return self.notify_error(&e),
+        };
+        match (told, telling) {
+            (Some((key, changed)), Telling::Tell(note)) => self.tell_agent(key, changed, &note, &said),
+            _ => self.notify(said),
         }
+    }
+
+    /// For a verdict's editor, why its save stops: `kb` decided meanwhile, which a save doesn't overturn unseen.
+    /// Where the decision stands is kept in `edit`, so a change after this stops the next save again.
+    fn verdict_meanwhile(&self, edit: &mut Edit) -> Option<String> {
+        let (key, verb, verdict, word) = match edit.target {
+            Target::Reject(key) => (key, "reject", DecisionState::Rejected, "reason"),
+            Target::Accept(key) => (key, "accept", DecisionState::Accepted, "comment"),
+            Target::Description(_)
+            | Target::NewComment(_)
+            | Target::Comment(..)
+            | Target::Project(_)
+            | Target::RepoNotes(_) => return None,
+        };
+        let now = self.task(key)?.decision;
+        if Some(now) == edit.decision && now != verdict {
+            return None;
+        }
+        edit.decision = Some(now);
+        let was = match now {
+            DecisionState::Proposed => "proposed again",
+            now => now.as_str(),
+        };
+        let name = self.entry_name(key);
+        // Given the verdict the user was writing, `resolve` does nothing: the text would be lost while saying it's done.
+        Some(if now == verdict {
+            format!("{name} was {was} meanwhile: copy your {word}, then ctrl+d")
+        } else {
+            format!("{name} was {was} meanwhile: save again to {verb} it anyway, ctrl+d to leave it")
+        })
     }
 
     /// Edits the description of the project shown, else the selected entry's, which its repositories share.

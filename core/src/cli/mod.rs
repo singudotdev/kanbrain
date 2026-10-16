@@ -3,8 +3,8 @@
 //! - [`entries`]: commands that read or change entries by id, for agents and scripts.
 //! - [`mod@init`]: a project's `.brain/`, and the section telling its agents about it; `deinit` undoes it.
 //! - [`claude`]: the Claude Code hooks `init` adds: the context at each session start, and [`hook`]'s checks.
-//! - [`hook`]: `kb hook prompt|stop|edit`, which hold an agent to describing an undescribed project first, to
-//!   commenting on the tasks it started, and to `kb` for the brain's files.
+//! - [`hook`]: `kb hook prompt|stop|edit|tool`, which hold an agent to describing an undescribed project first, to
+//!   commenting on the tasks it started, and to `kb` for the brain's files, and tell it of the user's comments.
 //! - [`completions`]: `kb completions SHELL`, tab completion, and the ids, projects and tags it offers.
 //! - [`update`]: `kb update` and the app's, the latest release over this one, through the installer, once no
 //!   agent is working.
@@ -152,10 +152,11 @@ usage:
   {pad}           stop this folder (or --project NAME) being a project: unregister it, remove its
   {pad}           section from CLAUDE.md / AGENTS.md, the other repositories' links to it and, with
   {pad}           its last repository, the project's card; its .brain/ is kept unless --purge
-  {name} hook prompt|stop|edit
+  {name} hook prompt|stop|edit|tool
   {pad}           what the Claude Code hooks `init` adds run: they hold an agent to describing an
   {pad}           undescribed project first, to commenting on the tasks it started, and to `kb` for
-  {pad}           the brain's files (they read the hook's JSON on stdin)
+  {pad}           the brain's files, and tell it of your comments on its task with its next tool
+  {pad}           (they read the hook's JSON on stdin)
   {name} status    print the running tasks, in whichever project, and how many wait for an answer
   {pad}           (for status bars)
   {name} report [{units}] [--group {groups}] [--tag TAG] [--save]
@@ -221,7 +222,7 @@ pub enum Command {
     /// `true` also deletes its `.brain/`.
     #[non_exhaustive]
     Deinit(bool),
-    /// `hook prompt|stop|edit`: what Claude Code's hooks run (see [`hook`]).
+    /// `hook prompt|stop|edit|tool`: what Claude Code's hooks run (see [`hook`]).
     #[non_exhaustive]
     Hook(hook::HookEvent),
     /// `status`: print the running tasks for status bars.
