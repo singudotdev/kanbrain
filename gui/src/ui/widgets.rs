@@ -101,9 +101,20 @@ pub fn segmented(segments: impl IntoIterator<Item = Stateful<Div>>) -> Div {
 
 /// The sideways scroll of each one-line field, kept from frame to frame: GPUI builds the elements anew every frame.
 #[derive(Default)]
-struct FieldScrolls(HashMap<TextBox, ScrollHandle>);
+struct FieldScrolls {
+    /// The frame being drawn, counted from the window's first.
+    frame: u64,
+    /// Each field's scroll, with the frame it was last drawn in: one the frame before didn't draw (a dialog's, opened
+    /// again) is new on screen, and starts at its start rather than where it was left scrolled.
+    fields: HashMap<TextBox, (ScrollHandle, u64)>,
+}
 
 impl Global for FieldScrolls {}
+
+/// Counts a frame of the window, before anything in it is drawn: [`text_field`] tells by it a field new on screen.
+pub(super) fn next_frame(cx: &mut GpuiApp) {
+    cx.default_global::<FieldScrolls>().frame += 1;
+}
 
 /// A one-line text field: the text with its cursor while `active`, else the text or `placeholder`.
 /// The mouse places the cursor and selects, and first makes it the field being typed into.
@@ -125,11 +136,15 @@ pub fn text_field(
     };
     let text = content.render();
     let hit = Hit::new(&text, input.text().chars().count());
-    // One not typed into shows its start.
-    let scroll = cx.default_global::<FieldScrolls>().0.entry(which).or_default().clone();
-    if !active {
+    let scrolls = cx.default_global::<FieldScrolls>();
+    let frame = scrolls.frame;
+    let (scroll, drawn) = scrolls.fields.entry(which).or_default();
+    // One not typed into shows its start, and so does one new on screen.
+    if !active || *drawn + 1 < frame {
         scroll.set_offset(point(px(0.), px(0.)));
     }
+    *drawn = frame;
+    let scroll = scroll.clone();
     let cursor = active.then(|| caret(&text, byte_at(input.text(), input.cursor()), Some(scroll.clone())));
     let field = div()
         .id(which.id())
