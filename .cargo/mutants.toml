@@ -34,4 +34,9 @@ exclude_re = [
     'gui/src/ui/pointer\.rs:.*replace focus with \(\)',
     # Downloads the installer from GitHub and runs it: the installer is checked by e2e/install.sh, not by tests.
     'core/src/cli/update\.rs:.*(replace run_installer -> Result| in run_installer$)',
+    # The conflict just picked is never among those left to pick, so `>=` finds the same one after it as `>`.
+    'gui/src/text/merge\.rs:.*replace > with >= in Merge::pick_at$',
+    # The highlight of a conflict's pick: a color and a weight, and the window tests read bounds, not colors (the
+    # state tests check what's picked, `Conflict::pick`).
+    'gui/src/ui/dialogs/merge\.rs:.*replace == with != in conflict_box$',
 ]

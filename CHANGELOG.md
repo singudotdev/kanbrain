@@ -5,6 +5,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-16
+
+### Added
+
+- The kanban app's editor merges what `kb` changed in a description, comment, project description or role while it
+  was open, line by line: lines only one side changed take that change, as do changes that only touch (a line edited
+  and one added after it), and the save goes on (`description saved, merged with the change made meanwhile`). Lines
+  both changed stop the save and show as conflicts in the editor's place, yours beside theirs (a description's under
+  who changed it and when): `m`, `t` and `b` (or a click) take yours, theirs or both, **Yours for the rest** (`esc`)
+  takes yours where nothing's picked, and **Use the result** (`enter`) puts the merged text in the editor to look over
+  and save. `kb` changing the text again while they're picked merges them again. It stopped at any change, for saving
+  again to replace it all.
+- A save that stops after **Tell the agent?** was answered asks it again with the note typed.
+- The edit form shows under the title the one `kb` gave while you changed it too, who gave it and when; **Use it**
+  (`ctrl+t`) takes it.
+
 ## [0.6.1] - 2026-10-16
 
 ### Fixed
@@ -491,7 +507,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/singudotdev/kanbrain/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/singudotdev/kanbrain/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/singudotdev/kanbrain/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/singudotdev/kanbrain/compare/v0.5.1...v0.5.2

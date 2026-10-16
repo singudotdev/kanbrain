@@ -2,6 +2,7 @@
 //!
 //! - [`form`]: the new / edit form, with its project, related entries and column.
 //! - [`editor`]: the text editor, for descriptions, comments and project text.
+//! - [`merge`]: the lines both the editor and `kb` changed, to pick from, in the editor's place.
 //! - [`pickers`]: the link picker, "which project?" and the command palette.
 //! - [`project`]: Manage project: a project at a glance, and the buttons that change it.
 //! - [`add_project`]: the project a folder picked in the system's dialog joins or starts.
@@ -13,6 +14,7 @@ mod add_project;
 mod editor;
 mod form;
 mod manage;
+mod merge;
 mod pickers;
 mod project;
 mod tell;

@@ -37,7 +37,8 @@ pub use mode::{
 };
 pub use sources::{Key, Scope, Source};
 
-use crate::text::editor::LineInput;
+use crate::text::editor::{LineInput, TextEditor};
+use crate::text::merge::{self, Merged};
 use anyhow::Result;
 use kanbrain_core::brain::{CalendarView, ReportView};
 use kanbrain_core::model::{Kind, Status, Task};
@@ -378,6 +379,7 @@ impl Board {
     /// Marks the open edit form or editor once `kb` changed what it edits, and says what, once: the save that follows
     /// is the user's call, made knowing it. One waiting for [`Tell`]'s answer too: the agent may finish the task then.
     fn mark_changed_on_disk(&mut self) {
+        self.merge_again();
         let said = match &self.mode {
             Mode::Edit(edit) => self.edit_mark(edit),
             Mode::Form(form) => self.form_mark(form),
@@ -398,6 +400,67 @@ impl Board {
             // Only an edit or a form says what changed.
             _ => return,
         }
+        self.notify_found(said);
+    }
+
+    /// Merges again the open conflicts of a text `kb` changed again while they were picked, which show its old text
+    /// otherwise; and shows in the form the title `kb` gives now, in place of the one a save stopped over, as the one
+    /// saving again keeps yours over. Picks made are lost, as the conflicts may not be the same.
+    fn merge_again(&mut self) {
+        if let Mode::Form(form) = &self.mode
+            && form.theirs_title.is_some()
+            && let Some(task) = form.target.key().and_then(|key| self.task(key))
+        {
+            let title = task.title.clone();
+            if let Mode::Form(form) = &mut self.mode {
+                if let Some(opened) = &mut form.opened {
+                    opened.title.clone_from(&title);
+                }
+                form.theirs_title = Some(title);
+            }
+            return;
+        }
+        let Mode::Edit(edit) = &self.mode else { return };
+        // Another comment at its index isn't merged with, which would put that comment in the editor: the text typed
+        // comes back, for the save to stop over (`same_comment`).
+        if edit.merge.is_some()
+            && let Target::Comment(key, _) = edit.target
+            && !self.same_comment(edit)
+        {
+            let name = self.entry_name(key);
+            if let Mode::Edit(edit) = &mut self.mode {
+                edit.merge = None;
+            }
+            return self.notify_found(format!(
+                "{name}'s comments changed around this one meanwhile: copy your text, then ctrl+d"
+            ));
+        }
+        let (Some(merge), Some(now)) = (&edit.merge, self.text_of(edit.target)) else { return };
+        if now == merge.theirs {
+            return;
+        }
+        let (merged, now) = (merge::merge(&edit.base, &edit.editor.text(), now), now.to_string());
+        let name = self.text_name(edit.target);
+        let Mode::Edit(edit) = &mut self.mode else { return };
+        let said = match merged {
+            Merged::Clean(text) => {
+                // All of theirs is the text as it is: nothing to save.
+                let theirs = text == now;
+                edit.base = now;
+                edit.merge = None;
+                edit.editor = TextEditor::new(&text);
+                edit.editor.modified = !theirs;
+                if theirs {
+                    format!("{name} changed again: it's theirs as it is now, esc closes")
+                } else {
+                    format!("{name} changed again: it all merges now, esc saves it")
+                }
+            }
+            Merged::Conflicted(conflicts) => {
+                edit.merge = Some(conflicts);
+                format!("{name} changed again: pick again where you both changed it")
+            }
+        };
         self.notify_found(said);
     }
 

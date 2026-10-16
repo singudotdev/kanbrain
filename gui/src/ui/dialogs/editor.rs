@@ -21,6 +21,9 @@ pub(super) fn draw(
     follow: bool,
     cx: &mut Context<BrainView>,
 ) -> Div {
+    if let Some(merge) = &edit.merge {
+        return super::merge::draw(board, edit, merge, (EDITOR_WIDTH, scroll), follow, cx);
+    }
     let name = edited_name(board, edit.target);
     let what = match edit.target {
         Target::Description(_) => "Description".to_string(),

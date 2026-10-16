@@ -4,11 +4,13 @@
 
 use super::nav::Step;
 use super::{
-    Board, COLUMNS, CommentPicker, Field, Form, Manage, Mode, Picker, PickerKey, Tab, Target, Telling, WherePicker,
+    Board, COLUMNS, CommentPicker, Edit, Field, Form, Manage, Mode, Picker, PickerKey, Tab, Target, Telling,
+    WherePicker,
 };
 use crate::text::editor::{LineInput, Outcome, Pointer, TextEditor};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
-use kanbrain_core::model::Kind;
+use crate::text::merge::{Merge, Pick};
+use kanbrain_core::model::{Kind, counted};
 
 /// Where typed text goes: a one-line field or the text editor.
 enum Typing<'a> {
@@ -26,13 +28,18 @@ impl Board {
 
     /// A key, without recording what it changes.
     fn key(&mut self, key: KeyEvent) {
-        // A ctrl+letter is a key only in the editor (`ctrl+d`; the clipboard's are the window's). Anywhere else it'd be
-        // taken for the letter alone: a second ctrl+d after discarding an edit would move the selected task to Done,
-        // and one in the remove dialog would delete its tasks.
-        if key.modifiers.contains(KeyModifiers::CONTROL)
-            && matches!(key.code, KeyCode::Char(_))
-            && !matches!(self.mode, Mode::Edit(_))
+        // A ctrl+letter is a key only in the editor (`ctrl+d`; the clipboard's are the window's) and in a form showing a
+        // title `kb` gave meanwhile (`ctrl+t` takes it). Anywhere else it'd be taken for the letter alone: a second
+        // ctrl+d after discarding an edit would move the selected task to Done, and one in the remove dialog would
+        // delete its tasks.
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        if ctrl
+            && key.code == KeyCode::Char('t')
+            && matches!(&self.mode, Mode::Form(form) if form.theirs_title.is_some())
         {
+            return self.take_theirs_title();
+        }
+        if ctrl && matches!(key.code, KeyCode::Char(_)) && !matches!(self.mode, Mode::Edit(_)) {
             return;
         }
         // Each handler puts back the mode it continues in; the default is the board.
@@ -53,6 +60,8 @@ impl Board {
                 if ctrl && key.code == KeyCode::Char('d') {
                     // Discard changes; the mode is already taken.
                     self.notify("changes discarded");
+                } else if edit.merge.is_some() {
+                    return self.key_merge(edit, key);
                 } else if edit.editor.on_key(key) == Outcome::Save || (ctrl && key.code == KeyCode::Enter) {
                     // A save that stops puts the editor back.
                     self.save_edit(edit, Telling::Ask);
@@ -146,6 +155,85 @@ impl Board {
         if outcome == PickerKey::Choose {
             choose(self, sel);
         }
+    }
+
+    /// The conflicts a save stopped over, in place of the editor's text: `tab` and the arrows move between them, `m`,
+    /// `t` and `b` pick yours, theirs or both, `enter` puts the merged text in the editor once each has a pick, and
+    /// `esc` takes yours where nothing's picked and puts that in the editor.
+    fn key_merge(&mut self, edit: Edit, key: KeyEvent) {
+        self.mode = Mode::Edit(edit);
+        // As the buttons name them, in either case (shift, caps lock); a ctrl+letter is the window's or nothing.
+        let pick = match key.code {
+            KeyCode::Char(_) if key.modifiers.contains(KeyModifiers::CONTROL) => return,
+            KeyCode::Char(c) => match c.to_ascii_lowercase() {
+                'm' => Pick::Mine,
+                't' => Pick::Theirs,
+                'b' => Pick::Both,
+                _ => return,
+            },
+            KeyCode::Tab | KeyCode::Down => return self.go_to_conflict(1),
+            KeyCode::BackTab | KeyCode::Up => return self.go_to_conflict(-1),
+            KeyCode::Enter => return self.use_merge(),
+            KeyCode::Esc => return self.keep_mine(),
+            _ => return,
+        };
+        if let Some(merge) = self.merge_mut() {
+            merge.pick(pick);
+        }
+    }
+
+    /// The conflicts shown in the editor's place, if any.
+    fn merge_mut(&mut self) -> Option<&mut Merge> {
+        match &mut self.mode {
+            Mode::Edit(edit) => edit.merge.as_mut(),
+            _ => None,
+        }
+    }
+
+    /// Moves to the next conflict (`step` 1) or the one before (`-1`).
+    fn go_to_conflict(&mut self, step: isize) {
+        if let Some(merge) = self.merge_mut() {
+            merge.go(step);
+        }
+    }
+
+    /// Picks `pick` for conflict `index`, from a click on one of its sides.
+    pub fn pick_conflict(&mut self, index: usize, pick: Pick) {
+        if let Some(merge) = self.merge_mut() {
+            merge.pick_at(index, pick);
+        }
+    }
+
+    /// Puts the merged text in the editor, once every conflict has a pick, to look over and save.
+    pub fn use_merge(&mut self) {
+        let Mode::Edit(edit) = &mut self.mode else { return };
+        let Some(merge) = &edit.merge else { return };
+        let Some(text) = merge.text() else {
+            let left = merge.conflicts().filter(|c| c.pick.is_none()).count();
+            return self.notify(format!(
+                "{} to pick yet: yours (m), theirs (t) or both (b)",
+                counted(left, "conflict", "conflicts")
+            ));
+        };
+        // All of theirs is the text as it is: nothing to save.
+        let said =
+            if text == merge.theirs { "merged: it's theirs as it is, esc closes" } else { "merged: esc saves it" };
+        // What a save merges with from now on is what the conflicts were picked over.
+        if let Some(merge) = edit.merge.take() {
+            edit.base = merge.theirs;
+        }
+        edit.editor = TextEditor::new(&text);
+        edit.editor.modified = true;
+        self.notify(said);
+    }
+
+    /// Takes yours in every conflict not picked yet, and puts the merged text in the editor: what `kb` changed
+    /// elsewhere stays.
+    pub fn keep_mine(&mut self) {
+        if let Some(merge) = self.merge_mut() {
+            merge.pick_rest(Pick::Mine);
+        }
+        self.use_merge();
     }
 
     /// Leaves the text editor without saving.
@@ -410,7 +498,8 @@ impl Board {
             Mode::Palette(picker) => Some(Typing::Line(&mut picker.search)),
             Mode::AddProject(add) => Some(Typing::Line(&mut add.picker.search)),
             Mode::Manage(manage) => manage.picker_mut().map(|picker| Typing::Line(&mut picker.search)),
-            Mode::Edit(edit) => Some(Typing::Text(&mut edit.editor)),
+            // The conflicts show in the text's place: nothing types into the text, unseen.
+            Mode::Edit(edit) => edit.merge.is_none().then_some(Typing::Text(&mut edit.editor)),
             Mode::Tell(tell) => Some(Typing::Line(&mut tell.note)),
             Mode::Normal | Mode::Confirm(_) | Mode::ManageProject(_) | Mode::Menu(_) | Mode::Comments(_) => None,
         }
@@ -454,7 +543,7 @@ impl Board {
                 | Manage::MoveRepo { picker, .. } => picker.search.selected_text().map(str::to_string),
                 Manage::Remove { .. } => None,
             },
-            Mode::Edit(edit) => edit.editor.selected_text(),
+            Mode::Edit(edit) => edit.merge.is_none().then(|| edit.editor.selected_text()).flatten(),
             Mode::Normal | Mode::Confirm(_) | Mode::ManageProject(_) | Mode::Menu(_) | Mode::Comments(_) => None,
         }
     }

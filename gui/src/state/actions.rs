@@ -5,6 +5,7 @@ use super::{
     Tab, Target, Tell, Telling, WhereFor, WherePicker, changed_on_disk,
 };
 use crate::text::editor::{LineInput, TextEditor};
+use crate::text::merge::{Merged, merge};
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveTime};
 use kanbrain_core::cli::update;
@@ -169,7 +170,18 @@ impl Board {
             _ => None,
         };
         let status = target.key().and_then(|key| self.task(key)).map(|t| t.status);
-        self.mode = Mode::Edit(Edit { editor, target, back, base, comments, decision, status, changed_on_disk: false });
+        self.mode = Mode::Edit(Edit {
+            editor,
+            target,
+            back,
+            base,
+            comments,
+            decision,
+            status,
+            changed_on_disk: false,
+            merge: None,
+            note: String::new(),
+        });
         // A new comment crosses nothing the agent writes: it's how to tell it.
         if let Target::Description(key) | Target::Comment(key, _) = target {
             self.say_agent_working(key);
@@ -196,7 +208,8 @@ impl Board {
 
     /// Asks [`Tell`]'s question about the save `pending`, which waits for the answer.
     pub(super) fn ask_to_tell(&mut self, pending: Pending) {
-        self.mode = Mode::Tell(Box::new(Tell { pending, note: LineInput::default() }));
+        let note = LineInput::new(pending.note());
+        self.mode = Mode::Tell(Box::new(Tell { pending, note }));
     }
 
     /// Saves the form or editor [`Tell`] holds, telling the agent unless `just_save`.
@@ -237,7 +250,7 @@ impl Board {
     /// Whether the comment at the editor's index is still the one it opened on: the others are as they were, but
     /// for any written after them, and the one there was written when it was, by the same author. Anything but a
     /// comment is.
-    fn same_comment(&self, edit: &Edit) -> bool {
+    pub(super) fn same_comment(&self, edit: &Edit) -> bool {
         fn others(comments: &[Comment], index: usize) -> impl Iterator<Item = &Comment> {
             comments.iter().enumerate().filter(move |&(at, _)| at != index).map(|(_, comment)| comment)
         }
@@ -277,7 +290,7 @@ impl Board {
     }
 
     /// What the editor's text is, to say what changed meanwhile.
-    fn text_name(&self, target: Target) -> String {
+    pub(super) fn text_name(&self, target: Target) -> String {
         match target {
             Target::Description(key) => format!("{}'s description", self.entry_name(key)),
             Target::NewComment(key) | Target::Comment(key, _) | Target::Reject(key) | Target::Accept(key) => {
@@ -297,7 +310,7 @@ impl Board {
     }
 
     /// What `target` holds now: the text the editor starts from, and saving the same is no change.
-    fn text_of(&self, target: Target) -> Option<&str> {
+    pub(super) fn text_of(&self, target: Target) -> Option<&str> {
         match target {
             Target::Description(key) => self.task(key).map(|t| t.description.as_str()),
             Target::NewComment(key) | Target::Reject(key) | Target::Accept(key) => self.task(key).map(|_| ""),
@@ -333,8 +346,11 @@ impl Board {
         if !self.changed(&edit) {
             return;
         }
-        // What `kb` wrote meanwhile isn't replaced unseen: the save stops, the editor open, and says so; saved again
-        // with nothing new there, it replaces it.
+        // A save that stops, after the agent's question was answered, asks it again with the note typed.
+        if let Telling::Tell(note) = &telling {
+            edit.note.clone_from(note);
+        }
+        // Another comment put at this one's place isn't saved over: the save stops for good.
         if let Target::Comment(key, _) = edit.target
             && !self.same_comment(&edit)
         {
@@ -344,19 +360,13 @@ impl Board {
             self.mode = Mode::Edit(edit);
             return;
         }
-        if let Some(now) = self.text_of(edit.target)
-            && now != edit.base
-        {
-            let now = now.to_string();
-            self.unsay_found(self.edit_changed_on_disk(&edit), self.edit_changed_but(&edit, text_word(edit.target)));
-            edit.base = now;
-            self.notify(format!(
-                "{} changed meanwhile: save again to replace it with yours, ctrl+d to keep it",
-                self.text_name(edit.target)
-            ));
-            self.mode = Mode::Edit(edit);
+        // A conflict stops the save, the editor put back to pick in it.
+        let Some((text, merged)) = self.merge_meanwhile(&mut edit, text) else {
+            if edit.merge.is_some() {
+                self.mode = Mode::Edit(edit);
+            }
             return;
-        }
+        };
         // Said before the verdict it stops over is taken in.
         let found = (self.edit_changed_on_disk(&edit), self.edit_changed_but(&edit, "verdict"));
         if let Some(stop) = self.verdict_meanwhile(&mut edit) {
@@ -412,9 +422,39 @@ impl Board {
             Ok((false, said)) => what(said),
             Err(e) => return self.notify_error(&e),
         };
+        let said = if merged { format!("{said}, merged with the change made meanwhile") } else { said };
         match (told, telling) {
             (Some((key, changed)), Telling::Tell(note)) => self.tell_agent(key, changed, &note, &said),
             _ => self.notify(said),
+        }
+    }
+
+    /// `text`, the editor's, merged with what `kb` wrote to its target since the editor opened (`Edit::base`): lines
+    /// only one side changed take its change. Returns the text to save, and whether it merged anything; `None` if
+    /// there's nothing to save, or, with `edit`'s `merge` set, if the save stops over lines both changed, for the user
+    /// to pick.
+    fn merge_meanwhile(&mut self, edit: &mut Edit, text: String) -> Option<(String, bool)> {
+        let Some(now) = self.text_of(edit.target).filter(|&now| now != edit.base).map(str::to_string) else {
+            return Some((text, false));
+        };
+        // What the read found of the text is what this says now, merged or stopped over.
+        let found = self.edit_changed_but(edit, text_word(edit.target));
+        self.unsay_found(self.edit_changed_on_disk(edit), found);
+        match merge(&edit.base, &text, &now) {
+            Merged::Clean(both) if both == now => {
+                let name = self.text_name(edit.target);
+                self.notify(format!("nothing to save: {name} has your changes already"));
+                None
+            }
+            Merged::Clean(both) => Some((both, true)),
+            Merged::Conflicted(conflicts) => {
+                self.notify(format!(
+                    "{} changed meanwhile: pick yours or theirs where you both changed it",
+                    self.text_name(edit.target)
+                ));
+                edit.merge = Some(conflicts);
+                None
+            }
         }
     }
 
