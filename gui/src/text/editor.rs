@@ -5,8 +5,6 @@
 //! Moving with shift held, `select_all`, or the mouse (`point`) selects text (only the desktop app does any);
 //! typing or pasting replaces the selection, and `backspace`/`delete` erase it.
 
-use kanbrain_core::model::one_line;
-
 use super::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// The text being edited, line by line, with a cursor.
@@ -361,21 +359,14 @@ impl LineInput {
         }
     }
 
-    /// Inserts `text` at the cursor, in place of the selection if any (for typing and pasting).
-    /// Text with line breaks (`\n`, `\r\n` or a lone `\r`, as markdown reads them) is put on one line as `kb add`
-    /// puts a title ([`one_line`]); tabs become spaces and other control characters are dropped. Returns whether the
-    /// text changed.
+    /// Inserts `text` at the cursor, in place of the selection if any (for typing and pasting), on one line
+    /// ([`on_one_line`]). Returns whether the text changed.
     pub fn insert(&mut self, text: &str) -> bool {
         let deleted = self.delete_selection();
-        let text: String = if text.contains(['\n', '\r']) { one_line(text) } else { text.to_owned() }
-            .chars()
-            .filter_map(|c| match c {
-                '\t' => Some(' '),
-                c if c.is_control() => None,
-                c => Some(c),
-            })
-            .collect();
         let at = self.byte(self.cursor);
+        let spaced = |c: Option<char>| c.is_none_or(char::is_whitespace);
+        let text =
+            on_one_line(text, spaced(self.text[..at].chars().next_back()), spaced(self.text[at..].chars().next()));
         self.text.insert_str(at, &text);
         self.cursor += text.chars().count();
         deleted || !text.is_empty()
@@ -481,6 +472,39 @@ fn word_at(line: &str, col: usize) -> (usize, usize) {
     let start = chars[..col].iter().rposition(|&d| kind(d) != kind(c)).map_or(0, |i| i + 1);
     let end = chars[col..].iter().position(|&d| kind(d) != kind(c)).map_or(chars.len(), |i| col + i);
     (start, end)
+}
+
+/// `text` as a one-line field takes it, put between what ends (`spaced_before`) and starts (`spaced_after`) with a
+/// space or the field's end, or not. Each run of spaces with a line break in it (`\n`, `\r\n` or a lone `\r`, as
+/// markdown reads them) is one space, as `kb add` joins a title's lines, but none at either end of `text` beside a
+/// space or the field's end; tabs become spaces and other control characters are dropped.
+fn on_one_line(text: &str, spaced_before: bool, spaced_after: bool) -> String {
+    let mut line = String::with_capacity(text.len());
+    // The spaces since the last other character, and whether a line break was among them.
+    let (mut spaces, mut broken) = (String::new(), false);
+    for c in text.chars() {
+        match c {
+            '\n' | '\r' => broken = true,
+            '\t' => spaces.push(' '),
+            c if c.is_control() => {}
+            c if c.is_whitespace() => spaces.push(c),
+            c => {
+                if !broken {
+                    line.push_str(&spaces);
+                } else if !line.is_empty() || !spaced_before {
+                    line.push(' ');
+                }
+                (spaces, broken) = (String::new(), false);
+                line.push(c);
+            }
+        }
+    }
+    if !broken {
+        line.push_str(&spaces);
+    } else if !spaced_after && (!line.is_empty() || !spaced_before) {
+        line.push(' ');
+    }
+    line
 }
 
 #[cfg(test)]

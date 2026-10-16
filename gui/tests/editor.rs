@@ -119,6 +119,19 @@ fn line_input_selects_copies_and_replaces() {
     input.select_all();
     input.insert("Plan\n\nsteps  \n  done\n");
     assert_eq!((input.text(), input.cursor()), ("Plan steps done", 15));
+    // A break at either end of what's pasted still parts it from the text beside it, with one space.
+    let pasted = |text: &str, at: usize, paste: &str| {
+        let mut input = LineInput::new(text);
+        input.on_key(key(KeyCode::Home));
+        (0..at).for_each(|_| _ = input.on_key(key(KeyCode::Right)));
+        input.insert(paste);
+        (input.text().to_string(), input.cursor())
+    };
+    assert_eq!(pasted("Fix login on", 12, "\nSafari"), ("Fix login on Safari".into(), 19));
+    assert_eq!(pasted("Fix login on ", 13, "\nSafari\n"), ("Fix login on Safari".into(), 19), "no second space");
+    assert_eq!(pasted("foobar", 3, "x\n"), ("foox bar".into(), 5));
+    assert_eq!(pasted("foobar", 3, " \n "), ("foo bar".into(), 4), "a break alone is a space");
+    assert_eq!(pasted("", 0, "  a\n"), ("  a".into(), 3), "nothing at the field's end; spaces without a break kept");
 }
 
 #[test]
