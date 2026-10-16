@@ -4,8 +4,7 @@
 
 use super::nav::Step;
 use super::{
-    Board, COLUMNS, CommentPicker, Confirm, Field, Form, Manage, Mode, Picker, PickerKey, Tab, Target, Telling,
-    WherePicker,
+    Board, COLUMNS, CommentPicker, Field, Form, Manage, Mode, Picker, PickerKey, Tab, Target, Telling, WherePicker,
 };
 use crate::text::editor::{LineInput, Outcome, Pointer, TextEditor};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -107,7 +106,7 @@ impl Board {
             KeyCode::Esc => {}
             KeyCode::Enter if picker.sel < count => self.open_editor(Target::Comment(picker.key, picker.sel)),
             KeyCode::Char('x') if picker.sel < count => {
-                self.mode = Mode::Confirm(Confirm::DeleteComment(picker.key, picker.sel));
+                self.ask_delete_comment(picker.key, picker.sel);
             }
             code => {
                 match code {

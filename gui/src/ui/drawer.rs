@@ -6,7 +6,7 @@ use super::widgets::{
     self, Kind, card, dim, dim_small, entry_pill, section, segment, segmented, small, state_pill, tag_chips,
 };
 use super::{BrainView, action, entry_action, markdown, when};
-use crate::state::{Board, COLUMNS, Confirm, Key, Mode, Target, When};
+use crate::state::{Board, COLUMNS, Key, Target, When};
 use crate::text::event::KeyCode;
 use gpui::{ClickEvent, Context, Div, ElementId, FontWeight, ScrollHandle, Stateful, div, prelude::*, px, rgb};
 use kanbrain_core::model::{
@@ -264,7 +264,7 @@ fn comment_card(key: Key, index: usize, comment: &Comment, cx: &mut Context<Brai
     let delete = small(widgets::button(("delete-comment", index), "Delete", Kind::Ghost))
         .tooltip(widgets::tooltip("Shortcut: C, then x on it"))
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-            this.act(cx, |b| b.mode = Mode::Confirm(Confirm::DeleteComment(key, index)));
+            this.act(cx, |b| b.ask_delete_comment(key, index));
         }));
     div()
         .flex()

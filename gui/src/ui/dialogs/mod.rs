@@ -40,7 +40,7 @@ pub fn draw(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<Brai
     let dialog = match &board.mode {
         Mode::Form(form) => form::draw(board, form, scroll, follow, cx),
         Mode::Edit(edit) => editor::draw(board, edit, &scroll.editor, follow, cx),
-        Mode::Confirm(confirm) => draw_confirm(board, *confirm, cx)?,
+        Mode::Confirm(confirm) => draw_confirm(board, confirm, cx)?,
         Mode::Links(picker) => pickers::links(board, picker, &scroll.links, follow, cx)?,
         Mode::Comments(picker) => pickers::comments(board, picker, &scroll.links, follow, cx)?,
         Mode::Where(asked) => pickers::place(board, asked, &scroll.place, follow, cx),
@@ -115,16 +115,15 @@ fn check(checked: bool) -> Div {
 }
 
 /// A delete dialog, what will be removed with Cancel and Delete buttons; or the update's, with Update.
-fn draw_confirm(board: &Board, confirm: Confirm, cx: &mut Context<BrainView>) -> Option<Div> {
+fn draw_confirm(board: &Board, confirm: &Confirm, cx: &mut Context<BrainView>) -> Option<Div> {
     let (title, lines) = match confirm {
-        Confirm::Delete(key) => {
+        &Confirm::Delete(key) => {
             let task = board.task(key)?;
             let consequence = "Its markdown file, with description, comments and history, will be removed.";
             let what = question(&board.entry_name(key), task);
             (format!("Delete {}?", task.kind.as_str()), vec![what, Line::styled(consequence, DIM_STYLE)])
         }
-        Confirm::DeleteComment(key, index) => {
-            let comment = board.task(key).and_then(|t| t.comments.get(index))?;
+        Confirm::DeleteComment(_, comment) => {
             let preview = comment.body.lines().next().unwrap_or_default();
             let lines = vec![
                 Line::raw("This comment will be removed."),
@@ -145,7 +144,7 @@ fn draw_confirm(board: &Board, confirm: Confirm, cx: &mut Context<BrainView>) ->
         }
     };
     let (confirm_label, confirm_kind) =
-        if confirm == Confirm::Update { ("Update", Kind::Primary) } else { ("Delete", Kind::Danger) };
+        if *confirm == Confirm::Update { ("Update", Kind::Primary) } else { ("Delete", Kind::Danger) };
     let content = div().flex().flex_col().gap_1().children(lines.into_iter().map(Line::render));
     let buttons = vec![
         action("cancel", "Cancel", Kind::Secondary, KeyCode::Esc, cx),

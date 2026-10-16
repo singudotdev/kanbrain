@@ -485,8 +485,14 @@ impl Board {
                     .and_then(|()| self.drop_links_from_other_repos(key))
                     .map(|()| format!("deleted {name}"))
             }
-            Confirm::DeleteComment(key, index) => {
-                self.brain_mut(key.src).delete_comment(key.id, index).map(|()| "comment deleted".into())
+            Confirm::DeleteComment(key, comment) => {
+                // Two the same are one to delete as much as the other.
+                match self.task(key).and_then(|t| t.comments.iter().position(|c| *c == comment)) {
+                    Some(index) => {
+                        self.brain_mut(key.src).delete_comment(key.id, index).map(|()| "comment deleted".into())
+                    }
+                    None => Ok(format!("not deleted: {}'s comment changed meanwhile", self.entry_name(key))),
+                }
             }
             Confirm::Update => {
                 self.request = Some(Request::Update);
@@ -498,6 +504,13 @@ impl Board {
             Err(e) => self.notify_error(&e),
         }
         self.keep_selection();
+    }
+
+    /// Asks whether to delete comment `index` of `key`'s entry, as it is now.
+    pub fn ask_delete_comment(&mut self, key: Key, index: usize) {
+        if let Some(comment) = self.task(key).and_then(|t| t.comments.get(index)) {
+            self.mode = Mode::Confirm(Confirm::DeleteComment(key, comment.clone()));
+        }
     }
 
     /// Opens the link picker for the selected entry.

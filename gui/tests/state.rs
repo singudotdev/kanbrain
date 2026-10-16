@@ -2624,12 +2624,46 @@ fn a_comment_is_edited_and_deleted_from_the_details() {
     let bodies = |f: &Fixture| f.on_disk(1).comments.iter().map(|c| c.body.clone()).collect::<Vec<_>>();
     assert_eq!(bodies(&f), ["first try, failed", "second try"]);
     assert!(f.on_disk(1).comments[0].edited.is_some(), "it says it was edited");
-    f.board.mode = Mode::Confirm(Confirm::DeleteComment(k(1), 0));
+    f.board.ask_delete_comment(k(1), 0);
     f.press(KeyCode::Char('n'));
     assert_eq!(bodies(&f).len(), 2, "n keeps it");
-    f.board.mode = Mode::Confirm(Confirm::DeleteComment(k(1), 0));
+    f.board.ask_delete_comment(k(1), 0);
     f.press(KeyCode::Char('y'));
     assert_eq!(bodies(&f), ["second try"]);
+}
+
+#[test]
+fn deleting_a_comment_deletes_the_one_asked_about_wherever_it_is_now() {
+    use kanbrain_core::brain::Brain;
+    use kanbrain_core::model::Comment;
+    // What `kb` (or a hand, or a pull) does between the question and its answer.
+    type Meanwhile = fn(&mut Brain);
+    let mut f = Fixture::new(&["feature"]);
+    let bodies = |f: &Fixture| f.on_disk(1).comments.iter().map(|c| c.body.clone()).collect::<Vec<_>>();
+    let cases: [(Meanwhile, &[&str], Option<&str>); 3] = [
+        // One before it gone: another is at its index now.
+        (|kb| kb.delete_comment(1, 0).unwrap(), &["c"], Some("comment deleted")),
+        (
+            |kb| _ = kb.update_comment(1, 1, "b, edited").unwrap(),
+            &["a", "b, edited", "c"],
+            Some("not deleted: #1's comment changed meanwhile"),
+        ),
+        (|kb| kb.delete_comment(1, 1).unwrap(), &["a", "c"], Some("not deleted: #1's comment changed meanwhile")),
+    ];
+    for (meanwhile, left, said) in cases {
+        let mut task = f.on_disk(1);
+        task.comments = ["a", "b", "c"].map(|body| Comment::new(now(), body.into(), Author::Human)).to_vec();
+        Store::at(f.dir.path()).unwrap().save(&mut task).unwrap();
+        f.board.reload().unwrap();
+        f.press(KeyCode::Char('C'));
+        f.press(KeyCode::Up);
+        f.press(KeyCode::Char('x'));
+        meanwhile(&mut Brain::open(Store::at(f.dir.path()).unwrap()).unwrap());
+        f.board.reload().unwrap();
+        f.board.message = None;
+        f.press(KeyCode::Char('y'));
+        assert_eq!((bodies(&f), f.board.message()), (left.iter().map(ToString::to_string).collect(), said));
+    }
 }
 
 #[test]
