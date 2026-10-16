@@ -43,8 +43,11 @@ holding what this version knows, parsed on every read; the user chose the field,
 
 ## Consequences
 
-- v0.6.0 breaks `kanbrain-core`'s API only; `kb`, the app and the data need nothing migrated. An older version on the
-  same brain keeps the section (written last in the file) and doesn't log its own changes.
+- v0.6.0 breaks `kanbrain-core`'s API only; `kb`, the app and the data need nothing migrated, and the data format
+  stays 1: a file without the section reads as one with nothing logged, and a `migrate::FORMAT` step would only have
+  older versions refuse the whole brain (a teammate's, read from git) over a section they already keep. An older
+  version on the same brain keeps it (written last in the file) and doesn't log its own changes; `e2e/upgrade.sh`
+  checks both ways from every release.
 - Outside the crate, these types are built through their constructors (`Task::new`, `Comment::new`, `Activity::new`)
   and changed through their fields or `Task::set_title`, `set_tags`, `set_description` and `relate`, which log.
 - Setting a field directly logs nothing: what changes an entry for someone goes through those, or `Brain`'s actions.
