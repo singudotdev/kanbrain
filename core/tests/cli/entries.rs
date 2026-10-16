@@ -135,8 +135,9 @@ fn tag_takes_signed_tags_in_order() {
 #[test]
 fn tag_takes_two_tags_to_rename_one() {
     let command = |args: &[&str]| parse(args).unwrap().command;
-    assert_eq!(command(&["tag", "#Ops", "infra"]), EntryCommand::RenameTag("ops".into(), "infra".into()));
-    assert_eq!(command(&["tag", "4", "ui"]), EntryCommand::RenameTag("4".into(), "ui".into()), "a tag may be a number");
+    assert_eq!(command(&["tag", "#Ops", "infra"]), EntryCommand::RenameTag("ops".into(), "infra".into(), true));
+    assert_eq!(command(&["tag", "ops", "infra"]), EntryCommand::RenameTag("ops".into(), "infra".into(), false));
+    assert_eq!(command(&["tag", "4", "ui"]), EntryCommand::RenameTag("4".into(), "ui".into(), false), "a number too");
 }
 
 #[test]
@@ -178,10 +179,17 @@ fn renaming_a_tag_renames_it_in_every_entry_and_keeps_its_color() {
     assert_eq!(brain.rename_tag("platform", "infra").unwrap(), [a, b]);
     assert_eq!(open().entry(b).unwrap().tags, ["infra"], "merged into the one it had");
     assert_eq!(open().tag_colors.get("infra"), infra, "keeps its own color");
-    let error = rename_tag(&mut brain, "ops", "x", false).unwrap_err().to_string();
+    let error = rename_tag(&mut brain, "ops", "x", false, false).unwrap_err().to_string();
     assert_eq!(error, "no entry is tagged #ops");
-    let error = rename_tag(&mut brain, &a.to_string(), "x", false).unwrap_err().to_string();
-    assert_eq!(error, format!("no entry is tagged #{a}: to tag entry #{a}, `kb tag {a} +x`"));
+    // A tag named as an entry's id: renamed only when written as a tag, `#1`.
+    brain.update(c, "x", vec![a.to_string()]).unwrap();
+    let error = rename_tag(&mut brain, &a.to_string(), "x", false, false).unwrap_err().to_string();
+    assert_eq!(error, format!("#{a} is an entry: to tag it, `kb tag {a} +x`; to rename tag #{a}, `kb tag '#{a}' x`"));
+    assert_eq!(open().entry(c).unwrap().tags, [a.to_string()], "nothing renamed");
+    rename_tag(&mut brain, &a.to_string(), "x", true, false).unwrap();
+    assert_eq!(open().entry(c).unwrap().tags, ["x"]);
+    let error = rename_tag(&mut brain, "99", "x", false, false).unwrap_err().to_string();
+    assert_eq!(error, "no entry is tagged #99", "no entry #99 to mistake it for");
 }
 
 #[test]

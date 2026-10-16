@@ -448,3 +448,15 @@ fn activity_lines_this_version_cant_read_are_kept_as_written() {
     }
     assert_eq!(Task::from_markdown(&again).unwrap().unknown.activity, lines, "and kept again");
 }
+
+#[test]
+fn text_a_person_wrote_in_an_activity_section_is_kept() {
+    // An `## Activity` of someone's own, before 0.6.0 gave the name a meaning: prose, paragraphs, a list.
+    let prose = "Some prose I wrote\n\nA second paragraph\n  indented";
+    let text = format!("# x\n\n- id: 1\n\n## Activity\n\n{prose}\n- not a change\n");
+    let task = Task::from_markdown(&text).unwrap();
+    assert_eq!(task.unknown.activity, [prose, "- not a change"]);
+    let again = task.to_markdown();
+    assert!(again.contains(&format!("## Activity\n\n{prose}\n- not a change\n")), "{again}");
+    assert_eq!(Task::from_markdown(&again).unwrap().unknown.activity, task.unknown.activity, "and kept again");
+}

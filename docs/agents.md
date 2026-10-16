@@ -213,7 +213,7 @@ hand.
 | --- | --- |
 | `context` | markdown summary: the project's description, answered tasks (with the answer), tasks in doing (with their latest comment), parked (with the question they wait on) and todo; the latest done; decisions (proposed and rejected ones marked); notes; outside a project, also how to use the commands |
 | `add [--note\|--decision] [--tag T]… [--link ID]… [--body TEXT\|-] [--start] TITLE…` | creates an entry, prints `#id title (state)` |
-| `show ID` | the entry as compact text: state, time tracked, description, comments with the changes to the title, tags, related entries and description among them, related entries, latest status changes, file path |
+| `show ID` | the entry as compact text: state, time tracked, description, comments with the latest changes to the title, tags, related entries and description among them, related entries, latest status changes, file path |
 | `list notes decisions` | every note and decision (add statuses such as `doing` to include tasks) |
 | `search WORDS…` | entries whose title, tags, description or comments contain every word, one line each, at most 20; `#tag` matches tags only |
 | `start` / `park` / `done` / `todo ID` | changes a task's status; `start` runs its clock. An agent can have several tasks running; a person, one per brain (another `start` is refused, naming it) |
@@ -225,7 +225,7 @@ hand.
 | `describe ID TEXT…\|-` | replaces the description |
 | `rename ID TITLE…` | replaces the title, and renames the entry's file after it |
 | `tag ID +TAG\|-TAG…` | adds tags to an entry (`+TAG`) or removes them (`-TAG`), in order; a word may name several (`+ui,bug`) |
-| `tag OLD NEW` | renames a tag in every entry that has it, and lists them |
+| `tag OLD NEW` | renames a tag in every entry that has it, and lists them; a tag named as an entry's id is written `#5` |
 | `link ID OTHER…` | links an entry to others: an id here, or `REPO#ID` in another repository of the project |
 | `project [describe\|notes TEXT…\|-]` | shows the project's description (shared by its repositories) and this repository's role, or replaces one |
 | `project rename NAME…` / `repo NAME` / `move PROJECT…` / `remove [--purge]` | renames the project or this repository, moves this repository to another project, or takes the project out (see [Managing a project](cli.md#managing-a-project)); only when the user asks |
@@ -266,6 +266,7 @@ decisions, the four links, `description`, `comments` and `activity` when empty, 
 comments never edited. Decisions have `decision` (`accepted`, `proposed` or `rejected`); a parked task with a
 question has `asked` (`waiting for an answer` or `answered`); a comment has `"author": "agent"` when an agent wrote
 it and `"question": true` when it's one. A change in `activity` says what it `changed` (`title`, `tags`, `related` or
-`description`), with `from` and `to` for a title and what was `added` and `removed` for the others, and
+`description`), with `from` and `to` for a title and what was `added` and `removed` for the others (related entries
+as `- links:` writes them, strings: `"5"`, `"web#1"`), and
 `"author": "agent"` when an agent made it. `search --json`, `list --json` and `tag OLD NEW --json` print every match (every entry renamed) as
 `{ id, kind, title, status, decision, asked, tags }`, all on one line.

@@ -250,7 +250,7 @@ fn comments_block(key: Key, task: &Task, cx: &mut Context<BrainView>) -> Div {
         .flex_col()
         .gap_2()
         .child(section(format!("Comments ({})", task.comments.len()), [add]))
-        .when(thread.is_empty(), |d| d.child(dim("No comments yet.")))
+        .when(task.comments.is_empty(), |d| d.child(dim("No comments yet.")))
         .children(thread)
 }
 

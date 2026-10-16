@@ -112,9 +112,9 @@ pub enum EntryCommand {
     /// `tag ID +TAG|-TAG…`: tags added and removed, in order.
     #[non_exhaustive]
     Tag(u32, Vec<TagChange>),
-    /// `tag OLD NEW`: a tag renamed in every entry.
+    /// `tag OLD NEW`: a tag renamed in every entry; true when OLD was written `#OLD`, which no id is.
     #[non_exhaustive]
-    RenameTag(String, String),
+    RenameTag(String, String, bool),
     /// `link ID OTHER…`: ids here, and `REPO#ID` in the project's other repositories.
     #[non_exhaustive]
     Link(u32, Vec<u32>, Vec<RepoLink>),
@@ -302,12 +302,12 @@ impl EntryArgs {
             }
             ("tag", None) => match std::mem::take(&mut rest).as_slice() {
                 // A word after the first that isn't a change names the tag's new name.
-                [old, new] if !new.starts_with(['+', '-']) => {
+                words @ [old, new] if !new.starts_with(['+', '-']) => {
                     let (old, new) = (one_tag(old)?, one_tag(new)?);
                     if old == new {
                         bail!("#{old} is already its name");
                     }
-                    EntryCommand::RenameTag(old, new)
+                    EntryCommand::RenameTag(old, new, words[0].starts_with('#'))
                 }
                 words => {
                     let mut words = words.to_vec();
@@ -392,7 +392,7 @@ impl EntryArgs {
                 }
                 id
             }
-            EntryCommand::RenameTag(old, new) => return rename_tag(&mut brain, &old, &new, json),
+            EntryCommand::RenameTag(old, new, hashed) => return rename_tag(&mut brain, &old, &new, hashed, json),
             EntryCommand::Link(id, others, repo_links) => {
                 brain.link(id, &others, &repo_links)?;
                 id
@@ -602,14 +602,13 @@ fn one_tag(word: &str) -> Result<String> {
 }
 
 /// Renames tag `old` to `new` in every entry of `brain` and prints the entries renamed, one line each (or as `search
-/// --json` lists them). `tag 5 ui` is likelier `tag 5 +ui` mistyped than tag `5` renamed: said, when no entry has it.
-fn rename_tag(brain: &mut Brain, old: &str, new: &str, json: bool) -> Result<()> {
-    let renamed = match brain.rename_tag(old, new) {
-        Err(e) if brain.task(old.parse().unwrap_or_default()).is_some() => {
-            bail!("{e}: to tag entry #{old}, `kb tag {old} +{new}`")
-        }
-        renamed => renamed?,
-    };
+/// --json` lists them). `tag 5 ui`, with an entry #5, may be `tag 5 +ui` mistyped: a tag named as an id is renamed only
+/// when written `#5` (`hashed`), as a rename that wasn't meant would change every entry that has it.
+fn rename_tag(brain: &mut Brain, old: &str, new: &str, hashed: bool, json: bool) -> Result<()> {
+    if !hashed && old.parse().ok().and_then(|id| brain.task(id)).is_some() {
+        bail!("#{old} is an entry: to tag it, `kb tag {old} +{new}`; to rename tag #{old}, `kb tag '#{old}' {new}`");
+    }
+    let renamed = brain.rename_tag(old, new)?;
     let entries = renamed.iter().filter_map(|&id| brain.task(id));
     if json {
         println!("{}", serde_json::to_string(&entries.map(Summary::new).collect::<Vec<_>>())?);

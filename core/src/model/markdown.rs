@@ -42,11 +42,12 @@
 //! - 2026-09-25T09:30:00+02:00 -> running
 //! ```
 //!
-//! `## Activity` and `## Sessions` are only written once there's something in them, so files stay short. Notes and decisions
-//! have `- kind: note` / `- kind: decision` instead of `- status:`, and no History or Sessions, and a decision that
-//! isn't in force has `- decision: proposed|rejected`. What a person wrote or did carries no mark; what an agent did
-//! says `agent`. `- links:` is only written when there are links. `shop-api#3` is entry 3 of the project's `shop-api`
-//! repository. Other `- key:` lines, link words and `##` sections are kept and written back (see [`Unknown`]).
+//! `## Activity` and `## Sessions` are only written once there's something in them, so files stay short. Notes and
+//! decisions have `- kind: note` / `- kind: decision` instead of `- status:`, and no History or Sessions, and a
+//! decision that isn't in force has `- decision: proposed|rejected`. What a person wrote or did carries no mark; what
+//! an agent did says `agent`. `- links:` is only written when there are links. `shop-api#3` is entry 3 of the project's
+//! `shop-api` repository. Other `- key:` lines, link words and `##` sections are kept and written back (see
+//! [`Unknown`]).
 
 use super::text::{one_line, parse_tags};
 use super::time::{fmt_dur, fmt_ts, now, parse_ts};
@@ -360,15 +361,17 @@ impl<'a> Parsed<'a> {
         }
     }
 
-    /// A `- ` line at the start starts an `## Activity` item; any other line that isn't blank is part of the last one.
+    /// A `- ` line at the start starts an `## Activity` item; any other line is part of the last one, blank ones
+    /// too, so text someone wrote there reads back as it was. Text before the first item is an item of its own, which
+    /// this version can't read and keeps.
     fn activity_line(&mut self, line: &str) {
-        if line.starts_with("- ") {
-            self.activity.push(line.to_string());
-        } else if let Some(item) = self.activity.last_mut()
-            && !line.trim().is_empty()
-        {
-            item.push('\n');
-            item.push_str(line);
+        match self.activity.last_mut() {
+            Some(item) if !line.starts_with("- ") => {
+                item.push('\n');
+                item.push_str(line);
+            }
+            _ if line.trim().is_empty() => {}
+            _ => self.activity.push(line.to_string()),
         }
     }
 
@@ -410,7 +413,7 @@ impl<'a> Parsed<'a> {
         for item in self.activity {
             match activity_item(&item) {
                 Some(read) => activity.push(read),
-                None => unread.push(item),
+                None => unread.push(item.trim_end().to_string()),
             }
         }
         activity.sort_by_key(|a: &Activity| a.at);
@@ -516,7 +519,7 @@ fn signed(added: &[String], removed: &[String]) -> String {
 /// An `## Activity` item, as [`Task::write_activity`] writes it; `None` for one this version can't read, which is
 /// kept as written rather than lose the file: what this section says is only a record.
 fn activity_item(item: &str) -> Option<Activity> {
-    let mut lines = item.lines();
+    let mut lines = item.lines().filter(|line| !line.trim().is_empty());
     let (at, rest) = lines.next()?.strip_prefix("- ")?.split_once(' ')?;
     let at = parse_ts(at)?;
     let (head, words) = match rest.split_once(':') {

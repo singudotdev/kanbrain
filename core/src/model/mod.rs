@@ -270,7 +270,6 @@ impl Activity {
 #[non_exhaustive]
 pub enum Changed {
     /// The title.
-    #[non_exhaustive]
     Title {
         /// What it was.
         from: String,
@@ -278,7 +277,6 @@ pub enum Changed {
         to: String,
     },
     /// The tags.
-    #[non_exhaustive]
     Tags {
         /// Tags it got.
         added: Vec<String>,
@@ -287,7 +285,6 @@ pub enum Changed {
     },
     /// The related entries, whichever side keeps the link: `5` names an entry of the same brain, `shop-api#3` one of
     /// the project's other repositories, as `- links:` writes them.
-    #[non_exhaustive]
     Related {
         /// Entries it was related to.
         added: Vec<String>,
@@ -403,20 +400,18 @@ impl Task {
         }
     }
 
-    /// Records `change`, made `by` someone `at` a time, in the activity. A change the same author made in the same
-    /// second to the same thing is part of it (the app saves a form's related entries one at a time), and one that
-    /// changes nothing, or undoes it, leaves nothing.
+    /// Records `change`, made `by` someone `at` a time, in the activity, in time order (another computer's clock
+    /// may be behind). The latest change, when the same author made it in the same second to the same thing, takes it
+    /// in (the app saves a form's related entries one at a time), and one that ends up changing nothing goes; any
+    /// other change between them keeps them apart, so the activity still says what came first.
     pub fn log(&mut self, at: DateTime<Local>, by: Author, change: Changed) {
+        let place = self.activity.partition_point(|a| a.at <= at);
         let mut change = change;
-        let same_second = self.activity.iter().rposition(|a| a.at != at).map_or(0, |last| last + 1);
-        for index in (same_second..self.activity.len()).rev() {
-            if self.activity[index].by != by {
-                continue;
-            }
-            match self.activity[index].change.absorb(change) {
+        if let Some(latest) = place.checked_sub(1).filter(|&i| self.activity[i].at == at && self.activity[i].by == by) {
+            match self.activity[latest].change.absorb(change) {
                 Ok(()) => {
-                    if self.activity[index].change.is_empty() {
-                        self.activity.remove(index);
+                    if self.activity[latest].change.is_empty() {
+                        self.activity.remove(latest);
                     }
                     return;
                 }
@@ -424,7 +419,7 @@ impl Task {
             }
         }
         if !change.is_empty() {
-            self.activity.push(Activity::new(at, by, change));
+            self.activity.insert(place, Activity::new(at, by, change));
         }
     }
 

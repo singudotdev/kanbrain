@@ -172,9 +172,9 @@ They show, top to bottom:
   buttons. An agent's say **Agent comment** or **Agent question**. Between them, by time, a line for each change to the
   title, tags, related entries or description, and who made it: `An agent changed the title from "Fix login" to "Fix
   login 500"`, `You added the tag #prod`, `An agent related it to #5`, `You changed the description`. A relation shows
-  on both entries; one with another repository's entry, on the entry whose file keeps the link. Changes one of you makes
-  within a second are one line (saving the form relates its entries one at a time), so relating and unrelating at once
-  leaves none;
+  on both entries; one with another repository's entry, on the entry whose file keeps the link. A change right after
+  another of the same kind, by the same one of you in the same second, joins it (saving the form relates its entries
+  one at a time), so relating and unrelating at once leaves no line;
 - **History**: every status change, `· agent` on those an agent made.
 
 ### Questions from agents
@@ -248,7 +248,8 @@ Tags group related work, e.g. `prod`, `support`, `meeting`, `feature`, or a clie
 - Tags are shown wherever an entry appears: cards, lists, the details, dialogs and `kb list`.
 
 To change an entry's tags, select it and press `e` (or **Edit title and tags**); from the command line,
-`kb tag ID +TAG -TAG` adds or removes them, and `kb tag OLD NEW` renames a tag in every entry that has it.
+`kb tag ID +TAG -TAG` adds or removes them, and `kb tag OLD NEW` renames a tag in every entry that has it (a tag named as an entry's id is written `#5`, so
+`kb tag 5 ui` isn't taken for it).
 
 ### Tag colors
 

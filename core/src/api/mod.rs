@@ -99,8 +99,8 @@ impl Brain {
     }
 
     /// Adds links from `id` to each of `others` and of `repo_links` (entries of the project's other
-    /// repositories), skipping ones it's already related to. The entries of this brain log it on both sides; those of
-    /// other repositories, whose files aren't written, only here.
+    /// repositories), skipping ones it already has. Each entry of this brain it wasn't related to logs it on both
+    /// sides; each link to another repository's entry that it didn't have, here only, as that file isn't written.
     pub fn link(&mut self, id: u32, others: &[u32], repo_links: &[RepoLink]) -> Result<()> {
         for &other in others {
             if other == id {
@@ -117,11 +117,6 @@ impl Brain {
             }
         }
         let now = now();
-        for &other in &new {
-            let back = self.index_of(other)?;
-            self.tasks[back].relate(now, self.author, &[id.to_string()], &[]);
-            self.store.save(&mut self.tasks[back])?;
-        }
         let task = &mut self.tasks[index];
         let mut added: Vec<String> = new.iter().map(u32::to_string).collect();
         for &other in others {
@@ -136,7 +131,14 @@ impl Brain {
             }
         }
         task.relate(now, self.author, &added, &[]);
-        self.store.save(task)
+        self.store.save(task)?;
+        // After the entry that keeps the links: a save that fails before leaves no side saying they're related.
+        for &other in &new {
+            let back = self.index_of(other)?;
+            self.tasks[back].relate(now, self.author, &[id.to_string()], &[]);
+            self.store.save(&mut self.tasks[back])?;
+        }
+        Ok(())
     }
 
     /// Checks that each link names another repository of this project, and an entry it has.

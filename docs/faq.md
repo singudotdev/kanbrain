@@ -83,7 +83,8 @@ Yes. Open the task with `o` and change the time in its `## History` line. See [D
 ### How do I rename a tag everywhere?
 
 `kb tag ops infra` renames it in every entry of the brain that has it, and prints them; `infra` takes `ops`'s color
-unless it has one. An entry that has both just loses `ops`. Each entry's details say so among its comments.
+unless it has one. An entry that has both just loses `ops`. Each entry's details say so among its comments. A tag
+named as an entry's id is renamed when written as a tag, `kb tag '#5' v5`.
 
 ### Does it work on Windows?
 

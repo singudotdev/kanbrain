@@ -268,12 +268,24 @@ fn show_lists_changes_among_the_comments_by_time() {
     assert!(brain.entry_text(id).unwrap().contains("\n## Changes\n\n- 2026-10-16 10:01 changed the title"));
 
     let json = serde_json::to_value(json::Entry::new(&brain, brain.entry(id).unwrap())).unwrap();
+    let fmt_ts = crate::model::fmt_ts;
     let expected = serde_json::json!([
-        {"at": crate::model::fmt_ts(at(1)), "author": "agent", "changed": "title", "from": "Fix login", "to": "Fix the login"},
-        {"at": crate::model::fmt_ts(at(1)), "changed": "tags", "added": ["ux"]},
-        {"at": crate::model::fmt_ts(at(3)), "author": "agent", "changed": "related", "added": ["shop-api#3"]},
+        {"at": fmt_ts(at(1)), "author": "agent", "changed": "title", "from": "Fix login", "to": "Fix the login"},
+        {"at": fmt_ts(at(1)), "changed": "tags", "added": ["ux"]},
+        {"at": fmt_ts(at(3)), "author": "agent", "changed": "related", "added": ["shop-api#3"]},
     ]);
     assert_eq!(json["activity"], expected);
+    // `show` lists only the latest changes, as History's (the JSON, every one): an entry's every tag and link toggled
+    // would cost an agent each time.
+    for minute in 10..20 {
+        brain.tasks[0].set_description(minute.to_string(), at(minute), Author::Human);
+    }
+    let text = brain.entry_text(id).unwrap();
+    assert!(text.contains("\n## Changes (latest 10 of 13 changes)\n\n- 2026-10-16 10:10 changed the description\n"));
+    assert!(
+        !text.contains("changed the title") && !text.contains("added the tag") && !text.contains("related it"),
+        "{text}"
+    );
 }
 
 #[test]

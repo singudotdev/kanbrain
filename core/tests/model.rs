@@ -111,33 +111,47 @@ fn edits_are_logged_with_who_made_them_and_only_when_they_change_something() {
 }
 
 #[test]
-fn changes_one_author_makes_in_the_same_second_are_one() {
+fn a_change_takes_in_the_next_of_its_kind_by_its_author_in_its_second() {
     let t0 = parse_ts("2026-10-16 10:00").unwrap();
     let words = |w: &[&str]| w.iter().map(ToString::to_string).collect::<Vec<_>>();
+    let related = |added: &[&str], removed: &[&str]| Changed::Related { added: words(added), removed: words(removed) };
     let mut task = Task::new(1, "A".into(), t0);
     // The app saves a form's related entries one at a time.
     task.relate(t0, Author::Human, &words(&["5"]), &[]);
     task.relate(t0, Author::Human, &words(&["6"]), &words(&["9"]));
+    assert_eq!(task.activity, [Activity::new(t0, Author::Human, related(&["5", "6"], &["9"]))]);
+    task.relate(t0, Author::Human, &words(&["9"]), &words(&["5", "6"]));
+    assert_eq!(task.activity, [], "undone in the same second");
+
     task.set_title("B".into(), t0, Author::Human);
     task.set_title("C".into(), t0, Author::Human);
-    assert_eq!(
-        task.activity,
-        [
-            Activity::new(t0, Author::Human, Changed::Related { added: words(&["5", "6"]), removed: words(&["9"]) }),
-            Activity::new(t0, Author::Human, Changed::Title { from: "A".into(), to: "C".into() }),
-        ],
-        "the latest change of a kind takes in the next"
-    );
-    task.relate(t0, Author::Human, &[], &words(&["5", "6"]));
-    task.relate(t0, Author::Human, &words(&["9"]), &[]);
     task.set_title("A".into(), t0, Author::Human);
-    assert!(task.activity.is_empty(), "undone in the same second: {:?}", task.activity);
+    assert_eq!(task.activity, [], "a title back to what it was");
+
+    task.set_title("B".into(), t0, Author::Human);
+    task.set_tags(words(&["ux"]), t0, Author::Human);
+    task.set_title("C".into(), t0, Author::Human);
+    let titled = |from: &str, to: &str| Changed::Title { from: from.into(), to: to.into() };
+    let tagged = Changed::Tags { added: words(&["ux"]), removed: vec![] };
+    let expected =
+        [titled("A", "B"), tagged.clone(), titled("B", "C")].map(|change| Activity::new(t0, Author::Human, change));
+    assert_eq!(task.activity, expected, "only the latest change: a later one of its kind after another stays apart");
 
     task.set_description("x".into(), t0, Author::Human);
-    task.set_description("y".into(), t0, Author::Human);
-    task.set_description("z".into(), t0, Author::Agent);
-    task.set_description("w".into(), t0 + Duration::seconds(1), Author::Agent);
-    assert_eq!(task.activity.len(), 3, "another author, or another second, is another change: {:?}", task.activity);
+    task.set_description("y".into(), t0, Author::Agent);
+    task.set_description("z".into(), t0 + Duration::seconds(1), Author::Agent);
+    assert_eq!(task.activity.len(), 6, "another author, or another second, is another change: {:?}", task.activity);
+}
+
+#[test]
+fn a_change_logged_with_an_earlier_time_goes_in_its_place() {
+    // Another computer's clock, behind this one's.
+    let t0 = parse_ts("2026-10-16 10:00").unwrap();
+    let mut task = Task::new(1, "A".into(), t0);
+    task.set_description("x".into(), t0 + Duration::minutes(5), Author::Human);
+    task.set_title("B".into(), t0, Author::Agent);
+    let times: Vec<_> = task.activity.iter().map(|a| a.at).collect();
+    assert_eq!(times, [t0, t0 + Duration::minutes(5)]);
 }
 
 #[test]

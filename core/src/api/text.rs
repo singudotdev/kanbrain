@@ -1,6 +1,7 @@
 //! Entries as compact text for agents: what `show`, `search` and the write commands print. Short on purpose, since
 //! agents pay for every token they read: dates without seconds or offsets, empty sections left out, sessions as one
-//! total, and only the latest history. Changes to an entry go among its comments, by time, one line each. The full record stays in the entry's file, whose path `show` gives.
+//! total, and only the latest history and changes, which go among the comments by time, one line each. The full record
+//! stays in the entry's file, whose path `show` gives.
 
 use super::ApiError;
 use crate::brain::Brain;
@@ -10,6 +11,8 @@ use std::fmt::Write;
 
 /// Status changes `show` lists, latest last; the rest are counted.
 const HISTORY_LIMIT: usize = 5;
+/// Changes `show` lists among the comments, the latest; the rest are counted.
+const CHANGES_LIMIT: usize = 10;
 /// Results `search` lists, best first; the rest are counted.
 pub const SEARCH_LIMIT: usize = 20;
 
@@ -119,9 +122,20 @@ impl Brain {
             (false, false) => Some("Comments and changes"),
         };
         if let Some(heading) = heading {
-            writeln!(out, "\n## {heading}")?;
+            let skipped = task.activity.len().saturating_sub(CHANGES_LIMIT);
+            match skipped {
+                0 => writeln!(out, "\n## {heading}")?,
+                _ => writeln!(out, "\n## {heading} (latest {CHANGES_LIMIT} of {} changes)", task.activity.len())?,
+            }
             let mut listing = false;
+            let mut changes = 0;
             for item in task.thread() {
+                if let ThreadItem::Change(_) = item {
+                    changes += 1;
+                    if changes <= skipped {
+                        continue;
+                    }
+                }
                 match item {
                     ThreadItem::Comment(_, comment) => {
                         writeln!(out, "\n### {}\n\n{}", comment_heading(comment), comment.body.trim())?;

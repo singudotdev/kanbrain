@@ -185,9 +185,9 @@ fn tag_adds_and_removes_and_says_when_nothing_changed() {
     assert!(json.starts_with("{\"id\":1,") && json.contains(r#""tags":[]"#), "{json}");
     let misused = String::from_utf8(run(&["tag", "1", "bug", "x"]).stderr).unwrap();
     assert!(misused.contains("usage:\n  kb tag ID +TAG|-TAG…\n"), "{misused}");
-    // Two words could be a tag renamed: one that no entry has, but an id, is likelier a change without its sign.
+    // Two words could be a tag renamed: an entry's id is likelier a change without its sign.
     let unsigned = String::from_utf8(run(&["tag", "1", "bug"]).stderr).unwrap();
-    assert_eq!(unsigned, "Error: no entry is tagged #1: to tag entry #1, `kb tag 1 +bug`\n");
+    assert_eq!(unsigned, "Error: #1 is an entry: to tag it, `kb tag 1 +bug`; to rename tag #1, `kb tag '#1' bug`\n");
 }
 
 #[test]
