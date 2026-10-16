@@ -11,7 +11,8 @@
 #   `context` adds to `.claude/settings.local.json` where kanbrain's are already there;
 # - shows every entry as the old version did, field by field (new fields may be added);
 # - runs `init --all`, which renames the names v0.4.0 stopped taking, and writes (comments, status changes)
-#   without an error.
+#   without an error;
+# - logs changes to an entry (`## Activity`, which v0.6.0 added), which the old `kb` keeps when it writes the entry.
 #
 # CI runs it when a change touches it (the `upgrade` job). It needs cargo, curl, git, python3 and the repository's
 # tags, and touches nothing outside a temporary folder.
@@ -230,7 +231,7 @@ EOF
 
 tags=$(git -C "$repo" tag -l 'v*' --sort=version:refname)
 [ -n "$tags" ] || fail "no release tags: fetch them (git fetch --tags)"
-tested=0 dashes=0 uppers=0 repos=0
+tested=0 dashes=0 uppers=0 repos=0 kept=0
 for tag in $tags; do
     # A tag whose release isn't out (being built, or its run failed) has nothing to download: not a failure here.
     status=$(curl -sSL -o /dev/null -w '%{http_code}' "$releases/$tag/$asset.sha256") || fail "$tag: no answer"
@@ -282,10 +283,26 @@ for tag in $tags; do
         agent "$head_kb" "$dir/head/home" comment 1 "an agent, from this build" >/dev/null &&
         person "$head_kb" "$dir/head/home" start 3 >/dev/null && person "$head_kb" "$dir/head/home" park 3 >/dev/null) ||
         fail "$tag: writing with this build failed"
+    # An older `kb` writes `## Activity` back as a section it doesn't know; one that refuses the brain leaves it be.
+    activity() {
+        (cd "$dir/head/src/shop/api" && person "$1" "$dir/head/home" show 2 --json) |
+            python3 -I -c 'import json, sys; print(json.dumps(json.load(sys.stdin).get("activity")))'
+    }
+    (cd "$dir/head/src/shop/api" && agent "$head_kb" "$dir/head/home" rename 2 "Payments v2" >/dev/null &&
+        person "$head_kb" "$dir/head/home" tag 2 +billing >/dev/null &&
+        agent "$head_kb" "$dir/head/home" describe 2 "Stripe, in cents" >/dev/null) || fail "$tag: logging failed"
+    logged=$(activity "$head_kb")
+    [ "$(python3 -I -c 'import json, sys; print(len(json.loads(sys.argv[1])))' "$logged")" = 3 ] ||
+        fail "$tag: this build logged $logged"
+    if (cd "$dir/head/src/shop/api" && person "$old_kb" "$dir/head/home" comment 2 "from $tag" >/dev/null 2>&1); then
+        kept=$((kept + 1))
+    fi
+    [ "$(activity "$head_kb")" = "$logged" ] || fail "$tag: its kb lost this build's activity: $(activity "$head_kb")"
     echo "PASS $tag"
     tested=$((tested + 1))
 done
 [ "$tested" -gt 0 ] || fail "no release to upgrade from"
+[ "$kept" -gt 0 ] || fail "no release wrote an entry with this build's activity, to keep it"
 # Releases before v0.4.0 took these names and are never deleted, so some always wrote them.
 if [ "$dashes" -eq 0 ] || [ "$uppers" -eq 0 ] || [ "$repos" -eq 0 ]; then
     fail "no release wrote the names v0.4.0 refuses (renamed: $dashes \`-dash\`, $uppers \`Central\`, $repos \`-docs\`)"
