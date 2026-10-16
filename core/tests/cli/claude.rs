@@ -79,4 +79,25 @@ fn hooks_are_brought_up_to_date_only_where_kanbrains_are() {
     fs::write(&path, &pathed).unwrap();
     assert_eq!(update_hooks(root.path()).unwrap(), Change::Unchanged, "{pathed}");
     assert_eq!(remove_hooks(root.path()).unwrap(), Change::Removed, "and taken out with the rest");
+
+    // With variables set before it, the same; a line of the user's that runs `kb` after another command isn't.
+    add_hooks(root.path()).unwrap();
+    let set = fs::read_to_string(&path).unwrap().replace("\"kb context", "\"KANBRAIN_DIR=/x A=1 kb context");
+    let set = set.replace("\"kb hook stop", "\"cd /x && /usr/bin/kb hook stop");
+    fs::write(&path, &set).unwrap();
+    assert_eq!(update_hooks(root.path()).unwrap(), Change::Written, "{set}");
+    assert_eq!(commands(&path, "SessionStart"), ["KANBRAIN_DIR=/x A=1 kb context"]);
+    assert_eq!(commands(&path, "Stop"), ["cd /x && /usr/bin/kb hook stop", "kb hook stop"]);
+    remove_hooks(root.path()).unwrap();
+    assert_eq!(commands(&path, "Stop"), ["cd /x && /usr/bin/kb hook stop"], "the user's, kept");
+}
+
+#[test]
+fn a_word_sets_a_variable_as_the_shell_takes_it() {
+    for word in ["KANBRAIN_DIR=/x", "_X=1", "a1=", "A=b=c"] {
+        assert!(assigns(word), "{word}");
+    }
+    for word in ["1X=2", "a-b=1", "=x", "--dir=/x", "kb", "x"] {
+        assert!(!assigns(word), "{word}");
+    }
 }

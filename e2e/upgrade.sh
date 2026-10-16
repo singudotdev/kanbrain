@@ -131,7 +131,6 @@ renamed() {
     fi
 }
 
-# Every brain's entries as `kb` $1 shows them, under $3: one JSON file each.
 # Every `.claude/settings.local.json` under $2 is the one under $1, but in the folders after them, where `context` ran:
 # there, where $1's had kanbrain's hooks, only its missing ones are added, `kb hook tool` among them.
 rehooked() {
@@ -170,6 +169,7 @@ for rel in sorted(olds):
 PY
 }
 
+# Every brain's entries as `kb` $1 shows them, under $3: one JSON file each.
 record() {
     local kb=$1 w=$2 out=$3 brain name ids
     mkdir -p "$out"

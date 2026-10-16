@@ -154,17 +154,29 @@ pub fn remove_hooks(root: &Path) -> Result<Change> {
     Ok(Change::Written)
 }
 
-/// Whether a matcher group runs `command`, as written or with `kb` given by its path (`/opt/bin/kb hook tool`), as a
-/// user may have changed it: one to keep, update or remove, never to add again beside itself.
+/// Whether a matcher group runs `command`, as written, with `kb` given by its path (`/opt/bin/kb hook tool`) or with
+/// variables set before it (`KANBRAIN_DIR=… kb context`), as a user may have changed it: one to keep, update or
+/// remove, never to add again beside itself. A line that runs `kb` after another command (`cd x && kb …`) is the
+/// user's.
 fn runs(group: &Value, command: &str) -> bool {
     let args = command.strip_prefix("kb");
     let same = |written: &str| {
-        written == command
-            || args
-                .and_then(|args| written.strip_suffix(args))
-                .is_some_and(|program| Path::new(program).file_stem().is_some_and(|stem| stem == "kb"))
+        let mut rest = written;
+        while let Some((_, after)) = rest.split_once(' ').filter(|(word, _)| assigns(word)) {
+            rest = after;
+        }
+        let program = args.and_then(|args| rest.strip_suffix(args)).filter(|p| !p.contains(' '));
+        written == command || program.is_some_and(|p| Path::new(p).file_stem().is_some_and(|stem| stem == "kb"))
     };
     group["hooks"].as_array().is_some_and(|hooks| hooks.iter().any(|h| h["command"].as_str().is_some_and(same)))
+}
+
+/// Whether a shell word sets a variable for the command after it (`NAME=value`).
+fn assigns(word: &str) -> bool {
+    word.split_once('=').is_some_and(|(name, _)| {
+        name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+            && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    })
 }
 
 /// The settings in `path`; none yet if there's no file. A file that isn't a JSON object is refused,

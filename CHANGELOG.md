@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-16
+
 ### Added
 
 - Claude Code hook `kb hook tool` (`PreToolUse`, every tool; `claude::HOOKS`, `hook::tell_of_comments`): an agent
@@ -20,6 +22,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- `kb init`, `kb deinit` and `kb context` take a hook that runs `kb` by its path or with variables set before it
+  (`KANBRAIN_DIR=… kb context`) as kanbrain's, instead of adding it again; one that runs `kb` after another command
+  (`cd x && kb …`) is left as the user's.
 - `kb hook stop` reminds an agent of a task it started and left uncommented even after the user commented on it:
   only the agent's own comments say where it stands (`hook::uncommented`).
 
@@ -439,7 +444,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/singudotdev/kanbrain/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/singudotdev/kanbrain/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/singudotdev/kanbrain/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/singudotdev/kanbrain/compare/v0.4.1...v0.4.2

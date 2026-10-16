@@ -51,10 +51,7 @@ impl Mode {
     /// The entry the mode acts on, if it's one: its form, editor, confirmation, pickers or menu.
     pub fn entry(&self) -> Option<Key> {
         match self {
-            Self::Form(form) => match form.target {
-                FormTarget::Edit(key) => Some(key),
-                FormTarget::New(..) => None,
-            },
+            Self::Form(form) => form.target.key(),
             Self::Edit(edit) => edit.target.key(),
             Self::Tell(tell) => tell.pending.key(),
             Self::Confirm(Confirm::Delete(key) | Confirm::DeleteComment(key, _))
@@ -400,6 +397,16 @@ pub enum FormTarget {
     Edit(Key),
 }
 
+impl FormTarget {
+    /// The entry the form changes; none for a new one.
+    pub fn key(self) -> Option<Key> {
+        match self {
+            Self::Edit(key) => Some(key),
+            Self::New(..) => None,
+        }
+    }
+}
+
 /// A field of the form.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Field {
@@ -698,10 +705,7 @@ impl Pending {
     /// The entry being saved.
     pub fn key(&self) -> Option<Key> {
         match self {
-            Self::Form(form) => match form.target {
-                FormTarget::Edit(key) => Some(key),
-                FormTarget::New(..) => None,
-            },
+            Self::Form(form) => form.target.key(),
             Self::Edit(edit) => edit.target.key(),
         }
     }
