@@ -63,3 +63,41 @@ fn the_editor_names_what_its_text_belongs_to() {
     let entry = editor::edited_name(&board, Target::Description(Key::new(api, 1)));
     assert!(entry.ends_with("#1 api task"), "{entry}");
 }
+
+#[test]
+fn a_merge_says_how_many_conflicts_are_left_and_keeps_empty_lines() {
+    use crate::text::merge::{Merged, Pick, merge};
+    let Merged::Conflicted(mut conflicts) = merge("a\nb\nc\nd\ne", "A\nb\nc\nd\nE", "a2\nb\nc\nd\ne2") else {
+        panic!("two conflicts")
+    };
+    assert_eq!(merge::heading(&conflicts), "2 conflicts to pick");
+    conflicts.pick(Pick::Mine);
+    assert_eq!(merge::heading(&conflicts), "1 conflict to pick");
+    conflicts.pick(Pick::Theirs);
+    assert_eq!(merge::heading(&conflicts), "All picked: use the result");
+    // A region's last line break isn't one more line; the empty lines it holds are.
+    assert_eq!(merge::shown("- form title\n\n"), "- form title\n");
+    assert_eq!(merge::shown("\nShip\n"), "\nShip");
+    // A side that shows nothing says what it is.
+    assert_eq!(merge::side_note(""), Some("(removed)"));
+    assert_eq!(merge::side_note("\n"), Some("(an empty line)"));
+    assert_eq!(merge::side_note("\n \n"), Some("(empty lines)"));
+    assert_eq!(merge::side_note("x\n"), None);
+}
+
+#[test]
+fn a_merge_says_who_changed_a_description_and_when() {
+    use kanbrain_core::brain::Brain;
+    use kanbrain_core::model::Author;
+    let dir = tempfile::tempdir().unwrap();
+    Store::at(dir.path()).unwrap().save(&mut Task::new(1, "a".into(), now())).unwrap();
+    let mut agent = Brain::open(Store::at(dir.path()).unwrap()).unwrap();
+    agent.author = Author::Agent;
+    agent.set_description(1, "theirs").unwrap();
+    let board = Board::open(dir.path(), None).unwrap();
+    let said = merge::changed_by(&board, Target::Description(Key::new(0, 1)));
+    assert!(said.starts_with("An agent changed the description · "), "{said}");
+    // A comment keeps no such record.
+    let said = merge::changed_by(&board, Target::Comment(Key::new(0, 1), 0));
+    assert!(said.starts_with("It was changed meanwhile. "), "{said}");
+}

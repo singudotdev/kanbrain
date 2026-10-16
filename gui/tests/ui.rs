@@ -1,5 +1,5 @@
 use super::*;
-use crate::state::Board;
+use crate::state::{Board, Mode};
 use gpui::MouseButton;
 use kanbrain_core::model::{Author, Status, Task, now};
 use kanbrain_core::store::Store;
@@ -1027,4 +1027,107 @@ fn the_details_of_a_task_waiting_on_a_question_offer_to_answer_it(cx: &mut gpui:
     });
     cx.run_until_parked();
     assert!(cx.debug_bounds("button answer").is_some(), "the question, with Answer");
+}
+
+#[gpui::test]
+fn conflicts_show_both_sides_and_are_picked_with_the_mouse(cx: &mut gpui::TestAppContext) {
+    use kanbrain_core::brain::Brain;
+    let (view, cx, dir) = window(cx, &["a"]);
+    let kb = || Brain::open(Store::at(dir.path()).unwrap()).unwrap();
+    let catch_up = |cx: &mut gpui::VisualTestContext| {
+        cx.executor().advance_clock(crate::watch::INTERVAL);
+        cx.run_until_parked();
+    };
+    kb().set_description(1, "a\nb\nc\nd\ne").unwrap();
+    catch_up(cx);
+    cx.simulate_keystrokes("m");
+    view.update(cx, |view, _| {
+        view.board.select_all();
+        view.board.paste("A\nb\nc\nd\nE");
+    });
+    kb().set_description(1, "a2\nb\nc\nd\ne2").unwrap();
+    catch_up(cx);
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("conflict 1").is_some(), "both conflicts drawn");
+    // A side, or a segment (conflict 1's third: both).
+    click(cx, "merge-theirs-0");
+    click(cx, "segment merge-pick-5");
+    click(cx, "button merge-use");
+    view.read_with(cx, |view, _| {
+        let Mode::Edit(edit) = &view.board.mode else { panic!("the editor is open") };
+        assert_eq!((edit.merge.is_none(), edit.editor.text().as_str()), (true, "a2\nb\nc\nd\nE\ne2"));
+    });
+    // Yours where nothing's picked, from its button.
+    view.update(cx, |view, _| {
+        view.board.select_all();
+        view.board.paste("mine");
+    });
+    kb().set_description(1, "theirs").unwrap();
+    catch_up(cx);
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+    click(cx, "button merge-mine");
+    view.read_with(cx, |view, _| {
+        assert!(matches!(&view.board.mode, Mode::Edit(edit) if edit.merge.is_none() && edit.editor.text() == "mine"));
+    });
+}
+
+#[gpui::test]
+fn the_form_shows_the_title_kb_gave_meanwhile_to_take(cx: &mut gpui::TestAppContext) {
+    use kanbrain_core::brain::Brain;
+    let (view, cx, dir) = window(cx, &["a"]);
+    cx.simulate_keystrokes("e end x");
+    let mut agent = Brain::open(Store::at(dir.path()).unwrap()).unwrap();
+    agent.author = Author::Agent;
+    agent.update(1, "a, the agent's", vec![]).unwrap();
+    cx.executor().advance_clock(crate::watch::INTERVAL);
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("theirs-title").is_none(), "only once a save stops over it");
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("theirs-title").is_some());
+    click(cx, "button take-title");
+    view.read_with(cx, |view, _| {
+        assert!(matches!(&view.board.mode, Mode::Form(form) if form.title.text() == "a, the agent's"));
+    });
+    assert!(cx.debug_bounds("theirs-title").is_none(), "taken");
+}
+
+#[gpui::test]
+fn the_conflict_being_picked_stands_out_and_is_scrolled_to(cx: &mut gpui::TestAppContext) {
+    use kanbrain_core::brain::Brain;
+    let (view, cx, dir) = window(cx, &["a"]);
+    let kb = || Brain::open(Store::at(dir.path()).unwrap()).unwrap();
+    let lines: Vec<String> = (0..80).map(|n| format!("line {n}")).collect();
+    let text = |first: &str, last: &str| {
+        let mut lines = lines.clone();
+        lines[0] = first.into();
+        lines[79] = last.into();
+        lines.join("\n")
+    };
+    kb().set_description(1, &lines.join("\n")).unwrap();
+    cx.executor().advance_clock(crate::watch::INTERVAL);
+    cx.run_until_parked();
+    cx.simulate_keystrokes("m");
+    view.update(cx, |view, _| {
+        view.board.select_all();
+        view.board.paste(&text("first, mine", "last, mine"));
+    });
+    kb().set_description(1, &text("first, theirs", "last, theirs")).unwrap();
+    cx.executor().advance_clock(crate::watch::INTERVAL);
+    cx.run_until_parked();
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+    let current = |cx: &mut gpui::VisualTestContext| cx.debug_bounds("current conflict").expect("one is current");
+    let first = cx.debug_bounds("conflict 0").unwrap();
+    assert!(first.contains(&current(cx).center()), "the first, to begin with");
+    let window = cx.debug_bounds("merge").expect("the conflicts are drawn");
+    let last = cx.debug_bounds("conflict 1").unwrap();
+    assert!(last.top() > window.bottom(), "the last starts out of view");
+    cx.simulate_keystrokes("tab");
+    cx.run_until_parked();
+    let last = cx.debug_bounds("conflict 1").unwrap();
+    assert!(last.contains(&current(cx).center()), "the next is current");
+    assert!(last.top() < window.bottom() && last.bottom() > window.top(), "and scrolled into view");
 }

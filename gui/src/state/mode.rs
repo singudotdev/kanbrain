@@ -3,6 +3,7 @@
 use super::Key;
 use crate::text::editor::{LineInput, Pointer, TextEditor};
 use crate::text::event::{KeyCode, KeyEvent};
+use crate::text::merge::Merge;
 use kanbrain_core::model::{Comment, DecisionState, Kind, Status, Task};
 use std::path::PathBuf;
 
@@ -196,6 +197,11 @@ pub struct Form {
     /// On an edit, `kb` changed one of the fields, or the task's status, since it opened: the title says so until
     /// it's closed, as a change put back is still one that happened.
     pub changed_on_disk: bool,
+    /// The title `kb` gave the entry while the form changed it too, as the save that stopped over it found it: shown
+    /// under the field, to take it (`ctrl+t`) or save again with the form's.
+    pub theirs_title: Option<String>,
+    /// What the user told the agent working on the entry, as a save that stopped after the question had it.
+    pub note: String,
 }
 
 /// An edited entry's title, tags and related entries when its form opened (its title as a save that stopped found
@@ -245,6 +251,8 @@ impl Form {
             title_missed: false,
             opened: None,
             changed_on_disk: false,
+            theirs_title: None,
+            note: String::new(),
         }
     }
 
@@ -528,8 +536,9 @@ pub struct Edit {
     pub target: Target,
     /// Manage project, on this brain, when it was opened from there: where closing it goes back to.
     pub back: Option<usize>,
-    /// The text a save replaces: the target's when the editor opened, or as a save that stopped found it. Another
-    /// text there is a change made meanwhile (`kb describe`), which a save doesn't replace unseen.
+    /// The text the editor's and the target's both started from: the target's when the editor opened, or the one a
+    /// merge's conflicts were picked over. Another text there is a change made meanwhile (`kb describe`), which a save
+    /// merges with the editor's.
     pub base: String,
     /// For a comment, the entry's comments when the editor opened: one deleted, moved or edited meanwhile may put
     /// another at its index, which comments written in one second, with one text, don't tell apart.
@@ -542,6 +551,12 @@ pub struct Edit {
     /// `kb` changed the text, the entry's status or the verdict being given since the editor opened: the title says
     /// so until it's closed, as a change put back is still one that happened.
     pub changed_on_disk: bool,
+    /// Lines both the editor and `kb` changed, which a save that stopped over them shows in place of the text, to
+    /// pick in each conflict the editor's, `kb`'s or both; `None` while typing.
+    pub merge: Option<Merge>,
+    /// What the user told the agent working on the entry, as a save that stopped after the question had it: asked
+    /// again, the question starts from it.
+    pub note: String,
 }
 
 /// What the text editor edits.
@@ -719,6 +734,14 @@ impl Pending {
                 Target::Comment(..) => "a comment",
                 _ => "its description",
             },
+        }
+    }
+
+    /// What the user told the agent before this save stopped, to ask with again.
+    pub fn note(&self) -> &str {
+        match self {
+            Self::Form(form) => &form.note,
+            Self::Edit(edit) => &edit.note,
         }
     }
 

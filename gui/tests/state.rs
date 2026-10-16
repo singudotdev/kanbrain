@@ -389,7 +389,7 @@ fn a_save_that_stops_over_what_kb_wrote_says_it_once() {
     f.board.reload().unwrap();
     assert_eq!(f.board.message(), Some("#1's description changed on disk"));
     f.press(KeyCode::Esc);
-    let stop = "#1's description changed meanwhile: save again to replace it with yours, ctrl+d to keep it";
+    let stop = "#1's description changed meanwhile: pick yours or theirs where you both changed it";
     assert_eq!(f.board.message(), Some(stop));
     f.board.discard_edit();
 
@@ -411,7 +411,7 @@ fn a_save_that_stops_over_what_kb_wrote_says_it_once() {
     f.board.reload().unwrap();
     assert_eq!(f.board.message(), Some("#1's title changed on disk"));
     f.press(KeyCode::Enter);
-    let renamed = "#1's title changed meanwhile, to “Fix SSO”: save again to replace it";
+    let renamed = "#1's title changed meanwhile, to “Fix SSO”: save again to keep yours, ctrl+t to take it";
     assert_eq!(f.board.message(), Some(renamed));
     f.press(KeyCode::Esc);
     f.press(KeyCode::Char('e'));
@@ -423,7 +423,10 @@ fn a_save_that_stops_over_what_kb_wrote_says_it_once() {
     f.press(KeyCode::Enter);
     assert_eq!(
         f.board.message(),
-        Some("#1's title changed meanwhile, to “Fix SSO 500”: save again to replace it · #1's tags changed on disk")
+        Some(
+            "#1's title changed meanwhile, to “Fix SSO 500”: save again to keep yours, ctrl+t to take it · #1's tags \
+             changed on disk"
+        )
     );
     f.press(KeyCode::Esc);
 
@@ -478,19 +481,25 @@ fn the_editor_doesnt_replace_unseen_what_kb_wrote_while_it_was_open() {
     kb(&f).set_description(1, "the agent's plan").unwrap();
     f.board.reload().unwrap();
     saving(&mut f);
-    assert!(matches!(f.board.mode, Mode::Edit(_)), "kept open with the text typed");
+    let merging = |f: &Fixture| matches!(&f.board.mode, Mode::Edit(edit) if edit.merge.is_some());
+    assert!(merging(&f), "kept open, the lines both changed to pick from");
     assert_eq!(
         f.board.message(),
-        Some("#1's description changed meanwhile: save again to replace it with yours, ctrl+d to keep it")
+        Some("#1's description changed meanwhile: pick yours or theirs where you both changed it")
     );
     assert_eq!(f.on_disk(1).description, "the agent's plan", "not replaced unseen");
+    // esc takes yours where nothing's picked, back in the editor.
+    saving(&mut f);
+    assert!(matches!(&f.board.mode, Mode::Edit(edit) if edit.merge.is_none() && edit.editor.text() == "mine"));
+    assert_eq!(f.board.message(), Some("merged: esc saves it"));
 
-    // Changed again before the second save: said again, still not replaced.
+    // Changed again before the second save: stopped again, still not replaced.
     kb(&f).set_description(1, "the agent's new plan").unwrap();
     f.board.reload().unwrap();
     saving(&mut f);
-    assert!(matches!(f.board.mode, Mode::Edit(_)));
+    assert!(merging(&f));
     assert_eq!(f.on_disk(1).description, "the agent's new plan");
+    saving(&mut f);
 
     // Saved again with nothing new on disk: the user's replaces it.
     saving(&mut f);
@@ -537,9 +546,10 @@ fn the_editor_doesnt_replace_unseen_what_kb_wrote_while_it_was_open() {
     saving(&mut f);
     assert_eq!(
         f.board.message(),
-        Some("#1's comment changed meanwhile: save again to replace it with yours, ctrl+d to keep it")
+        Some("#1's comment changed meanwhile: pick yours or theirs where you both changed it")
     );
     assert_eq!(f.on_disk(1).comments[0].body, "first, the agent's");
+    saving(&mut f);
     saving(&mut f);
     assert_eq!(f.on_disk(1).comments[0].body, "first, mine");
 
@@ -552,6 +562,254 @@ fn the_editor_doesnt_replace_unseen_what_kb_wrote_while_it_was_open() {
     assert!(matches!(f.board.mode, Mode::Normal));
     let bodies: Vec<_> = f.on_disk(1).comments.into_iter().map(|c| c.body).collect();
     assert_eq!(bodies, ["first, mine", "the agent's", "second"]);
+}
+
+#[test]
+fn the_editor_merges_lines_only_one_side_changed() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["feature"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    kb(&f).set_description(1, "Plan\n\n- one\n- two\n- three").unwrap();
+    f.board.reload().unwrap();
+    let typing = |f: &mut Fixture, text: &str| {
+        f.board.select_all();
+        f.board.paste(text);
+    };
+
+    // The user's line and the agent's, both kept, and said so.
+    f.press(KeyCode::Char('m'));
+    typing(&mut f, "Plan, mine\n\n- one\n- two\n- three");
+    kb(&f).set_description(1, "Plan\n\n- one\n- three\n- four").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Esc);
+    assert!(matches!(f.board.mode, Mode::Normal));
+    assert_eq!(f.board.message(), Some("description saved, merged with the change made meanwhile"));
+    assert_eq!(f.on_disk(1).description, "Plan, mine\n\n- one\n- three\n- four");
+
+    // The agent made the same change, and another: nothing to write.
+    f.press(KeyCode::Char('m'));
+    typing(&mut f, "Plan, mine\n\n- one\n- three\n- five");
+    kb(&f).set_description(1, "Plan, done\n\n- one\n- three\n- five").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Esc);
+    assert!(matches!(f.board.mode, Mode::Normal));
+    assert_eq!(f.board.message(), Some("nothing to save: #1's description has your changes already"));
+
+    // Told to the agent working on it, the save says it merged.
+    let mut agent = kb(&f);
+    agent.author = Author::Agent;
+    agent.set_status(1, Status::Doing).unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Char('m'));
+    typing(&mut f, "Plan\n\n- one\n- three\n- five");
+    agent.set_description(1, "Plan, done\n\n- one\n- three\n- five, done").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Esc);
+    assert!(matches!(f.board.mode, Mode::Tell(_)));
+    f.press(KeyCode::Enter);
+    assert_eq!(f.board.message(), Some("description saved, merged with the change made meanwhile; the agent is told"));
+    assert_eq!(f.on_disk(1).description, "Plan\n\n- one\n- three\n- five, done");
+}
+
+#[test]
+fn lines_both_changed_are_picked_in_place_of_the_text() {
+    use crate::text::merge::Pick;
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["feature"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    kb(&f).set_description(1, "a\nb\nc\nd\ne").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Char('m'));
+    f.board.select_all();
+    f.board.paste("A\nb\nc\nd\nE");
+    kb(&f).set_description(1, "a2\nb\nc\nd\ne2").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Esc);
+    let at = |f: &Fixture| match &f.board.mode {
+        Mode::Edit(Edit { merge: Some(merge), .. }) => merge.at,
+        _ => panic!("picking"),
+    };
+    assert_eq!(at(&f), 0);
+
+    // The arrows and tab move between conflicts; other keys type nothing.
+    f.press(KeyCode::Down);
+    assert_eq!(at(&f), 1);
+    f.press(KeyCode::Up);
+    assert_eq!(at(&f), 0);
+    f.press(KeyCode::Tab);
+    assert_eq!(at(&f), 1);
+    f.shift(KeyCode::BackTab);
+    assert_eq!(at(&f), 0);
+    f.press(KeyCode::Char('x'));
+    assert_eq!(at(&f), 0);
+
+    // Each pick moves on; enter waits for the last.
+    f.press(KeyCode::Char('t'));
+    assert_eq!(at(&f), 1);
+    f.press(KeyCode::Enter);
+    assert_eq!(f.board.message(), Some("1 conflict to pick yet: yours (m), theirs (t) or both (b)"));
+    assert_eq!(at(&f), 1);
+    f.press(KeyCode::Char('b'));
+    // A click on a side picks it.
+    f.board.pick_conflict(0, Pick::Mine);
+    f.press(KeyCode::Enter);
+    assert!(
+        matches!(&f.board.mode, Mode::Edit(edit) if edit.merge.is_none() && edit.editor.text() == "A\nb\nc\nd\nE\ne2")
+    );
+    assert_eq!(f.board.message(), Some("merged: esc saves it"));
+    assert!(matches!(&f.board.mode, Mode::Edit(edit) if f.board.changed(edit)), "Save, not Close");
+    assert_eq!(f.on_disk(1).description, "a2\nb\nc\nd\ne2", "not saved yet");
+    f.press(KeyCode::Esc);
+    assert_eq!(f.board.message(), Some("description saved"));
+    assert_eq!(f.on_disk(1).description, "A\nb\nc\nd\nE\ne2");
+
+    // Picking mine everywhere, then theirs: the same.
+    f.press(KeyCode::Char('m'));
+    f.board.select_all();
+    f.board.paste("A!\nb");
+    kb(&f).set_description(1, "a3\nb\nc\nd\nE\ne3").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Esc);
+    f.press(KeyCode::Char('m'));
+    f.press(KeyCode::Char('m'));
+    f.board.use_merge();
+    f.press(KeyCode::Esc);
+    assert_eq!(f.on_disk(1).description, "A!\nb");
+    // Nothing types into the text the conflicts hide: a paste, a cut, a select-all.
+    f.press(KeyCode::Char('m'));
+    f.board.select_all();
+    f.board.paste("mine\nb");
+    kb(&f).set_description(1, "theirs\nb").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Esc);
+    f.board.select_all();
+    f.board.paste("pasted");
+    assert_eq!(f.board.selected_text(), None);
+    assert_eq!(f.board.cut(), None);
+    assert!(!f.board.is_typing(), "no cursor");
+    // All theirs is the text as it is: nothing to save, and said so.
+    f.press(KeyCode::Char('t'));
+    f.press(KeyCode::Enter);
+    assert!(matches!(&f.board.mode, Mode::Edit(edit) if edit.editor.text() == "theirs\nb" && !f.board.changed(edit)));
+    assert_eq!(f.board.message(), Some("merged: it's theirs as it is, esc closes"));
+    f.press(KeyCode::Esc);
+    assert_eq!(f.on_disk(1).description, "theirs\nb");
+    // ctrl+d while picking discards it all.
+    f.press(KeyCode::Char('m'));
+    f.board.select_all();
+    f.board.paste("mine");
+    kb(&f).set_description(1, "theirs").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Esc);
+    f.board.on_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL));
+    assert!(matches!(f.board.mode, Mode::Normal));
+    assert_eq!(f.on_disk(1).description, "theirs");
+}
+
+#[test]
+fn yours_for_the_rest_keeps_the_lines_only_kb_changed() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["feature"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    kb(&f).set_description(1, "a\nb\nc\nd\ne").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Char('m'));
+    f.board.select_all();
+    f.board.paste("A\nb\nc\nd\nE");
+    kb(&f).set_description(1, "a2\nb\nc, theirs\nd\ne2").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Esc);
+    // Picked in either case; ctrl+a letter picks nothing.
+    f.board.on_key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL));
+    assert!(
+        matches!(&f.board.mode, Mode::Edit(Edit { merge: Some(m), .. }) if m.conflicts().all(|c| c.pick.is_none()))
+    );
+    f.shift(KeyCode::Char('T'));
+    assert!(matches!(&f.board.mode, Mode::Edit(Edit { merge: Some(m), .. }) if m.at == 1));
+    f.press(KeyCode::Esc);
+    assert!(matches!(&f.board.mode, Mode::Edit(edit) if edit.editor.text() == "a2\nb\nc, theirs\nd\nE"));
+    f.press(KeyCode::Esc);
+    assert_eq!(f.on_disk(1).description, "a2\nb\nc, theirs\nd\nE", "theirs, and the line only kb changed");
+}
+
+#[test]
+fn conflicts_kb_changes_again_while_picked_are_merged_again() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["feature"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    kb(&f).set_description(1, "a\nb\nc\nd\ne").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Char('m'));
+    f.board.select_all();
+    f.board.paste("A\nb\nc\nd\nE");
+    kb(&f).set_description(1, "a2\nb\nc\nd\ne2").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Esc);
+    f.press(KeyCode::Char('t'));
+    // Changed again: the conflicts are of the new text, picked anew.
+    kb(&f).set_description(1, "a3\nb\nc\nd\ne2").unwrap();
+    f.board.message = None;
+    f.board.reload().unwrap();
+    assert_eq!(f.board.message(), Some("#1's description changed again: pick again where you both changed it"));
+    let Mode::Edit(Edit { merge: Some(merge), .. }) = &f.board.mode else { panic!("still picking") };
+    assert_eq!(merge.theirs, "a3\nb\nc\nd\ne2");
+    assert!(merge.conflicts().all(|c| c.pick.is_none()));
+    // Read again with nothing new: as it was.
+    f.press(KeyCode::Char('t'));
+    f.board.message = None;
+    f.board.reload().unwrap();
+    assert_eq!(f.board.message(), None);
+    // Changed again to lines the user didn't: it all merges, back in the editor.
+    kb(&f).set_description(1, "a\nb\nc, theirs\nd\ne").unwrap();
+    f.board.reload().unwrap();
+    assert_eq!(f.board.message(), Some("#1's description changed again: it all merges now, esc saves it"));
+    assert!(
+        matches!(&f.board.mode, Mode::Edit(edit) if edit.merge.is_none() && edit.editor.text() == "A\nb\nc, theirs\nd\nE")
+    );
+    // What a save merges with is that text now: taken back, it's taken back in the editor's too.
+    kb(&f).set_description(1, "a\nb\nc\nd\ne").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Esc);
+    assert_eq!(f.on_disk(1).description, "A\nb\nc\nd\nE");
+}
+
+#[test]
+fn a_save_that_stops_after_telling_the_agent_asks_again_with_the_note() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["feature"]);
+    let mut agent = Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    agent.author = Author::Agent;
+    agent.set_status(1, Status::Doing).unwrap();
+    agent.set_description(1, "plan").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Char('m'));
+    f.board.select_all();
+    f.board.paste("my plan");
+    f.press(KeyCode::Esc);
+    f.type_text("use mine");
+    // The agent writes before the answer: the save stops over it.
+    agent.set_description(1, "the agent's plan").unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Enter);
+    assert!(matches!(&f.board.mode, Mode::Edit(edit) if edit.merge.is_some()));
+    f.press(KeyCode::Char('m'));
+    f.press(KeyCode::Enter);
+    f.press(KeyCode::Esc);
+    assert!(matches!(&f.board.mode, Mode::Tell(tell) if tell.note.text() == "use mine"), "asked again, with the note");
+    // The form's title, the same.
+    f.press(KeyCode::Enter);
+    assert_eq!(f.on_disk(1).description, "my plan");
+    f.press(KeyCode::Char('e'));
+    f.press(KeyCode::End);
+    f.type_text("!");
+    f.press(KeyCode::Enter);
+    f.type_text("renamed");
+    agent.update(1, "feature, the agent's", vec![]).unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Enter);
+    assert!(matches!(&f.board.mode, Mode::Form(form) if form.theirs_title.is_some()));
+    f.press(KeyCode::Enter);
+    assert!(matches!(&f.board.mode, Mode::Tell(tell) if tell.note.text() == "renamed"));
 }
 
 #[test]
@@ -1638,8 +1896,9 @@ fn the_editor_doesnt_replace_unseen_a_project_description_or_role_kb_wrote_meanw
     saving(&mut board);
     assert_eq!(
         board.message(),
-        Some("the project's description changed meanwhile: save again to replace it with yours, ctrl+d to keep it")
+        Some("the project's description changed meanwhile: pick yours or theirs where you both changed it")
     );
+    saving(&mut board);
     saving(&mut board);
     assert_eq!(board.brain(2).project.as_ref().unwrap().description, "An online shop.!");
 
@@ -1651,7 +1910,7 @@ fn the_editor_doesnt_replace_unseen_a_project_description_or_role_kb_wrote_meanw
     saving(&mut board);
     assert_eq!(
         board.message(),
-        Some("this repository's role changed meanwhile: save again to replace it with yours, ctrl+d to keep it")
+        Some("this repository's role changed meanwhile: pick yours or theirs where you both changed it")
     );
     assert_eq!(projects::read_repo_card(&api).unwrap().notes, "The API, says kb.");
 }
@@ -2954,12 +3213,45 @@ fn an_edit_saves_only_what_was_changed_in_the_form_and_keeps_what_kb_changed_mea
     f.board.message = None;
     f.press(KeyCode::Enter);
     assert!(matches!(f.board.mode, Mode::Form(_)), "kept open with what was typed");
-    assert_eq!(f.board.message(), Some("#1's title changed meanwhile, to “Fix SSO”: save again to replace it"));
+    assert_eq!(
+        f.board.message(),
+        Some("#1's title changed meanwhile, to “Fix SSO”: save again to keep yours, ctrl+t to take it")
+    );
     assert_eq!((f.on_disk(1).title.as_str(), tags(&f).len()), ("Fix SSO", 3), "nothing saved");
     f.press(KeyCode::Enter);
     assert_eq!(f.on_disk(1).title, "Fix the SSO login now", "the title typed");
     assert_eq!(tags(&f), ["bug", "ui", "db"], "auth taken out in the form, db added by the agent");
     assert_eq!(related(&f), [k(3)], "#2 unrelated in the form, #3 related by the agent");
+
+    // ctrl+t takes theirs instead, which then saves as the agent left it.
+    let ctrl_t = |f: &mut Fixture| f.board.on_key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL));
+    f.press(KeyCode::Char('e'));
+    ctrl_t(&mut f);
+    assert!(
+        matches!(&f.board.mode, Mode::Form(form) if form.title.text() == "Fix the SSO login now"),
+        "nothing to take"
+    );
+    f.type_text("!");
+    f.press(KeyCode::Tab);
+    f.press(KeyCode::End);
+    f.type_text(", api");
+    kb(&f).update(1, "Fix SSO", vec!["bug".into(), "ui".into(), "db".into()]).unwrap();
+    f.board.reload().unwrap();
+    f.press(KeyCode::Enter);
+    assert!(matches!(&f.board.mode, Mode::Form(form) if form.theirs_title.as_deref() == Some("Fix SSO")));
+    // Renamed again before it's taken: the form shows, and takes, the title as it is now.
+    kb(&f).update(1, "Fix SSO 2", vec!["bug".into(), "ui".into(), "db".into()]).unwrap();
+    f.board.reload().unwrap();
+    assert!(matches!(&f.board.mode, Mode::Form(form) if form.theirs_title.as_deref() == Some("Fix SSO 2")));
+    kb(&f).update(1, "Fix SSO", vec!["bug".into(), "ui".into(), "db".into()]).unwrap();
+    f.board.reload().unwrap();
+    ctrl_t(&mut f);
+    assert!(matches!(&f.board.mode, Mode::Form(form) if form.title.text() == "Fix SSO" && form.theirs_title.is_none()
+            && form.field == Field::Title));
+    f.press(KeyCode::Enter);
+    assert!(matches!(f.board.mode, Mode::Normal));
+    assert_eq!(f.on_disk(1).title, "Fix SSO");
+    assert_eq!(tags(&f), ["bug", "ui", "db", "api"], "the form's other changes saved");
 }
 
 #[test]
