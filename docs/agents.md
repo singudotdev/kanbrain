@@ -28,15 +28,20 @@ kb init        # creates .brain/ and tells the project's agents about it
    isn't touched. Running `init` again updates the section in place, and upgrading does it in every project: the
    installer and `kb update` run `kb init --all`.
 
-   For Claude Code (when the section goes in `CLAUDE.md`), it also adds four hooks to
+   For Claude Code (when the section goes in `CLAUDE.md`), it also adds five hooks to
    `.claude/settings.local.json`, keeping whatever else is there:
 
    | hook | runs | does |
    | --- | --- | --- |
    | `SessionStart` | `kb context` | when a session starts or resumes, after `/clear` and after compaction, the agent gets the brain's state without spending a tool call, and keeps it deep into a long session |
    | `UserPromptSubmit` | `kb hook prompt` | while the project isn't described (or, with several repositories, this one's role isn't), every prompt arrives with the request to write it before anything else |
-   | `Stop` | `kb hook stop` | an agent ending its turn with it still missing is reminded to write it, once a turn (a reminder, not a block: the turn ends all the same). It also reminds an agent of each task it started and hasn't commented on since, to say where it stands |
+   | `Stop` | `kb hook stop` | an agent ending its turn with it still missing is reminded to write it, once a turn (a reminder, not a block: the turn ends all the same). It also reminds an agent of each task it started and hasn't commented on since (a comment of yours doesn't count: it doesn't say where the agent stands), to say where it stands |
    | `PreToolUse` (`Edit`, `Write`, `MultiEdit`) | `kb hook edit` | an agent about to write a brain's file (anything in a project's `.brain/`; in the central brain, its entries, `tags.md`, `projects.md`, `last-id`, `format`, project cards and reports, not a notes vault's other notes nor a repository kept there) is refused and told to make the change with `kb`, which takes the brain's lock, numbers new entries and keeps the format; or, if no command makes it, to tell you what to change: a merge conflict in a committed `.brain/` is yours to resolve. A shell command's writes aren't seen |
+   | `PreToolUse` (every tool) | `kb hook tool` | with each step (next to a tool's result) of an agent working on a task you commented on since its last comment there (from the app's **Save and tell**, or any comment), it's told to `kb show` the task and `kb comment` what it'll do about it, until it does. Context, never a block; a few milliseconds, as it only reads the brain. A hook of these you take out comes back with the next session (`kb context` brings them up to date): `kb deinit` takes them all out |
+
+   `kb context` brings the hooks up to date where kanbrain's are already there, so a release that adds one reaches
+   every project with its next session; it never writes them where they aren't (`kb deinit` took them out, or the
+   section went only in `AGENTS.md`).
 
    Agents skipped describing the project when only the section and `context` asked them to; with these, Claude
    Code reminds them on their first turn. Once it's described and the tasks the agent started commented on,

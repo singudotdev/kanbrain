@@ -32,8 +32,8 @@ mod tests;
 pub use keys::{Action, When};
 pub use menu::MenuPicker;
 pub use mode::{
-    AddProject, CommentPicker, Confirm, Edit, Field, Form, FormTarget, LinkPicker, Manage, Mode, Picker, PickerKey,
-    ProjectOption, QuickAdd, Target, WhereFor, WherePicker,
+    AddProject, CommentPicker, Confirm, Edit, Field, Form, FormTarget, LinkPicker, Manage, Mode, Pending, Picker,
+    PickerKey, ProjectOption, QuickAdd, Target, Tell, Telling, WhereFor, WherePicker,
 };
 pub use sources::{Key, Scope, Source};
 
@@ -361,21 +361,39 @@ impl Board {
     }
 
     /// Marks the open edit form or editor once `kb` changed what it edits, and says what, once: the save that follows
-    /// is the user's call, made knowing it.
+    /// is the user's call, made knowing it. One waiting for [`Tell`]'s answer too: the agent may finish the task then.
     fn mark_changed_on_disk(&mut self) {
         let said = match &self.mode {
-            Mode::Edit(edit) if !edit.changed_on_disk => self.edit_changed_on_disk(edit),
-            Mode::Form(form) if !form.changed_on_disk => self.form_changed_on_disk(form),
+            Mode::Edit(edit) => self.edit_mark(edit),
+            Mode::Form(form) => self.form_mark(form),
+            Mode::Tell(tell) => match &tell.pending {
+                Pending::Edit(edit) => self.edit_mark(edit),
+                Pending::Form(form) => self.form_mark(form),
+            },
             _ => None,
         };
         let Some(said) = said else { return };
         match &mut self.mode {
             Mode::Edit(edit) => edit.changed_on_disk = true,
             Mode::Form(form) => form.changed_on_disk = true,
+            Mode::Tell(tell) => match &mut tell.pending {
+                Pending::Edit(edit) => edit.changed_on_disk = true,
+                Pending::Form(form) => form.changed_on_disk = true,
+            },
             // Only an edit or a form says what changed.
             _ => return,
         }
         self.notify_found(said);
+    }
+
+    /// What `kb` changed of what `edit` edits, unless it was said already.
+    fn edit_mark(&self, edit: &Edit) -> Option<String> {
+        if edit.changed_on_disk { None } else { self.edit_changed_on_disk(edit) }
+    }
+
+    /// What `kb` changed of what `form` edits, unless it was said already.
+    fn form_mark(&self, form: &Form) -> Option<String> {
+        if form.changed_on_disk { None } else { self.form_changed_on_disk(form) }
     }
 
     /// Tasks in a column, filtered by the scope and the search, most recently moved there first; the
@@ -550,8 +568,12 @@ impl Board {
 
 /// "#1's title and status changed on disk", naming the fields of `name`'s entry that changed; `None` if none did.
 fn changed_on_disk(name: &str, fields: &[(bool, &str)]) -> Option<String> {
+    listed(fields).map(|fields| format!("{name}'s {fields} changed on disk"))
+}
+
+/// The fields marked changed, as a sentence lists them ("title, tags and status"); `None` if none is.
+fn listed(fields: &[(bool, &str)]) -> Option<String> {
     let changed: Vec<&str> = fields.iter().filter(|(changed, _)| *changed).map(|(_, field)| *field).collect();
     let (last, rest) = changed.split_last()?;
-    let fields = if rest.is_empty() { (*last).to_string() } else { format!("{} and {last}", rest.join(", ")) };
-    Some(format!("{name}'s {fields} changed on disk"))
+    Some(if rest.is_empty() { (*last).to_string() } else { format!("{} and {last}", rest.join(", ")) })
 }

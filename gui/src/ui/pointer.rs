@@ -43,6 +43,8 @@ pub enum TextBox {
     ProjectName,
     /// The description or comment editor.
     Editor,
+    /// The note for the agent, when a save tells it.
+    TellNote,
 }
 
 impl TextBox {
@@ -61,6 +63,7 @@ impl TextBox {
             Self::WhereSearch => "where-search",
             Self::PaletteSearch => "palette-search",
             Self::ProjectName => "project-name",
+            Self::TellNote => "tell-note",
             Self::ManageName => "manage-name",
             Self::Editor => "editor",
         }
@@ -193,6 +196,7 @@ fn focus(this: &mut BrainView, which: TextBox) {
         | TextBox::PaletteSearch
         | TextBox::ProjectName
         | TextBox::ManageName
+        | TextBox::TellNote
         | TextBox::Editor => {}
     }
 }

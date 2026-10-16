@@ -43,17 +43,17 @@ pub enum Mode {
     AddProject(AddProject),
     /// Renaming, moving or removing a project or one of its repositories, from Manage project.
     Manage(Manage),
+    /// Before a save on a task an agent is working on: whether to tell it, with a note, as the user's comment.
+    Tell(Box<Tell>),
 }
 
 impl Mode {
     /// The entry the mode acts on, if it's one: its form, editor, confirmation, pickers or menu.
     pub fn entry(&self) -> Option<Key> {
         match self {
-            Self::Form(form) => match form.target {
-                FormTarget::Edit(key) => Some(key),
-                FormTarget::New(..) => None,
-            },
+            Self::Form(form) => form.target.key(),
             Self::Edit(edit) => edit.target.key(),
+            Self::Tell(tell) => tell.pending.key(),
             Self::Confirm(Confirm::Delete(key) | Confirm::DeleteComment(key, _))
             | Self::Links(LinkPicker { key, .. })
             | Self::Comments(CommentPicker { key, .. })
@@ -76,6 +76,11 @@ impl Mode {
     /// Points every brain the mode names, by index, at where `to` says it now is, after the list of brains
     /// changed; `None` if one is gone, and the mode with it.
     pub fn remap(self, to: impl Fn(usize) -> Option<usize>) -> Option<Self> {
+        self.remap_by(&to)
+    }
+
+    /// [`Self::remap`], through a reference: [`Tell`] remaps the form or editor it holds with it.
+    fn remap_by(self, to: &dyn Fn(usize) -> Option<usize>) -> Option<Self> {
         let key = |key: Key| Some(Key::new(to(key.src)?, key.id));
         Some(match self {
             Self::Form(mut form) => {
@@ -95,6 +100,20 @@ impl Mode {
                 Self::Form(form)
             }
             Self::QuickAdd(add) => Self::QuickAdd(QuickAdd { src: to(add.src)?, ..add }),
+            // The save waiting is remapped as it would be open.
+            Self::Tell(mut tell) => {
+                tell.pending = match tell.pending {
+                    Pending::Form(form) => {
+                        let Self::Form(form) = Self::Form(form).remap_by(to)? else { return None };
+                        Pending::Form(form)
+                    }
+                    Pending::Edit(edit) => {
+                        let Self::Edit(edit) = Self::Edit(*edit).remap_by(to)? else { return None };
+                        Pending::Edit(Box::new(edit))
+                    }
+                };
+                Self::Tell(tell)
+            }
             Self::Edit(edit) => {
                 let target = match edit.target {
                     Target::Description(k) => Target::Description(key(k)?),
@@ -378,6 +397,16 @@ pub enum FormTarget {
     Edit(Key),
 }
 
+impl FormTarget {
+    /// The entry the form changes; none for a new one.
+    pub fn key(self) -> Option<Key> {
+        match self {
+            Self::Edit(key) => Some(key),
+            Self::New(..) => None,
+        }
+    }
+}
+
 /// A field of the form.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Field {
@@ -651,4 +680,63 @@ impl Picker {
         }
         PickerKey::Stay
     }
+}
+
+/// The question a save on a task an agent is working on asks first: what it changes may cross what the agent writes
+/// next, and the agent hears of a change only through a comment (`kb hook tool` tells it of one).
+#[derive(Debug)]
+pub struct Tell {
+    /// The form or editor saving, as it was: `esc` goes back to it, either answer saves it.
+    pub pending: Pending,
+    /// What the user adds for the agent, after what changed; may stay empty.
+    pub note: LineInput,
+}
+
+/// A save waiting for [`Tell`]'s answer.
+#[derive(Debug)]
+pub enum Pending {
+    /// The edit form's.
+    Form(Box<Form>),
+    /// The description's or a comment's editor.
+    Edit(Box<Edit>),
+}
+
+impl Pending {
+    /// The entry being saved.
+    pub fn key(&self) -> Option<Key> {
+        match self {
+            Self::Form(form) => form.target.key(),
+            Self::Edit(edit) => edit.target.key(),
+        }
+    }
+
+    /// What the save changes, as the question names it.
+    pub fn what(&self) -> &'static str {
+        match self {
+            Self::Form(_) => "its title, tags or related entries",
+            Self::Edit(edit) => match edit.target {
+                Target::Comment(..) => "a comment",
+                _ => "its description",
+            },
+        }
+    }
+
+    /// The form or editor again, as it was.
+    pub fn into_mode(self) -> Mode {
+        match self {
+            Self::Form(form) => Mode::Form(form),
+            Self::Edit(edit) => Mode::Edit(*edit),
+        }
+    }
+}
+
+/// What a save does about an agent working on the entry: asks first, or was answered.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Telling {
+    /// Asks, if an agent is working on it ([`Tell`]); else just saves.
+    Ask,
+    /// Saves without telling.
+    Save,
+    /// Saves, then tells the agent what changed, with this note, as the user's comment.
+    Tell(String),
 }

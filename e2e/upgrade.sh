@@ -7,7 +7,8 @@
 # agents' comments, links within a brain and across repositories, unicode and markdown. Every entry's
 # `show --json` is recorded. Then this build, on a copy:
 #
-# - reads every brain (`list`, `show`, `context`, `status`, `report`) without changing a file;
+# - reads every brain (`list`, `show`, `context`, `status`, `report`) without changing a file, but for the hooks
+#   `context` adds to `.claude/settings.local.json` where kanbrain's are already there;
 # - shows every entry as the old version did, field by field (new fields may be added);
 # - runs `init --all`, which renames the names v0.4.0 stopped taking, and writes (comments, status changes)
 #   without an error.
@@ -130,6 +131,44 @@ renamed() {
     fi
 }
 
+# Every `.claude/settings.local.json` under $2 is the one under $1, but in the folders after them, where `context` ran:
+# there, where $1's had kanbrain's hooks, only its missing ones are added, `kb hook tool` among them.
+rehooked() {
+    python3 - "$@" <<'PY'
+import json, pathlib, sys
+
+old_root, new_root = map(pathlib.Path, sys.argv[1:3])
+read = {pathlib.Path(folder) / ".claude/settings.local.json" for folder in sys.argv[3:]}
+name = ".claude/settings.local.json"
+olds = {p.relative_to(old_root) for p in old_root.rglob(name)}
+news = {p.relative_to(new_root) for p in new_root.rglob(name)}
+assert olds == news, f"settings files differ: {sorted(map(str, olds ^ news))}"
+
+
+def commands(settings):
+    return [h["command"] for groups in settings.get("hooks", {}).values() for g in groups for h in g["hooks"]]
+
+
+for rel in sorted(olds):
+    old = json.loads((old_root / rel).read_text())
+    new = json.loads((new_root / rel).read_text())
+    if rel not in read or not any(c.startswith("kb ") for c in commands(old)):
+        assert old == new, f"{rel}: changed"
+        continue
+    assert "kb hook tool" in commands(new), f"{rel}: no `kb hook tool`"
+    added = commands(new)
+    for c in commands(old):
+        added.remove(c)
+    assert all(c.startswith("kb ") for c in added), f"{rel}: added {added}"
+    kept = {
+        event: [g for g in groups if g in old["hooks"][event]]
+        for event, groups in new["hooks"].items()
+        if event in old["hooks"]
+    }
+    assert {**new, "hooks": kept} == old, f"{rel}: what was there changed"
+PY
+}
+
 # Every brain's entries as `kb` $1 shows them, under $3: one JSON file each.
 record() {
     local kb=$1 w=$2 out=$3 brain name ids
@@ -222,15 +261,19 @@ for tag in $tags; do
     grep -q "$dir/head/src/shop/api" "$dir/head/home/central/projects.md" || fail "$tag: the copy's registry"
     record "$head_kb" "$dir/head" "$dir/new"
     (cd "$dir/head/home" && person "$head_kb" "$dir/head/home" status >/dev/null) || fail "$tag: status failed"
-    for brain in home src/shop/api src/shop/web src/solo; do
+    read=(home src/shop/api src/shop/web src/solo)
+    for brain in "${read[@]}"; do
         (cd "$dir/head/$brain" && person "$head_kb" "$dir/head/home" context >/dev/null &&
             person "$head_kb" "$dir/head/home" report week >/dev/null) || fail "$tag: reading $brain failed"
     done
     # The copy's registry aside, which names its own folders.
-    if ! diff -r --exclude=.git --exclude=.cache --exclude=projects.md "$dir/data" "$dir/head" >"$dir/read.diff"; then
+    if ! diff -r --exclude=.git --exclude=.cache --exclude=projects.md --exclude=settings.local.json "$dir/data" \
+        "$dir/head" >"$dir/read.diff"; then
         cat "$dir/read.diff" >&2
         fail "$tag: reading changed files (above)"
     fi
+    rehooked "$dir/data" "$dir/head" "${read[@]}" ||
+        fail "$tag: reading changed Claude Code's settings beyond kanbrain's hooks"
     compare "$dir/old" "$dir/new" || fail "$tag: entries read differently (above)"
 
     (cd "$dir/head/home" && person "$head_kb" "$dir/head/home" init --all >/dev/null) || fail "$tag: init --all failed"

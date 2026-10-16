@@ -15,6 +15,7 @@ mod form;
 mod manage;
 mod pickers;
 mod project;
+mod tell;
 
 use crate::state::{Board, Confirm, Mode};
 use crate::text::event::KeyCode;
@@ -47,6 +48,7 @@ pub fn draw(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<Brai
         Mode::Palette(picker) => pickers::palette(board, picker, &scroll.palette, follow, cx),
         Mode::AddProject(add) => add_project::draw(board, add, &scroll.add_project, follow, cx),
         Mode::Manage(manage) => manage::draw(board, manage, &scroll.add_project, follow, cx)?,
+        Mode::Tell(tell) => tell::draw(board, tell, cx),
         // The project dropdown hangs from its button in the top bar.
         // The menu is drawn at the click, over everything: see `menu::draw`.
         Mode::Normal | Mode::Search | Mode::QuickAdd(_) | Mode::Scopes(_) | Mode::Tags(..) | Mode::Menu(_) => {
