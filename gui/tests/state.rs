@@ -1019,6 +1019,33 @@ fn what_kb_changed_in_an_open_dialog_isnt_replaced_by_what_else_is_said() {
 }
 
 #[test]
+fn what_kb_changed_goes_beside_a_slow_save_but_not_beside_a_later_inputs_message() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["Fix login"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    f.board.select(k(1));
+    f.press(KeyCode::Char('e'));
+    kb(&f).set_status(1, Status::Doing).unwrap();
+    f.board.reload().unwrap();
+    // The save the read was for takes seconds, on a slow disk or a busy machine: it's still said beside it.
+    if let Some((_, at, _)) = &mut f.board.message {
+        *at -= Duration::from_secs(2);
+    }
+    f.press(KeyCode::Char('!'));
+    f.press(KeyCode::Enter);
+    assert_eq!(f.board.message(), Some("#1 saved · #1's status changed on disk"));
+    // Found by a read no input made, as the window's timer does: shown, then replaced as any message.
+    f.press(KeyCode::Char('e'));
+    kb(&f).set_status(1, Status::Todo).unwrap();
+    f.board.reload().unwrap();
+    f.board.input_done();
+    assert_eq!(f.board.message(), Some("#1's status changed on disk"));
+    f.press(KeyCode::Char('?'));
+    f.press(KeyCode::Enter);
+    assert_eq!(f.board.message(), Some("#1 saved"));
+}
+
+#[test]
 fn an_open_verdict_says_kb_decided_meanwhile() {
     use kanbrain_core::brain::{Brain, NewEntry};
     let mut f = Fixture::new(&["cache"]);
@@ -3265,6 +3292,16 @@ fn a_decision_already_decided_is_named_with_its_repository() {
     board.selected = Some(Key::new(src, accepted));
     board.accept_with_comment();
     assert_eq!(board.message(), Some(format!("shop/api #{accepted} is already accepted").as_str()));
+}
+
+#[test]
+fn whats_skipped_when_the_window_opens_is_replaced_by_the_first_keys_message() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("0009-broken.md"), "# no id\n").unwrap();
+    let mut board = Board::open(dir.path(), None).unwrap();
+    assert!(board.message().unwrap().contains("0009-broken.md"), "{:?}", board.message());
+    board.notify("undone");
+    assert_eq!(board.message(), Some("undone"));
 }
 
 #[test]

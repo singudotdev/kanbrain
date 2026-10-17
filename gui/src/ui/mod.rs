@@ -358,6 +358,7 @@ impl BrainView {
         self.catch_up();
         self.board.lock_found_brains(&mut locks, &mut tried);
         let result = input(self);
+        self.board.input_done();
         self.watcher.sync(self.board.watched_dirs());
         drop(locks);
         result

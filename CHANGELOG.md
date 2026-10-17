@@ -25,6 +25,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   Windows `\todo` and `D:todo` are relative too. One starting with `~`, which only a shell expands (not inside quotes,
   nor in a systemd environment.d file), says so. `install.sh --purge` and `install.ps1`'s purge refuse a relative one
   the same way.
+- The kanban app no longer loses what `kb` changed in an open form or editor ("#1's status changed on disk"), nor a
+  file it found skipped, when the save or action that read for takes over a second, on a slow disk or a busy machine:
+  it's said beside that action's message for the whole key or click, not for a second. What the window's timer
+  found, or opening found, is replaced by the next key's message.
 
 ## [0.6.2] - 2026-10-16
 

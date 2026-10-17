@@ -49,7 +49,12 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 /// How long a status bar message shows.
+#[cfg(not(test))]
 const MESSAGE_TTL: Duration = Duration::from_secs(5);
+/// Never expires in tests: one reads the message right after the key that says it, but a loaded machine can stall
+/// the thread for seconds in between, and the message would be gone.
+#[cfg(test)]
+const MESSAGE_TTL: Duration = Duration::MAX;
 
 /// The board's columns, left to right, in the order a task usually moves through them.
 pub const COLUMNS: [Status; 4] = [Status::Todo, Status::Doing, Status::Parked, Status::Done];
@@ -143,6 +148,19 @@ enum NextUndo {
     Redo,
 }
 
+/// Who said the status bar's message, for what's said next.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Said {
+    /// An action: what's said next replaces it.
+    Action,
+    /// A read of the brains, in the input still running: said only once, so that input's action goes beside it,
+    /// however long it takes to write.
+    Found,
+    /// A read whose input is over, or that no input made (opening, the window's timer): what's said next replaces it,
+    /// but a save that stops over part of it still takes that part out.
+    FoundBefore,
+}
+
 /// Everything the window shows and remembers.
 #[derive(Debug)]
 pub struct Board {
@@ -185,9 +203,8 @@ pub struct Board {
     pub request: Option<Request>,
     /// A newer release's version, once the window found one out.
     pub available: Option<String>,
-    /// Status bar message, when it was set (it expires after `MESSAGE_TTL`), and whether it's what a read of the
-    /// brains found rather than what an action did: said only once, so the action that read for goes beside it.
-    message: Option<(String, Instant, bool)>,
+    /// Status bar message, when it was set (it expires after `MESSAGE_TTL`), and who said it.
+    message: Option<(String, Instant, Said)>,
     /// The files the last change wrote, as they were before and after, for `u` to put back.
     last_change: Vec<Change>,
     /// What `u` does next to `last_change`.
@@ -230,6 +247,8 @@ impl Board {
             board.scope = if repos > 1 { Scope::Repo(src) } else { Scope::Project(project) };
         }
         board.after_load();
+        // Opening isn't an input: what it found shows, and the first key's message replaces it.
+        board.input_done();
         Ok(board)
     }
 
@@ -240,32 +259,41 @@ impl Board {
 
     /// Shows `msg` in the status bar for a few seconds.
     pub fn notify(&mut self, msg: impl Into<String>) {
-        self.say(&msg.into(), false);
+        self.say(&msg.into(), Said::Action);
     }
 
     /// Shows what a read of the brains found (a file skipped, `kb` changing what a dialog edits), which the action
     /// that read for, said next, doesn't replace: it's said only once.
     fn notify_found(&mut self, msg: impl Into<String>) {
-        self.say(&msg.into(), true);
+        self.say(&msg.into(), Said::Found);
     }
 
     /// Shows `msg`, after what a read found just before, if that's what's shown.
-    fn say(&mut self, msg: &str, found: bool) {
+    fn say(&mut self, msg: &str, by: Said) {
         // Plain text: the command line's messages, which these often are, quote names in markdown's backticks.
         let mut msg = msg.replace('`', "");
-        if let Some((said, at, true)) = &self.message
-            && at.elapsed() < Duration::from_secs(1)
+        if let Some((said, _, Said::Found)) = &self.message
             && *said != msg
         {
             msg = format!("{msg} · {said}");
         }
-        self.message = Some((msg, Instant::now(), found));
+        self.message = Some((msg, Instant::now(), by));
+    }
+
+    /// Ends the input the window ran, from the read before it to its action: what that read found, its action had
+    /// its turn to go beside, and what's said next replaces it.
+    pub fn input_done(&mut self) {
+        if let Some((_, _, by @ Said::Found)) = &mut self.message {
+            *by = Said::FoundBefore;
+        }
     }
 
     /// Puts `rest` in the status bar in place of `found`, what a read just said there: a save that stops over part
     /// of it is about to say that part, with what to do. The rest of what the read found stays.
     fn unsay_found(&mut self, found: Option<String>, rest: Option<String>) {
-        let (Some(found), Some((said, _, true))) = (found, &mut self.message) else { return };
+        let (Some(found), Some((said, _, Said::Found | Said::FoundBefore))) = (found, &mut self.message) else {
+            return;
+        };
         // As `say` keeps it.
         let (found, rest) = (found.replace('`', ""), rest.map(|rest| rest.replace('`', "")));
         let parts: Vec<&str> =

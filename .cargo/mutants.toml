@@ -25,8 +25,6 @@ exclude_re = [
     # Which row of the editor draws the cursor (`index == row`, by its line, so the selection's rows stay tested):
     # painted, and the window tests read bounds, not what's painted.
     'gui/src/ui/dialogs/editor\.rs:56:.*replace == with != in draw',
-    # A message exactly one second after what a read found, to the nanosecond, is the only one `<=` would join.
-    'gui/src/state/mod\.rs:.*replace < with <= in Board::say$',
     # A message read exactly MESSAGE_TTL after it was set, to the nanosecond, is the only one `<=` would still show.
     'gui/src/state/mod\.rs:.*replace < with <= in Board::message$',
     # Which field a mouse press makes the one typed into: the state tests drive keys, and the window tests read bounds
