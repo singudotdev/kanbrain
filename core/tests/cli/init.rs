@@ -181,6 +181,73 @@ fn the_section_comes_out_with_its_blank_line() {
 }
 
 #[test]
+fn a_crlf_agent_file_keeps_its_line_endings() {
+    // git's core.autocrlf checks files out with CRLF on Windows.
+    let (root, central) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let path = root.path().join("CLAUDE.md");
+    fs::write(&path, "# Rules\r\n\r\nUse tabs.\r\n").unwrap();
+    init(root.path(), None, None, central.path()).unwrap();
+    let once = fs::read_to_string(&path).unwrap();
+    assert!(once.starts_with(&format!("# Rules\r\n\r\nUse tabs.\r\n\r\n{START}\r\n## Project memory")), "{once:?}");
+    assert_eq!(once.matches('\n').count(), once.matches("\r\n").count(), "every line ends with CRLF");
+    assert!(once.ends_with(&format!("{END}\r\n")), "{once:?}");
+
+    let done = init(root.path(), None, None, central.path()).unwrap();
+    assert!(done.iter().any(|l| l == "CLAUDE.md already tells agents about kanbrain"), "{done:?}");
+    assert_eq!(fs::read_to_string(&path).unwrap(), once, "a second init changes nothing");
+
+    // A section an older kanbrain wrote with LF into it, keeping the CRLF that ended its end marker, comes out
+    // CRLF too, with the text after it as it was.
+    fs::write(&path, format!("# Rules\r\n\r\n{START}\nold advice\n{END}\n\r\n\r\n## More\r\n")).unwrap();
+    init(root.path(), None, None, central.path()).unwrap();
+    let mended = fs::read_to_string(&path).unwrap();
+    assert_eq!(mended.matches('\n').count(), mended.matches("\r\n").count(), "{mended:?}");
+    assert!(mended.ends_with(&format!("{END}\r\n\r\n## More\r\n")), "{mended:?}");
+}
+
+#[test]
+fn the_section_comes_out_of_a_crlf_file_cleanly() {
+    let text = "# Rules\r\n\r\nUse tabs.\r\n";
+    assert_eq!(without_section(&with_section(text)), text);
+    let between = format!("# Rules\r\n\r\n{START}\r\nold\r\n{END}\r\n\r\n## More\r\n");
+    assert_eq!(without_section(&between), "# Rules\r\n\r\n## More\r\n");
+    let first = format!("{START}\r\nold\r\n{END}\r\n\r\n## More\r\n");
+    assert_eq!(without_section(&first), "## More\r\n");
+    assert_eq!(without_section(&with_section("")), "");
+}
+
+#[test]
+fn a_section_an_older_kanbrain_wrote_with_lf_into_a_crlf_file_is_mended() {
+    // It replaced the section and kept the `\r\n` after its end marker: `END\n\r\n`.
+    let block = format!("{START}\r\n{}\r\n{END}\r\n", SECTION.replace('\n', "\r\n"));
+    for (damaged, mended) in [
+        (format!("{START}\nold\n{END}\n\r\n\r\n## More\r\n"), format!("{block}\r\n## More\r\n")),
+        (format!("# Rules\r\n\r\n{START}\nold\n{END}\n\r\n"), format!("# Rules\r\n\r\n{block}")),
+        (format!("{START}\nold\n{END}\n\r\n"), block.clone()),
+    ] {
+        assert_eq!(with_section(&damaged), mended);
+        assert_eq!(with_section(&mended), mended, "and stays as it is");
+    }
+}
+
+#[test]
+fn a_file_holding_only_a_byte_order_mark_counts_as_empty() {
+    let once = with_section("\u{FEFF}");
+    assert_eq!(once, format!("\u{FEFF}{START}\n{SECTION}\n{END}\n"));
+    assert_eq!(without_section(&once), "", "so deinit removes the file");
+    let first = format!("\u{FEFF}{START}\nold\n{END}\n\n## More\n");
+    assert_eq!(without_section(&first), "\u{FEFF}## More\n");
+}
+
+#[test]
+fn the_first_line_break_decides_a_mixed_file() {
+    assert_eq!(line_break("a\r\nb\nc\n"), "\r\n");
+    assert_eq!(line_break("a\nb\r\nc\r\n"), "\n");
+    assert_eq!(line_break("no break"), "\n");
+    assert_eq!(line_break(""), "\n");
+}
+
+#[test]
 fn init_says_when_agents_cant_run_kb() {
     let dir = tempfile::tempdir().unwrap();
     let path = |dirs: &[&std::path::Path]| Some(std::env::join_paths(dirs).unwrap());

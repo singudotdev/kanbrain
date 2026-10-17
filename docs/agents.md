@@ -25,7 +25,8 @@ kb init        # creates .brain/ and tells the project's agents about it
    every session, so from the first one they know to run `kb context` and how to record their work.
    With nothing else in the repository, it's enough for an agent to work this way from its first session.
    The section sits between `<!-- kanbrain:start -->` and `<!-- kanbrain:end -->`; the rest of the file
-   isn't touched. Running `init` again updates the section in place, and upgrading does it in every project: the
+   isn't touched, and the section is written with the file's line endings (CRLF, as git checks it out on Windows,
+   or LF). Running `init` again updates the section in place, and upgrading does it in every project: the
    installer and `kb update` run `kb init --all`.
 
    For Claude Code (when the section goes in `CLAUDE.md`), it also adds five hooks to
