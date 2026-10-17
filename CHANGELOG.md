@@ -9,8 +9,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - `kb completions powershell`: tab completion in PowerShell (5.1 and 7, on Windows, Linux and macOS), as bash, zsh
   and fish have it, each id's title as its tooltip. Load it from `$PROFILE` with
-  `kb completions powershell | Out-String | Invoke-Expression`. Windows PowerShell 5.1 completes no word starting
-  with a single `-` (a tag to take off), which it takes for a parameter.
+  `kb completions powershell | Out-String | Invoke-Expression`. A project with a space, or a tag or project holding a
+  character PowerShell reads otherwise (`$`, quotes, the typographic ones `‘ ’ ‚ ‛ “ ” „` too, brackets, wildcards
+  `* ?`, a leading dash `– — ―` it reads as `-`…), comes in single quotes, each single quote doubled. Windows
+  PowerShell 5.1 completes no word starting with a single `-` (a tag to take off), which it takes for a parameter.
 - CI's lints (`cargo clippy` and `cargo doc`, warnings failing) run on macOS and Windows too, where code behind
   `cfg(windows)` or `cfg(not(unix))` is compiled.
 
