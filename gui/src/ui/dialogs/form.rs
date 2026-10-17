@@ -44,12 +44,12 @@ pub(super) fn draw(board: &Board, form: &Form, scroll: &Scrolls, follow: bool, c
             tags_field(
                 board,
                 form,
-                field(Field::Tags, &form.tags, TextBox::Tags, "e.g. prod, support", cx),
+                field(Field::Tags, &form.tag_input, TextBox::Tags, "e.g. prod, support", cx),
                 (&scroll.form_tags, follow),
                 cx,
             ),
         ))
-        .child(dim_small("Separate tags with commas or spaces. Tab switches fields."))
+        .child(dim_small("A comma or space adds the tag typed; its × takes it off. Tab switches fields."))
         .child(labeled(
             "Related",
             related_field(
@@ -160,9 +160,9 @@ fn project_field(
     div().flex().flex_col().gap_1().child(search).child(options)
 }
 
-/// The tags field: while it has the keys, the tags in use by entries of the form's kind drop down below it, those
-/// it holds left out and filtered by the one typed, to pick with a click or `↓` and `enter`; or a line saying the tag
-/// typed is a new one.
+/// The tags field: the tags held, each a chip in its color with ×, then the box to type one; while it has the keys,
+/// the tags in use by entries of the form's kind drop down below it, those held left out and filtered by the one
+/// typed, to pick with a click or `↓` and `enter`; or a line saying the tag typed is a new one.
 fn tags_field(
     board: &Board,
     form: &Form,
@@ -170,14 +170,35 @@ fn tags_field(
     (scroll, follow): (&ScrollHandle, bool),
     cx: &mut Context<BrainView>,
 ) -> Div {
-    let field = div().flex().flex_col().gap_1().child(search);
+    let chips = form.tags.iter().map(|tag| {
+        let untag = tag.clone();
+        let x = div()
+            .id(ElementId::Name(format!("untag {tag}").into()))
+            .cursor_pointer()
+            .opacity(0.7)
+            .hover(|s| s.opacity(1.))
+            .debug_selector(|| format!("untag {untag}"))
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.untag_in_form(&untag))))
+            .child("×");
+        let selector = format!("form tag {tag}");
+        tag_chip(board, tag).flex().items_center().gap_1().debug_selector(|| selector).child(x)
+    });
+    let field = div()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .when(!form.tags.is_empty(), |d| d.child(div().flex().flex_wrap().gap_1().children(chips)))
+        .child(search);
     if form.field != Field::Tags {
         return field;
     }
     let (kind, tags) = board.form_tags(form);
     let typed = form.typed_tag();
+    let field = field.when(form.typed_tag_held(), |d| {
+        d.child(dim_small(format!("#{typed} is on it already.")).debug_selector(|| "held tag".into()))
+    });
     if tags.is_empty() {
-        return field.when(!typed.is_empty(), |d| {
+        return field.when(!typed.is_empty() && !form.typed_tag_held(), |d| {
             let says = format!("No tag in use in {}s matches {typed}: it'll be a new one.", kind.as_str());
             d.child(dim_small(says).debug_selector(|| "new tag".into()))
         });

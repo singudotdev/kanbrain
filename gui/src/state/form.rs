@@ -6,28 +6,27 @@ use super::{
 use crate::text::editor::LineInput;
 use anyhow::Result;
 use kanbrain_core::brain::NewEntry;
-use kanbrain_core::model::{Kind, Status, Task, parse_tags};
+use kanbrain_core::model::{Kind, Status, Task};
 use std::collections::BTreeMap;
 
 impl Board {
     /// The kind of entry the form makes or changes, and the tags entries of that kind already use in
     /// its brain, each with how many use it, to pick from: a task's form offers task tags, not those of notes or
-    /// decisions. Those the field holds are left out but the one being typed, and while one is typed, only those
-    /// containing it ([`Form::typed_tag`]), as the dropdowns filter.
+    /// decisions. Those the field holds as chips are left out, and while one is typed, only those containing it
+    /// ([`Form::typed_tag`]), as the dropdowns filter.
     pub fn form_tags(&self, form: &Form) -> (Kind, Vec<(String, usize)>) {
         let (src, kind) = match form.target {
             FormTarget::New(src, kind, _) => (src, kind),
             FormTarget::Edit(key) => (key.src, self.task(key).map_or(Kind::Task, |t| t.kind)),
         };
         let typed = form.typed_tag();
-        let held = parse_tags(form.tags.text());
         let mut uses = BTreeMap::new();
         for tag in self.brain(src).tasks.iter().filter(|t| t.kind == kind).flat_map(|t| &t.tags) {
             *uses.entry(tag.as_str()).or_insert(0) += 1;
         }
         let tags = uses
             .into_iter()
-            .filter(|&(tag, _)| tag.contains(typed.as_str()) && (tag == typed || !held.iter().any(|h| h == tag)))
+            .filter(|&(tag, _)| tag.contains(typed.as_str()) && !form.tags.iter().any(|held| held == tag))
             .map(|(tag, n)| (tag.to_string(), n))
             .collect();
         (kind, tags)
@@ -86,7 +85,7 @@ impl Board {
             self.mode = Mode::Form(form);
             return;
         }
-        let tags = parse_tags(form.tags.text());
+        let tags = form.tags_to_save();
         match form.target {
             FormTarget::New(src, kind, status) => self.create(src, kind, title, tags, form.links, status),
             FormTarget::Edit(key) => {
@@ -222,6 +221,13 @@ impl Board {
         let Mode::Form(form) = &mut self.mode else { return };
         form.set_src(src);
         form.go_to(Field::Title);
+    }
+
+    /// Takes `tag` off the form's entry, from the × on its chip.
+    pub fn untag_in_form(&mut self, tag: &str) {
+        if let Mode::Form(form) = &mut self.mode {
+            form.tags.retain(|held| held != tag);
+        }
     }
 
     /// Unchecks a related entry, from the × on its chip.

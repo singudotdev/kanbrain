@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The kanban app's new / edit form shows the tags as chips in their colors, each with × to take it off, instead of
+  text: a comma or space after a tag typed, or picking one from the list, adds it as a chip.
+
 ## [0.6.2] - 2026-10-16
 
 ### Added

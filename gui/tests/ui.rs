@@ -693,6 +693,19 @@ fn the_form_says_when_the_tag_typed_is_new(cx: &mut gpui::TestAppContext) {
 }
 
 #[gpui::test]
+fn the_form_says_a_tag_typed_again_is_held_not_new(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    view.update(cx, |view, cx| {
+        view.board.brain_mut(0).update(1, "a", vec!["auth".into()]).unwrap();
+        cx.notify();
+    });
+    cx.simulate_keystrokes("e tab a u t h");
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("new tag").is_none(), "the entry has #auth already");
+    assert!(cx.debug_bounds("held tag").is_some(), "which the form says");
+}
+
+#[gpui::test]
 fn the_form_lists_its_tags_while_typing_them_and_a_click_picks_one(cx: &mut gpui::TestAppContext) {
     let (view, cx, _dir) = window(cx, &["a"]);
     view.update(cx, |view, cx| {
@@ -708,7 +721,7 @@ fn the_form_lists_its_tags_while_typing_them_and_a_click_picks_one(cx: &mut gpui
     cx.simulate_click(bug, gpui::Modifiers::none());
     view.read_with(cx, |view, _| {
         let Mode::Form(form) = &view.board.mode else { panic!("the form stays open") };
-        assert_eq!(form.tags.text(), "bug, ");
+        assert_eq!(form.tags, ["bug"]);
     });
 }
 
@@ -730,7 +743,27 @@ fn a_click_on_the_tags_list_puts_the_tag_clicked_though_a_reload_moved_it(cx: &m
     cx.simulate_click(perf, gpui::Modifiers::none());
     view.read_with(cx, |view, _| {
         let Mode::Form(form) = &view.board.mode else { panic!("the form is open") };
-        assert_eq!(form.tags.text(), "perf, ", "the tag clicked, not the row's new one");
+        assert_eq!(form.tags, ["perf"], "the tag clicked, not the row's new one");
+    });
+}
+
+#[gpui::test]
+fn the_forms_tags_are_chips_in_their_colors_and_a_click_on_one_s_x_takes_it_off(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    view.update(cx, |view, cx| {
+        view.board.brain_mut(0).update(1, "a", vec!["auth".into(), "bug".into()]).unwrap();
+        cx.notify();
+    });
+    cx.simulate_keystrokes("e");
+    cx.run_until_parked();
+    let auth = cx.debug_bounds("form tag auth").expect("each tag a chip");
+    let field = cx.debug_bounds("tags").expect("the box to type one");
+    assert!(auth.bottom() <= field.top(), "above the box, as the related field's: {auth:?} over {field:?}");
+    let x = cx.debug_bounds("untag bug").expect("each with its ×").center();
+    cx.simulate_click(x, gpui::Modifiers::none());
+    view.read_with(cx, |view, _| {
+        let Mode::Form(form) = &view.board.mode else { panic!("the form stays open") };
+        assert_eq!(form.tags, ["auth"]);
     });
 }
 

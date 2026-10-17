@@ -2,7 +2,6 @@
 
 use super::nav::Step;
 use super::*;
-use crate::text::editor::Pointer;
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
 use kanbrain_core::model::{Asked, Author, DecisionState, now};
 use kanbrain_core::store::Store;
@@ -332,7 +331,8 @@ fn the_form_creates_a_tagged_task_and_edits_it() {
     // Tags in another order are another set of tags to show: saved.
     f.press(KeyCode::Char('e'));
     f.press(KeyCode::Tab);
-    (0..20).for_each(|_| f.press(KeyCode::Backspace));
+    f.board.untag_in_form("prod");
+    f.board.untag_in_form("auth");
     f.type_text("auth, prod");
     f.press(KeyCode::Enter);
     assert_eq!(f.on_disk(1).tags, ["auth", "prod"]);
@@ -342,9 +342,11 @@ fn the_form_creates_a_tagged_task_and_edits_it() {
     assert!(matches!(&f.board.mode, Mode::Form(form) if form.title_missed), "said under the field, kept open");
     f.press(KeyCode::Esc);
 
-    // Tab into a field selects its text, so typing replaces it; shift+tab goes back.
+    // Tab into the title selects its text, so typing replaces it; shift+tab goes back.
     f.press(KeyCode::Char('e'));
     f.press(KeyCode::Tab);
+    f.board.untag_in_form("auth");
+    f.board.untag_in_form("prod");
     f.type_text("ops");
     f.press(KeyCode::BackTab);
     f.type_text("Fix SAML");
@@ -2194,13 +2196,11 @@ fn the_form_suggests_only_the_tags_containing_the_one_typed() {
     f.type_text("o");
     assert_eq!(tags(&f), ["prod"]);
     f.type_text("d, ");
-    assert_eq!(tags(&f), ["auth", "bug", "perf", "prod"], "after a separator, a new tag: every one");
+    assert_eq!(tags(&f), ["auth", "bug", "perf", "prod"], "after a separator, #rod is held and a new tag: every one");
     f.type_text("x");
     assert!(tags(&f).is_empty(), "none in use has it");
-    for _ in 0..4 {
-        f.press(KeyCode::Left);
-    }
-    assert_eq!(tags(&f), ["prod"], "the word the cursor ends, not the field's last");
+    let Mode::Form(form) = &f.board.mode else { panic!("the form is open") };
+    assert_eq!((form.tags.as_slice(), form.tag_input.text()), (["rod".to_string()].as_slice(), "x"));
 }
 
 #[test]
@@ -2240,7 +2240,7 @@ fn the_tags_highlight_stays_on_its_tag_when_a_reload_adds_one_ahead() {
     f.board.reload().unwrap();
     f.press(KeyCode::Enter);
     let Mode::Form(form) = &f.board.mode else { panic!("the form is open") };
-    assert_eq!(form.tags.text(), "perf, ", "enter picks the tag highlighted, not the one now in its row");
+    assert_eq!(form.tags, ["perf"], "enter picks the tag highlighted, not the one now in its row");
 }
 
 #[test]
@@ -2251,7 +2251,7 @@ fn the_form_picks_tags_from_its_list() {
     brain.update(2, "slow page", vec!["perf".into(), "prod".into()]).unwrap();
     let form = |f: &Fixture| {
         let Mode::Form(form) = &f.board.mode else { panic!("the form is open") };
-        (f.board.form_tags(form).1, form.tag_sel.clone(), form.tags.text().to_string())
+        (f.board.form_tags(form).1, form.tag_sel.clone(), form.tags.join(" "))
     };
     let owned = |tags: &[(&str, usize)]| tags.iter().map(|&(t, n)| (t.to_string(), n)).collect::<Vec<_>>();
     f.press(KeyCode::Char('n'));
@@ -2273,12 +2273,12 @@ fn the_form_picks_tags_from_its_list() {
     assert!(matches!(&f.board.mode, Mode::Form(form) if form.field == Field::Tags), "and stays in the field");
     f.press(KeyCode::Down);
     f.press(KeyCode::Enter);
-    assert_eq!((form(&f).1, form(&f).2), (None, "perf, ".to_string()), "enter picks it, ready for the next");
+    assert_eq!((form(&f).1, form(&f).2), (None, "perf".to_string()), "enter picks it, ready for the next");
     assert_eq!(form(&f).0, owned(&[("auth", 1), ("prod", 2)]), "what the field holds isn't offered again");
     f.board.choose_form_tag("prod");
-    assert_eq!(form(&f).2, "perf, prod, ", "a click picks one too");
+    assert_eq!(form(&f).2, "perf prod", "a click picks one too");
     f.board.choose_form_tag("ape");
-    assert_eq!(form(&f).2, "perf, prod, ", "but not one the list no longer holds");
+    assert_eq!(form(&f).2, "perf prod", "but not one the list no longer holds");
     f.type_text("zz");
     assert!(form(&f).0.is_empty(), "nothing to pick");
     f.press(KeyCode::Down);
@@ -2306,10 +2306,6 @@ fn enter_saves_the_form_unless_the_start_of_a_tag_was_typed() {
     f.board.selected = Some(Key { src: 0, id: 2 });
     f.press(KeyCode::Char('e'));
     f.press(KeyCode::Tab);
-    f.press(KeyCode::End);
-    f.press(KeyCode::Left);
-    assert_eq!(sel(&f), None, "moving the cursor into a tag held highlights nothing, though #project starts with pro");
-    f.press(KeyCode::End);
     f.type_text(" pro");
     assert_eq!(sel(&f).as_deref(), Some("project"), "typing the start of #project does");
     let Mode::Form(form) = &mut f.board.mode else { panic!("the form is open") };
@@ -2331,28 +2327,89 @@ fn enter_saves_the_form_unless_the_start_of_a_tag_was_typed() {
 fn a_picked_tag_takes_the_place_of_the_one_typed() {
     let mut form = Form::new(0, Kind::Task, Status::Todo, false);
     form.go_to(Field::Tags);
-    let put = |form: &mut Form, text: &str, cursor: usize, tag: &str| {
-        form.tags = LineInput::new(text);
-        form.tags.point(cursor, Pointer::Place);
-        form.put_tag(tag);
-        (form.tags.text().to_string(), form.tags.cursor())
-    };
-    assert_eq!(put(&mut form, "", 0, "prod"), ("prod, ".into(), 6));
-    assert_eq!(put(&mut form, "auth pr", 7, "prod"), ("auth, prod, ".into(), 12));
-    assert_eq!(
-        put(&mut form, "auth pr bug", 6, "prod"),
-        ("auth, prod, bug".into(), 12),
-        "the whole word the cursor is in"
-    );
-    assert_eq!(put(&mut form, "auth, #Pr", 9, "prod"), ("auth, prod, ".into(), 12));
-    form.tags = LineInput::new("auth, prxx");
-    form.tags.point(8, Pointer::Place);
-    assert_eq!(form.typed_tag(), "pr", "the word the cursor ends, up to it");
-    form.tags = LineInput::new("auth, bug");
-    form.tags.select_all();
-    assert_eq!(form.typed_tag(), "", "selected text isn't a tag being typed");
+    form.tag_input = LineInput::new("#Pr");
     form.put_tag("prod");
-    assert_eq!(form.tags.text(), "auth, bug, prod, ", "after the others");
+    assert_eq!((form.tags.as_slice(), form.tag_input.text()), (["prod".to_string()].as_slice(), ""));
+    form.tag_input = LineInput::new("au");
+    form.put_tag("auth");
+    form.put_tag("prod");
+    assert_eq!(form.tags, ["prod", "auth"], "after the others, and once");
+    form.tag_input = LineInput::new("bug");
+    form.tag_input.select_all();
+    assert_eq!(form.typed_tag(), "", "selected text isn't a tag being typed");
+    form.tag_input = LineInput::new("#Bu");
+    assert_eq!(form.typed_tag(), "bu", "as it's saved");
+}
+
+#[test]
+fn editing_shows_the_tags_held_as_chips_and_takes_them_off_only_with_their_x() {
+    let mut f = Fixture::new(&["login bug"]);
+    f.board.brain_mut(0).update(1, "login bug", vec!["auth".into(), "prod".into(), "ui".into()]).unwrap();
+    let field = |f: &Fixture| {
+        let Mode::Form(form) = &f.board.mode else { panic!("the form is open") };
+        (form.tags.join(" "), form.tag_input.text().to_string())
+    };
+    f.press(KeyCode::Char('e'));
+    f.press(KeyCode::Tab);
+    assert_eq!(field(&f), ("auth prod ui".into(), String::new()), "each tag a chip, the box empty to type one");
+    f.board.untag_in_form("prod");
+    assert_eq!(field(&f).0, "auth ui", "its × takes it off");
+    f.type_text("x");
+    f.press(KeyCode::Backspace);
+    assert_eq!(field(&f), ("auth ui".into(), String::new()), "backspace deletes what's typed first");
+    f.press(KeyCode::Backspace);
+    assert_eq!(field(&f).0, "auth ui", "and in the empty box, nothing: a chip comes off only with its ×");
+    f.press(KeyCode::Enter);
+    assert_eq!(f.on_disk(1).tags, ["auth", "ui"]);
+}
+
+#[test]
+fn a_separator_typed_or_pasted_turns_the_tags_before_it_into_chips() {
+    let mut f = Fixture::new(&["login bug"]);
+    f.board.brain_mut(0).update(1, "login bug", vec!["auth".into()]).unwrap();
+    let field = |f: &Fixture| {
+        let Mode::Form(form) = &f.board.mode else { panic!("the form is open") };
+        (form.tags.join(" "), form.tag_input.text().to_string())
+    };
+    f.press(KeyCode::Char('e'));
+    f.press(KeyCode::Tab);
+    f.type_text("#Bug,");
+    assert_eq!(field(&f), ("auth bug".into(), String::new()), "as it's saved: lowercase, without #");
+    f.type_text(" auth ");
+    assert_eq!(field(&f).0, "auth bug", "a tag held isn't held twice");
+    f.board.paste("ui, prod  db");
+    assert_eq!(field(&f), ("auth bug ui prod".into(), "db".into()), "pasted, the last is still being typed");
+    f.board.paste(", ");
+    f.board.paste(",");
+    assert_eq!(field(&f), ("auth bug ui prod db".into(), String::new()), "a separator alone adds nothing more");
+    f.board.paste("ops");
+    f.press(KeyCode::Home);
+    f.board.paste("x, ");
+    assert_eq!(field(&f), ("auth bug ui prod db x".into(), "ops".into()), "nor empties what follows");
+    f.press(KeyCode::Right);
+    f.type_text(" ");
+    assert_eq!(field(&f), ("auth bug ui prod db x o".into(), "ps".into()), "typed mid-word, it splits it there");
+    f.type_text("1");
+    assert_eq!(field(&f).1, "1ps", "the cursor where it was in what's left");
+    f.press(KeyCode::Enter);
+    assert_eq!(f.on_disk(1).tags, ["auth", "bug", "ui", "prod", "db", "x", "o", "1ps"], "and saved with the chips");
+}
+
+#[test]
+fn a_tag_held_typed_again_is_neither_highlighted_nor_new_and_enter_saves() {
+    let mut f = Fixture::new(&["login bug", "signup"]);
+    let brain = f.board.brain_mut(0);
+    brain.update(1, "login bug", vec!["auth".into()]).unwrap();
+    brain.update(2, "signup", vec!["author".into()]).unwrap();
+    f.board.selected = Some(Key { src: 0, id: 1 });
+    f.press(KeyCode::Char('e'));
+    f.press(KeyCode::Tab);
+    f.type_text("auth");
+    let Mode::Form(form) = &f.board.mode else { panic!("the form is open") };
+    assert_eq!((form.tag_sel.as_deref(), form.typed_tag_held()), (None, true), "#author isn't picked");
+    f.press(KeyCode::Enter);
+    assert!(matches!(f.board.mode, Mode::Normal), "enter saves");
+    assert_eq!(f.on_disk(1).tags, ["auth"]);
 }
 
 #[test]
@@ -3273,7 +3330,8 @@ fn an_edit_saves_only_what_was_changed_in_the_form_and_keeps_what_kb_changed_mea
     f.board.reload().unwrap();
     f.type_text(" now");
     f.press(KeyCode::Tab);
-    f.type_text("bug, ui");
+    f.board.untag_in_form("auth");
+    f.type_text("ui");
     // #2 unchecked in the Related field.
     let Mode::Form(form) = &f.board.mode else { panic!("the form is open") };
     let at = f.board.form_link_options(form).iter().position(|&(key, _)| key == k(2)).unwrap();
