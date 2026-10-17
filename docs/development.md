@@ -142,7 +142,7 @@ The crates use the **Rust 2024 edition**. Shared versions and lints are in the w
 | [`pulldown-cmark`](https://docs.rs/pulldown-cmark) | 0.13 | `gui`: parsing descriptions and comments to draw them as markdown; the version Zed uses |
 | [`fs4`](https://docs.rs/fs4) | 1.1 | each brain's write lock, an advisory lock on a file in the cache (`Store::lock`) |
 | `gpui_platform` | Zed 1.23.2 (git) | `gui`: GPUI's window system backends, Wayland and X11 on Linux |
-| [`image`](https://docs.rs/image) | 0.25 | `gui`: decoding the window icon (PNG) |
+| [`image`](https://docs.rs/image) | 0.25 | `gui`, Linux and FreeBSD only: decoding the window icon (PNG) for X11; only its `png` feature |
 | [`winresource`](https://docs.rs/winresource) | 0.1 | `gui`, Windows only, at build time: the program's icon and version in its `.exe` |
 | [`similar`](https://docs.rs/similar) | 3.2 | `gui`: the line diff and three-way merge of what the editor and `kb` changed meanwhile (`text::merge`) |
 | [`tempfile`](https://docs.rs/tempfile) | 3 | tests only: temporary data folders |
@@ -175,10 +175,10 @@ core/src/            kanbrain-core: shared by both programs
 │   ├── mod.rs       Program (the binary's name), Command parsing, `--project`, `list`, `status`, `report`, `path`, usage
 │   ├── claude.rs    the Claude Code hooks `init` merges into .claude/settings.local.json (and `deinit` takes out)
 │   ├── hook.rs      `kb hook prompt|stop|edit|tool`: the hooks' checks that hold an agent to describing the project first, and to `kb` for the brain's files, and tell it of the user's comments
-│   ├── entries.rs   agent commands by id: `add`, `show`, `search`, status changes, `comment`, `ask`, `propose`, `accept`/`reject`, `describe`, `rename`, `tag`, `link`, `context`
+│   ├── entries.rs   agent commands by id: `add`, `show`, `search`, status changes, `comment`, `ask`, `wait`, `propose`, `accept`/`reject`, `describe`, `rename`, `tag`, `link`, `project`, `context`
 │   ├── completions.rs `completions bash|zsh|fish|powershell`: the scripts, and `complete`, the ids, projects and tags they offer
 │   ├── update.rs    `update`, and the app's: the latest release asked for, the installer run again for the apps beside this one, into the same folder (a macOS bundle's says which), once no agent has a task in doing
-│   ├── init.rs      `init`: the repository's .brain/ and card, its registration, the "Project memory" section in CLAUDE.md / AGENTS.md; `init --all` refreshes every registered repository's; `deinit` undoes it
+│   ├── init.rs      `init`: the repository's .brain/ and card, its registration, the "Project memory" section in CLAUDE.md / AGENTS.md; `init --all` brings every registered brain up to this version: migrates its data (after a backup), renames the projects and repositories older versions named as none can be now, fixes each repository's .brain/project.md, then refreshes its agent instructions; `deinit` undoes `init`
 │   └── manage.rs    renaming a project or a repository, moving a repository to another project, removing them (`deinit --purge`, `project remove`), rewriting or dropping the links between repositories
 ├── api/             operations by id for the CLI, with typed refusals (ApiError)
 │   ├── mod.rs       add, change_status, comment, describe, link, full-text search
@@ -221,7 +221,7 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
 ├── watch.rs         polls the data folders (names, sizes, times) every second, naming those other programs changed
 ├── state/           what's on screen and every action, without GPUI (tested without a window)
 │   ├── mod.rs       Board: the brains, the scope, the tab and the board's layout (Layout: kanban or list), the selected entry (by Key), the details, search, report view, status message, what the window must do (Request: $EDITOR, the folder dialog, the update), a newer release found; columns and lists
-│   ├── mode.rs      the dialogs and fields that take the keys (Mode): search, form, quick add, editor, confirm, links, project and tag dropdowns, which project a quick-added task goes in or an entry moves to, Manage project, command palette, adding a project (AddProject, ProjectOption), renaming, moving or removing a project or repository (Manage)
+│   ├── mode.rs      the dialogs and fields that take the keys (Mode): search, form, quick add, editor, confirm, links, an entry's comments (Comments), project and tag dropdowns, which project a quick-added task goes in or an entry moves to, the right-click menu (Menu), Manage project, command palette, adding a project (AddProject, ProjectOption), renaming, moving or removing a project or repository (Manage), whether a save tells the agent working on the task (Tell)
 │   ├── actions.rs   status changes and drops, asking which brain a new entry goes in when the scope shows several, moving an entry to another brain, the editor's save, deletes, links, undo (recording what each change writes), reload, park & quit, export
 │   ├── decisions.rs the questions and decisions waiting on you: which, the next one, answering, accepting or rejecting
 │   ├── form.rs      the new / edit form (its tags to pick, related entries, column and project) and quick add
@@ -251,8 +251,8 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
     ├── dialogs/     dialogs over the window; a delete's confirmation in mod.rs
     │   ├── form.rs     the new / edit form: project, title, tags, related entries, column
     │   ├── editor.rs   the text editor for descriptions, comments and project text
-│   ├── merge.rs    the conflicts of a merge, shown in the editor's place: yours beside theirs, to pick
-│   ├── tell.rs     Tell the agent?, asked on saving a task an agent is working on
+    │   ├── merge.rs    the conflicts of a merge, shown in the editor's place: yours beside theirs, to pick
+    │   ├── tell.rs     Tell the agent?, asked on saving a task an agent is working on
     │   ├── pickers.rs  the link picker, which project, the command palette
     │   ├── project.rs  Manage project: description, repositories, the week's time, and the buttons that manage them
     │   ├── manage.rs   renaming a project or repository, moving a repository, removing either
@@ -296,12 +296,14 @@ every second / before each input ──▶ Watcher::changed ──▶ Board::rel
   sessions, and appends a `StatusChange` to the history only when the status really changes. The `- status:` line in
   the file is the truth; the history is the record of how the task got there.
 - **Modes** (`state::Mode`): `Normal`, `Search`, `Form`, `QuickAdd`, `Edit` (text editor with a `Target`: description,
-  new or existing comment, a decision's reason, a project's description or a repository's notes), `Confirm` (a
-  delete, or the update), `Links`, `Scopes` and `Tags` (the dropdowns), `Where` (which brain a quick-added task goes
-  in, or an entry moves to), `Menu` (the right-click menu), `ManageProject`, `Palette` (the command
-  palette), `AddProject` (naming a picked folder's project) and `Manage` (renaming, moving or removing from Manage
-  project). A reload points an open one at its brains' new places (`Mode::remap`). `on_key` takes the current mode out, handles the
-  key, and each handler puts back the mode to continue in.
+  new or existing comment, a decision's reason, a project's description or a repository's notes), `Confirm` (deleting
+  an entry, `Confirm::Delete`, or a comment, `Confirm::DeleteComment`, or the update), `Links`, `Comments` (an entry's
+  comments, to edit or delete one), `Scopes` and `Tags` (the dropdowns), `Where` (which brain a quick-added task goes
+  in, or an entry moves to), `Menu` (the right-click menu), `ManageProject`, `Palette` (the command palette),
+  `AddProject` (naming a picked folder's project), `Manage` (renaming, moving or removing from Manage project) and
+  `Tell` (whether a save on a task an agent is working on tells it, with a note). A reload points an open one at its
+  brains' new places (`Mode::remap`). `on_key` takes the current mode out, handles the key, and each handler puts back
+  the mode to continue in.
 - **A button is its key.** `ui::action(id, label, kind, code, cx)` makes a button that presses its key through
   `BrainView::press`, with the key in its tooltip. So a button can never do something its key wouldn't, and the state
   tests, which drive the board with keys, cover the buttons too. Clicks that aren't keys (select, open, drop, focus a
@@ -373,7 +375,7 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | module | covers |
 | --- | --- |
 | `brain` | status history, columns, one person's task in doing and agents' unlimited (a second start refused, loading parks the extra ones), sessions, comments, links, renames and deletes, ids never given twice, moving to another brain, reports, the calendar's days and filters, the decision template |
-| `api`, `cli` | agent operations and their refusals, links to other repositories, compact text and JSON, `context`'s caps, command parsing, `--project`, `list` output, usage, completion scripts and candidates, which apps `update` installs and where (a macOS bundle's folder), whether a release is newer, an update waiting for agents' tasks in doing and not a person's |
+| `api`, `cli` | agent operations and their refusals, links to other repositories, compact text and JSON, `context`'s caps, command parsing, `--project`, `list` output, usage (and `docs/cli.md`'s copy of it, `docs/agents.md`'s command table), completion scripts and candidates, which apps `update` installs and where (a macOS bundle's folder), whether a release is newer, an update waiting for agents' tasks in doing and not a person's |
 | `cli::init` | the agent section written, updated in place and left alone when unclosed; a CRLF file keeping its line endings, a second `init` leaving it as it is, a section an older kanbrain wrote into it with LF mended, and `deinit` taking the section out cleanly; a file holding only a byte order mark taken for empty; `init --all` updating every registered repository that has it, and no other; registering repositories and joining them into a project; `deinit` taking it all back but `.brain/`; the Claude Code hooks added once beside other settings, and removed leaving them as they were; `kb hook` asking with every prompt and reminding once a turn while the project or this repository's role isn't described, and of a task an agent started and left uncommented, and silent once they are; `kb hook tool` telling an agent of the user's comment on its task until it comments, and not of what came before it started; `kb hook stop` counting only the agent's comments; `kb context` adding the hooks a release added only where kanbrain's are; `kb hook edit` refusing a write to a brain's file, through a link or a `..` too, and leaving a notes vault's own files and a repository kept in the central brain to the agent |
 | `projects` | the registry and its labels, cards, moving a repository between projects, refusing two repositories with one name |
 | `migrate` | every format after the first having its step; an old brain backed up, then migrated step by step and only once, resuming from where it is; a brain in a newer format refused, read or written |

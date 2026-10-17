@@ -440,3 +440,32 @@ fn a_wait_fails_at_once_on_a_folder_it_cant_read_but_looks_again_after_its_first
     assert!(!error.starts_with("no answer"), "{error}");
     assert!(started.elapsed() < Duration::from_secs(10), "not after the time limit");
 }
+
+#[test]
+fn the_agents_command_table_is_the_usage() {
+    // On Windows, git may check the docs out with CRLF line endings.
+    let docs = include_str!("../../../docs/agents.md").replace("\r\n", "\n");
+    let table = docs.split("\n## Commands for agents and scripts\n").nth(1).expect("the section");
+    let table = table.trim_start().split("\n\n").next();
+    let rows: Vec<&str> = table
+        .expect("its table")
+        .lines()
+        .skip(2)
+        .map(|row| row.strip_prefix("| `").and_then(|row| row.split_once("` |")).expect("a row naming a command").0)
+        .collect();
+    // A command starts at the margin (the first one's, after the string's escaped line break, without it); its
+    // synopsis ends where its description starts, on its line or the next.
+    let synopses: Vec<String> = USAGE
+        .lines()
+        .map(|line| line.strip_prefix("  ").unwrap_or(line))
+        .filter(|line| !line.starts_with(' '))
+        .map(|line| line.split("   ").next().unwrap_or(line).replace('|', "\\|"))
+        .collect();
+    for synopsis in &synopses {
+        assert!(rows.contains(&synopsis.as_str()), "docs/agents.md's command table has a row for `{synopsis}`");
+    }
+    // `list` is the main usage's; the table shows it for what an agent lists. Any other row is one that drifted.
+    for row in rows.iter().filter(|&&row| row != "list notes decisions") {
+        assert!(synopses.iter().any(|s| s == row), "`{row}`, in docs/agents.md's command table, isn't in the usage");
+    }
+}

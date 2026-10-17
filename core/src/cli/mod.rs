@@ -146,8 +146,9 @@ usage:
   {pad}           about it in CLAUDE.md / AGENTS.md (run again to update them); in a project with
   {pad}           several, the repository is named REPO (default: the folder's, made unique)
   {name} init --all
-  {pad}           update the agents' section and hooks in every registered project to this version's
-  {pad}           (the installer and update run it)
+  {pad}           bring every registered project up to this version: migrate its data (after a
+  {pad}           backup), rename the projects and repositories older versions named as none can
+  {pad}           be now, and update the agents' section and hooks (the installer and update run it)
   {name} deinit [--purge]
   {pad}           stop this folder (or --project NAME) being a project: unregister it, remove its
   {pad}           section from CLAUDE.md / AGENTS.md, the other repositories' links to it and, with
@@ -164,7 +165,8 @@ usage:
   {pad}           (default: {unit}, grouped by {group}); --save also writes it to reports/
 {entries}
   {name} path      print the data directory in use (a project's .brain/ inside it)
-  {name} update    install the latest release over this one (and the other app, if it's beside it)
+  {name} update    install the latest release over this one (and the other app, if it's beside it),
+  {pad}           then bring every project up to it (init --all)
   {name} completions bash|zsh|fish|powershell
   {pad}           print a tab completion script for the shell (commands, ids, projects, tags)
   {name} --version print the version
@@ -215,7 +217,9 @@ pub enum Command {
     /// and the repository `REPO` in it.
     #[non_exhaustive]
     Init(Option<String>, Option<String>),
-    /// `init --all`: bring every registered repository's agent instructions up to this version's.
+    /// `init --all`: bring every registered brain up to this version: its data migrated (after a backup), the
+    /// projects and repositories older versions named as none can be now renamed, each repository's card fixed,
+    /// then its agent instructions updated.
     #[non_exhaustive]
     InitAll,
     /// `deinit [--purge]`: undo `init` for the current directory's project, or the one `--project` names;
