@@ -199,6 +199,11 @@ confirm() {
 
 if [ "$UNINSTALL" = 1 ]; then
     if [ "$PURGE" = 1 ]; then
+        # As kb refuses it: a relative path names a different folder from each folder.
+        case "${KANBRAIN_DIR:-/}" in
+            /*) ;;
+            *) die "KANBRAIN_DIR must be an absolute path, not '$KANBRAIN_DIR': set it to the folder's full path" ;;
+        esac
         data=$(data_dir)
         # As the file system has it, links and `..` resolved: `$HOME//` or a link to it is the home folder too.
         if [ -d "$data" ]; then data=$(cd "$data" && pwd -P); fi

@@ -2,7 +2,7 @@
 //! temporary folders. The commands' logic is tested inside the core crate; these check the process around it.
 
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
 /// Runs `kb ARGS` in `dir`, with the central brain in `central` and `stdin` as its input.
@@ -459,6 +459,40 @@ fn the_edit_hook_reads_a_tilde_as_the_home_folder() {
     child.stdin.take().unwrap().write_all(input.as_bytes()).unwrap();
     let refused = String::from_utf8(child.wait_with_output().unwrap().stdout).unwrap();
     assert!(refused.contains("\"permissionDecision\":\"deny\""), "{refused}");
+}
+
+// Unix only: on Windows the platform data folder is the real user's, whatever the environment says.
+#[cfg(unix)]
+#[test]
+fn an_empty_kanbrain_dir_is_unset_rather_than_the_current_folder() {
+    let (here, home) = (tempdir(), tempdir());
+    let run = Command::new(env!("CARGO_BIN_EXE_kb"))
+        .args(["path"])
+        .current_dir(here.path())
+        .env("KANBRAIN_DIR", "")
+        .env("HOME", home.path())
+        .env("XDG_DATA_HOME", home.path().join("data"))
+        .output()
+        .unwrap();
+    let central = PathBuf::from(ok(&run).trim_end());
+    assert!(central.starts_with(home.path()) && central.ends_with("kanbrain"), "{}", central.display());
+    assert!(central.join("format").is_file(), "the platform data folder became the central brain");
+    assert_eq!(std::fs::read_dir(here.path()).unwrap().count(), 0, "nothing written in the current folder");
+}
+
+#[test]
+fn a_relative_kanbrain_dir_is_refused() {
+    let here = tempdir();
+    let run = Command::new(env!("CARGO_BIN_EXE_kb"))
+        .args(["add", "Lost"])
+        .current_dir(here.path())
+        .env("KANBRAIN_DIR", "todo")
+        .output()
+        .unwrap();
+    assert!(!run.status.success());
+    let said = String::from_utf8_lossy(&run.stderr);
+    assert!(said.contains("KANBRAIN_DIR must be an absolute path, not `todo`"), "{said}");
+    assert_eq!(std::fs::read_dir(here.path()).unwrap().count(), 0, "nothing written in the current folder");
 }
 
 #[test]

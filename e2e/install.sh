@@ -6,7 +6,7 @@
 # - the installed `kb` runs, and `init --all` has brought a registered project's agent section up to date;
 # - `--uninstall` takes it out again; `--purge` deletes the central brain's files and kanbrain's locks and backups in
 #   the cache, keeping files it didn't create though named like its own, through a linked data folder, and refusing
-#   the home folder however it's written;
+#   the home folder however it's written and a relative KANBRAIN_DIR;
 # - the kanban app gets its launcher with the logo: an application menu entry and icon on Linux, an app bundle on
 #   macOS. `kb` stands in for the app, which takes the same commands, so GPUI needn't be built.
 #
@@ -187,6 +187,10 @@ KANBRAIN_DIR="$empty" sh "$repo/install.sh" --purge --yes --app cli >/dev/null |
 [ ! -e "$empty" ] || fail "purging a brain with no entry kept it"
 # A data folder that's the home folder, however it's written, is refused before anything is deleted.
 if KANBRAIN_DIR="$HOME//" sh "$repo/install.sh" --purge --yes >/dev/null 2>&1; then fail "purge took \$HOME// as data"; fi
+# A relative one, which names another folder from each folder kb runs in, is refused as kb refuses it.
+if (cd "$HOME" && KANBRAIN_DIR=Sync/central sh "$repo/install.sh" --purge --yes >/dev/null 2>&1); then
+    fail "purge took a relative KANBRAIN_DIR"
+fi
 [ -e "$data/0007-mine.md" ] || fail "a refused purge deleted something"
 sh "$repo/install.sh" --purge --yes >/dev/null || fail "purging failed"
 [ ! -e "$cache" ] || fail "purge left kanbrain's cache"

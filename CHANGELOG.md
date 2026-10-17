@@ -17,6 +17,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The kanban app's new / edit form shows the tags as chips in their colors, each with × to take it off, instead of
   text: a comma or space after a tag typed, or picking one from the list, adds it as a chip.
 
+### Fixed
+
+- `KANBRAIN_DIR` set but empty counts as unset, the platform data folder: `kb` or the kanban app wrote `format` into
+  whatever folder it ran in, and the command then failed (`reading …: No such file or directory`). A relative one is
+  refused with an error naming it, as it named another central brain from each folder `kb` ran in, hooks included; on
+  Windows `\todo` and `D:todo` are relative too. One starting with `~`, which only a shell expands (not inside quotes,
+  nor in a systemd environment.d file), says so. `install.sh --purge` and `install.ps1`'s purge refuse a relative one
+  the same way.
+
 ## [0.6.2] - 2026-10-16
 
 ### Added

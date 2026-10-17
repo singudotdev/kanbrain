@@ -393,26 +393,27 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 
 `cli/tests/kb.rs` runs the built `kb` the way agents and scripts do, over temporary folders: an agent's session from
 `init` to `context`, text read from stdin with `-`, one-line JSON, errors on stderr with a failing exit code and the
-usage, `--project` from another folder, completion candidates, the hooks asking until the project is described, the edit
-hook refusing a write to `.brain/` (and a `~` path read as the home folder), `tag` and `rename` and what they say when
-nothing changed, bash running `kb completions bash` itself to complete `tag`'s id and then its signed tags, PowerShell
-completing through `kb completions powershell` (`pwsh`, and on Windows also 5.1; skipped only off CI without `pwsh`),
-quoting what it inserts and reading `kb`'s UTF-8 under any code page, and sixteen
-commands run at once losing no change and no id (the brain's write lock). They're Cargo integration tests
-(`CARGO_BIN_EXE_kb`), so they see only what the binary prints.
+usage, `--project` from another folder, completion candidates, the hooks asking until the project is described, the
+edit hook refusing a write to `.brain/` (and a `~` path read as the home folder), `tag` and `rename` and what they
+say when nothing changed, bash running `kb completions bash` itself to complete `tag`'s id and then its signed tags,
+PowerShell completing through `kb completions powershell` (`pwsh`, and on Windows also 5.1; skipped only off CI
+without `pwsh`), quoting what it inserts and reading `kb`'s UTF-8 under any code page, an empty `KANBRAIN_DIR` read
+as unset rather than the current folder and a relative one refused, and sixteen commands run at once losing no
+change and no id (the brain's write lock). They're Cargo integration tests (`CARGO_BIN_EXE_kb`), so they see only
+what the binary prints.
 
 ### Installers, end to end
 
 `e2e/install.sh` (Linux, macOS) and `e2e/install.ps1` (Windows) package this build of `kb` as a release asset, serve
 it over HTTP on `127.0.0.1` and install it with `install.sh` / `install.ps1` into a throwaway home, as a user would
 (`KANBRAIN_BASE_URL` points the installer at it). They check that the download's checksum is verified and a wrong
-one refused, that the installed `kb` is this build, that `init --all` brought a registered project's agent section up
-to date, that uninstalling takes it out, and that `--purge` deletes the central brain's files and kanbrain's locks
-and backups in the cache, leftover temporary files included, and keeps a file kanbrain didn't create. Both also
-install the kanban app (`kb` standing in for it, so GPUI isn't built) and check its launcher: the menu entry and
-icon on Linux, the app bundle on macOS, the Start Menu shortcut on Windows, where both apps install at once. CI runs
-them on all three systems, after `shellcheck` on the shell scripts and PSScriptAnalyzer on the PowerShell ones;
-locally they need cargo and Python.
+one refused, that the installed `kb` is this build, that `init --all` brought a registered project's agent section
+up to date, that uninstalling takes it out, and that `--purge` deletes the central brain's files and kanbrain's
+locks and backups in the cache, leftover temporary files included, keeps a file kanbrain didn't create, and refuses
+a relative `KANBRAIN_DIR`. Both also install the kanban app (`kb` standing in for it, so GPUI isn't built) and check
+its launcher: the menu entry and icon on Linux, the app bundle on macOS, the Start Menu shortcut on Windows, where
+both apps install at once. CI runs them on all three systems, after `shellcheck` on the shell scripts and
+PSScriptAnalyzer on the PowerShell ones; locally they need cargo and Python.
 
 ### Upgrades, end to end
 

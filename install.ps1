@@ -146,6 +146,10 @@ function Install-Kanbrain {
 
         $owned = @()
         if ($purge) {
+            # As kb refuses it: a relative path (`\todo` and `D:todo` too) names a different folder from each folder.
+            if ($env:KANBRAIN_DIR -and $env:KANBRAIN_DIR -notmatch '^([A-Za-z]:[\\/]|[\\/]{2})') {
+                throw "kanbrain: KANBRAIN_DIR must be an absolute path, not '$env:KANBRAIN_DIR': set it to the folder's full path"
+            }
             $full = [IO.Path]::GetFullPath($data).TrimEnd('\', '/')
             $homes = @("$env:USERPROFILE".TrimEnd('\'), "$HOME".TrimEnd('\', '/')) | Where-Object { $_ }
             $unsafe = @([IO.Path]::GetPathRoot($full).TrimEnd('\', '/')) + $homes

@@ -17,6 +17,7 @@
 use crate::model::slugify;
 use crate::store::{self, Store};
 use anyhow::{Context, Result, bail};
+use std::ffi::OsString;
 use std::fmt::Write;
 use std::fs;
 use std::io::ErrorKind;
@@ -97,12 +98,33 @@ pub struct ProjectInfo {
     pub siblings: Vec<(String, PathBuf)>,
 }
 
-/// The central brain's folder: `$KANBRAIN_DIR`, else the platform data folder.
+/// The central brain's folder: `$KANBRAIN_DIR`, else the platform data folder. Errors when `$KANBRAIN_DIR` is a
+/// relative path, which would name another folder from each folder `kb` runs in.
 pub fn central_dir() -> Result<PathBuf> {
-    if let Some(dir) = std::env::var_os("KANBRAIN_DIR") {
-        return Ok(dir.into());
+    central_dir_from(std::env::var_os("KANBRAIN_DIR"), dirs::data_dir)
+}
+
+/// [`central_dir`] for the value `KANBRAIN_DIR` has, `data_dir` giving the platform's data folder.
+fn central_dir_from(var: Option<OsString>, data_dir: impl FnOnce() -> Option<PathBuf>) -> Result<PathBuf> {
+    // Set but empty is unset (`KANBRAIN_DIR= kb …`): taken as is, it made whatever folder `kb` ran in the central
+    // brain, writing `format` there.
+    if let Some(dir) = var.filter(|v| !v.is_empty()).map(PathBuf::from) {
+        // Hooks run from each project's folder, so a relative one would split the central brain among them. On
+        // Windows `\todo` (rooted, no drive) and `D:todo` count as relative: each depends on the current folder.
+        if !dir.is_absolute() {
+            let what = dir.display();
+            // Only a shell expands `~`, and not inside quotes: what sets the variable without one passes it on as is.
+            if dir.as_os_str().as_encoded_bytes().starts_with(b"~") {
+                bail!(
+                    "KANBRAIN_DIR must be an absolute path, not `{what}`: `~` isn't expanded there (as when quoted, or \
+                     in a systemd environment.d file); write it with the home folder's full path"
+                );
+            }
+            bail!("KANBRAIN_DIR must be an absolute path, not `{what}`: set it to the folder's full path");
+        }
+        return Ok(dir);
     }
-    Ok(dirs::data_dir().context("could not determine the data directory; set KANBRAIN_DIR")?.join("kanbrain"))
+    Ok(data_dir().context("could not determine the data directory; set KANBRAIN_DIR")?.join("kanbrain"))
 }
 
 /// The registered repositories, in the order they were registered. No registry means none yet.

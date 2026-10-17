@@ -188,3 +188,40 @@ fn a_projects_card_is_written_under_the_central_brains_lock() {
         holder.join().unwrap();
     }
 }
+
+#[test]
+fn kanbrain_dir_set_but_empty_is_unset_and_a_relative_one_is_refused() {
+    let data = || Some(PathBuf::from(if cfg!(windows) { r"C:\data" } else { "/data" }));
+    let fallback = data().unwrap().join("kanbrain");
+    assert_eq!(central_dir_from(None, data).unwrap(), fallback);
+    assert_eq!(central_dir_from(Some("".into()), data).unwrap(), fallback, "empty is unset, not the current folder");
+    let absolute = if cfg!(windows) { r"D:\notes\todo" } else { "/home/me/todo" };
+    assert_eq!(central_dir_from(Some(absolute.into()), || None).unwrap(), Path::new(absolute));
+    let mut relative = vec!["todo", "./todo", "../todo"];
+    if cfg!(windows) {
+        assert_eq!(
+            central_dir_from(Some(r"\\server\share\todo".into()), || None).unwrap(),
+            Path::new(r"\\server\share\todo")
+        );
+        let verbatim = r"\\?\C:\notes\todo";
+        assert_eq!(central_dir_from(Some(verbatim.into()), || None).unwrap(), Path::new(verbatim));
+        // Each depends on the current folder: its drive, or the one on drive D.
+        relative.extend([r"\todo", "D:todo"]);
+    }
+    for value in relative {
+        let err = format!("{:#}", central_dir_from(Some(value.into()), data).unwrap_err());
+        assert_eq!(
+            err,
+            format!("KANBRAIN_DIR must be an absolute path, not `{value}`: set it to the folder's full path")
+        );
+    }
+    // Left unexpanded by a shell (quoted) or by what sets it without one (a systemd environment.d file).
+    let err = format!("{:#}", central_dir_from(Some("~/todo".into()), data).unwrap_err());
+    assert_eq!(
+        err,
+        "KANBRAIN_DIR must be an absolute path, not `~/todo`: `~` isn't expanded there (as when quoted, or in a \
+         systemd environment.d file); write it with the home folder's full path"
+    );
+    let err = format!("{:#}", central_dir_from(None, || None).unwrap_err());
+    assert_eq!(err, "could not determine the data directory; set KANBRAIN_DIR");
+}
