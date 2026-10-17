@@ -17,6 +17,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The kanban app's new / edit form shows the tags as chips in their colors, each with × to take it off, instead of
   text: a comma or space after a tag typed, or picking one from the list, adds it as a chip.
 
+### Fixed
+
+- `kb init`, `kb deinit` and `kb context` take a hook that runs `kb` at a path with spaces, quoted as the shell takes
+  it (`"C:\Program Files\kanbrain\kb.exe" hook tool`, `'/Users/John Doe/bin/kb' context`), as kanbrain's, instead
+  of adding it again beside it. A path with spaces left unquoted, which the shell doesn't run, stays the user's.
+
 ## [0.6.2] - 2026-10-16
 
 ### Added

@@ -41,7 +41,9 @@ kb init        # creates .brain/ and tells the project's agents about it
 
    `kb context` brings the hooks up to date where kanbrain's are already there, so a release that adds one reaches
    every project with its next session; it never writes them where they aren't (`kb deinit` took them out, or the
-   section went only in `AGENTS.md`).
+   section went only in `AGENTS.md`). A hook you changed to run `kb` by its path, quoted if it has spaces
+   (`"C:\Program Files\kanbrain\kb.exe" context`), or with variables set before it (`KANBRAIN_DIR=… kb context`),
+   is still kanbrain's: it isn't added again beside it, and `kb deinit` takes it out.
 
    Agents skipped describing the project when only the section and `context` asked them to; with these, Claude
    Code reminds them on their first turn. Once it's described and the tasks the agent started commented on,

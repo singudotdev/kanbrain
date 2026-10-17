@@ -101,3 +101,66 @@ fn a_word_sets_a_variable_as_the_shell_takes_it() {
         assert!(!assigns(word), "{word}");
     }
 }
+
+/// A matcher group running `command`, as the settings hold it.
+fn running(command: &str) -> Value {
+    json!({ "hooks": [{ "type": "command", "command": command }] })
+}
+
+#[test]
+fn kb_at_a_path_with_spaces_is_kanbrains_hook_when_quoted_as_the_shell_takes_it() {
+    for written in [
+        "kb hook tool",
+        "kb  hook tool",
+        "/opt/bin/kb hook tool",
+        r#""C:\Program Files\kanbrain\kb.exe" hook tool"#,
+        r"'C:\Program Files\kanbrain\kb.exe' hook tool",
+        r"C:\Users\me\kb.exe hook tool",
+        r#""/Users/John Doe/bin/kb" hook tool"#,
+        "'/Users/John Doe/bin/kb' hook tool",
+        r"/Users/John\ Doe/bin/kb hook tool",
+        r#"/Users/"John Doe"/bin/kb hook tool"#,
+        r#""/Users/a \"b\" \\c/kb" hook tool"#,
+        r#"KANBRAIN_DIR="/a b" "/Users/John Doe/bin/kb" hook tool"#,
+        "kb 'hook' \"tool\"",
+    ] {
+        assert!(runs(&running(written), "kb hook tool"), "{written}");
+    }
+    for written in [
+        // Unquoted, the shell runs `/Users/John`: not a hook that works, so not one to keep instead of kanbrain's.
+        "/Users/John Doe/bin/kb hook tool",
+        r"C:\Program Files\kanbrain\kb.exe hook tool",
+        // The user's own, that run `kb` after something else or with more to it.
+        "cd /x && /usr/bin/kb hook tool",
+        "echo '/a b/kb' hook tool",
+        "\"/a b/kb\" hook tool; date",
+        "kb hook tool > /tmp/log",
+        "kb hook 'tool x'",
+        "kb hook edit",
+        "kbx hook tool",
+        r#""/a b/kbx.exe" hook tool"#,
+        "\"/a b/kb hook tool",
+        "'/a b/kb hook tool",
+        "kb hook tool\\",
+        "",
+    ] {
+        assert!(!runs(&running(written), "kb hook tool"), "{written}");
+    }
+}
+
+#[test]
+fn a_hook_at_a_path_with_spaces_is_kept_and_taken_out_rather_than_doubled() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join(SETTINGS);
+    add_hooks(root.path()).unwrap();
+    let quoted = fs::read_to_string(&path)
+        .unwrap()
+        .replace("\"kb context", r#""\"C:\\Program Files\\kanbrain\\kb.exe\" context"#)
+        .replace("\"kb hook tool", "\"'/Users/John Doe/bin/kb' hook tool");
+    fs::write(&path, &quoted).unwrap();
+    assert_eq!(add_hooks(root.path()).unwrap(), Change::Unchanged, "{quoted}");
+    assert_eq!(update_hooks(root.path()).unwrap(), Change::Unchanged);
+    assert_eq!(commands(&path, "SessionStart"), [r#""C:\Program Files\kanbrain\kb.exe" context"#]);
+    assert_eq!(commands(&path, "PreToolUse"), ["kb hook edit", "'/Users/John Doe/bin/kb' hook tool"]);
+    assert_eq!(remove_hooks(root.path()).unwrap(), Change::Removed, "and taken out with the rest");
+}

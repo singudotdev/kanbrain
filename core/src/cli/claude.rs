@@ -154,21 +154,66 @@ pub fn remove_hooks(root: &Path) -> Result<Change> {
     Ok(Change::Written)
 }
 
-/// Whether a matcher group runs `command`, as written, with `kb` given by its path (`/opt/bin/kb hook tool`) or with
-/// variables set before it (`KANBRAIN_DIR=… kb context`), as a user may have changed it: one to keep, update or
-/// remove, never to add again beside itself. A line that runs `kb` after another command (`cd x && kb …`) is the
-/// user's.
+/// Whether a matcher group runs `command`, as written, with `kb` given by its path (`/opt/bin/kb hook tool`), quoted
+/// if it has spaces (`"C:\Program Files\kanbrain\kb.exe" hook tool`), or with variables set before it
+/// (`KANBRAIN_DIR=… kb context`), as a user may have changed it: one to keep, update or remove, never to add again
+/// beside itself. A line that runs `kb` after another command (`cd x && kb …`), or does more with it, is the user's;
+/// so is a path with spaces left unquoted, which the shell splits and doesn't run.
 fn runs(group: &Value, command: &str) -> bool {
-    let args = command.strip_prefix("kb");
     let same = |written: &str| {
-        let mut rest = written;
-        while let Some((_, after)) = rest.split_once(' ').filter(|(word, _)| assigns(word)) {
-            rest = after;
-        }
-        let program = args.and_then(|args| rest.strip_suffix(args)).filter(|p| !p.contains(' '));
-        written == command || program.is_some_and(|p| Path::new(p).file_stem().is_some_and(|stem| stem == "kb"))
+        let Some(words) = words(written) else { return false };
+        let mut words = words.iter().skip_while(|word| assigns(word));
+        let is_kb = |program: &String| {
+            let name = program.rsplit(['/', '\\']).next().unwrap_or(program);
+            Path::new(name).file_stem().is_some_and(|stem| stem == "kb")
+        };
+        words.next().is_some_and(is_kb) && words.map(String::as_str).eq(command.split(' ').skip(1))
     };
     group["hooks"].as_array().is_some_and(|hooks| hooks.iter().any(|h| h["command"].as_str().is_some_and(same)))
+}
+
+/// The words a POSIX shell splits `line` into, quotes taken off: `'…'` as it is, `"…"` with `\"` and `\\` escaped,
+/// and outside quotes a `\` escaping a space, a quote or itself. Any other `\` is kept, so that a Windows path
+/// (`C:\Users\me\kb.exe`) reads as one word whatever the shell. `None` if a quote or `\` is left open.
+fn words(line: &str) -> Option<Vec<String>> {
+    let mut words = Vec::new();
+    // `None` between words, so that `""` still makes one.
+    let mut word: Option<String> = None;
+    let mut chars = line.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            ' ' | '\t' => words.extend(word.take()),
+            '\'' => {
+                let word = word.get_or_insert_default();
+                loop {
+                    match chars.next()? {
+                        '\'' => break,
+                        c => word.push(c),
+                    }
+                }
+            }
+            '"' => {
+                let word = word.get_or_insert_default();
+                loop {
+                    match chars.next()? {
+                        '"' => break,
+                        '\\' => match chars.next()? {
+                            c @ ('"' | '\\') => word.push(c),
+                            c => word.extend(['\\', c]),
+                        },
+                        c => word.push(c),
+                    }
+                }
+            }
+            '\\' => match chars.next()? {
+                c @ (' ' | '\t' | '\'' | '"' | '\\') => word.get_or_insert_default().push(c),
+                c => word.get_or_insert_default().extend(['\\', c]),
+            },
+            c => word.get_or_insert_default().push(c),
+        }
+    }
+    words.extend(word);
+    Some(words)
 }
 
 /// Whether a shell word sets a variable for the command after it (`NAME=value`).
