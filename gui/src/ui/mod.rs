@@ -39,7 +39,7 @@ mod theme;
 mod topbar;
 mod widgets;
 
-use crate::state::{Board, COLUMNS, Layout, Mode, Request, Scope, Tab};
+use crate::state::{Board, COLUMNS, Clock, Layout, Mode, Request, Scope, Tab};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::update;
 use crate::watch::{self, Watcher};
@@ -237,6 +237,8 @@ impl BrainView {
             }
         });
         let mut board = board;
+        let executor = cx.background_executor().clone();
+        board.clock = Clock::new(move || executor.now());
         if let Some(failed) = update::take_failure() {
             board.notify(failed);
         }
@@ -358,6 +360,7 @@ impl BrainView {
         self.catch_up();
         self.board.lock_found_brains(&mut locks, &mut tried);
         let result = input(self);
+        self.board.input_done();
         self.watcher.sync(self.board.watched_dirs());
         drop(locks);
         result
