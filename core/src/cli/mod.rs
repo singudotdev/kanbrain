@@ -165,7 +165,7 @@ usage:
 {entries}
   {name} path      print the data directory in use (a project's .brain/ inside it)
   {name} update    install the latest release over this one (and the other app, if it's beside it)
-  {name} completions bash|zsh|fish
+  {name} completions bash|zsh|fish|powershell
   {pad}           print a tab completion script for the shell (commands, ids, projects, tags)
   {name} --version print the version
 

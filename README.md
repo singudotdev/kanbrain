@@ -151,7 +151,7 @@ The output is kept small so it doesn't waste the agent's context, and the CLI co
 | `kb status` | the running tasks and their clocks, for status bars |
 | `kb report [hour\|day\|week\|month] [--group task\|tag] [--tag T] [--save]` | tracked time as markdown |
 | `kb update` | install the latest release over this one |
-| `kb completions bash\|zsh\|fish` | tab completion of commands, ids, projects and tags |
+| `kb completions bash\|zsh\|fish\|powershell` | tab completion of commands, ids, projects and tags |
 | `kanbrain` | open the kanban board (`?` opens the command palette, with every key; `u` undoes) |
 
 The entry commands and `list` accept `--json` (all but `wait`, `context` and `project`).
