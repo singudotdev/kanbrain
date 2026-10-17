@@ -8,7 +8,7 @@ use crate::state::Field;
 use crate::text::editor::Pointer;
 use gpui::{
     Context, DispatchPhase, Div, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, Stateful,
-    StyledText, TextLayout, Window, canvas, point, prelude::*, px,
+    StyledText, TextLayout, canvas, point, prelude::*, px,
 };
 use std::rc::Rc;
 
@@ -211,7 +211,7 @@ fn paste_on_middle_click(
 ) -> Stateful<Div> {
     element.on_mouse_down(
         MouseButton::Middle,
-        cx.listener(move |this, event: &MouseDownEvent, _: &mut Window, cx| {
+        cx.listener(move |this, event: &MouseDownEvent, _: &mut gpui::Window, cx| {
             focus(this, which);
             let (row, col) = at(&lines, event.position);
             this.board.point(row, col, Pointer::Place);

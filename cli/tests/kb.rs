@@ -2,7 +2,7 @@
 //! temporary folders. The commands' logic is tested inside the core crate; these check the process around it.
 
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Output, Stdio};
 
 /// Runs `kb ARGS` in `dir`, with the central brain in `central` and `stdin` as its input.
@@ -474,7 +474,7 @@ fn an_empty_kanbrain_dir_is_unset_rather_than_the_current_folder() {
         .env("XDG_DATA_HOME", home.path().join("data"))
         .output()
         .unwrap();
-    let central = PathBuf::from(ok(&run).trim_end());
+    let central = std::path::PathBuf::from(ok(&run).trim_end());
     assert!(central.starts_with(home.path()) && central.ends_with("kanbrain"), "{}", central.display());
     assert!(central.join("format").is_file(), "the platform data folder became the central brain");
     assert_eq!(std::fs::read_dir(here.path()).unwrap().count(), 0, "nothing written in the current folder");

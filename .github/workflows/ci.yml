@@ -54,11 +54,17 @@ jobs:
           retention-days: 90
           overwrite: true
 
+  # Lints and docs on each system, as code behind `cfg(windows)`, `cfg(not(unix))` or a non-Linux `target_os` is
+  # only compiled there; formatting and packaging don't depend on it.
   lint:
-    name: fmt + clippy
+    name: fmt + clippy (${{ matrix.os }})
     needs: plan
     if: needs.plan.outputs.lint == 'true'
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     # Every job gets one: a hung test or e2e server would otherwise hold a runner for GitHub's default six hours.
     timeout-minutes: 30
     steps:
@@ -67,10 +73,12 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - run: |
+      - if: runner.os == 'Linux'
+        run: |
           # shellcheck disable=SC2086 # one package per word
           sudo apt-get update && sudo apt-get install -y $GUI_LINUX_DEPS
-      - run: cargo fmt --all --check
+      - if: runner.os == 'Linux'
+        run: cargo fmt --all --check
       # The lint policy (pedantic, no unsafe) lives in Cargo.toml; here any warning fails the build.
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # Broken intra-doc links and malformed doc comments.
@@ -78,7 +86,8 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
       # The crates published to crates.io package and build as published, before a tag makes them a release.
-      - run: cargo publish --dry-run --locked -p kanbrain-core -p kanbrain
+      - if: runner.os == 'Linux'
+        run: cargo publish --dry-run --locked -p kanbrain-core -p kanbrain
 
   deny:
     name: licenses + advisories

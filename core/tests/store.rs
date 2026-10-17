@@ -200,8 +200,6 @@ fn a_write_that_fails_leaves_the_file_as_it_was_and_no_temporary() {
     let store = Store::at(dir.path()).unwrap();
     let mut task = Task::new(1, "Fix login".into(), now());
     store.save(&mut task).unwrap();
-    let path = dir.path().join("0001-fix-login.md");
-    let before = fs::read_to_string(&path).unwrap();
     // Its place taken by a folder, as a sync tool's conflict can leave it.
     let blocked = dir.path().join("0001-blocked.md");
     fs::create_dir(&blocked).unwrap();
@@ -217,6 +215,8 @@ fn a_write_that_fails_leaves_the_file_as_it_was_and_no_temporary() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
+        let path = dir.path().join("0001-fix-login.md");
+        let before = fs::read_to_string(&path).unwrap();
         // A folder that can't be written to, as a read-only mount or a permissions slip leaves it.
         fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o555)).unwrap();
         task.description = "lost?".into();
