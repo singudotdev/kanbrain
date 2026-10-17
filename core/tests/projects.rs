@@ -190,6 +190,14 @@ fn a_projects_card_is_written_under_the_central_brains_lock() {
 }
 
 #[test]
+fn these_tests_fall_back_to_a_temporary_folder_not_the_users_data_folder() {
+    // A mutant of how `KANBRAIN_DIR` is read once sent these tests' writes to the real central brain.
+    let fallback = super::data_dir().unwrap();
+    assert!(fallback.starts_with(std::env::temp_dir()), "{}", fallback.display());
+    assert_ne!(Some(fallback), dirs::data_dir());
+}
+
+#[test]
 fn kanbrain_dir_set_but_empty_is_unset_and_a_relative_one_is_refused() {
     let data = || Some(PathBuf::from(if cfg!(windows) { r"C:\data" } else { "/data" }));
     let fallback = data().unwrap().join("kanbrain");

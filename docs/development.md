@@ -454,6 +454,11 @@ again: a change no test notices is behavior nothing guards. CI runs it on each p
 fails on a mutant no test catches. `.cargo/mutants.toml` lists what no test can tell apart (starting the installer,
 a hover style), each with why; anything else missed is a test to write. Locally, run it from a clean checkout
 (`git worktree add`) outside the repository (see `TMPDIR` above): it copies the working tree as it is when it starts.
+A mutant of how the central brain is found can make `kb` drop the tests' `KANBRAIN_DIR` and fall back to the platform
+data folder: core's own tests fall back to a temporary folder instead, and the tests that run the `kb` binary point
+`XDG_DATA_HOME` and `HOME` inside their own (`fallback_inside` in `cli/tests/kb.rs`). Windows takes that folder from
+the system, so there, run the tests on a machine whose central brain you don't mind; elsewhere, setting
+`XDG_DATA_HOME` to a scratch folder for the whole run covers anything else.
 
 ### Agents, end to end
 

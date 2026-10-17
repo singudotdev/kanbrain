@@ -101,7 +101,21 @@ pub struct ProjectInfo {
 /// The central brain's folder: `$KANBRAIN_DIR`, else the platform data folder. Errors when `$KANBRAIN_DIR` is a
 /// relative path, which would name another folder from each folder `kb` runs in.
 pub fn central_dir() -> Result<PathBuf> {
-    central_dir_from(std::env::var_os("KANBRAIN_DIR"), dirs::data_dir)
+    central_dir_from(std::env::var_os("KANBRAIN_DIR"), data_dir)
+}
+
+/// The platform's data folder.
+#[cfg(not(test))]
+fn data_dir() -> Option<PathBuf> {
+    dirs::data_dir()
+}
+
+/// In this crate's tests, a temporary folder instead: a test that loses its central brain (a mutant of how
+/// `KANBRAIN_DIR` is read) once wrote into the real one of whoever ran them.
+#[cfg(test)]
+#[expect(clippy::unnecessary_wraps, reason = "the signature of `dirs::data_dir`, which it stands in for")]
+fn data_dir() -> Option<PathBuf> {
+    Some(std::env::temp_dir().join("kanbrain-tests-data"))
 }
 
 /// [`central_dir`] for the value `KANBRAIN_DIR` has, `data_dir` giving the platform's data folder.
