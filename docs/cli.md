@@ -281,7 +281,7 @@ to take off, `kb tag 1 -bu`): it takes it for a parameter and never asks a progr
 
 | variable | purpose |
 | --- | --- |
-| `KANBRAIN_DIR` | the central brain's folder, instead of the platform default; a project's `.brain/` still takes precedence inside it |
+| `KANBRAIN_DIR` | the central brain's folder, instead of the platform default; a project's `.brain/` still takes precedence inside it. An absolute path (`/home/me/todo`, `D:\notes\todo`, `\\server\share\todo`): a relative one is refused, as it would name another folder from each folder `kb` runs in. Set but empty counts as unset |
 | `KANBRAIN_WAIT_TIMEOUT` | minutes `kb wait` waits for an answer without `--timeout` (default 8; `0`: no limit) |
 | `KANBRAIN_AUTHOR` | `human` or `agent`: who the comments and status changes `kb` makes are recorded as. Without it, `kb` writes `agent` when a coding agent's own variable is set (`AGENT`, `AI_AGENT`, `CLAUDECODE`, `CODEX_SANDBOX`, `CODEX_CI`, `CODEX_THREAD_ID`, `GEMINI_CLI`), else `human` |
 | `KANBRAIN_NO_UPDATE_CHECK` | set (to any value, even `0`) to keep the kanban app from asking GitHub whether a newer release is out |

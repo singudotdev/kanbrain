@@ -342,6 +342,8 @@ Only in the current PowerShell session:
 $env:KANBRAIN_DIR = "D:\notes\todo"
 ```
 
+The path must be absolute (on Windows with its drive, `D:\...`, or a share, `\\server\share\...`): `kb` refuses a
+relative one, which would name another folder from each folder it runs in. An empty `KANBRAIN_DIR` counts as unset.
 The folder is created if it doesn't exist. See [Data format](data-format.md) for what goes inside.
 
 ### Projects
