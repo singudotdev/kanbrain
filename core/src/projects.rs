@@ -152,7 +152,8 @@ pub fn load(central: &Path) -> Result<Vec<Repo>> {
     Ok(text
         .lines()
         .filter_map(|line| line.strip_prefix("- ")?.split_once(": "))
-        .map(|(project, dir)| Repo { project: project.trim().to_string(), dir: PathBuf::from(dir.trim()) })
+        // Plain, as `init` registers it now: released versions registered Windows' verbatim form (`\\?\C:\…`).
+        .map(|(project, dir)| Repo { project: project.trim().to_string(), dir: simplified(Path::new(dir.trim())) })
         .collect())
 }
 
@@ -193,7 +194,9 @@ pub fn register(central: &Path, project: &str, dir: &Path) -> Result<()> {
     // By folder, not path: `init` registers the canonical one, which another registration's may not be (`/var`
     // is `/private/var` on macOS, Windows prefixes `\\?\`), and a move must replace it, not add a second.
     if repos.iter().any(|r| r.project == project && same_dir(&r.dir, dir)) {
-        return Ok(());
+        // As it was, unless a released version wrote it with Windows' verbatim prefix, which `load` read plain.
+        let text = store::read_text(&central.join(REGISTRY_FILE)).unwrap_or_default();
+        return if text.contains(r"\\?\") && text != render(&repos) { save(central, &repos) } else { Ok(()) };
     }
     repos.retain(|r| !same_dir(&r.dir, dir));
     if let Some(twin) = repos.iter().find(|r| r.project == project && r.name() == new.name() && r.dir.is_dir()) {
@@ -283,6 +286,11 @@ fn lock(central: &Path) -> Result<store::BrainLock> {
 /// Writes the registry.
 fn save(central: &Path, repos: &[Repo]) -> Result<()> {
     Store::at(central)?;
+    store::write_file(&central.join(REGISTRY_FILE), &render(repos))
+}
+
+/// The registry's text, as [`save`] writes it.
+fn render(repos: &[Repo]) -> String {
     let mut text = String::from(
         "# Projects\n\nRepositories with their own `.brain/`, registered by `kb init`; several lines \
          with the same name are one project's repositories. The kanban app shows them all.\n\n",
@@ -290,7 +298,7 @@ fn save(central: &Path, repos: &[Repo]) -> Result<()> {
     for r in repos {
         writeln!(text, "- {}: {}", r.project, r.dir.display()).expect("writing to a String cannot fail");
     }
-    store::write_file(&central.join(REGISTRY_FILE), &text)
+    text
 }
 
 /// What a repository's `.brain/project.md` says about it, travelling with its code (and its git):
@@ -499,6 +507,58 @@ pub fn info(dir: &Path, central: Option<&Path>) -> Option<ProjectInfo> {
 /// symlink (`/var` is `/private/var` on macOS) or be typed by hand, and still name the folder opened.
 pub fn same_dir(a: &Path, b: &Path) -> bool {
     a == b || fs::canonicalize(a).is_ok_and(|a| fs::canonicalize(b).ok() == Some(a))
+}
+
+/// `path`'s canonical form, as `init` registers it and the app opens it: [`fs::canonicalize`], then
+/// [`simplified`], so a repository reads `C:\code\api` in `projects.md`, `kb`'s output and the app rather than
+/// `\\?\C:\code\api`, and matches the same path typed or given without the prefix.
+pub fn canonical(path: &Path) -> std::io::Result<PathBuf> {
+    fs::canonicalize(path).map(|path| simplified(&path))
+}
+
+/// `path` without Windows' verbatim prefix, which canonicalizing a path there adds (`\\?\C:\…` as `C:\…`,
+/// `\\?\UNC\server\share\…` as `\\server\share\…`), when the plain path names the same folder; else, or when
+/// it isn't verbatim, `path` as it is. Pure, so it's the same on every system: elsewhere no path starts with
+/// `\\?\` but one read from a registry Windows wrote.
+pub fn simplified(path: &Path) -> PathBuf {
+    path.to_str().and_then(without_verbatim_prefix).map_or_else(|| path.to_path_buf(), PathBuf::from)
+}
+
+/// `path` without its verbatim prefix where Windows reads the plain one alike, as the `dunce` crate decides it
+/// (drive paths only there; a share's here, by the same rules): Windows takes a verbatim path's names literally,
+/// but trims a plain one's trailing dots and spaces, reads `con`, `nul`, `lpt1.txt`… as devices, and stops at
+/// `MAX_PATH` in programs that aren't long-path aware (an editor given the path). Any of those, or anything it
+/// doesn't recognize (`\\?\Volume{…}`, `..`, a doubled `\\`), keeps the prefix.
+fn without_verbatim_prefix(path: &str) -> Option<String> {
+    const MAX_PATH: usize = 260;
+    let (plain, names, least) = if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        (r"\\", rest, 2)
+    } else {
+        let rest = path.strip_prefix(r"\\?\")?;
+        let (drive, names) = (rest.get(..3)?, rest.get(3..)?);
+        let [letter, b':', b'\\'] = drive.as_bytes() else { return None };
+        if !letter.is_ascii_alphabetic() {
+            return None;
+        }
+        (drive, names, 0)
+    };
+    let plain_names = names.is_empty() || names.split('\\').all(plain_name);
+    let enough = names.split('\\').filter(|name| !name.is_empty()).count() >= least;
+    (plain_names && enough && path.encode_utf16().count() <= MAX_PATH).then(|| format!("{plain}{names}"))
+}
+
+/// Whether Windows reads `name` the same in a plain path as in a verbatim one, as `dunce` checks it, with Windows'
+/// own device rules: a name is a device by what's before its first dot (`con.tar.gz` is `CON`), trimmed of spaces,
+/// and `COM¹`, `LPT³`, `CONIN$` are devices too.
+fn plain_name(name: &str) -> bool {
+    let forbidden = |c: char| matches!(c, '\0'..='\x1f' | '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*');
+    let base = name.split('.').next().unwrap_or(name).trim_end_matches(' ').to_ascii_uppercase();
+    let numbered = ["COM", "LPT"].iter().filter_map(|port| base.strip_prefix(port)).any(|n| {
+        let mut digits = n.chars();
+        digits.next().is_some_and(|c| c.is_ascii_digit() || matches!(c, '¹' | '²' | '³')) && digits.next().is_none()
+    });
+    let device = numbered || ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"].contains(&base.as_str());
+    !name.is_empty() && !name.contains(forbidden) && !name.ends_with([' ', '.']) && !device
 }
 
 #[cfg(test)]

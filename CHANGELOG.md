@@ -47,6 +47,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The kanban app no longer loses what `kb` changed in an open form or editor ("#1's status changed on disk"), nor a
   file it found skipped, when the save or action it read for takes over a second, on a slow disk or a busy machine:
   it's said beside that action's message for the whole key or click, not for a second.
+- On Windows, `kb init` registers a repository in `projects.md` as `C:\code\api\.brain` (a share's as
+  `\\server\share\…`), not the `\\?\C:\…` canonicalizing gives, which `projects.md`, `kb`'s output and the
+  kanban app showed. The prefix stays where the plain path would name something else (a name ending in a dot or
+  space, a device name such as `con`, `con.tar.gz`, `COM¹` or `CONIN$`, more than `MAX_PATH`). A registry an earlier
+  kanbrain wrote with the prefix reads plain, and is written without it the next time `kb` writes `projects.md`
+  (`init`, `deinit`, a move or rename). `kb init` refuses a folder whose path isn't valid Unicode, which
+  `projects.md`, a UTF-8 file, can't hold, also when reached through a link: it used to register a garbled path,
+  naming another folder.
 
 ## [0.6.2] - 2026-10-16
 

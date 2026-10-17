@@ -233,3 +233,85 @@ fn kanbrain_dir_set_but_empty_is_unset_and_a_relative_one_is_refused() {
     let err = format!("{:#}", central_dir_from(None, || None).unwrap_err());
     assert_eq!(err, "could not determine the data directory; set KANBRAIN_DIR");
 }
+
+#[test]
+fn verbatim_paths_lose_the_prefix_only_where_windows_reads_both_alike() {
+    let plain = |path: &str| simplified(Path::new(path));
+    assert_eq!(plain(r"\\?\C:\code\api\.brain"), Path::new(r"C:\code\api\.brain"));
+    assert_eq!(plain(r"\\?\d:\"), Path::new(r"d:\"), "a drive's root");
+    assert_eq!(plain(r"\\?\UNC\server\share\api\.brain"), Path::new(r"\\server\share\api\.brain"));
+    assert_eq!(plain(r"\\?\UNC\server\share"), Path::new(r"\\server\share"));
+    let long = format!(r"\\?\C:\{}", ["folder"; 40].join(r"\"));
+    let kept = [
+        // Each names something else, or nothing, without the prefix.
+        r"\\?\C:\code\api.\.brain",
+        r"\\?\C:\code\api \.brain",
+        r"\\?\C:\code\con\.brain",
+        r"\\?\C:\code\Aux.txt\.brain",
+        r"\\?\C:\code\lpt1 .md",
+        r"\\?\C:\code\a*b",
+        r"\\?\C:\code\a/b",
+        r"\\?\C:\code\.",
+        r"\\?\C:\code\..\x",
+        r"\\?\C:\code\\x",
+        r"\\?\C:\code\",
+        r"\\?\C:",
+        r"\\?\C:x",
+        r"\\?\1:\x",
+        r"\\?\UNC\server",
+        r"\\?\UNC\server\\x",
+        r"\\?\UNC\server\nul\x",
+        r"\\?\Volume{0b1c2d3e-0000-0000-0000-100000000000}\x",
+        r"\\?\GLOBALROOT\Device\x",
+        &long,
+    ];
+    for path in kept {
+        assert_eq!(plain(path), Path::new(path), "kept: {path}");
+    }
+    for path in [r"C:\code\api", r"\\server\share\api", "/home/me/api", r"\\.\COM1", "api"] {
+        assert_eq!(plain(path), Path::new(path), "not verbatim: {path}");
+    }
+    assert_eq!(plain(r"\\?\C:\code\console\.brain"), Path::new(r"C:\code\console\.brain"), "only device names");
+    // A device name is cut at the first dot, and has superscript and console forms too.
+    for device in ["con.tar.gz", "Nul .txt", "COM0", "com9.log", "COM¹", "lpt³.txt", "CONIN$", "conout$.x"] {
+        let path = format!(r"\\?\C:\code\{device}");
+        assert_eq!(plain(&path), Path::new(&path), "a device: {device}");
+    }
+    for name in ["COM10", "LPT", "COM¹¹", "CONIN", "con-tar.gz", ".con", "auxiliary.txt", "NUL_"] {
+        let path = format!(r"\\?\C:\code\{name}");
+        assert_eq!(plain(&path), Path::new(&path[4..]), "not a device: {name}");
+    }
+    let within = format!(r"\\?\C:\{}", ["folder"; 35].join(r"\"));
+    assert_eq!(plain(&within), Path::new(&within[4..]), "within MAX_PATH");
+}
+
+#[test]
+fn a_registry_written_with_verbatim_paths_matches_their_plain_form() {
+    let central = tempfile::tempdir().unwrap();
+    // As released versions wrote it on Windows: `init` registered the canonical path, with its `\\?\`.
+    let registry = "# Projects\n\n- shop: \\\\?\\C:\\code\\api\\.brain\n- blog: \\\\?\\UNC\\nas\\work\\blog\\.brain\n";
+    fs::write(central.path().join(REGISTRY_FILE), registry).unwrap();
+    let dirs: Vec<_> = load(central.path()).unwrap().into_iter().map(|r| r.dir).collect();
+    assert_eq!(dirs, [PathBuf::from(r"C:\code\api\.brain"), PathBuf::from(r"\\nas\work\blog\.brain")]);
+    // Registered again by its plain path, as `init` gives it now: one line, written back plain.
+    register(central.path(), "blog", Path::new(r"\\nas\work\blog\.brain")).unwrap();
+    let text = fs::read_to_string(central.path().join(REGISTRY_FILE)).unwrap();
+    assert!(!text.contains(r"\\?\"), "{text}");
+    assert_eq!(load(central.path()).unwrap().len(), 2, "{text}");
+    // Its folder gone (not on this machine), a plain path still names it, as one typed by hand or written by a
+    // newer kanbrain is.
+    let out = unregister(central.path(), Path::new(r"C:\code\api\.brain")).unwrap();
+    assert_eq!(out.map(|r| r.project).as_deref(), Some("shop"));
+    let text = fs::read_to_string(central.path().join(REGISTRY_FILE)).unwrap();
+    assert!(text.ends_with("- blog: \\\\nas\\work\\blog\\.brain\n"), "written back plain: {text}");
+}
+
+#[test]
+fn registering_a_repository_again_leaves_a_hand_edited_registry_as_it_is() {
+    let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let api = repo_dir(code.path(), "api");
+    let text = format!("# Projects\n\nMine, by hand.\n\n- shop: {}\n", api.display());
+    fs::write(central.path().join(REGISTRY_FILE), &text).unwrap();
+    register(central.path(), "shop", &api).unwrap();
+    assert_eq!(fs::read_to_string(central.path().join(REGISTRY_FILE)).unwrap(), text);
+}
