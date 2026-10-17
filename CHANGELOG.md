@@ -41,6 +41,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   CRLF, its stray blank line taken out. `kb deinit` takes the section out of a CRLF file without leaving a `\r` or a
   blank line, and removes a file left holding only a byte order mark, which `init` no longer follows with two blank
   lines.
+- On Windows, a `kb` command or the app no longer fails when an antivirus, the search indexer or an editor has a
+  brain's file open just as it's replaced or deleted (`Access is denied`, `being used by another process`): the
+  rename or delete is tried again for up to about 1.3 seconds.
 
 ## [0.6.2] - 2026-10-16
 

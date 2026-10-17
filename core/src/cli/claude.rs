@@ -141,7 +141,7 @@ pub fn remove_hooks(root: &Path) -> Result<Change> {
         settings.remove("hooks");
     }
     if settings.is_empty() {
-        fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
+        crate::store::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
         // `.claude/` too, if the file was all it held, as when `init` created both.
         if let Some(dir) = path.parent()
             && fs::read_dir(dir).is_ok_and(|mut entries| entries.next().is_none())

@@ -414,7 +414,7 @@ pub fn deinit(dir: &Path, central: &Path) -> Result<Vec<String>> {
             continue;
         }
         if after.trim().is_empty() {
-            fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
+            store::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
             done.push(format!("removed {name}: it only held the \"Project memory\" section"));
         } else {
             store::write_file(&path, &after)?;

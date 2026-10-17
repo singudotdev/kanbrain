@@ -229,3 +229,96 @@ fn a_write_that_fails_leaves_the_file_as_it_was_and_no_temporary() {
         assert_eq!(leftovers(dir.path()), 0);
     }
 }
+
+/// An operation that fails with `kind` its first `fails` calls, then succeeds; and how many calls it got.
+fn failing(kind: ErrorKind, fails: u32) -> (impl FnMut() -> std::io::Result<u32>, std::rc::Rc<std::cell::Cell<u32>>) {
+    let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+    let counted = calls.clone();
+    let op = move || {
+        counted.set(counted.get() + 1);
+        if counted.get() <= fails { Err(std::io::Error::from(kind)) } else { Ok(counted.get()) }
+    };
+    (op, calls)
+}
+
+#[test]
+fn a_busy_file_is_tried_again_until_it_is_let_go() {
+    let (op, calls) = failing(ErrorKind::PermissionDenied, 2);
+    assert_eq!(retry_while_busy(&[Duration::ZERO; 3], op).unwrap(), 3);
+    assert_eq!(calls.get(), 3);
+}
+
+#[test]
+fn a_file_busy_past_the_budget_gives_the_last_error() {
+    let (op, calls) = failing(ErrorKind::PermissionDenied, 10);
+    let error = retry_while_busy(&[Duration::ZERO; 3], op).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::PermissionDenied);
+    assert_eq!(calls.get(), 4, "the first try and one per delay");
+}
+
+#[test]
+fn only_a_busy_file_is_tried_again() {
+    let (op, calls) = failing(ErrorKind::NotFound, 1);
+    assert_eq!(retry_while_busy(&[Duration::ZERO; 3], op).unwrap_err().kind(), ErrorKind::NotFound);
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn only_windows_waits_for_a_busy_file() {
+    let waits = if cfg!(windows) { BUSY_DELAYS.len() } else { 0 };
+    assert_eq!(busy_delays().len(), waits, "elsewhere a denied permission is a real one");
+    let total: Duration = BUSY_DELAYS.iter().sum();
+    assert!(total < Duration::from_millis(1500), "a command waits well under two seconds: {total:?}");
+}
+
+#[test]
+fn a_sharing_violation_is_a_busy_file_on_windows_only() {
+    // ERROR_SHARING_VIOLATION, which std reports as uncategorized; elsewhere 32 is EPIPE.
+    let shared = std::io::Error::from_raw_os_error(32);
+    assert_eq!(busy(&shared), cfg!(windows));
+    assert!(busy(&std::io::Error::from(ErrorKind::PermissionDenied)));
+    assert!(!busy(&std::io::Error::from(ErrorKind::NotFound)));
+}
+
+#[cfg(windows)]
+#[test]
+fn a_file_another_program_holds_for_a_moment_is_replaced_and_deleted_once_it_lets_go() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let mut task = Task::new(1, "Fix".into(), now());
+    store.save(&mut task).unwrap();
+    let path = dir.path().join("0001-fix.md");
+    // Opened sharing nothing, as an antivirus scan can: nothing replaces or deletes it until it's closed.
+    let open_alone = |time: Duration| {
+        let file = fs::OpenOptions::new().read(true).share_mode(0).open(&path).unwrap();
+        std::thread::spawn(move || {
+            std::thread::sleep(time);
+            drop(file);
+        })
+    };
+
+    let closing = open_alone(Duration::from_millis(30));
+    task.description = "written".into();
+    store.save(&mut task).unwrap();
+    closing.join().unwrap();
+    assert!(fs::read_to_string(&path).unwrap().contains("written"));
+
+    let closing = open_alone(Duration::from_millis(30));
+    store.delete(&task).unwrap();
+    closing.join().unwrap();
+    assert!(!path.exists());
+
+    // Held past the budget: the write fails, leaving the file as it was and no temporary.
+    write_file(&path, "before").unwrap();
+    let closing = open_alone(BUSY_DELAYS.iter().sum::<Duration>() + Duration::from_secs(1));
+    let error = write_file(&path, "after").unwrap_err();
+    closing.join().unwrap();
+    let io = error.downcast_ref::<std::io::Error>().unwrap();
+    // ERROR_ACCESS_DENIED or ERROR_SHARING_VIOLATION, whichever Windows gives for it.
+    assert!(matches!(io.raw_os_error(), Some(5 | 32)), "{io:?}");
+    assert_eq!(fs::read_to_string(&path).unwrap(), "before");
+    let temporaries =
+        fs::read_dir(dir.path()).unwrap().filter(|e| e.as_ref().unwrap().path().extension() == Some("tmp".as_ref()));
+    assert_eq!(temporaries.count(), 0);
+}

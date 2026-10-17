@@ -419,13 +419,14 @@ pub fn write_description(central: &Path, project: &str, description: &str) -> Re
     if let Some(owner) = card_owner(&path).filter(|owner| owner != project) {
         let theirs = card_path(central, &owner);
         if theirs != path && !theirs.exists() {
-            fs::rename(&path, &theirs).with_context(|| format!("moving {} to {}", path.display(), theirs.display()))?;
+            store::rename(&path, &theirs)
+                .with_context(|| format!("moving {} to {}", path.display(), theirs.display()))?;
         }
     }
     let legacy = legacy_card(central, project);
     store::write_file(&path, &format!("# {project}\n\n{}\n", description.trim()))?;
     if let Some(legacy) = legacy {
-        fs::remove_file(&legacy).with_context(|| format!("removing {}", legacy.display()))?;
+        store::remove_file(&legacy).with_context(|| format!("removing {}", legacy.display()))?;
     }
     Ok(())
 }
@@ -458,7 +459,7 @@ pub fn rename(central: &Path, old: &str, new: &str) -> Result<()> {
         return store::write_file(&from, &format!("# {new}\n\n{}\n", body.trim()));
     }
     write_description(central, new, &body)?;
-    fs::remove_file(&from).with_context(|| format!("removing {}", from.display()))?;
+    store::remove_file(&from).with_context(|| format!("removing {}", from.display()))?;
     Ok(())
 }
 
@@ -467,7 +468,7 @@ pub fn rename(central: &Path, old: &str, new: &str) -> Result<()> {
 pub fn remove_description(central: &Path, project: &str) -> Result<bool> {
     let _lock = lock(central)?;
     let Some(path) = current_card(central, project) else { return Ok(false) };
-    fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
+    store::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
     Ok(true)
 }
 
