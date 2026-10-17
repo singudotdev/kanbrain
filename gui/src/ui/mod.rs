@@ -509,6 +509,7 @@ impl BrainView {
 
     /// Only Linux desktops have a primary selection.
     #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+    #[expect(clippy::unused_self, reason = "the same method as on Linux, where it keeps what it shared")]
     fn share_selection(&mut self, _: &mut Context<Self>) {}
 }
 
