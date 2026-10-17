@@ -4,7 +4,7 @@ use super::Key;
 use crate::text::editor::{LineInput, Pointer, TextEditor};
 use crate::text::event::{KeyCode, KeyEvent};
 use crate::text::merge::Merge;
-use kanbrain_core::model::{Comment, DecisionState, Kind, Status, Task};
+use kanbrain_core::model::{Comment, DecisionState, Kind, Status, Task, parse_tags};
 use std::path::PathBuf;
 
 /// The dialog or field that takes the keys; `Normal` leaves them to the board.
@@ -173,8 +173,10 @@ pub struct Form {
     pub target: FormTarget,
     /// The title field.
     pub title: LineInput,
-    /// The tags field: comma or space separated.
-    pub tags: LineInput,
+    /// The tags the entry is to have, each a chip in the tags field, in the order added.
+    pub tags: Vec<String>,
+    /// The tags field's box, typing the next tag: a comma or space turns what's before it into chips.
+    pub tag_input: LineInput,
     /// The tag highlighted in the tags field's list: `None` until a tag is typed or `↓` moves to one, so `enter`
     /// saves the form rather than picking a tag nobody pointed at. By name, as a reload that adds a tag ahead of it
     /// moves its row.
@@ -210,7 +212,7 @@ pub struct Form {
 pub struct Opened {
     /// As saved, on one line: the form's title, trimmed, is compared with it.
     pub title: String,
-    /// As saved, lowercase and without `#`: the field's, read by `parse_tags`, are compared with them.
+    /// As saved, lowercase and without `#`: what the form saves ([`Form::tags_to_save`]) is compared with them.
     pub tags: Vec<String>,
     /// Naming brains by index, as `Form::links` does: a change to the list of brains remaps both (`Mode::remap`).
     pub links: Vec<Key>,
@@ -222,7 +224,7 @@ impl Form {
     /// An empty form for a new entry of `kind` in the brain at `src`; a task starts in `status`.
     /// `pick_project` adds the field to put it in another brain instead.
     pub fn new(src: usize, kind: Kind, status: Status, pick_project: bool) -> Self {
-        let form = Self::filled(FormTarget::New(src, kind, status), "", "", Vec::new());
+        let form = Self::filled(FormTarget::New(src, kind, status), "", Vec::new(), Vec::new());
         Self { project: pick_project.then(Picker::default), ..form }
     }
 
@@ -231,18 +233,16 @@ impl Form {
     pub fn edit(key: Key, task: &Task, related: Vec<Key>) -> Self {
         let opened =
             Opened { title: task.title.clone(), tags: task.tags.clone(), links: related.clone(), status: task.status };
-        Self {
-            opened: Some(opened),
-            ..Self::filled(FormTarget::Edit(key), &task.title, &task.tags.join(", "), related)
-        }
+        Self { opened: Some(opened), ..Self::filled(FormTarget::Edit(key), &task.title, task.tags.clone(), related) }
     }
 
     /// A form for `target` with these fields, typing into the title.
-    fn filled(target: FormTarget, title: &str, tags: &str, links: Vec<Key>) -> Self {
+    fn filled(target: FormTarget, title: &str, tags: Vec<String>, links: Vec<Key>) -> Self {
         Self {
             target,
             title: LineInput::new(title),
-            tags: LineInput::new(tags),
+            tags,
+            tag_input: LineInput::default(),
             tag_sel: None,
             related: Picker::default(),
             links,
@@ -264,48 +264,58 @@ impl Form {
         }
     }
 
-    /// The tag being typed: while the tags field has the keys, the word the cursor ends, as it's saved (lowercase,
-    /// without `#`); empty after a separator, with text selected (which typing replaces), or in another field.
+    /// The tag being typed: while the tags field has the keys, what its box holds, as it's saved (lowercase,
+    /// without `#`); empty with text selected (which typing replaces), or in another field.
     pub fn typed_tag(&self) -> String {
-        if self.field != Field::Tags || self.tags.selection().is_some() {
+        if self.field != Field::Tags || self.tag_input.selection().is_some() {
             return String::new();
         }
-        let (start, _) = self.tag_span();
-        let word: String = self.tags.text().chars().skip(start).take(self.tags.cursor() - start).collect();
-        word.trim_start_matches('#').to_lowercase()
+        self.tag_input.text().trim_start_matches('#').to_lowercase()
     }
 
-    /// The tag the cursor is in, as a range of characters: from the separator before it to the one after.
-    fn tag_span(&self) -> (usize, usize) {
-        let text = self.tags.text();
-        let cursor = self.tags.cursor();
-        let start =
-            text.chars().take(cursor).enumerate().filter(|&(_, c)| separates(c)).last().map_or(0, |(i, _)| i + 1);
-        let end = text.chars().skip(cursor).position(separates).map_or(text.chars().count(), |i| cursor + i);
-        (start, end)
+    /// Whether the tag being typed is one the entry holds already: neither a new one nor one to pick.
+    pub fn typed_tag_held(&self) -> bool {
+        let typed = self.typed_tag();
+        !typed.is_empty() && self.tags.contains(&typed)
     }
 
-    /// Puts `tag` in place of the one the cursor is in (after the others, with text selected), then a separator and
-    /// the cursor, to type or pick the next.
+    /// Adds `tag` as a chip in place of the one being typed, unless the entry holds it already, emptying the box to
+    /// type or pick the next.
     pub fn put_tag(&mut self, tag: &str) {
-        let len = self.tags.text().chars().count();
-        let (start, end) = if self.tags.selection().is_some() { (len, len) } else { self.tag_span() };
-        let text = self.tags.text();
-        let before: String = text.chars().take(start).collect();
-        let after: String = text.chars().skip(end).collect();
-        let before = before.trim_end_matches(separates);
-        let head = if before.is_empty() { format!("{tag}, ") } else { format!("{before}, {tag}, ") };
-        let at = head.chars().count();
-        self.tags = LineInput::new(&format!("{head}{}", after.trim_start_matches(separates)));
-        self.tags.point(at, Pointer::Place);
+        if !self.tags.iter().any(|held| held == tag) {
+            self.tags.push(tag.to_string());
+        }
+        self.tag_input = LineInput::default();
         self.tag_sel = None;
+    }
+
+    /// Turns the tags before the box's last separator, typed or pasted, into chips; what follows it is still being
+    /// typed, the cursor where it was in it.
+    pub(super) fn split_tags(&mut self) {
+        let text = self.tag_input.text();
+        let Some((before, after)) = text.rsplit_once(separates) else { return };
+        let cut = text.chars().count() - after.chars().count();
+        let at = self.tag_input.cursor().saturating_sub(cut);
+        let (before, after) = (parse_tags(before), after.to_string());
+        for tag in before {
+            self.put_tag(&tag);
+        }
+        self.tag_input = LineInput::new(&after);
+        self.tag_input.point(at, Pointer::Place);
+    }
+
+    /// The tags saving gives the entry: the chips, then the one still being typed.
+    pub fn tags_to_save(&self) -> Vec<String> {
+        let mut tags = self.tags.clone();
+        tags.extend(parse_tags(self.tag_input.text()).into_iter().filter(|tag| !self.tags.contains(tag)));
+        tags
     }
 
     /// The field being typed into; `None` on the column picker, which takes no text.
     pub fn active(&self) -> Option<&LineInput> {
         match self.field {
             Field::Title => Some(&self.title),
-            Field::Tags => Some(&self.tags),
+            Field::Tags => Some(&self.tag_input),
             Field::Links => Some(&self.related.search),
             Field::Project => self.project.as_ref().map(|p| &p.search),
             Field::Status => None,
@@ -316,7 +326,7 @@ impl Form {
     pub fn active_mut(&mut self) -> Option<&mut LineInput> {
         match self.field {
             Field::Title => Some(&mut self.title),
-            Field::Tags => Some(&mut self.tags),
+            Field::Tags => Some(&mut self.tag_input),
             Field::Links => Some(&mut self.related.search),
             Field::Project => self.project.as_mut().map(|p| &mut p.search),
             Field::Status => None,

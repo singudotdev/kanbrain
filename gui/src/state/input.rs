@@ -390,6 +390,7 @@ impl Board {
                 let changed = form.active_mut().is_some_and(|input| input.on_key(key));
                 // Not as the cursor merely moves.
                 if changed && form.field == Field::Tags {
+                    form.split_tags();
                     form.tag_sel = self.tag_highlight(&form);
                 }
                 self.mode = Mode::Form(form);
@@ -403,17 +404,19 @@ impl Board {
     fn tag_highlight(&self, form: &Form) -> Option<String> {
         let typed = form.typed_tag();
         let tags = self.form_tags(form).1;
-        let partial = !typed.is_empty() && !tags.iter().any(|(tag, _)| *tag == typed);
+        let partial = !typed.is_empty() && !form.typed_tag_held() && !tags.iter().any(|(tag, _)| *tag == typed);
         partial.then(|| tags.into_iter().map(|(tag, _)| tag).find(|tag| tag.starts_with(typed.as_str()))).flatten()
     }
 
-    /// After the tags field's text changed other than by a key (pasted, cut): its list's highlight follows, as
-    /// typing it would.
+    /// After the tags field's text changed other than by a key (pasted, cut): the tags before a separator become
+    /// chips and its list's highlight follows, as typing it would.
     fn retag(&mut self) {
-        let Mode::Form(form) = &self.mode else { return };
+        let Mode::Form(form) = &mut self.mode else { return };
         if form.field != Field::Tags {
             return;
         }
+        form.split_tags();
+        let Mode::Form(form) = &self.mode else { return };
         let sel = self.tag_highlight(form);
         if let Mode::Form(form) = &mut self.mode {
             form.tag_sel = sel;
