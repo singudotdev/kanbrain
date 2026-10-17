@@ -229,3 +229,55 @@ fn a_write_that_fails_leaves_the_file_as_it_was_and_no_temporary() {
         assert_eq!(leftovers(dir.path()), 0);
     }
 }
+
+/// An operation that fails with `kind` its first `fails` calls, then succeeds; and how many calls it got.
+fn failing(kind: ErrorKind, fails: u32) -> (impl FnMut() -> std::io::Result<u32>, std::rc::Rc<std::cell::Cell<u32>>) {
+    let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+    let counted = calls.clone();
+    let op = move || {
+        counted.set(counted.get() + 1);
+        if counted.get() <= fails { Err(std::io::Error::from(kind)) } else { Ok(counted.get()) }
+    };
+    (op, calls)
+}
+
+#[test]
+fn a_busy_file_is_tried_again_until_it_is_let_go() {
+    let (op, calls) = failing(ErrorKind::PermissionDenied, 2);
+    assert_eq!(retry_while_busy(&[Duration::ZERO; 3], op).unwrap(), 3);
+    assert_eq!(calls.get(), 3);
+}
+
+#[test]
+fn a_file_busy_past_the_budget_gives_the_last_error() {
+    let (op, calls) = failing(ErrorKind::PermissionDenied, 10);
+    let error = retry_while_busy(&[Duration::ZERO; 3], op).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::PermissionDenied);
+    assert_eq!(calls.get(), 4, "the first try and one per delay");
+}
+
+#[test]
+fn only_a_busy_file_is_tried_again() {
+    let (op, calls) = failing(ErrorKind::NotFound, 1);
+    assert_eq!(retry_while_busy(&[Duration::ZERO; 3], op).unwrap_err().kind(), ErrorKind::NotFound);
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn only_windows_waits_for_a_busy_file() {
+    let (op, calls) = failing(ErrorKind::PermissionDenied, u32::MAX);
+    assert!(retry_while_busy(busy_delays(), op).is_err());
+    let tries = if cfg!(windows) { BUSY_DELAYS.len() + 1 } else { 1 };
+    assert_eq!(calls.get() as usize, tries, "elsewhere a denied permission is a real one");
+    let total: Duration = BUSY_DELAYS.iter().sum();
+    assert!(total < Duration::from_millis(500), "a command waits well under a second: {total:?}");
+}
+
+#[test]
+fn a_sharing_violation_is_a_busy_file_on_windows_only() {
+    // ERROR_SHARING_VIOLATION, which std reports as uncategorized; elsewhere 32 is EPIPE.
+    let shared = std::io::Error::from_raw_os_error(32);
+    assert_eq!(busy(&shared), cfg!(windows));
+    assert!(busy(&std::io::Error::from(ErrorKind::PermissionDenied)));
+    assert!(!busy(&std::io::Error::from(ErrorKind::NotFound)));
+}

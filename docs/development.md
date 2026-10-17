@@ -374,7 +374,7 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | `migrate` | every format after the first having its step; an old brain backed up, then migrated step by step and only once, resuming from where it is; a brain in a newer format refused, read or written |
 | `cli::manage` | two folders named alike getting distinct repository names (`--repo` refused when taken); renaming a repository rewriting its siblings' links; renaming a project with its card and repositories; moving a repository dropping its links to the old project; removing keeping or deleting the tasks, and a whole project |
 | `model` | file round trip, what a newer version wrote kept, hand-typed history, missing id, status changes recorded once, search matching, tags, slugs, heading rules, timestamps, ages, overlapping time counted once |
-| `store` | renaming on title change, unreadable files become warnings, `tags.md` isn't a task, whole-file writes |
+| `store` | renaming on title change, unreadable files become warnings, `tags.md` isn't a task, whole-file writes, a busy file tried again (on Windows only) |
 | `tags` | no color repeats until the palette is used up, `tags.md` round trip, custom colors |
 | `period`, `export` | period bounds and stepping, report tables |
 | `enums` | generated `ALL` / `position` / `next`, `parse` as the inverse of `as_str` |

@@ -78,7 +78,7 @@ pub fn undo(changes: &[Change]) -> Result<()> {
     for change in changes.iter().rev() {
         match &change.before {
             Some(text) => write_file(&change.path, text)?,
-            None => fs::remove_file(&change.path).with_context(|| format!("removing {}", change.path.display()))?,
+            None => remove_file(&change.path).with_context(|| format!("removing {}", change.path.display()))?,
         }
     }
     Ok(())
@@ -277,7 +277,7 @@ impl Store {
             && Some(&old) != task.path.as_ref()
         {
             // The old name only matters if it still exists; a failure here leaves a stale copy, not lost data.
-            let _ = fs::remove_file(old);
+            let _ = remove_file(&old);
         }
         Ok(())
     }
@@ -289,7 +289,7 @@ impl Store {
             bail!("refusing to delete {}: not in {}", path.display(), self.dir.display());
         }
         self.remember(path);
-        fs::remove_file(path).with_context(|| format!("deleting {}", path.display()))
+        remove_file(path).with_context(|| format!("deleting {}", path.display()))
     }
 
     /// The highest id given so far, as `last-id` keeps it; 0 when it's missing (a folder from an older
@@ -478,11 +478,57 @@ pub(crate) fn write_file(path: &Path, text: &str) -> Result<()> {
         file.write_all(text.as_bytes())?;
         file.sync_all()
     });
-    if let Err(e) = written.and_then(|()| fs::rename(&tmp, path)) {
-        let _ = fs::remove_file(&tmp);
+    if let Err(e) = written.and_then(|()| retry_while_busy(busy_delays(), || fs::rename(&tmp, path))) {
+        let _ = remove_file(&tmp);
         return Err(e).with_context(|| format!("writing {}", path.display()));
     }
     Ok(())
+}
+
+/// How long to wait before each new try at a file another program holds, 310 ms in all: a scan holds it for a
+/// few milliseconds, and a command still fails fast when the file stays held.
+const BUSY_DELAYS: [Duration; 5] = [
+    Duration::from_millis(10),
+    Duration::from_millis(20),
+    Duration::from_millis(40),
+    Duration::from_millis(80),
+    Duration::from_millis(160),
+];
+
+/// The waits of [`retry_while_busy`] on this system. Only Windows has any: there a file another program has open
+/// (an antivirus, the search indexer, an editor, the app reading it) can't be replaced or deleted, and the rename
+/// or delete fails (see [`busy`]) until it lets go. Elsewhere it can, so a denied permission is a real one and fails
+/// at once.
+fn busy_delays() -> &'static [Duration] {
+    if cfg!(windows) { &BUSY_DELAYS } else { &[] }
+}
+
+/// Runs `op`, and runs it again after each of `delays` while it fails as a file another program holds makes it fail
+/// on Windows (see [`busy_delays`]). Any other error, or the last try's, is returned.
+fn retry_while_busy<T>(delays: &[Duration], mut op: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+    let mut delays = delays.iter();
+    loop {
+        match op() {
+            Err(e) if busy(&e) => match delays.next() {
+                Some(delay) => std::thread::sleep(*delay),
+                None => return Err(e),
+            },
+            result => return result,
+        }
+    }
+}
+
+/// Whether `error` may be a file another program holds: a denied permission (`ERROR_ACCESS_DENIED` on Windows), or on
+/// Windows `ERROR_SHARING_VIOLATION`, which std leaves uncategorized (32 is another error elsewhere).
+fn busy(error: &std::io::Error) -> bool {
+    const ERROR_SHARING_VIOLATION: i32 = 32;
+    error.kind() == ErrorKind::PermissionDenied
+        || (cfg!(windows) && matches!(error.raw_os_error(), Some(ERROR_SHARING_VIOLATION)))
+}
+
+/// Deletes the file at `path`, waiting a little for a program holding it to let go (see [`retry_while_busy`]).
+fn remove_file(path: &Path) -> std::io::Result<()> {
+    retry_while_busy(busy_delays(), || fs::remove_file(path))
 }
 
 /// The name `task`'s file is saved under: `0005-fix-login.md`.

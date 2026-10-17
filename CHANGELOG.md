@@ -17,6 +17,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The kanban app's new / edit form shows the tags as chips in their colors, each with × to take it off, instead of
   text: a comma or space after a tag typed, or picking one from the list, adds it as a chip.
 
+### Fixed
+
+- On Windows, a `kb` command or the app no longer fails when an antivirus, the search indexer, an editor or the app
+  itself has a brain's file open just as it's replaced or deleted (`Access is denied`, `being used by another
+  process`): the rename or delete is tried again for up to about a third of a second.
+
 ## [0.6.2] - 2026-10-16
 
 ### Added
