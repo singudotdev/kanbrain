@@ -171,7 +171,7 @@ core/src/            kanbrain-core: shared by both programs
 │   ├── claude.rs    the Claude Code hooks `init` merges into .claude/settings.local.json (and `deinit` takes out)
 │   ├── hook.rs      `kb hook prompt|stop|edit|tool`: the hooks' checks that hold an agent to describing the project first, and to `kb` for the brain's files, and tell it of the user's comments
 │   ├── entries.rs   agent commands by id: `add`, `show`, `search`, status changes, `comment`, `ask`, `propose`, `accept`/`reject`, `describe`, `rename`, `tag`, `link`, `context`
-│   ├── completions.rs `completions bash|zsh|fish`: the scripts, and `complete`, the ids, projects and tags they offer
+│   ├── completions.rs `completions bash|zsh|fish|powershell`: the scripts, and `complete`, the ids, projects and tags they offer
 │   ├── update.rs    `update`, and the app's: the latest release asked for, the installer run again for the apps beside this one, into the same folder (a macOS bundle's says which), once no agent has a task in doing
 │   ├── init.rs      `init`: the repository's .brain/ and card, its registration, the "Project memory" section in CLAUDE.md / AGENTS.md; `init --all` refreshes every registered repository's; `deinit` undoes it
 │   └── manage.rs    renaming a project or a repository, moving a repository to another project, removing them (`deinit --purge`, `project remove`), rewriting or dropping the links between repositories
@@ -395,7 +395,9 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 `init` to `context`, text read from stdin with `-`, one-line JSON, errors on stderr with a failing exit code and the
 usage, `--project` from another folder, completion candidates, the hooks asking until the project is described, the edit
 hook refusing a write to `.brain/` (and a `~` path read as the home folder), `tag` and `rename` and what they say when
-nothing changed, bash running `kb completions bash` itself to complete `tag`'s id and then its signed tags, and sixteen
+nothing changed, bash running `kb completions bash` itself to complete `tag`'s id and then its signed tags, PowerShell
+completing through `kb completions powershell` (`pwsh`, and on Windows also 5.1; skipped only off CI without `pwsh`),
+quoting what it inserts and reading `kb`'s UTF-8 under any code page, and sixteen
 commands run at once losing no change and no id (the brain's write lock). They're Cargo integration tests
 (`CARGO_BIN_EXE_kb`), so they see only what the binary prints.
 

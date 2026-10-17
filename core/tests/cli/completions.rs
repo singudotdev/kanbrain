@@ -38,12 +38,13 @@ fn ids_come_open_tasks_first_and_projects_by_the_names_project_takes() {
 
 #[test]
 fn scripts_name_the_program() {
-    for shell in [Shell::Bash, Shell::Zsh, Shell::Fish] {
+    for shell in [Shell::Bash, Shell::Zsh, Shell::Fish, Shell::Powershell] {
         let text = script(shell, "kanbrain");
         assert!(text.contains("kanbrain complete ids") && !text.contains("kb "), "{text}");
     }
     assert!(script(Shell::Bash, "kanbrain").contains("complete -F _kanbrain kanbrain"));
     assert!(script(Shell::Fish, "kanbrain").contains("function __kanbrain_words"));
+    assert!(script(Shell::Powershell, "kanbrain").contains("-CommandName kanbrain, kanbrain.exe"));
 }
 
 #[test]

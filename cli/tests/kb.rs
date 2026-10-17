@@ -256,6 +256,89 @@ fn bash_completes_tag_with_the_id_then_signed_tags() {
     assert_eq!(completes(&["kb", "rename", ""]), "1");
 }
 
+/// What PowerShell's completion of `kb` offers for `line`, completed where its `|` is (its end without one), in `dir`:
+/// each match's text, then its tooltip after a tab, one per line. `shell` is `pwsh` (7) or Windows' `powershell`
+/// (5.1). The console's output encoding is set to Latin-1 meanwhile, as Windows' OEM code pages read UTF-8 wrong.
+/// `None` without the shell, which GitHub's runners have on every OS: CI never skips.
+fn powershell_completes(shell: &str, dir: &Path, central: &Path, line: &str) -> Option<String> {
+    let bin = Path::new(env!("CARGO_BIN_EXE_kb")).parent().unwrap();
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let paths = std::iter::once(bin.to_path_buf()).chain(std::env::split_paths(&path));
+    let at = line.find('|').unwrap_or(line.len());
+    let script = r#"$ErrorActionPreference = 'Stop'
+kb completions powershell | Out-String | Invoke-Expression
+[Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding('iso-8859-1')
+$found = (TabExpansion2 -inputScript $env:KB_LINE -cursorColumn ([int]$env:KB_AT)).CompletionMatches
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$found | ForEach-Object { "$($_.CompletionText)`t$($_.ToolTip)" }"#;
+    let output = match Command::new(shell)
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .current_dir(dir)
+        .env("KANBRAIN_DIR", central)
+        .env("PATH", std::env::join_paths(paths).unwrap())
+        .env("KB_LINE", line.replacen('|', "", 1))
+        .env("KB_AT", at.to_string())
+        .output()
+    {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound && std::env::var_os("CI").is_none() => return None,
+        output => output.unwrap(),
+    };
+    let stdout = ok(&output);
+    assert!(output.stderr.is_empty(), "nothing over the line: {}", String::from_utf8_lossy(&output.stderr));
+    Some(stdout.replace("\r\n", "\n").trim_end().to_string())
+}
+
+#[test]
+fn powershell_completes_commands_ids_and_tag_with_the_id_then_signed_tags() {
+    let (central, dir, other) = (tempdir(), tempdir(), tempdir());
+    ok(&kb(other.path(), central.path(), &["init", "my app"], ""));
+    let tags = ["--tag", "ui", "--tag", "bug", "--tag", "café", "--tag", "o'k"];
+    ok(&kb(dir.path(), central.path(), &[&["add"][..], &tags, &["Fix", "café", "login"]].concat(), ""));
+    // Windows PowerShell, 5.1, is on every Windows; pwsh, 7, is where it's installed.
+    let shells: &[&str] = if cfg!(windows) { &["pwsh", "powershell"] } else { &["pwsh"] };
+    for &shell in shells {
+        let completes = |line: &str| powershell_completes(shell, dir.path(), central.path(), line);
+        let Some(shown) = completes("kb sh") else {
+            eprintln!("no {shell} here: its completion isn't checked");
+            continue;
+        };
+        assert_eq!(shown, "show\tshow", "{shell}");
+        let texts = |line: &str| {
+            let lines = completes(line).unwrap();
+            lines.lines().map(|l| l.split('\t').next().unwrap().to_string()).collect::<Vec<_>>().join(" ")
+        };
+        // Windows PowerShell 5.1 doesn't ask a program's completer for a word starting with a single `-`, which it
+        // takes for a parameter: no tag to take off. `--` options it does, as PowerShell 7 does both.
+        let dashed = |expected: &'static str| if shell == "powershell" { "" } else { expected };
+        let cases = [
+            ("kb show ", "1", "the id"),
+            ("kb tag ", "1", "the id first"),
+            ("kb tag --project central ", "1", "options aren't the id"),
+            ("kb tag 1 ", "+bug -bug +café -café '+o''k' '-o''k' +ui -ui", "quoted as needed"),
+            ("kb tag 1 +ui -b", dashed("-bug"), "a tag to take off"),
+            ("kb tag 1 +|u", "+ui", "in the middle of a word, by all of it"),
+            ("kb --project ce|ntral show", "central", "in the middle of a word, after an option"),
+            ("kb rename ", "1", "the id"),
+            ("kb add --tag ", "bug café 'o''k' ui", "the tags in use"),
+            ("kb add --t", "--tag", "options"),
+            ("kb --project ", "central 'my app'", "the projects"),
+            ("kb --project 'my", "'my app'", "a quote begun"),
+            ("kb report --group ", "task tag", "the groups"),
+            ("kb completions ", "bash zsh fish powershell", "the shells"),
+            ("kb.exe sh", "show", "as Windows names it too"),
+            ("kb --project nowhere show ", "", "kb's error isn't shown, nothing is offered"),
+        ];
+        // Every case, before failing: a shell CI alone runs shows all it does differently at once.
+        let wrong: Vec<_> = cases
+            .iter()
+            .map(|&(line, expected, why)| (line, texts(line), expected, why))
+            .filter(|(_, got, expected, _)| got != expected)
+            .collect();
+        assert!(wrong.is_empty(), "{shell}: (line, offered, expected, why) {wrong:#?}");
+        assert_eq!(completes("kb show ").unwrap(), "1\tFix café login", "{shell}: the id, its title beside it");
+    }
+}
+
 #[test]
 fn words_that_look_like_options_are_text_after_a_double_dash_or_inside_it() {
     let (central, repo) = (tempdir(), tempdir());

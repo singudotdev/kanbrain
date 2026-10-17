@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- `kb completions powershell`: tab completion in PowerShell (5.1 and 7, on Windows, Linux and macOS), as bash, zsh
+  and fish have it, each id's title as its tooltip. Load it from `$PROFILE` with
+  `kb completions powershell | Out-String | Invoke-Expression`. Windows PowerShell 5.1 completes no word starting
+  with a single `-` (a tag to take off), which it takes for a parameter.
+
 ### Changed
 
 - The kanban app's new / edit form shows the tags as chips in their colors, each with × to take it off, instead of

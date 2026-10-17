@@ -72,7 +72,7 @@ context: write commands reply with one line, like `#4 Fix login 500 (doing) #aut
 | `kb status` | the running tasks and their clocks, for status bars |
 | `kb report [hour\|day\|week\|month] [--group task\|tag] [--tag T] [--save]` | tracked time as markdown |
 | `kb update` | install the latest release over this one |
-| `kb completions bash\|zsh\|fish` | tab completion of commands, ids, projects and tags |
+| `kb completions bash\|zsh\|fish\|powershell` | tab completion of commands, ids, projects and tags |
 
 The entry commands and `list` accept `--json` (all but `wait`, `context` and `project`). `--project NAME` runs a
 command on another registered project from any folder. Outside any project, entries go to the central folder

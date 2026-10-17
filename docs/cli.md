@@ -30,7 +30,7 @@ kb add | show | search | start | park | done | todo | comment | ask | wait | pro
                  entries by id, for agents and scripts (see For coding agents)
 kb path      print the data directory in use (a project's .brain/ inside it)
 kb update    install the latest release over this one (and the other app, if it's beside it)
-kb completions bash|zsh|fish
+kb completions bash|zsh|fish|powershell
                  print a tab completion script for the shell (commands, ids, projects, tags)
 kb --version print the version (also -V)
 kb --help    show usage (also with no arguments, or `kb help`); `kb COMMAND --help` or `kb help COMMAND` shows one
@@ -259,15 +259,21 @@ refused with "install folder must be inside your home folder": reinstall it ther
 ## `kb completions`
 
 Prints a script that completes `kb` in your shell: the commands and their options, entries' ids (open tasks
-first; fish also shows each title), project names after `--project` and tags after `--tag`. Ids and tags come from
-the brain the command line names, so `kb --project blog done <tab>` offers blog's. Load it from your shell's
-startup:
+first; fish and PowerShell also show each title), project names after `--project` and tags after `--tag`. Ids and
+tags come from the brain the command line names, so `kb --project blog done <tab>` offers blog's. Load it from your
+shell's startup:
 
 | shell | add |
 | --- | --- |
 | bash, in `~/.bashrc` | `source <(kb completions bash)` |
 | zsh, in `~/.zshrc` | `source <(kb completions zsh)` |
 | fish | `kb completions fish > ~/.config/fish/completions/kb.fish` |
+| PowerShell (Windows, or `pwsh` anywhere), in `$PROFILE` | `kb completions powershell \| Out-String \| Invoke-Expression` |
+
+Windows PowerShell (5.1) and PowerShell 7 each have their own `$PROFILE`: add the line to the one you use, or both.
+Windows PowerShell doesn't run a profile until scripts are allowed, e.g. with
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, and doesn't complete a word starting with a single `-` (a tag
+to take off, `kb tag 1 -bu`): it takes it for a parameter and never asks a program's completer. PowerShell 7 does.
 
 `kanbrain completions SHELL` prints the same for `kanbrain`, which takes the same commands.
 
