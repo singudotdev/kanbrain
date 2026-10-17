@@ -1,5 +1,6 @@
 //! The lines both the editor and `kb` changed, shown in place of the editor's text when a save stops over them: each
-//! conflict with yours beside theirs, to pick one or both.
+//! conflict with yours beside theirs, to pick one or both. Every side's and settled run's lines are a text of their
+//! own the mouse selects.
 
 use super::dialog;
 use super::editor::{edited_name, title};
@@ -7,7 +8,8 @@ use crate::state::{Board, Edit, Target};
 use crate::text::event::KeyCode;
 use crate::text::merge::{Conflict, Merge, Pick, Region};
 use crate::ui::drawer::change_label;
-use crate::ui::theme::{self, ACCENT, BORDER};
+use crate::ui::shown;
+use crate::ui::theme::{self, ACCENT, BORDER, Line};
 use crate::ui::widgets::{Kind, button, dim_small, segment, segmented, tooltip};
 use crate::ui::{BrainView, action};
 use gpui::{ClickEvent, Context, Div, ScrollHandle, Stateful, div, prelude::*, px, relative, rgb};
@@ -27,13 +29,13 @@ pub(super) fn draw(
     let mut rows = Vec::with_capacity(merge.regions.len());
     for (at, region) in merge.regions.iter().enumerate() {
         rows.push(match region {
-            Region::Settled(text) => settled(text),
+            Region::Settled(text) => settled(board, at, text, cx),
             Region::Conflict(conflict) => {
                 let current = index == merge.at;
                 if follow && current {
                     scroll.scroll_to_item(at);
                 }
-                let row = conflict_box(conflict, index, count, current, cx);
+                let row = conflict_box(board, conflict, index, count, current, cx);
                 index += 1;
                 row
             }
@@ -101,7 +103,7 @@ pub(super) fn side_note(lines: &str) -> Option<&'static str> {
 
 /// Lines as a region holds them, each ending in a break, as a text to draw: without the last line's break, which
 /// would draw an empty line after it, but with the empty lines it holds.
-pub(super) fn shown(lines: &str) -> String {
+pub(super) fn as_drawn(lines: &str) -> String {
     lines.strip_suffix('\n').unwrap_or(lines).to_string()
 }
 
@@ -118,15 +120,21 @@ pub(super) fn changed_by(board: &Board, target: Target) -> String {
     format!("{said}. The lines only one of you changed are merged; pick where you both changed the same lines.")
 }
 
-/// Lines the merge settled, as they'll be; a single empty one keeps its height.
-fn settled(text: &str) -> Div {
-    let text = shown(text);
-    div().text_color(rgb(theme::DIM)).child(if text.is_empty() { " ".to_string() } else { text })
+/// Lines the merge settled, the `at`th region, as they'll be; a single empty one keeps its height.
+fn settled(board: &Board, at: usize, text: &str, cx: &mut Context<BrainView>) -> Div {
+    shown::text(board, format!("merge settled {at}"), Line::raw(as_drawn(text)), cx).text_color(rgb(theme::DIM))
 }
 
 /// Conflict `index` of `count`: yours beside theirs, each picked with a click, and the picks as segments. The one
 /// being picked (`current`) stands out.
-fn conflict_box(conflict: &Conflict, index: usize, count: usize, current: bool, cx: &mut Context<BrainView>) -> Div {
+fn conflict_box(
+    board: &Board,
+    conflict: &Conflict,
+    index: usize,
+    count: usize,
+    current: bool,
+    cx: &mut Context<BrainView>,
+) -> Div {
     let picks = [("Yours (M)", Pick::Mine), ("Theirs (T)", Pick::Theirs), ("Both (B)", Pick::Both)];
     let picks = picks.into_iter().enumerate().map(|(at, (label, pick))| {
         segment(("merge-pick", index * picks.len() + at), label, conflict.pick == Some(pick))
@@ -160,13 +168,25 @@ fn conflict_box(conflict: &Conflict, index: usize, count: usize, current: bool, 
             div()
                 .flex()
                 .gap_2()
-                .child(side(("merge-mine", index), "Yours", &conflict.mine, mine, index, Pick::Mine, cx))
-                .child(side(("merge-theirs", index), "Theirs", &conflict.theirs, theirs, index, Pick::Theirs, cx)),
+                .child(side(board, ("merge-mine", index), "Yours", &conflict.mine, mine, index, Pick::Mine, cx))
+                .child(side(
+                    board,
+                    ("merge-theirs", index),
+                    "Theirs",
+                    &conflict.theirs,
+                    theirs,
+                    index,
+                    Pick::Theirs,
+                    cx,
+                )),
         )
 }
 
-/// One side of conflict `index`: its lines, or what they are if they show nothing, outlined once `taken`.
+/// One side of conflict `index`: its lines, or what they are if they show nothing, outlined once `taken`. A click
+/// picks it, but not one ending a drag that selected some of its lines.
+#[expect(clippy::too_many_arguments, reason = "the board and the window, besides what the side shows")]
 fn side(
+    board: &Board,
     id: (&'static str, usize),
     label: &str,
     text: &str,
@@ -175,9 +195,10 @@ fn side(
     pick: Pick,
     cx: &mut Context<BrainView>,
 ) -> Stateful<Div> {
+    let region = format!("{} {index}", id.0);
     let lines = match side_note(text) {
         Some(note) => div().text_color(rgb(theme::DIM)).italic().child(note),
-        None => div().child(shown(text)),
+        None => shown::text(board, region.clone(), Line::raw(as_drawn(text)), cx),
     };
     div()
         .id(id)
@@ -196,5 +217,10 @@ fn side(
         .hover(|s| s.bg(rgb(theme::HOVER)))
         .child(dim_small(label.to_string()).font_family(theme::UI_FONT))
         .child(lines)
-        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.pick_conflict(index, pick))))
+        // A click picks it, so a double-click picks it too, then selects the word; a drag that selected doesn't.
+        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+            if !this.board.selects_shown(&region) {
+                this.act(cx, |b| b.pick_conflict(index, pick));
+            }
+        }))
 }

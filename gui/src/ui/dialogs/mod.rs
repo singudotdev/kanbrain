@@ -21,6 +21,7 @@ mod tell;
 
 use crate::state::{Board, Confirm, Mode};
 use crate::text::event::KeyCode;
+use crate::ui::shown::Selectable;
 use crate::ui::theme::{self, BORDER, DIM_STYLE, Line, Span, Style};
 use crate::ui::widgets::Kind;
 use crate::ui::{BrainView, Scrolls, action, truncate, when};
@@ -146,7 +147,9 @@ fn draw_confirm(board: &Board, confirm: &Confirm, cx: &mut Context<BrainView>) -
             (format!("Update to {version}?"), lines, ("Update", Kind::Primary))
         }
     };
-    let content = div().flex().flex_col().gap_1().children(lines.into_iter().map(Line::render));
+    let mut text = Selectable::new(board, "confirm");
+    let lines: Vec<_> = lines.into_iter().map(|line| text.line(line)).collect();
+    let content = text.finish(div().flex().flex_col().gap_1().children(lines), cx);
     let buttons = vec![
         action("cancel", "Cancel", Kind::Secondary, KeyCode::Esc, cx),
         action("confirm", confirm_label, confirm_kind, KeyCode::Char('y'), cx),

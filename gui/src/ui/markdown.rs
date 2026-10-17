@@ -1,11 +1,13 @@
 //! Markdown drawn as formatted text: descriptions, comments, and a project's description and role.
 //! The files keep the text as written (the editor shows it raw); only how it's drawn changes.
 //!
-//! [`blocks`] parses the text into [`Block`]s, plain data that tests can check; [`render`] draws them.
-//! Covered: paragraphs, headings, bold, italic, strikethrough, inline code, links (a click opens them),
-//! lists and task lists, quotes, code blocks, tables and rules. A single line break is kept as one,
+//! [`blocks`] parses the text into [`Block`]s, plain data that tests can check; [`render`] draws them, as one text
+//! the mouse selects ([`Selectable`]): each paragraph, heading, code line and cell a piece of it, a list's markers
+//! and the rules left out. Covered: paragraphs, headings, bold, italic, strikethrough, inline code, links (a click
+//! opens them), lists and task lists, quotes, code blocks, tables and rules. A single line break is kept as one,
 //! as comments and notes are written line by line, not wrapped like prose.
 
+use super::shown::Selectable;
 use super::theme::{ACCENT, BORDER, DIM, EDITOR_FONT, INPUT, Line, SURFACE, Span, Style, TEXT};
 use gpui::{AnyElement, Div, ElementId, FontWeight, InteractiveText, SharedString, div, prelude::*, px, rgb};
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
@@ -273,19 +275,21 @@ impl Builder {
     }
 }
 
-/// `text` drawn as markdown. `id` names its links' elements, so it must differ between the texts
-/// one view shows (`description`, `comment 3`).
-pub fn render(id: impl Into<SharedString>, text: &str) -> Div {
-    let mut links = Links { id: id.into(), count: 0 };
+/// `text` drawn as markdown, its pieces those of `shown`, which the caller finishes. `id` names its links' elements,
+/// so it must differ between the texts one view shows (`description`, `comment 3`).
+pub fn render(id: impl Into<SharedString>, text: &str, shown: &mut Selectable) -> Div {
+    let mut links = Links { id: id.into(), count: 0, shown };
     draw(blocks(text), &mut links).text_size(px(13.)).text_color(rgb(TEXT))
 }
 
-/// Numbers the texts with links, each an element of its own.
-struct Links {
+/// Numbers the texts with links, each an element of its own, and takes every piece drawn into the text selected.
+struct Links<'s, 'a> {
     /// The text's id, which theirs start with.
     id: SharedString,
     /// How many have been numbered.
     count: usize,
+    /// The text the mouse selects, of every piece drawn.
+    shown: &'s mut Selectable<'a>,
 }
 
 /// The blocks, one under the other.
@@ -297,7 +301,7 @@ fn draw(blocks: Vec<Block>, links: &mut Links) -> Div {
 fn draw_block(block: Block, links: &mut Links) -> AnyElement {
     match block {
         Block::Text { line, links: urls, heading } => {
-            let text = line.render();
+            let text = links.shown.line(line);
             let text = if urls.is_empty() {
                 text.into_any_element()
             } else {
@@ -325,7 +329,7 @@ fn draw_block(block: Block, links: &mut Links) -> AnyElement {
             .bg(rgb(INPUT))
             .font_family(EDITOR_FONT)
             .text_size(px(12.))
-            .children(code.lines().map(|l| Line::raw(l).render())),
+            .children(code.lines().map(|l| links.shown.line(Line::raw(l)))),
         Block::Quote(blocks) => draw(blocks, links).pl_3().border_l_2().border_color(rgb(BORDER)).text_color(rgb(DIM)),
         Block::List(items) => div().flex().flex_col().gap_0p5().children(items.into_iter().map(|(marker, blocks)| {
             div()

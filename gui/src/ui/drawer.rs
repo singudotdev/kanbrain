@@ -1,9 +1,11 @@
 //! The details drawer: everything about the selected entry, beside the board or list, with a button
-//! for each thing that can be done to it.
+//! for each thing that can be done to it. Its text is selected with the mouse to copy, each part on its own: the
+//! title, the tags, the question, the description, each comment and change, the history.
 
+use super::shown::{self, Selectable};
 use super::theme::{self, BORDER, DIM_STYLE, Line, Span};
 use super::widgets::{
-    self, Kind, card, dim, dim_small, entry_pill, section, segment, segmented, small, state_pill, tag_chips,
+    self, Kind, card, dim, dim_small, entry_pill, labeled_chip, section, segment, segmented, small, state_pill,
 };
 use super::{BrainView, action, entry_action, markdown, when};
 use crate::state::{Board, COLUMNS, Key, Target, When};
@@ -30,7 +32,7 @@ pub fn draw(board: &Board, key: Key, task: &Task, scroll: &ScrollHandle, cx: &mu
         .child(heading(board, key, task, cx))
         .children(asked_block(board, key, task, cx))
         .children(task.is_task().then(|| status_block(board, key, task, cx)))
-        .children(task.is_task().then(|| time_block(task)))
+        .children(task.is_task().then(|| time_block(board, key, task, cx)))
         .child(
             div()
                 .flex()
@@ -55,10 +57,10 @@ pub fn draw(board: &Board, key: Key, task: &Task, scroll: &ScrollHandle, cx: &mu
                 .child(named(board, "delete", 'x', Kind::Danger, cx)),
         )
         .child(divider())
-        .child(description_block(task, cx))
+        .child(description_block(board, key, task, cx))
         .child(related_block(board, key, cx))
-        .child(comments_block(key, task, cx))
-        .children(task.is_task().then(|| history_block(task)));
+        .child(comments_block(board, key, task, cx))
+        .children(task.is_task().then(|| history_block(board, key, task, cx)));
     card().child(content)
 }
 
@@ -89,9 +91,31 @@ fn heading(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView>) ->
                         .debug_selector(|| "close drawer".into()),
                 ),
         )
-        .child(div().text_size(px(18.)).font_weight(FontWeight::SEMIBOLD).child(task.title.clone()))
-        .child(dim_small(format!("created {}", when(task.created))))
-        .when(!task.tags.is_empty(), |d| d.child(tag_chips(board, &task.tags).pt_1()))
+        .child(
+            shown::text(board, region(key, "title"), Line::raw(&task.title), cx)
+                .text_size(px(18.))
+                .font_weight(FontWeight::SEMIBOLD),
+        )
+        .child(small_dim_text(board, region(key, "created"), format!("created {}", when(task.created)), cx))
+        .when(!task.tags.is_empty(), |d| d.child(tags(board, key, &task.tags, cx).pt_1()))
+}
+
+/// The name of the text `what` of `key`'s entry, among those the window shows.
+fn region(key: Key, what: &str) -> String {
+    format!("{}/{} {what}", key.src, key.id)
+}
+
+/// Secondary text in the small size, as [`dim_small`], the text `region` the mouse selects.
+fn small_dim_text(board: &Board, region: String, text: String, cx: &mut Context<BrainView>) -> Div {
+    dim_small(shown::text(board, region, Line::raw(text), cx))
+}
+
+/// The entry's tags as chips in a row that wraps, as [`widgets::tag_chips`], selected with the mouse as text: a tag
+/// on each line.
+fn tags(board: &Board, key: Key, tags: &[String], cx: &mut Context<BrainView>) -> Div {
+    let mut text = Selectable::new(board, region(key, "tags"));
+    let chips: Vec<_> = tags.iter().map(|tag| labeled_chip(board, tag, text.line(Line::raw(tag)))).collect();
+    text.finish(div().flex().flex_wrap().gap_1().children(chips), cx)
 }
 
 /// The question an agent asked and the task waits on, with a button to answer it and one to open each
@@ -120,12 +144,15 @@ fn asked_block(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView>
                 .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.open_entry(k))))
             });
             let buttons = div().flex().flex_wrap().gap_2().children(decide.into_iter().map(small)).children(open);
+            let mut text = Selectable::new(board, region(key, "question"));
+            let asks = text.line(Line::raw(format!("{} asks, {}", who(question.author), when(question.created))));
+            let body = markdown::render("question", &question.body, &mut text);
+            let asked = div().flex().flex_col().gap_2().child(dim_small(asks));
             Some(
                 callout
                     .border_color(rgb(theme::ACCENT))
                     .bg(rgb(theme::SELECTED))
-                    .child(dim_small(format!("{} asks, {}", who(question.author), when(question.created))))
-                    .child(markdown::render("question", &question.body))
+                    .child(text.finish(asked.child(body), cx))
                     .child(buttons),
             )
         }
@@ -156,14 +183,17 @@ fn status_block(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView
             .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.set_status(key, status))))
     });
     let since = task.status_since();
-    div().flex().flex_col().gap_1p5().child(segmented(segments).self_start()).child(
-        dim(format!("{} for {}, since {}", theme::status_label(task.status), fmt_age(now() - since), when(since)))
-            .text_size(px(12.)),
-    )
+    let since = format!("{} for {}, since {}", theme::status_label(task.status), fmt_age(now() - since), when(since));
+    div().flex().flex_col().gap_1p5().child(segmented(segments).self_start()).child(small_dim_text(
+        board,
+        region(key, "status"),
+        since,
+        cx,
+    ))
 }
 
 /// Time tracked on the task: the running clock, today, this week and in total.
-fn time_block(task: &Task) -> Div {
+fn time_block(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView>) -> Div {
     let now = now();
     let within = |unit| {
         let (from, to) = Period::current(unit).bounds();
@@ -179,16 +209,18 @@ fn time_block(task: &Task) -> Div {
     if let Some(running) = task.running_for(now) {
         text = format!("Running {} · {text}", fmt_clock(running));
     }
-    dim_small(text)
+    small_dim_text(board, region(key, "time"), text, cx)
 }
 
 /// The whole description, and a button to edit it.
-fn description_block(task: &Task, cx: &mut Context<BrainView>) -> Div {
+fn description_block(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView>) -> Div {
     let edit = small(entry_action("edit-description", "Edit", Kind::Secondary, KeyCode::Char('m'), cx));
     let body = if task.description.is_empty() {
         dim("No description yet.")
     } else {
-        markdown::render("description", &task.description)
+        let mut text = Selectable::new(board, region(key, "description"));
+        let body = markdown::render("description", &task.description, &mut text);
+        text.finish(body, cx)
     };
     div().flex().flex_col().gap_2().child(section("Description", [edit])).child(body)
 }
@@ -234,15 +266,15 @@ fn related_block(board: &Board, key: Key, cx: &mut Context<BrainView>) -> Div {
 
 /// The thread: every comment, each with Edit and Delete, and every change to the title, tags, related entries and
 /// description, one line each, oldest first; and a button to add a comment.
-fn comments_block(key: Key, task: &Task, cx: &mut Context<BrainView>) -> Div {
+fn comments_block(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView>) -> Div {
     let add = small(entry_action("add-comment", "Add", Kind::Secondary, KeyCode::Char('c'), cx));
     let thread: Vec<_> = task
         .thread()
         .into_iter()
         .enumerate()
         .map(|(at, item)| match item {
-            ThreadItem::Comment(index, comment) => comment_card(key, index, comment, cx),
-            ThreadItem::Change(change) => change_line(at, change),
+            ThreadItem::Comment(index, comment) => comment_card(board, key, index, comment, cx),
+            ThreadItem::Change(change) => change_line(board, key, at, change, cx),
         })
         .collect();
     div()
@@ -254,8 +286,8 @@ fn comments_block(key: Key, task: &Task, cx: &mut Context<BrainView>) -> Div {
         .children(thread)
 }
 
-/// Comment `index` of `key`'s entry, with Edit and Delete.
-fn comment_card(key: Key, index: usize, comment: &Comment, cx: &mut Context<BrainView>) -> Div {
+/// Comment `index` of `key`'s entry, with Edit and Delete: its heading and its text one text the mouse selects.
+fn comment_card(board: &Board, key: Key, index: usize, comment: &Comment, cx: &mut Context<BrainView>) -> Div {
     let edit = small(widgets::button(("edit-comment", index), "Edit", Kind::Ghost))
         .tooltip(widgets::tooltip("Shortcut: C, then Enter on it"))
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
@@ -266,25 +298,28 @@ fn comment_card(key: Key, index: usize, comment: &Comment, cx: &mut Context<Brai
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
             this.act(cx, |b| b.ask_delete_comment(key, index));
         }));
-    div()
+    let mut text = Selectable::new(board, region(key, &format!("comment {index}")));
+    let label = text.line(Line::raw(comment_label(comment)));
+    let body = markdown::render(format!("comment {index}"), &comment.body, &mut text);
+    let card = div()
         .flex()
         .flex_col()
         .gap_1()
         .p_2()
         .rounded_md()
         .bg(rgb(theme::BG))
-        .debug_selector(move || format!("thread comment {index}"))
         .child(
             div()
                 .flex()
                 .items_center()
                 .gap_1()
                 // It wraps rather than push the buttons past the panel's edge, as an edit's date did.
-                .child(dim_small(comment_label(comment)).flex_1().min_w_0())
+                .child(dim_small(label).flex_1().min_w_0())
                 .child(edit)
                 .child(delete),
         )
-        .child(markdown::render(format!("comment {index}"), &comment.body))
+        .child(body);
+    text.finish(card, cx).debug_selector(move || format!("thread comment {index}"))
 }
 
 /// What a comment's card says above it: an agent's kind of comment, when, and when it was edited.
@@ -296,8 +331,10 @@ pub(super) fn comment_label(comment: &Comment) -> String {
 }
 
 /// A change in the thread, the `at`th item, as a line between the comments.
-fn change_line(at: usize, change: &Activity) -> Div {
-    dim_small(change_label(change)).px_2().debug_selector(move || format!("thread change {at}"))
+fn change_line(board: &Board, key: Key, at: usize, change: &Activity, cx: &mut Context<BrainView>) -> Div {
+    small_dim_text(board, region(key, &format!("change {at}")), change_label(change), cx)
+        .px_2()
+        .debug_selector(move || format!("thread change {at}"))
 }
 
 /// What a change's line says: who did what, and when.
@@ -305,9 +342,11 @@ pub(super) fn change_label(change: &Activity) -> String {
     format!("{} {} · {}", who(change.by), change.change.said(), when(change.at))
 }
 
-/// Every status change, newest first.
-fn history_block(task: &Task) -> Div {
-    let changes = task.history.iter().rev().map(|change| history_line(change).render());
+/// Every status change, newest first: one text the mouse selects, a change on each line.
+fn history_block(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView>) -> Div {
+    let mut text = Selectable::new(board, region(key, "history"));
+    let changes: Vec<_> = task.history.iter().rev().map(|change| text.line(history_line(change))).collect();
+    let changes = text.finish(div().flex().flex_col().gap_1().children(changes), cx);
     div()
         .flex()
         .flex_col()
@@ -315,7 +354,7 @@ fn history_block(task: &Task) -> Div {
         .text_size(px(12.))
         .child(section("History", []))
         .when(task.history.is_empty(), |d| d.child(dim("No status changes yet.")))
-        .children(changes)
+        .child(changes)
 }
 
 /// `Mon 28 Sep 2026 10:12  To do → Doing`, the new status in its color.
