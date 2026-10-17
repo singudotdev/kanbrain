@@ -7,6 +7,10 @@ ignore = [
     { id = "RUSTSEC-2024-0436", reason = "paste, unmaintained, through gpui" },
     { id = "RUSTSEC-2026-0192", reason = "ttf-parser, unmaintained, through gpui's font stack" },
     { id = "RUSTSEC-2026-0206", reason = "rustybuzz, unmaintained, through gpui's usvg" },
+    # Merged into zbus 6 as its modules; gpui's Linux crates (ashpd, accesskit, atspi, notify-rust) are on zbus 5.
+    { id = "RUSTSEC-2026-0370", reason = "zvariant, merged into zbus 6, through gpui on Linux" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names, merged into zbus 6, through gpui on Linux" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive, merged into zbus 6, through gpui on Linux" },
 ]
 
 [licenses]
