@@ -48,6 +48,11 @@ Lints, which must be warning-free (pedantic is on, see below):
 cargo clippy --workspace --all-targets
 ```
 
+Code for another system (`cfg(windows)`, `cfg(not(unix))`) is only linted for it. Windows' can be checked from Linux
+(`rustup target add x86_64-pc-windows-msvc`, then `--target x86_64-pc-windows-msvc`), the app included; macOS's only
+for the core and the command line (`--target aarch64-apple-darwin -p kanbrain-core -p kanbrain`), as GPUI's Metal
+shaders need Xcode. CI lints on all three.
+
 Formatting (`rustfmt.toml`):
 
 ```sh
@@ -484,9 +489,10 @@ The kanban app's look is checked by running it (`KANBRAIN_DIR=/tmp/t cargo run -
 `.github/workflows/ci.yml` runs on every push to `main` and `develop` and every pull request, each job as the change
 needs it (see below):
 
-- `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and the docs with
-  `cargo doc --workspace --no-deps --document-private-items` failing on warnings; and the published crates
-  packaged as they'd be published (`cargo publish --dry-run -p kanbrain-core -p kanbrain`)
+- `cargo clippy --workspace --all-targets -- -D warnings` and the docs with
+  `cargo doc --workspace --no-deps --document-private-items` failing on warnings, on Linux, macOS and Windows (code
+  behind `cfg(windows)` or `cfg(not(unix))` is only compiled there); on Linux also `cargo fmt --all --check`, and
+  the published crates packaged as they'd be published (`cargo publish --dry-run -p kanbrain-core -p kanbrain`)
 - `cargo deny check`: dependency licenses, sources and security advisories, as `deny.toml` allows them; and the
   third-party notices still generate (`cargo xtask notices`, through cargo-about), with every license accepted
 - the installers end to end on Linux, macOS and Windows (`e2e/install.sh`, `e2e/install.ps1`, the latter in

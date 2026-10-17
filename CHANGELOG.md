@@ -11,6 +11,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   and fish have it, each id's title as its tooltip. Load it from `$PROFILE` with
   `kb completions powershell | Out-String | Invoke-Expression`. Windows PowerShell 5.1 completes no word starting
   with a single `-` (a tag to take off), which it takes for a parameter.
+- CI's lints (`cargo clippy` and `cargo doc`, warnings failing) run on macOS and Windows too, where code behind
+  `cfg(windows)` or `cfg(not(unix))` is compiled.
 
 ### Changed
 
