@@ -91,3 +91,49 @@ fn an_update_to_the_release_already_installed_installs_nothing() {
     assert_eq!(up_to_date(&Ok(Some("9.0.0".into()))), None, "a newer one is installed");
     assert_eq!(up_to_date(&Err(anyhow::anyhow!("offline"))), None, "the installer says why it can't download");
 }
+
+/// A Windows folder with every character special in PowerShell's strings: `$` and a backtick, which a double-quoted
+/// string expands, and the quotes, plain and typographic, which PowerShell reads as the end of a single-quoted one.
+const AWKWARD_FOLDER: &str = r"C:\Users\Zoë O'Neil\my $HOME`s ‘bin’ ‚x‛";
+
+#[test]
+fn a_folder_goes_to_powershell_as_a_literal_whatever_its_characters() {
+    assert_eq!(powershell_string(AWKWARD_FOLDER), r"'C:\Users\Zoë O''Neil\my $HOME`s ‘‘bin’’ ‚‚x‛‛'");
+    let command = windows_update_command(Path::new(AWKWARD_FOLDER), "both");
+    assert!(command.starts_with(&clear_installer_choices_ps1()), "{command}");
+    assert!(command.contains("$env:KANBRAIN_APP = 'both';"), "{command}");
+    assert!(
+        command.contains(r"$env:KANBRAIN_INSTALL_DIR = 'C:\Users\Zoë O''Neil\my $HOME`s ‘‘bin’’ ‚‚x‛‛';"),
+        "{command}"
+    );
+    assert!(command.ends_with(&format!("; irm {INSTALL_PS1} | iex")), "{command}");
+}
+
+/// PowerShell itself reads the command `kb update` prints back to the very folder and app, the installer's
+/// download swapped for printing them: pwsh (7), and on Windows also Windows PowerShell (5.1), which every Windows
+/// has. Skipped without `pwsh`, which GitHub's runners have on every OS: CI never skips.
+#[test]
+fn powershell_reads_the_update_command_back_to_the_folder() {
+    let command = windows_update_command(Path::new(AWKWARD_FOLDER), "gui");
+    let shown = command.replace(
+        &format!("irm {INSTALL_PS1} | iex"),
+        "[Console]::Out.Write($env:KANBRAIN_APP + '|' + $env:KANBRAIN_INSTALL_DIR)",
+    );
+    assert_ne!(shown, command, "the download is swapped out");
+    // UTF-8 out, which Windows' OEM code pages, PowerShell's default there, would garble.
+    let shown = format!("[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); {shown}");
+    let shells: &[&str] = if cfg!(windows) { &["pwsh", "powershell"] } else { &["pwsh"] };
+    for &shell in shells {
+        // The script goes by the environment, so no command line's quoting comes between it and PowerShell.
+        let output = match Command::new(shell)
+            .args(["-NoProfile", "-NonInteractive", "-Command", "Invoke-Expression $env:KB_SCRIPT"])
+            .env("KB_SCRIPT", &shown)
+            .output()
+        {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound && std::env::var_os("CI").is_none() => return,
+            output => output.unwrap(),
+        };
+        assert!(output.status.success(), "{shell}: {}", String::from_utf8_lossy(&output.stderr));
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), format!("gui|{AWKWARD_FOLDER}"), "{shell}");
+    }
+}

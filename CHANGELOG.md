@@ -25,6 +25,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   Windows `\todo` and `D:todo` are relative too. One starting with `~`, which only a shell expands (not inside quotes,
   nor in a systemd environment.d file), says so. `install.sh --purge` and `install.ps1`'s purge refuse a relative one
   the same way.
+- `kb update` on Windows prints the install folder in single quotes in the PowerShell command it gives: in double
+  quotes, a `$` or a backtick in the folder's name was expanded, so the update went elsewhere. A typographic single
+  quote (`‘ ’ ‚ ‛`) in the folder's name, which PowerShell also reads as one, no longer breaks the app's update on
+  Windows either.
 
 ## [0.6.2] - 2026-10-16
 

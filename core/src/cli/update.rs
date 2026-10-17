@@ -167,6 +167,34 @@ pub fn clear_installer_choices_ps1() -> String {
     format!("Remove-Item {} -ErrorAction SilentlyContinue", vars.join(", "))
 }
 
+/// `text` as a PowerShell single-quoted string literal, which PowerShell reads back to exactly `text`, whatever its
+/// characters: for a folder or file in a command or script made for PowerShell. Nothing expands in single quotes,
+/// neither `$` nor a backtick; only a single quote is special, written twice, and PowerShell takes the typographic
+/// ones (`‘ ’ ‚ ‛`) for one too.
+pub fn powershell_string(text: &str) -> String {
+    let mut quoted = String::with_capacity(text.len() + 2);
+    quoted.push('\'');
+    for c in text.chars() {
+        if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') {
+            quoted.push(c);
+        }
+        quoted.push(c);
+    }
+    quoted.push('\'');
+    quoted
+}
+
+/// The PowerShell command that installs the latest release of `app` into `dir`, on Windows, where a running
+/// program's file can't be replaced, so `kb update` prints it for after kanbrain is closed.
+fn windows_update_command(dir: &Path, app: &str) -> String {
+    format!(
+        "{}; $env:KANBRAIN_APP = {}; $env:KANBRAIN_INSTALL_DIR = {}; irm {INSTALL_PS1} | iex",
+        clear_installer_choices_ps1(),
+        powershell_string(app),
+        powershell_string(&dir.display().to_string())
+    )
+}
+
 /// The shell that runs the installer script given on its stdin, for `app` into `dir`, without
 /// [`INSTALLER_CHOICES`].
 fn installer_shell(dir: &Path, app: &str) -> Command {
@@ -227,12 +255,7 @@ pub fn update(central: &Path) -> Result<()> {
         return Ok(());
     };
     if cfg!(windows) {
-        println!(
-            "Close kanbrain, then run in PowerShell:\n\n  {}; $env:KANBRAIN_APP = \"{app}\"; \
-             $env:KANBRAIN_INSTALL_DIR = \"{}\"; irm {INSTALL_PS1} | iex",
-            clear_installer_choices_ps1(),
-            dir.display()
-        );
+        println!("Close kanbrain, then run in PowerShell:\n\n  {}", windows_update_command(&dir, app));
         return Ok(());
     }
     run_installer(&dir, app, false)

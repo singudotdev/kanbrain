@@ -65,24 +65,29 @@ fn install_now(exe: &Path, dir: &Path, app: &str) -> Result<()> {
 /// Leaves the installer to PowerShell, once this app has exited, since Windows won't replace a running program's
 /// file; it starts the app again whether it worked or not, with the error noted for it.
 fn install_after_exit(exe: &Path, dir: &Path, app: &str) -> Result<()> {
-    // In single quotes, where only a single quote is special, written twice.
-    let quote = |path: &Path| format!("'{}'", path.display().to_string().replace('\'', "''"));
-    let script = format!(
-        "try {{ Wait-Process -Id {pid} -ErrorAction SilentlyContinue; {clear}; $env:KANBRAIN_APP = '{app}'; \
-         $env:KANBRAIN_INSTALL_DIR = {dir}; irm {url} | iex }} catch {{ Set-Content -LiteralPath {note} -Value \
-         \"$_\" }} finally {{ Start-Process -FilePath {exe} }}",
-        pid = std::process::id(),
-        clear = update::clear_installer_choices_ps1(),
-        dir = quote(dir),
-        url = update::INSTALL_PS1,
-        note = quote(&failure_note()),
-        exe = quote(exe),
-    );
+    let script = after_exit_script(std::process::id(), exe, dir, app, &failure_note());
     let mut powershell = Command::new("powershell");
     powershell.args(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", &script]);
     update::hide_console(&mut powershell);
     powershell.spawn().context("starting PowerShell, which runs the installer")?;
     Ok(())
+}
+
+/// The PowerShell script that, once process `pid` (this app) has exited, installs the latest release of `app` into
+/// `dir`, leaves its error in `note` if it fails, and starts `exe` again either way.
+fn after_exit_script(pid: u32, exe: &Path, dir: &Path, app: &str, note: &Path) -> String {
+    let quote = |path: &Path| update::powershell_string(&path.display().to_string());
+    format!(
+        "try {{ Wait-Process -Id {pid} -ErrorAction SilentlyContinue; {clear}; $env:KANBRAIN_APP = {app}; \
+         $env:KANBRAIN_INSTALL_DIR = {dir}; irm {url} | iex }} catch {{ Set-Content -LiteralPath {note} -Value \
+         \"$_\" }} finally {{ Start-Process -FilePath {exe} }}",
+        clear = update::clear_installer_choices_ps1(),
+        app = update::powershell_string(app),
+        dir = quote(dir),
+        url = update::INSTALL_PS1,
+        note = quote(note),
+        exe = quote(exe),
+    )
 }
 
 #[cfg(test)]
