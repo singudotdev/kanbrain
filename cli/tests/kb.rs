@@ -282,7 +282,8 @@ fn powershell_completes(shell: &str, dir: &Path, central: &Path, line: &str) -> 
     let bin = Path::new(env!("CARGO_BIN_EXE_kb")).parent().unwrap();
     let path = std::env::var_os("PATH").unwrap_or_default();
     let paths = std::iter::once(bin.to_path_buf()).chain(std::env::split_paths(&path));
-    let at = line.find('|').unwrap_or(line.len());
+    // PowerShell's cursor counts UTF-16 units, not bytes.
+    let at = line[..line.find('|').unwrap_or(line.len())].encode_utf16().count();
     let script = r#"$ErrorActionPreference = 'Stop'
 kb completions powershell | Out-String | Invoke-Expression
 [Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding('iso-8859-1')
@@ -312,8 +313,8 @@ $found | ForEach-Object { "$($_.CompletionText)`t$($_.ToolTip)" }"#;
 fn powershell_completes_commands_ids_and_tag_with_the_id_then_signed_tags() {
     let (central, dir, other) = (tempdir(), tempdir(), tempdir());
     ok(&kb(other.path(), central.path(), &["init", "my app"], ""));
-    let tags = ["--tag", "ui", "--tag", "bug", "--tag", "café", "--tag", "o'k"];
-    ok(&kb(dir.path(), central.path(), &[&["add"][..], &tags, &["Fix", "café", "login"]].concat(), ""));
+    let tags = ["ui", "bug", "café", "o'k", "it’s", "–ops", "]x", "[wip]", "a*"].map(|tag| ["--tag", tag]);
+    ok(&kb(dir.path(), central.path(), &[&["add"][..], tags.as_flattened(), &["Fix", "café", "login"]].concat(), ""));
     // Windows PowerShell, 5.1, is on every Windows; pwsh, 7, is where it's installed.
     let shells: &[&str] = if cfg!(windows) { &["pwsh", "powershell"] } else { &["pwsh"] };
     for &shell in shells {
@@ -334,12 +335,27 @@ fn powershell_completes_commands_ids_and_tag_with_the_id_then_signed_tags() {
             ("kb show ", "1", "the id"),
             ("kb tag ", "1", "the id first"),
             ("kb tag --project central ", "1", "options aren't the id"),
-            ("kb tag 1 ", "+bug -bug +café -café '+o''k' '-o''k' +ui -ui", "quoted as needed"),
+            (
+                "kb tag 1 ",
+                "'+[wip]' '-[wip]' '+]x' '-]x' '+a*' '-a*' +bug -bug +café -café '+it’’s' '-it’’s' '+o''k' '-o''k' +ui -ui \
+                 +–ops -–ops",
+                "quoted as needed",
+            ),
             ("kb tag 1 +ui -b", dashed("-bug"), "a tag to take off"),
             ("kb tag 1 +|u", "+ui", "in the middle of a word, by all of it"),
             ("kb --project ce|ntral show", "central", "in the middle of a word, after an option"),
             ("kb rename ", "1", "the id"),
-            ("kb add --tag ", "bug café 'o''k' ui", "the tags in use"),
+            ("kb add --tag ", "'[wip]' ']x' 'a*' bug café 'it’’s' 'o''k' ui '–ops'", "the tags in use"),
+            // PowerShell takes a word starting with – — ― for a parameter, as it does with `-`.
+            ("kb add --tag '–", "'–ops'", "a dash begun"),
+            // PowerShell reads ’ and its kin as `'`: doubled inside the quotes, as `'` is.
+            ("kb add --tag 'it’’", "'it’’s'", "a quote begun, a curly one inside"),
+            ("kb add --tag ‘it", "'it’’s'", "a curly quote begun"),
+            ("kb add --tag 'o''", "'o''k'", "a quote begun, a doubled one inside"),
+            // Not split at `]`, nor taken for a wildcard.
+            ("kb add --tag ]", "']x'", "a bracket"),
+            ("kb add --tag [", "'[wip]'", "a wildcard"),
+            ("kb add --tag a", "'a*'", "a wildcard"),
             ("kb add --t", "--tag", "options"),
             ("kb --project ", "central 'my app'", "the projects"),
             ("kb --project 'my", "'my app'", "a quote begun"),
@@ -355,6 +371,21 @@ fn powershell_completes_commands_ids_and_tag_with_the_id_then_signed_tags() {
             .filter(|(_, got, expected, _)| got != expected)
             .collect();
         assert!(wrong.is_empty(), "{shell}: (line, offered, expected, why) {wrong:#?}");
+        // pwsh off Windows expands a program's unquoted argument as a wildcard when a file matches: `[wip]` would
+        // reach kb as `w`. The insertion reaches it as the tag.
+        std::fs::write(dir.path().join("w"), "").unwrap();
+        let kb_exe = env!("CARGO_BIN_EXE_kb");
+        for line in ["kb add --tag [w", "kb add --tag a"] {
+            let insert = texts(line);
+            let listed = Command::new(shell)
+                .args(["-NoProfile", "-NonInteractive", "-Command", &format!("& '{kb_exe}' list --tag {insert}")])
+                .current_dir(dir.path())
+                .env("KANBRAIN_DIR", central.path())
+                .output()
+                .unwrap();
+            assert!(ok(&listed).contains("#1 Fix café login"), "{shell}: {insert}");
+        }
+        std::fs::remove_file(dir.path().join("w")).unwrap();
         assert_eq!(completes("kb show ").unwrap(), "1\tFix café login", "{shell}: the id, its title beside it");
     }
 }

@@ -238,15 +238,30 @@ fn powershell(program: &str, commands: &str, (statuses, units, groups, shells): 
     elseif ($cmd -eq 'deinit') {{ '--purge' }}
     elseif ($cmd -eq 'completions') {{ '{shells}' -split ' ' }}
     [Console]::OutputEncoding = $encoding
-    # A quote begun comes closed: `'my` as `'my'`.
-    $typed = if ($word.StartsWith("'")) {{ $word.Trim("'") -replace "''", "'" }} else {{ $word }}
+    # PowerShell reads the curly quotes, U+2018 to U+201B, as `'` and U+201C to U+201E as `"`. By their codes, so that
+    # the script stays ASCII: Windows PowerShell reads this script, a program's output, through the console's code page.
+    $quotes = [string]::new([char[]](0x27, 0x2018, 0x2019, 0x201A, 0x201B))
+    $doubles = [string]::new([char[]](0x201C, 0x201D, 0x201E))
+    # And a word starting with a dash, U+2013 to U+2015, as a parameter, as with `-`.
+    $dashes = [string]::new([char[]](0x2013, 0x2014, 0x2015))
+    # The word completed as the program would get it, a quote begun closed (`'my` as `my`, `'it''` as `it'`), from
+    # the parser: PowerShell 7 hands `$word` with a begun quote's value between `'`, its quotes no longer doubled.
+    $current = $ast.CommandElements | Where-Object {{
+        $_.Extent.StartOffset -lt $cursor -and $_.Extent.EndOffset -ge $cursor
+    }}
+    $typed = if ($current -is [System.Management.Automation.Language.StringConstantExpressionAst]) {{
+        $current.Value
+    }} else {{ $word }}
     foreach ($item in $reply) {{
         # An id comes with its title after a tab: the tooltip.
         $text, $tip = "$item" -split "`t", 2
         if ($text.StartsWith($typed, [System.StringComparison]::Ordinal)) {{
             $tip = if ($tip) {{ $tip }} else {{ $text }}
-            # Quoted where PowerShell would read it otherwise: `my app` as two words, `a$b` as `a`.
-            $insert = if ($text -match '[\s''"`$;,(){{}}@#&|<>]') {{ "'" + ($text -replace "'", "''") + "'" }} else {{ $text }}
+            # Quoted where PowerShell would read it otherwise: `my app` as two words, `a$b` as `a`, `]x` as `]` and
+            # `x`; and `[wip]` as a wildcard, which pwsh off Windows expands to a file's name in a program's argument.
+            $insert = if ($text -match ('[\s"`$;,(){{}}@#&|<>*?\[\]' + $doubles + $quotes + ']|^[' + $dashes + ']')) {{
+                "'" + ($text -replace "[$quotes]", '$0$0') + "'"
+            }} else {{ $text }}
             [System.Management.Automation.CompletionResult]::new($insert, $text, 'ParameterValue', $tip)
         }}
     }}
