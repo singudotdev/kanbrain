@@ -29,6 +29,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   quotes, a `$` or a backtick in the folder's name was expanded, so the update went elsewhere. A typographic single
   quote (`‘ ’ ‚ ‛`) in the folder's name, which PowerShell also reads as one, no longer breaks the app's update on
   Windows either.
+- `kb init` keeps the line endings of a CRLF `CLAUDE.md` / `AGENTS.md` (git's `core.autocrlf` on Windows): it wrote
+  the section with LF and left the CRLF after its end marker, so once git checked the file out again as CRLF (a
+  clone, a pull touching it), `init` and `init --all` said it updated the file and rewrote it with mixed line endings
+  and one more blank line. The section, and the blank line before it, now go in with the line break of the text
+  around it, so a second `init` leaves the file unchanged; a section an older kanbrain wrote that way is mended to
+  CRLF, its stray blank line taken out. `kb deinit` takes the section out of a CRLF file without leaving a `\r` or a
+  blank line, and removes a file left holding only a byte order mark, which `init` no longer follows with two blank
+  lines.
 
 ## [0.6.2] - 2026-10-16
 

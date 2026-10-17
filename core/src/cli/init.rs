@@ -24,6 +24,8 @@ const DEFAULT_AGENT_FILE: &str = "CLAUDE.md";
 const START: &str = "<!-- kanbrain:start -->";
 /// See [`START`].
 const END: &str = "<!-- kanbrain:end -->";
+/// UTF-8's byte order mark, which some Windows editors start a file with.
+const BOM: &str = "\u{FEFF}";
 
 /// The section. Read at the start of every session, so it's short, yet the whole CLI an agent needs is
 /// here. It has to win over the agent's own habits: Claude Code, for one, has a built-in to-do list,
@@ -428,31 +430,57 @@ pub fn deinit(dir: &Path, central: &Path) -> Result<Vec<String>> {
 fn section(text: &str) -> Option<(usize, usize)> {
     let end = text.find(END)? + END.len();
     let start = text[..end].rfind(START)?;
-    Some((start, if text[end..].starts_with('\n') { end + 1 } else { end }))
+    // `\n\r\n` is what an older kanbrain left in a CRLF file: its section ended with `\n`, and the `\r\n`
+    // after the end marker it found there stayed, so both go, or the blank line they make would stay for good.
+    let eol = ["\n\r\n", "\r\n", "\n"].into_iter().find(|eol| text[end..].starts_with(eol)).unwrap_or("");
+    Some((start, end + eol.len()))
+}
+
+/// The line break `text` uses, `\r\n` or `\n`, for the section and the blank lines around it: git's
+/// `core.autocrlf` checks agent files out with CRLF on Windows, and a section written with LF into one
+/// would never equal what's there, so every `init` would rewrite it. It's the first line break of the
+/// user's text, before the section, else after it, as editors go by the first: a file with both is one
+/// an older kanbrain wrote its section with LF into, and the section's own breaks are kanbrain's. A
+/// file with no other text goes by its last break, which that older section left as the CRLF it found.
+fn line_break(text: &str) -> &'static str {
+    let outside = match section(text) {
+        Some((start, end)) => [&text[..start], &text[end..]].into_iter().find(|part| part.contains('\n')),
+        None => Some(text),
+    };
+    match outside.and_then(|part| part.find('\n').map(|at| &part[..at])) {
+        Some(line) if line.ends_with('\r') => "\r\n",
+        None if text.ends_with("\r\n") => "\r\n",
+        Some(_) | None => "\n",
+    }
 }
 
 /// `text` with the section between the markers: replaced where it already is, else appended after
-/// a blank line.
+/// a blank line. Written with `text`'s line breaks.
 fn with_section(text: &str) -> String {
-    let block = format!("{START}\n{SECTION}\n{END}\n");
+    let eol = line_break(text);
+    let block = format!("{START}\n{SECTION}\n{END}\n").replace('\n', eol);
     if let Some((start, end)) = section(text) {
         return format!("{}{block}{}", &text[..start], &text[end..]);
     }
+    // A byte order mark alone is an empty file to the user (`trim` keeps it: it isn't whitespace).
     match text.trim_end() {
-        "" => block,
-        kept => format!("{kept}\n\n{block}"),
+        kept @ ("" | BOM) => format!("{kept}{block}"),
+        kept => format!("{kept}{eol}{eol}{block}"),
     }
 }
 
-/// `text` without the section, and without the blank line `with_section` put before it.
+/// `text` without the section, and without the blank line `with_section` put before it. Empty, for the
+/// file to be removed, when nothing but a byte order mark is left.
 fn without_section(text: &str) -> String {
     let Some((start, end)) = section(text) else { return text.to_string() };
+    let eol = line_break(text);
     let before = text[..start].trim_end();
-    let after = text[end..].trim_start_matches('\n');
+    let after = text[end..].trim_start_matches(['\r', '\n']);
     match (before, after) {
-        ("", after) => after.to_string(),
-        (before, "") => format!("{before}\n"),
-        (before, after) => format!("{before}\n\n{after}"),
+        ("" | BOM, "") => String::new(),
+        ("" | BOM, after) => format!("{before}{after}"),
+        (before, "") => format!("{before}{eol}"),
+        (before, after) => format!("{before}{eol}{eol}{after}"),
     }
 }
 
