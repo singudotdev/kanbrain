@@ -113,7 +113,7 @@ fn central_owned(central: &Path, rel: &Path) -> bool {
     }
     let path = central.join(rel);
     // As `Store::load` reads it and `kb` reports it (`say_skipped`): an entry, or a broken one, unreadable included.
-    let entry = |text: String| Task::from_markdown(&text).err().is_none_or(|error| error != crate::model::MISSING_ID);
+    let entry = |text: String| !matches!(Task::parse(&text), Err(crate::model::ParseError::MissingId));
     // Only a file is read: a pipe, or a link to a device, would hold the hook.
     fs::metadata(&path).ok().filter(fs::Metadata::is_file).is_some_and(|_| store::read_text(&path).map_or(true, entry))
 }

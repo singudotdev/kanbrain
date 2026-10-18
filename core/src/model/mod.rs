@@ -8,7 +8,7 @@ mod markdown;
 mod text;
 mod time;
 
-pub(crate) use markdown::MISSING_ID;
+pub(crate) use markdown::{MISSING_ID, ParseError};
 pub use markdown::{not_a_link, parse_links};
 pub(crate) use text::infallible;
 pub use text::{counted, one_line, parse_tags, sanitize_comment, sanitize_description, slugify};

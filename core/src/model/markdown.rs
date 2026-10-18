@@ -171,6 +171,11 @@ impl Task {
     /// Parses a task file. Unknown `- key:` lines, link words and `##` sections are kept as written;
     /// open sessions that can't be running are closed (see `Parsed::into_task`).
     pub fn from_markdown(text: &str) -> Result<Task, String> {
+        Self::parse(text).map_err(|e| e.to_string())
+    }
+
+    /// [`Task::from_markdown`], saying with [`ParseError::MissingId`] that the file isn't an entry at all.
+    pub(crate) fn parse(text: &str) -> Result<Task, ParseError> {
         let mut parsed = Parsed::default();
         let mut section = Section::Meta;
         // A title with line breaks, which versions before 0.4.0 wrote as typed: the lines right under it, up to the
@@ -212,8 +217,8 @@ impl Task {
                 Section::Description => parsed.description.push(line),
                 Section::Comments => parsed.comment_line(line),
                 Section::Activity => parsed.activity_line(trimmed),
-                Section::History => parsed.history_line(trimmed)?,
-                Section::Sessions => parsed.session_line(trimmed)?,
+                Section::History => parsed.history_line(trimmed).map_err(ParseError::Line)?,
+                Section::Sessions => parsed.session_line(trimmed).map_err(ParseError::Line)?,
                 Section::Other => parsed.other_line(line),
             }
         }
@@ -224,6 +229,24 @@ impl Task {
 /// [`Task::from_markdown`]'s error for a file with no id: what tells markdown of other kinds, which a central brain
 /// kept in a notes vault holds, from a broken entry.
 pub(crate) const MISSING_ID: &str = "missing `- id:` line";
+
+/// Why [`Task::parse`] read no entry.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum ParseError {
+    /// No `- id:` line: other markdown than an entry, rather than a broken one ([`MISSING_ID`]).
+    MissingId,
+    /// A history or session line that doesn't read as one, saying which.
+    Line(String),
+}
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParseError::MissingId => f.write_str(MISSING_ID),
+            ParseError::Line(why) => f.write_str(why),
+        }
+    }
+}
 
 /// The `##` section a line belongs to.
 #[derive(Clone, Copy)]
@@ -406,8 +429,8 @@ impl<'a> Parsed<'a> {
     /// Builds the task. The `- status:` line decides where the task stands, so open sessions
     /// are closed where they can't be running: any but the last at the next one's start, and the
     /// last at the latest status change if the task isn't `doing`.
-    fn into_task(mut self) -> Result<Task, String> {
-        let id = self.id.ok_or(MISSING_ID)?;
+    fn into_task(mut self) -> Result<Task, ParseError> {
+        let id = self.id.ok_or(ParseError::MissingId)?;
         self.history.sort_by_key(|c| c.at);
         let (mut activity, mut unread) = (Vec::new(), Vec::new());
         for item in self.activity {
