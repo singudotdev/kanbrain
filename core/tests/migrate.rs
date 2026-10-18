@@ -78,8 +78,11 @@ fn a_brain_a_newer_kanbrain_wrote_is_refused_entirely() {
     assert_eq!(too_new(store.load_entries().unwrap_err()), FORMAT + 1, "not even read");
     assert_eq!(too_new(migrate(&store).unwrap_err()), FORMAT + 1, "nor migrated down");
     assert!(crate::brain::Brain::open(Store::at(store.dir()).unwrap()).is_err(), "nor opened");
+    assert!(crate::migrate::too_new(store.dir()));
     store::write_file(&store.dir().join(FORMAT_FILE), "two\n").unwrap();
     assert!(format_of(store.dir()).is_err(), "a format that isn't a number is an error, not format 1");
+    // Damaged, not newer: left to what opens it to say, rather than taken for one a newer kanbrain wrote.
+    assert!(!crate::migrate::too_new(store.dir()) && refuse_too_new(store.dir()).is_ok());
     store::write_file(&store.dir().join(FORMAT_FILE), "0\n").unwrap();
     assert!(migrate(&store).is_err(), "nor is format 0, which comes before any");
 }

@@ -55,7 +55,7 @@ fn renaming_a_project_moves_its_card_and_repositories() {
     let (central, code) = folders();
     let api = repo(central.path(), code.path(), "api", "shop");
     repo(central.path(), code.path(), "web", "shop");
-    repo(central.path(), code.path(), "blog", "blog");
+    let blog = repo(central.path(), code.path(), "blog", "blog");
     projects::write_description(central.path(), "shop", "An online shop.").unwrap();
 
     assert!(rename_project(central.path(), "shop", "blog").is_err(), "taken");
@@ -64,6 +64,7 @@ fn renaming_a_project_moves_its_card_and_repositories() {
     assert_eq!(projects::read_description(central.path(), "store"), "An online shop.");
     assert_eq!(projects::read_description(central.path(), "shop"), "", "the old card is gone");
     assert_eq!(projects::read_repo_card(&api).unwrap().project, "store");
+    assert_eq!(projects::read_repo_card(&blog).unwrap().project, "blog", "another project's card stays");
 }
 
 #[test]
@@ -308,4 +309,57 @@ fn each_step_says_what_it_was_for_the_app() {
         lines(Ok(steps)).unwrap()[0],
         format!("unregistered {}: the kanban app no longer shows it", duo[1].display())
     );
+}
+
+/// What every file directly in `dirs` holds, to tell whether anything in them was written.
+fn files_in(dirs: &[&Path]) -> Vec<(PathBuf, Vec<u8>)> {
+    let mut files: Vec<(PathBuf, Vec<u8>)> = dirs
+        .iter()
+        .flat_map(|dir| fs::read_dir(dir).unwrap().map(|entry| entry.unwrap().path()))
+        .filter(|path| path.is_file())
+        .map(|path| {
+            let text = fs::read(&path).unwrap();
+            (path, text)
+        })
+        .collect();
+    files.sort();
+    files
+}
+
+#[test]
+fn nothing_changes_a_project_one_of_whose_repositories_a_newer_kanbrain_wrote() {
+    let (central, code) = folders();
+    let [api, web, docs] = ["api", "web", "docs"].map(|name| repo(central.path(), code.path(), name, "shop"));
+    let target = brain(central.path(), &api).add(NewEntry { title: "Cart total".into(), ..NewEntry::default() });
+    let target = target.unwrap();
+    let mut docs_brain = brain(central.path(), &docs);
+    let header = docs_brain.add(NewEntry { title: "Document the total".into(), ..NewEntry::default() }).unwrap();
+    docs_brain.link(header, &[], &[RepoLink { repo: "api".into(), id: target }]).unwrap();
+    let newer = crate::migrate::FORMAT + 1;
+    fs::write(web.join(crate::migrate::FORMAT_FILE), format!("{newer}\n")).unwrap();
+    let roots = ["api", "web", "docs"].map(|name| code.path().join(name));
+    let dirs = [central.path(), &api, &web, &docs, &roots[0], &roots[1], &roots[2]];
+    let (before, web_before) = (files_in(&dirs), files_in(&[&web]));
+    let too_new = |result: Result<Vec<String>>| {
+        let error = result.expect_err("refused");
+        assert!(error.is::<crate::migrate::TooNew>(), "{error:#}");
+    };
+
+    // Each would rewrite links in web, or web itself: refused before anything is written, in any of them.
+    too_new(rename_repo(central.path(), &api, "backend"));
+    too_new(move_repo(central.path(), &api, "blog"));
+    too_new(init::init(&roots[0], Some("blog"), None, central.path()));
+    too_new(remove_repo(central.path(), &api, false));
+    too_new(remove_repo(central.path(), &web, false));
+    too_new(remove_project(central.path(), "shop", false));
+    assert_eq!(files_in(&dirs), before);
+
+    // Renamed in the registry, web's card left as it is.
+    let done = rename_project(central.path(), "shop", "store").unwrap();
+    let said = "renamed project `shop` to `store`; its repositories and card follow, but `web`'s .brain/project.md, \
+                left alone, keeps `shop` until `kb update`";
+    assert_eq!(done, [said]);
+    assert_eq!(names(central.path()), ["store/api", "store/web", "store/docs"]);
+    assert_eq!(files_in(&[&web]), web_before, "its card too");
+    assert_eq!(projects::read_repo_card(&docs).unwrap().project, "store");
 }
