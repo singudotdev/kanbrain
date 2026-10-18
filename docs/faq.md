@@ -95,6 +95,14 @@ opens no console window, so use `kb` from a terminal for the command line.
 
 Ages round down: minutes, then hours, days and weeks. The exact time is in the details' history.
 
+### The kanban app shows "kanbrain couldn't open"
+
+It couldn't open the board, and the window says why: kanbrain running as root, a relative `KANBRAIN_DIR`, a brain
+it can't read, or one a newer kanbrain wrote (`kb update` then). Fix what it says and open the app again; **Copy**
+puts the message on the clipboard, for a bug report. Started from a terminal, the same error is on stderr, and the
+app exits with a failing code once the window is closed. On Linux without a display (over ssh, or under `sudo`) it's
+on stderr only.
+
 ### "kanbrain is a per-user app and doesn't run as root"
 
 kanbrain is installed and used per user, so run it as your normal account, without `sudo`. Running it as root would either

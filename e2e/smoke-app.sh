@@ -39,6 +39,8 @@ pid=$!
 # Its first frames, fonts loaded.
 sleep 15
 kill -0 "$pid" 2>/dev/null || fail "the app exited: $(cat "$work/app.log")"
+# Failing to open the board, it says why on stderr and in a window that stays up until closed.
+if grep -q '^Error:' "$work/app.log"; then fail "the app couldn't open the board: $(cat "$work/app.log")"; fi
 
 # CPU time the app's process used, in hundredths of a second.
 cpu() {
