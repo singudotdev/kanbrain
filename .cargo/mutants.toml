@@ -39,10 +39,15 @@ exclude_re = [
     'core/src/store\.rs:.*replace busy_delays -> &.static\[Duration\] with Vec::leak\(Vec::new\(\)\)',
     # Writing into a String never fails, so a body that doesn't check what it returned does what this one does.
     'core/src/model/text\.rs:.*replace infallible with \(\)',
-    # The app's entry point: opens the window, which no test runs (the state and window tests open the board
-    # themselves, `Board::open`).
-    'gui/src/main\.rs:.*replace main -> anyhow::Result<\(\)> with Ok\(\(\)\)',
     # The build-time check of MIGRATIONS (a `const`, in no function): a mutant of it either fails the build or, with
     # no step whose format to check, checks nothing either way.
     'core/src/migrate\.rs:[0-9]+:[0-9]+: replace [^ ]+ with [^ ]+$',
+    # The app's entry, and opening its real window: what goes to the window is tested by `start`, the startup error's
+    # view by `StartupError` in a test window.
+    'gui/src/main\.rs:.*replace main -> ',
+    'gui/src/ui/mod\.rs:.*replace run with \(\)',
+    # Whether the startup error opens its window or just exits, in the process it ends: `shows_window` is what's tested.
+    'gui/src/ui/startup\.rs:.*delete ! in fail$',
+    # The fonts the text is drawn in: how it looks, and the window tests read bounds, not glyphs.
+    'gui/src/ui/mod\.rs:.*replace load_fonts with \(\)',
 ]

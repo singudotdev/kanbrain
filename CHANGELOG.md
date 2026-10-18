@@ -39,6 +39,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   It said `kb`, and to run `cargo install kanbrain`, which installs the command line, not the app.
 - `kb report --tag a,b` is refused with the error `kb list --tag a,b` gives: it counted only the first tag's
   tasks, without a word.
+- The kanban app started from the Start Menu, Finder or a desktop's launcher, without a console (on Windows it never
+  has one), says an error before the board opens in a small window titled "kanbrain couldn't open", with Copy (the
+  message, for a bug report) and Close (or Enter, Esc), and exits with a failing code: running as root, a relative
+  `KANBRAIN_DIR`, or a brain it can't read or a newer kanbrain wrote only went to stderr, so the app just didn't open.
+  The error still goes to stderr too, and alone on Linux without a display (over ssh, or under `sudo`); `kanbrain`
+  with arguments, the command line, is unchanged. The release smoke checks fail on that window or that error.
 - `KANBRAIN_DIR` set but empty counts as unset, the platform data folder: `kb` or the kanban app wrote `format` into
   whatever folder it ran in, and the command then failed (`reading …: No such file or directory`). A relative one is
   refused with an error naming it, as it named another central brain from each folder `kb` ran in, hooks included; on

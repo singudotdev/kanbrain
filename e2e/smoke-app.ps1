@@ -38,6 +38,9 @@ try {
     # Its first frames, fonts loaded.
     Start-Sleep -Seconds 15
     if ($process.HasExited) { Fail "the app exited ($($process.ExitCode))" }
+    # Failing to open the board, it says why in a window of its own that stays up until closed (gui/src/ui/startup.rs).
+    $process.Refresh()
+    if ($process.MainWindowTitle -eq 'kanbrain couldn''t open') { Fail "the app couldn't open the board" }
 
     $process.Refresh()
     $before = $process.TotalProcessorTime

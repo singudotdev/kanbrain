@@ -458,6 +458,16 @@ fn the_installer_gives_the_desktop_the_logo() {
     assert!(installer.contains(&format!("Icon={APP_ID}")) && installer.contains(&format!("apps/{APP_ID}.svg")));
 }
 
+#[gpui::test]
+fn windows_open_centered_with_the_apps_id_and_logo(cx: &mut gpui::TestAppContext) {
+    let options = cx.update(|cx| window_options(size(px(560.), px(280.)), cx));
+    let Some(WindowBounds::Windowed(bounds)) = options.window_bounds else { panic!("{:?}", options.window_bounds) };
+    assert_eq!(bounds.size, size(px(560.), px(280.)));
+    assert_eq!(options.app_id.as_deref(), Some(APP_ID));
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    assert!(options.icon.is_some(), "the logo for X11");
+}
+
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 #[test]
 fn the_window_carries_the_logo_for_x11() {
