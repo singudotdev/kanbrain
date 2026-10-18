@@ -1164,3 +1164,28 @@ fn the_conflict_being_picked_stands_out_and_is_scrolled_to(cx: &mut gpui::TestAp
     assert!(last.contains(&current(cx).center()), "the next is current");
     assert!(last.top() < window.bottom() && last.bottom() > window.top(), "and scrolled into view");
 }
+
+#[gpui::test]
+fn what_kb_changed_goes_beside_the_inputs_message_and_the_next_inputs_replaces_it(cx: &mut gpui::TestAppContext) {
+    let (view, cx, dir) = window(cx, &["a"]);
+    let kb = || kanbrain_core::brain::Brain::open(Store::at(dir.path()).unwrap()).unwrap();
+    let said = |view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext| {
+        view.read_with(cx, |view, _| view.board.message().map(str::to_string))
+    };
+    let card = cx.debug_bounds("card 0/1").expect("card 1 is drawn").center();
+    cx.simulate_click(card, gpui::Modifiers::none());
+    cx.simulate_keystrokes("e !");
+    kb().set_status(1, Status::Doing).unwrap();
+    cx.simulate_keystrokes("enter");
+    assert_eq!(said(&view, cx).as_deref(), Some("#1 saved · #1's status changed on disk"));
+    cx.simulate_keystrokes("e");
+    kb().set_status(1, Status::Todo).unwrap();
+    cx.executor().advance_clock(crate::watch::INTERVAL);
+    cx.run_until_parked();
+    assert_eq!(said(&view, cx).as_deref(), Some("#1's status changed on disk"));
+    // Shown for as long as the timer takes to read again: the next save's message replaces it.
+    cx.executor().advance_clock(crate::watch::INTERVAL);
+    cx.run_until_parked();
+    cx.simulate_keystrokes("? enter");
+    assert_eq!(said(&view, cx).as_deref(), Some("#1 saved"));
+}

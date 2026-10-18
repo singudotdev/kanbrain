@@ -84,7 +84,7 @@ The user follows them live on a kanban board: keep it showing what you're doing 
 /// between it and its old project's repositories go, and so does that project's card if it was the last.
 pub fn init(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path) -> Result<Vec<String>> {
     if let Some(to) = name
-        && let Ok(dir) = root.join(PROJECT_DIR).canonicalize()
+        && let Ok(dir) = projects::canonical(&root.join(PROJECT_DIR))
         && projects::load(central)?.iter().any(|r| projects::same_dir(&r.dir, &dir) && r.project != to)
     {
         let mut done = super::manage::move_repo(central, &dir, to)?;
@@ -109,6 +109,15 @@ pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central:
     if root.to_string_lossy().contains(['\n', '\r']) {
         bail!("{} has a line break in its path: kanbrain can't register it", root.display());
     }
+    // Nor one `projects.md`, a UTF-8 file, can't hold: written lossily, it would name another folder. The canonical
+    // one, which is what's written: a link with a Unicode name can lead to a folder without one.
+    if fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf()).to_str().is_none() {
+        bail!(
+            "{} has a folder name that isn't valid Unicode, which projects.md can't hold: kanbrain can't register it; \
+             rename that folder",
+            root.display()
+        );
+    }
     // Registered, its `.brain/` would be both the central brain and a project's, and taking it out with `--purge`
     // would delete every project's registration and card.
     if projects::same_dir(&dir, central) {
@@ -122,7 +131,7 @@ pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central:
         done.push("commit it to share tasks, notes and decisions with the project, or add it to .gitignore".into());
     }
     // Registered by its absolute path, so the kanban app finds it from anywhere.
-    let dir = dir.canonicalize().with_context(|| format!("reading {}", dir.display()))?;
+    let dir = projects::canonical(&dir).with_context(|| format!("reading {}", dir.display()))?;
     let folder = root.canonicalize().ok().and_then(|r| Some(r.file_name()?.to_string_lossy().into_owned()));
     let card = projects::read_repo_card(&dir);
     // Re-run without a name, it stays in the project the registry has it in, which a rename while its folder was

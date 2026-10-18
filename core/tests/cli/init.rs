@@ -87,7 +87,7 @@ fn registers_the_project_and_joins_repositories_of_the_same_one() {
     let repos = projects::load(central.path()).unwrap();
     let labels: Vec<_> = repos.iter().map(|r| r.label(&repos)).collect();
     assert_eq!(labels, ["shop/api", "shop/web"]);
-    let api_brain = api.join(".brain").canonicalize().unwrap();
+    let api_brain = projects::canonical(&api.join(".brain")).unwrap();
     assert_eq!(projects::read_repo_card(&api_brain).unwrap().project, "shop");
     // Running it again without a name keeps the project the card names.
     init(&web, None, None, central.path()).unwrap();
@@ -121,7 +121,7 @@ fn running_init_again_keeps_the_name_given_to_a_repository_of_the_same_project()
     let api = code.path().join("api");
     fs::create_dir(&api).unwrap();
     init(&api, Some("shop"), None, central.path()).unwrap();
-    let dir = api.join(".brain").canonicalize().unwrap();
+    let dir = projects::canonical(&api.join(".brain")).unwrap();
     crate::cli::manage::rename_repo(central.path(), &dir, "backend").unwrap();
     init(&api, None, None, central.path()).unwrap();
     let repos = projects::load(central.path()).unwrap();
@@ -134,7 +134,7 @@ fn deinit_undoes_init_and_keeps_the_brain() {
     fs::write(root.path().join("AGENTS.md"), "# Rules\n\nBe brief.\n").unwrap();
     init(root.path(), Some("shop"), None, central.path()).unwrap();
     projects::write_description(central.path(), "shop", "An online shop.").unwrap();
-    let dir = root.path().join(".brain").canonicalize().unwrap();
+    let dir = projects::canonical(&root.path().join(".brain")).unwrap();
     let done = deinit(&dir, central.path()).unwrap();
     assert_eq!(projects::load(central.path()).unwrap(), [], "{done:?}");
     assert!(projects::read_description(central.path(), "shop").is_empty(), "the last repository takes the card");
@@ -164,7 +164,7 @@ fn deinit_takes_out_a_repository_whose_folder_is_gone() {
     let root = code.path().join("api");
     fs::create_dir(&root).unwrap();
     init(&root, None, None, central.path()).unwrap();
-    let dir = root.join(".brain").canonicalize().unwrap();
+    let dir = projects::canonical(&root.join(".brain")).unwrap();
     fs::remove_dir_all(&root).unwrap();
     let done = deinit(&dir, central.path()).unwrap();
     assert!(done.last().unwrap().contains("is gone"), "{done:?}");
@@ -336,7 +336,7 @@ fn init_all_renames_a_project_a_version_before_0_4_0_named_as_no_project_can_be_
     let names = ["-shop", "--shop", "Central", "-shop"];
     let mut registry = String::from("# Projects\n\n");
     for (root, name) in folders.iter().zip(names) {
-        let dir = root.join(".brain").canonicalize().unwrap();
+        let dir = projects::canonical(&root.join(".brain")).unwrap();
         writeln!(registry, "- {name}: {}", dir.display()).unwrap();
         let card = projects::read_repo_card(&dir).unwrap();
         projects::write_repo_card(&dir, &projects::RepoCard { project: name.into(), ..card }).unwrap();
@@ -371,7 +371,7 @@ fn init_all_renames_a_lone_central_project_and_one_with_a_slash() {
         let root = code.path().join("api");
         fs::create_dir(&root).unwrap();
         init(&root, None, None, central.path()).unwrap();
-        let dir = root.join(".brain").canonicalize().unwrap();
+        let dir = projects::canonical(&root.join(".brain")).unwrap();
         let mut registry = String::from("# Projects\n\n");
         writeln!(registry, "- {name}: {}", dir.display()).unwrap();
         fs::write(central.path().join(projects::REGISTRY_FILE), registry).unwrap();
@@ -410,7 +410,7 @@ fn init_all_renames_nothing_in_a_central_brain_a_newer_kanbrain_wrote() {
     fs::create_dir(&api).unwrap();
     init(&api, None, None, central.path()).unwrap();
     let registry = central.path().join(projects::REGISTRY_FILE);
-    let old = format!("# Projects\n\n- -shop: {}\n", api.join(".brain").canonicalize().unwrap().display());
+    let old = format!("# Projects\n\n- -shop: {}\n", projects::canonical(&api.join(".brain")).unwrap().display());
     fs::write(&registry, &old).unwrap();
     let newer = crate::migrate::FORMAT + 1;
     fs::write(central.path().join(crate::migrate::FORMAT_FILE), format!("{newer}\n")).unwrap();
@@ -456,4 +456,56 @@ fn the_central_brain_and_paths_with_line_breaks_are_never_registered() {
         assert!(projects::load(central.path()).unwrap().is_empty(), "nothing registered");
         assert!(!odd.join(PROJECT_DIR).exists(), "nor created");
     }
+}
+
+// macOS's file systems (APFS) refuse a name that isn't UTF-8, so no such path exists there; Windows' are UTF-16.
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn a_path_that_isnt_unicode_is_never_registered() {
+    use std::os::unix::ffi::OsStrExt;
+    let (code, central) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    // Latin-1 `café`, which `projects.md`, a UTF-8 file, can't hold.
+    let odd = code.path().join(std::ffi::OsStr::from_bytes(b"caf\xe9"));
+    fs::create_dir_all(&odd).unwrap();
+    // Reached by a link whose own name is Unicode, the path written is still the folder's.
+    let link = code.path().join("cafe");
+    std::os::unix::fs::symlink(&odd, &link).unwrap();
+    for root in [&odd, &link] {
+        let error = init(root, Some("odd"), None, central.path()).unwrap_err().to_string();
+        assert!(error.contains("isn't valid Unicode"), "{error}");
+        assert!(projects::load(central.path()).unwrap().is_empty(), "nothing registered");
+        assert!(!odd.join(PROJECT_DIR).exists(), "nor created");
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn init_registers_the_plain_path_not_the_verbatim_one() {
+    let (code, central) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let api = code.path().join("api");
+    fs::create_dir(&api).unwrap();
+    init(&api, Some("shop"), None, central.path()).unwrap();
+    let registry = fs::read_to_string(central.path().join(projects::REGISTRY_FILE)).unwrap();
+    assert!(!registry.contains(r"\\?\"), "{registry}");
+    let dir = projects::load(central.path()).unwrap().remove(0).dir;
+    let verbatim = api.join(".brain").canonicalize().unwrap();
+    assert_eq!(dir, Path::new(verbatim.to_str().unwrap().strip_prefix(r"\\?\").unwrap()));
+    init(&api, None, None, central.path()).unwrap();
+    assert_eq!(projects::load(central.path()).unwrap().len(), 1, "found again, not doubled");
+}
+
+#[cfg(windows)]
+#[test]
+fn init_rewrites_a_verbatim_registration_a_released_version_wrote_plain() {
+    let (code, central) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let api = code.path().join("api");
+    fs::create_dir_all(api.join(".brain")).unwrap();
+    let verbatim = api.join(".brain").canonicalize().unwrap();
+    assert!(verbatim.to_str().unwrap().starts_with(r"\\?\"), "{}", verbatim.display());
+    let registry = central.path().join(projects::REGISTRY_FILE);
+    fs::write(&registry, format!("# Projects\n\n- shop: {}\n", verbatim.display())).unwrap();
+    init(&api, Some("shop"), None, central.path()).unwrap();
+    let text = fs::read_to_string(&registry).unwrap();
+    let lines: Vec<_> = text.lines().filter(|line| line.starts_with("- ")).collect();
+    assert_eq!(lines, [format!("- shop: {}", &verbatim.to_str().unwrap()[4..])], "{text}");
 }

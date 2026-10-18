@@ -26,7 +26,7 @@ fn main() -> anyhow::Result<()> {
     // Opened in a project's repository, it starts on that project; it shows them all anyway.
     let here = std::env::current_dir()?;
     // Canonical, as `init` registers it.
-    let opened_in = store::find_project(&here).and_then(|dir| dir.canonicalize().ok());
+    let opened_in = store::find_project(&here).and_then(|dir| projects::canonical(&dir).ok());
     ui::run(state::Board::open(&projects::central_dir()?, opened_in)?);
     Ok(())
 }
