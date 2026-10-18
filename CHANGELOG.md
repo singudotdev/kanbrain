@@ -28,6 +28,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `cli::update::update`, which always said `kb`: `cli::update::update_program` names the program running.
   `store::Store::load`, whose warnings are text: `Store::load_entries` gives each file skipped as a `Skipped`, with
   why (`SkipReason`), and says it the same way.
+  `cli::init`, `cli::rename_project`, `cli::rename_repo`, `cli::move_repo`, `cli::remove_repo` and
+  `cli::remove_project`, which return text: their `_steps` versions give each line as a `Step`, with what it was
+  (`StepKind`: a move, links dropped, the tasks deleted…), and say it the same way.
 
 ### Fixed
 

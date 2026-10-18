@@ -185,7 +185,7 @@ core/src/            kanbrain-core: shared by both programs
 │   ├── completions.rs `completions bash|zsh|fish|powershell`: the scripts, and `complete`, the ids, projects and tags they offer
 │   ├── update.rs    `update`, and the app's: the latest release asked for, the installer run again for the apps beside this one, into the same folder (a macOS bundle's says which), once no agent has a task in doing
 │   ├── init.rs      `init`: the repository's .brain/ and card, its registration, the "Project memory" section in CLAUDE.md / AGENTS.md; `init --all` brings every registered brain up to this version: migrates its data (after a backup), renames the projects and repositories older versions named as none can be now, fixes each repository's .brain/project.md, then refreshes its agent instructions; `deinit` undoes `init`
-│   └── manage.rs    renaming a project or a repository, moving a repository to another project, removing them (`deinit --purge`, `project remove`), rewriting or dropping the links between repositories
+│   └── manage.rs    renaming a project or a repository, moving a repository to another project, removing them (`deinit --purge`, `project remove`), rewriting or dropping the links between repositories; what each did, as Steps (a line each, and what it was)
 ├── api/             operations by id for the CLI, with typed refusals (ApiError)
 │   ├── mod.rs       add, link, full-text search; change_status, comment and describe, deprecated for Brain's own
 │   ├── json.rs      entries as JSON, one line without empty fields (Entry, Summary)

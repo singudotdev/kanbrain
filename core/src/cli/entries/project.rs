@@ -73,11 +73,11 @@ pub(super) fn run_project(brain: &mut Brain, change: Option<ProjectChange>) -> R
         }
         Some(ProjectChange::Text(ProjectPart::Description, text)) => {
             brain.set_project_description(&text.read()?)?;
-            vec![format!("project {name}: description saved")]
+            vec![format!("project {name}: description saved").into()]
         }
         Some(ProjectChange::Text(ProjectPart::Notes, text)) => {
             brain.set_repo_notes(&text.read()?)?;
-            vec![format!("project {name}: repository role saved")]
+            vec![format!("project {name}: repository role saved").into()]
         }
         // `rename OLD NEW`, as other tools have it, would name the project "OLD NEW", names having spaces.
         Some(ProjectChange::Rename(new, false))
@@ -89,10 +89,10 @@ pub(super) fn run_project(brain: &mut Brain, change: Option<ProjectChange>) -> R
                  `{new}`, `kb project rename -- {new}`"
             )
         }
-        Some(ProjectChange::Rename(new, _)) => manage::rename_project(&central, &name, &new)?,
-        Some(ProjectChange::Repo(new)) => manage::rename_repo(&central, &dir, &new)?,
-        Some(ProjectChange::Move(to)) => manage::move_repo(&central, &dir, &to)?,
-        Some(ProjectChange::Remove(purge)) => manage::remove_project(&central, &name, purge)?,
+        Some(ProjectChange::Rename(new, _)) => manage::rename_project_steps(&central, &name, &new)?,
+        Some(ProjectChange::Repo(new)) => manage::rename_repo_steps(&central, &dir, &new)?,
+        Some(ProjectChange::Move(to)) => manage::move_repo_steps(&central, &dir, &to)?,
+        Some(ProjectChange::Remove(purge)) => manage::remove_project_steps(&central, &name, purge)?,
     };
     for line in &done {
         println!("{line}");

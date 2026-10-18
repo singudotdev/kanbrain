@@ -1789,7 +1789,7 @@ fn a_shown_project_taken_out_from_the_command_line_shows_all() {
     let (central, code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
     board.set_scope(Scope::Project("blog".into()));
-    kanbrain_core::cli::remove_repo(central.path(), &code.path().join("blog/.brain"), false).unwrap();
+    kanbrain_core::cli::remove_repo_steps(central.path(), &code.path().join("blog/.brain"), false).unwrap();
     board.reload().unwrap();
     assert_eq!(board.scope, Scope::All, "not a blank scope");
 }
@@ -1799,13 +1799,13 @@ fn a_shown_project_renamed_from_the_command_line_stays_shown() {
     let (central, code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
     board.set_scope(Scope::Project("shop".into()));
-    kanbrain_core::cli::rename_project(central.path(), "shop", "store").unwrap();
+    kanbrain_core::cli::rename_project_steps(central.path(), "shop", "store").unwrap();
     board.reload().unwrap();
     assert_eq!(board.scope, Scope::Project("store".into()), "under its new name");
 
     // Its last repository joining a project that has others is no rename: all of them.
     board.set_scope(Scope::Project("blog".into()));
-    kanbrain_core::cli::move_repo(central.path(), &code.path().join("blog/.brain"), "store").unwrap();
+    kanbrain_core::cli::move_repo_steps(central.path(), &code.path().join("blog/.brain"), "store").unwrap();
     board.reload().unwrap();
     assert_eq!(board.scope, Scope::All);
 }
@@ -3256,21 +3256,21 @@ fn a_shown_project_follows_command_line_changes_seen_by_the_watcher() {
     let (central, code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
     board.set_scope(Scope::Project("shop".into()));
-    kanbrain_core::cli::rename_project(central.path(), "shop", "store").unwrap();
+    kanbrain_core::cli::rename_project_steps(central.path(), "shop", "store").unwrap();
     // As the watcher hands it over: the cards' folder changed.
     board.reload_changed(&[kanbrain_core::projects::cards_dir(central.path())]).unwrap();
     assert_eq!(board.scope, Scope::Project("store".into()), "renamed");
 
     // A one-repository project's repository moved to a project of its own is the same project renamed.
     board.set_scope(Scope::Project("blog".into()));
-    kanbrain_core::cli::move_repo(central.path(), &code.path().join("blog/.brain"), "journal").unwrap();
+    kanbrain_core::cli::move_repo_steps(central.path(), &code.path().join("blog/.brain"), "journal").unwrap();
     board.reload().unwrap();
     assert_eq!(board.scope, Scope::Project("journal".into()));
 
     // Split across two projects before the board looks again: neither is it.
     board.set_scope(Scope::Project("store".into()));
-    kanbrain_core::cli::move_repo(central.path(), &code.path().join("web/.brain"), "front").unwrap();
-    kanbrain_core::cli::move_repo(central.path(), &code.path().join("api/.brain"), "back").unwrap();
+    kanbrain_core::cli::move_repo_steps(central.path(), &code.path().join("web/.brain"), "front").unwrap();
+    kanbrain_core::cli::move_repo_steps(central.path(), &code.path().join("api/.brain"), "back").unwrap();
     board.reload().unwrap();
     assert_eq!(board.scope, Scope::All, "store is gone, split in two");
 }

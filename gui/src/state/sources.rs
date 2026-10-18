@@ -7,7 +7,7 @@ use super::{AddProject, Board, Form, Mode, Picker, ProjectOption, WhereFor};
 use crate::text::event::KeyEvent;
 use anyhow::Result;
 use kanbrain_core::brain::{Brain, Calendar, CalendarView, Report, ReportView};
-use kanbrain_core::cli;
+use kanbrain_core::cli::{self, StepKind};
 use kanbrain_core::migrate::TooNew;
 use kanbrain_core::model::{RepoLink, Task};
 use kanbrain_core::projects::{self, Repo};
@@ -268,7 +268,7 @@ impl Board {
         let name = option.name().to_string();
         let dir = add.dir.clone();
         let from_manage = add.back.is_some();
-        let done = match cli::init(&dir, Some(&name), None, &self.central) {
+        let done = match cli::init_steps(&dir, Some(&name), None, &self.central) {
             Ok(done) => done,
             Err(e) => return self.notify_error(&e),
         };
@@ -278,11 +278,11 @@ impl Board {
         let repos = self.repos_of(&name).count();
         self.set_scope(Scope::Project(name.clone()));
         // A repository of another project moved here: said as a move, with the links it dropped.
-        let moved = done.first().is_some_and(|line| line.starts_with("moved "));
+        let moved = done.first().is_some_and(|step| step.kind == StepKind::Moved);
         self.notify(if moved {
             done.iter()
-                .filter(|l| l.starts_with("moved ") || l.starts_with("dropped "))
-                .cloned()
+                .filter(|step| matches!(step.kind, StepKind::Moved | StepKind::DroppedLinks))
+                .map(ToString::to_string)
                 .collect::<Vec<_>>()
                 .join("; ")
         } else if repos > 1 {

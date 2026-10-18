@@ -21,7 +21,13 @@ mod manage;
 pub mod update;
 
 pub use entries::{AddArgs, EntryArgs, EntryCommand, ProjectChange, ProjectPart, TagChange, Text};
+#[expect(deprecated, reason = "kept for code built on kanbrain-core: the `_steps` functions replace them")]
 pub use init::init;
+pub use init::init_steps;
+pub use manage::{
+    Step, StepKind, move_repo_steps, remove_project_steps, remove_repo_steps, rename_project_steps, rename_repo_steps,
+};
+#[expect(deprecated, reason = "kept for code built on kanbrain-core: the `_steps` functions replace them")]
 pub use manage::{move_repo, remove_project, remove_repo, rename_project, rename_repo};
 
 use crate::api::json::Summary;
@@ -375,7 +381,7 @@ impl Command {
                     bail!("init works on the current directory; leave out --project");
                 }
                 let root = std::env::current_dir().context("reading the current directory")?;
-                init::init(&root, name.as_deref(), repo.as_deref(), &projects::central_dir()?)?
+                init::init_steps(&root, name.as_deref(), repo.as_deref(), &projects::central_dir()?)?
                     .iter()
                     .for_each(|line| println!("{line}"));
                 return Ok(());
@@ -401,7 +407,7 @@ impl Command {
                 platform::ensure_not_root()?;
                 let central = projects::central_dir()?;
                 let dir = deinit_dir(&central, project)?;
-                manage::remove_repo(&central, &dir, purge)?.iter().for_each(|line| println!("{line}"));
+                manage::remove_repo_steps(&central, &dir, purge)?.iter().for_each(|step| println!("{step}"));
                 return Ok(());
             }
             _ => platform::ensure_not_root()?,

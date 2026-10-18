@@ -1,5 +1,8 @@
+#![expect(deprecated, reason = "what the functions the `_steps` ones replace still say, word for word, is under test")]
+
 use super::*;
 use crate::brain::{Brain, NewEntry};
+use crate::cli::init;
 use crate::model::RepoLink;
 use std::path::PathBuf;
 
@@ -264,4 +267,45 @@ fn renaming_a_project_checks_the_name_under_the_lock_it_renames_under() {
     let refused = rename_project(central.path(), "shop", "store");
     other.join().unwrap();
     assert!(refused.unwrap_err().to_string().contains("already a project `store`"), "merged into it");
+}
+
+#[test]
+fn each_step_says_what_it_was_for_the_app() {
+    let (central, code) = folders();
+    let api = repo(central.path(), code.path(), "api", "shop");
+    let web = repo(central.path(), code.path(), "web", "shop");
+    let target = brain(central.path(), &api).add(NewEntry { title: "Cart total".into(), ..NewEntry::default() });
+    let mut web_brain = brain(central.path(), &web);
+    let header = web_brain.add(NewEntry { title: "Show the total".into(), ..NewEntry::default() }).unwrap();
+    web_brain.link(header, &[], &[RepoLink { repo: "api".into(), id: target.unwrap() }]).unwrap();
+
+    // What the app says of an `init` that moved the repository: the move and the links it dropped, and nothing else.
+    let steps = init::init_steps(&code.path().join("web"), Some("blog"), None, central.path()).unwrap();
+    let kinds: Vec<_> = steps.iter().map(|step| step.kind).collect();
+    assert_eq!(kinds[0], StepKind::Moved, "{steps:?}");
+    let acted: Vec<_> = steps
+        .iter()
+        .filter(|step| matches!(step.kind, StepKind::Moved | StepKind::DroppedLinks))
+        .map(ToString::to_string)
+        .collect();
+    assert_eq!(
+        acted,
+        ["moved web from project `shop` to `blog`", "dropped 1 link between it and project `shop`'s repositories"]
+    );
+    assert!(!kinds.contains(&StepKind::AlreadyExisted), "a move doesn't say the folder was there: {steps:?}");
+
+    // Removing a repository of several says its project keeps its card; removing the whole project doesn't.
+    let duo: Vec<_> = ["duo/a", "duo/b"].iter().map(|f| repo(central.path(), code.path(), f, "duo")).collect();
+    let steps = remove_repo_steps(central.path(), &duo[0], true).unwrap();
+    let kinds: Vec<_> = steps.iter().map(|step| step.kind).collect();
+    assert!(kinds.contains(&StepKind::KeptCard) && kinds.contains(&StepKind::Deleted), "{steps:?}");
+    let deleted = steps.iter().find(|step| step.kind == StepKind::Deleted).unwrap();
+    assert!(deleted.line.starts_with("deleted ") && !duo[0].exists(), "{steps:?}");
+    repo(central.path(), code.path(), "duo/c", "duo");
+    let steps = remove_project_steps(central.path(), "duo", false).unwrap();
+    assert!(steps.iter().all(|step| step.kind == StepKind::Other), "kept, not deleted; no card kept: {steps:?}");
+    assert_eq!(
+        lines(Ok(steps)).unwrap()[0],
+        format!("unregistered {}: the kanban app no longer shows it", duo[1].display())
+    );
 }

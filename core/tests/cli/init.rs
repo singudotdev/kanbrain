@@ -1,3 +1,5 @@
+#![expect(deprecated, reason = "what the functions the `_steps` ones replace still say, word for word, is under test")]
+
 use super::*;
 
 #[test]
@@ -167,7 +169,7 @@ fn deinit_takes_out_a_repository_whose_folder_is_gone() {
     let dir = projects::canonical(&root.join(".brain")).unwrap();
     fs::remove_dir_all(&root).unwrap();
     let done = deinit(&dir, central.path()).unwrap();
-    assert!(done.last().unwrap().contains("is gone"), "{done:?}");
+    assert!(done.last().unwrap().line.contains("is gone"), "{done:?}");
     assert_eq!(projects::load(central.path()).unwrap(), []);
 }
 
