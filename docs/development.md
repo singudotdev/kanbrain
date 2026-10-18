@@ -175,7 +175,13 @@ core/src/            kanbrain-core: shared by both programs
 │   ├── mod.rs       Program (the binary's name), Command parsing, `--project`, `list`, `status`, `report`, `path`, usage
 │   ├── claude.rs    the Claude Code hooks `init` merges into .claude/settings.local.json (and `deinit` takes out)
 │   ├── hook.rs      `kb hook prompt|stop|edit|tool`: the hooks' checks that hold an agent to describing the project first, and to `kb` for the brain's files, and tell it of the user's comments
-│   ├── entries.rs   agent commands by id: `add`, `show`, `search`, status changes, `comment`, `ask`, `wait`, `propose`, `accept`/`reject`, `describe`, `rename`, `tag`, `link`, `project`, `context`
+│   ├── entries/     agent commands by id: `add`, `show`, `search`, status changes, `comment`, `ask`, `wait`, `propose`, `accept`/`reject`, `describe`, `rename`, `tag`, `link`, `project`, `context`
+│   │   ├── mod.rs   their arguments (EntryArgs, EntryCommand, AddArgs, Text), parsing and running them
+│   │   ├── args.rs  ids, text words (`-` for stdin, `--`), titles and links
+│   │   ├── tags.rs  `tag`: changes to an entry's tags, or renaming a tag everywhere
+│   │   ├── project.rs `project`: showing the project, or changing it
+│   │   ├── wait.rs  `wait`: polling until an entry no longer waits on a person, and what it then prints
+│   │   └── show.rs  printing an entry (`show`, each command's confirmation) and search results
 │   ├── completions.rs `completions bash|zsh|fish|powershell`: the scripts, and `complete`, the ids, projects and tags they offer
 │   ├── update.rs    `update`, and the app's: the latest release asked for, the installer run again for the apps beside this one, into the same folder (a macOS bundle's says which), once no agent has a task in doing
 │   ├── init.rs      `init`: the repository's .brain/ and card, its registration, the "Project memory" section in CLAUDE.md / AGENTS.md; `init --all` brings every registered brain up to this version: migrates its data (after a backup), renames the projects and repositories older versions named as none can be now, fixes each repository's .brain/project.md, then refreshes its agent instructions; `deinit` undoes `init`

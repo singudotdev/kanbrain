@@ -1,5 +1,9 @@
+use super::project::project_text;
+use super::wait::{Watch, minutes, settled};
 use super::*;
+use crate::api::ApiError;
 use crate::model::{Author, Changed};
+use crate::projects::ProjectInfo;
 
 fn parse(args: &[&str]) -> Result<EntryArgs> {
     let (name, rest) = args.split_first().unwrap();
