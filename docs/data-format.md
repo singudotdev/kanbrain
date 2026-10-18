@@ -239,3 +239,5 @@ New tags are added automatically. See [tag colors](tasks-and-tags.md#tag-colors)
 Task files are written to a temporary file (`.NNNN-slug.md.PID-N.tmp`), flushed to disk, and then renamed into
 place, so a crash or power loss never leaves a half-written task file. A temporary file a crash leaves behind is
 deleted once it's an hour old, the next time a `kb` command or the app writes to that brain.
+On Windows, a file another program has open for a moment (an antivirus, the search indexer, an editor) can't be
+replaced or deleted: the rename, or the delete, is tried again for up to about 1.3 seconds before it fails.

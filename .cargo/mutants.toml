@@ -39,4 +39,6 @@ exclude_re = [
     # The highlight of a conflict's pick: a color and a weight, and the window tests read bounds, not colors (the
     # state tests check what's picked, `Conflict::pick`).
     'gui/src/ui/dialogs/merge\.rs:.*replace == with != in conflict_box$',
+    # No waits for a busy file is what `busy_delays` gives off Windows, where the mutants run.
+    'core/src/store\.rs:.*replace busy_delays -> &.static\[Duration\] with Vec::leak\(Vec::new\(\)\)',
 ]
