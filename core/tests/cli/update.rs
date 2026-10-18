@@ -68,6 +68,10 @@ fn an_update_waits_for_the_agents_tasks_in_doing_only() {
     let err = update_program(central.path(), KB).unwrap_err().to_string();
     assert!(err.contains(&format!("shop #{working} rate-limit the login")), "as kb status names it: {err}");
     assert!(!err.contains("my own work"), "{err}");
+    // As the deprecated `update`, for `kb`, still does.
+    #[expect(deprecated, reason = "what it still does is under test")]
+    let old = update(central.path()).unwrap_err().to_string();
+    assert_eq!(old, err);
 
     std::fs::remove_dir_all(repo.path()).unwrap();
     assert!(check_no_agent_working(central.path()).is_ok(), "a deleted repository has no agent at work");

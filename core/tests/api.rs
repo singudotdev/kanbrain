@@ -369,3 +369,19 @@ fn a_question_a_person_asks_waits_for_an_answer_like_an_agents() {
     brain.add_comment(task, "eu-west").unwrap();
     assert!(matches!(brain.entry(task).unwrap().asked(), Some(Asked::Answered(_))));
 }
+
+#[test]
+fn search_says_how_many_more_matched_than_it_lists() {
+    use crate::api::text::SEARCH_LIMIT;
+    let (mut brain, _dir) = brain();
+    for n in 0..SEARCH_LIMIT {
+        brain.add(new(Kind::Task, &format!("Login step {n}"))).unwrap();
+    }
+    let all = brain.search_text("login");
+    assert_eq!(all.lines().count(), SEARCH_LIMIT, "exactly the limit, nothing more to say: {all}");
+    brain.add(new(Kind::Task, "Login again")).unwrap();
+    brain.add(new(Kind::Task, "Login once more")).unwrap();
+    let capped = brain.search_text("login");
+    assert_eq!(capped.lines().count(), SEARCH_LIMIT + 1, "{capped}");
+    assert!(capped.ends_with("- … 2 more: add words to narrow it down\n"), "{capped}");
+}
