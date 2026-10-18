@@ -44,6 +44,21 @@ kb init        # creates .brain/ and tells the project's agents about it
    every project with its next session; it never writes them where they aren't (`kb deinit` took them out, or the
    section went only in `AGENTS.md`).
 
+   Leave kanbrain's hooks as `init` writes them. One that runs `kb` by a plain path instead is still kanbrain's: a
+   path of letters (`é` too), digits and `_ . / : -`, or in `"…"` or `'…'` also spaces and `( )`, then exactly the
+   hook's arguments, as `/opt/bin/kb hook tool`, `~/.local/bin/kb hook tool` or `'/Users/John Doe/bin/kb' hook tool`;
+   or the exec form (`"command"` the path, `"args"` the arguments). On Windows, a `\` path goes in `'…'`, the only
+   quotes bash (Git Bash, which runs a hook without `shell`) leaves every `\` in:
+   `'C:\Users\John Doe\AppData\Local\Programs\kanbrain\kb.exe' hook tool`. PowerShell runs a quoted path only after
+   `& `: with `"shell": "powershell"`, write `& 'C:\Users\John Doe\AppData\Local\Programs\kanbrain\kb.exe' hook tool`.
+   Only bash expands a leading `~/`. Anything more (variables set before it, another command, a `$`, any other quote)
+   and it's yours, even if it runs `kb hook tool`: a shell line can't be read for sure without running it, and a hook
+   of yours is never taken out for looking like kanbrain's. When it does look like one (`kb`, by its path or not,
+   followed by the hook's words anywhere in it, `env kb context` and `echo kb context` alike), `init` adds none
+   beside it and says so, for you to replace it with the hook as written or, if it isn't kanbrain's, add kanbrain's
+   beside it; `deinit` leaves it and says so, for you to remove it. One that merely resembles a hook
+   (`kb.sh hook tool`, `cat ~/notes/kb/context`) is left as it is, with kanbrain's added beside it.
+
    Agents skipped describing the project when only the section and `context` asked them to; with these, Claude
    Code reminds them on their first turn. Once it's described and the tasks the agent started commented on,
    `prompt` and `stop` print nothing and cost nothing. An explicit

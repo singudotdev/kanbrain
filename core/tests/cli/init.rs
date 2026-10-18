@@ -144,6 +144,61 @@ fn deinit_undoes_init_and_keeps_the_brain() {
 }
 
 #[test]
+fn init_and_deinit_tell_of_a_hook_that_looks_like_kanbrains_and_leave_it_as_it_is() {
+    let (root, central) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let settings = root.path().join(".claude/settings.local.json");
+    fs::create_dir_all(settings.parent().unwrap()).unwrap();
+    let theirs = r#"{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"cd /x && '/Users/John Doe/bin/kb' hook stop"}]}]}}"#;
+    fs::write(&settings, theirs).unwrap();
+    let hook = |text: &str| serde_json::from_str::<serde_json::Value>(text).unwrap()["hooks"]["Stop"].clone();
+    let done = init(root.path(), None, None, central.path()).unwrap();
+    let told = ".claude/settings.local.json: a hook for Stop runs `cd /x && '/Users/John Doe/bin/kb' hook stop`, \
+                which looks like kanbrain's `kb hook stop`: kanbrain added none beside it; if it's kanbrain's, \
+                replace it with `kb hook stop` so kanbrain can update and remove it, and if it isn't, add one running \
+                `kb hook stop` for Stop beside it";
+    assert!(done.iter().any(|line| line == told), "{done:?}");
+    assert!(done.iter().any(|line| line.starts_with("added kanbrain's hooks")), "the others: {done:?}");
+    assert_eq!(hook(&fs::read_to_string(&settings).unwrap()), hook(theirs), "no copy beside it");
+    let done = init(root.path(), None, None, central.path()).unwrap();
+    assert!(done.iter().any(|line| line == told), "told again: {done:?}");
+    assert!(!done.iter().any(|line| line.contains("already has kanbrain's hooks")), "not all of them: {done:?}");
+
+    let done = deinit(&root.path().join(".brain").canonicalize().unwrap(), central.path()).unwrap();
+    let told = ".claude/settings.local.json: a hook for Stop runs `cd /x && '/Users/John Doe/bin/kb' hook stop`, \
+                which looks like kanbrain's `kb hook stop`: kanbrain left it in place; if it's kanbrain's, remove it \
+                yourself";
+    assert!(done.iter().any(|line| line == told), "{done:?}");
+    assert!(done.iter().any(|line| line.starts_with("removed kanbrain's hooks")), "the others: {done:?}");
+    assert_eq!(
+        fs::read_to_string(&settings).unwrap().parse::<serde_json::Value>().unwrap(),
+        theirs.parse::<serde_json::Value>().unwrap()
+    );
+}
+
+#[test]
+fn deinit_takes_out_hooks_an_older_kanbrain_took_as_its_own_by_their_path() {
+    let (root, central) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    init(root.path(), None, None, central.path()).unwrap();
+    let settings = root.path().join(".claude/settings.local.json");
+    let pathed = fs::read_to_string(&settings).unwrap().replace("\"kb ", "\"/home/josé/.local/bin/kb ");
+    fs::write(&settings, pathed).unwrap();
+    let done = deinit(&root.path().join(".brain").canonicalize().unwrap(), central.path()).unwrap();
+    assert!(done.iter().any(|line| line.starts_with("removed .claude/settings.local.json")), "{done:?}");
+    assert!(!settings.exists());
+}
+
+#[test]
+fn a_hook_that_looks_like_kanbrains_is_said_on_one_line() {
+    let hook = claude::Edited { event: "Stop", command: "date\n/usr/bin/kb hook stop\r".into(), hook: "kb hook stop" };
+    let said = looks_like_kanbrains(&hook, "kanbrain left it in place");
+    assert_eq!(
+        said,
+        ".claude/settings.local.json: a hook for Stop runs `date\\n/usr/bin/kb hook stop\\r`, which looks like \
+         kanbrain's `kb hook stop`: kanbrain left it in place"
+    );
+}
+
+#[test]
 fn deinit_removes_a_claude_md_it_created_and_keeps_a_shared_card() {
     let (code, central) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let (api, web) = (code.path().join("api"), code.path().join("web"));
