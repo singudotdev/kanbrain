@@ -120,20 +120,28 @@ fn up_to_date(newer: &Result<Option<String>>, program: Program) -> Option<String
 }
 
 /// What `program`'s `update` says when cargo installed it, which keeps its own record of what it installed: the
-/// command that updates it, and then the projects. The crate `kanbrain` on crates.io is the command line; the kanban
-/// app's, `kanbrain-app`, isn't there (GPUI comes from git), so it comes from the repository, at `main`, the latest
-/// release.
-fn cargo_update(program: Program) -> String {
-    let install = if program.name == "kanbrain" {
-        "cargo install --locked --git https://github.com/singudotdev/kanbrain kanbrain-app"
-    } else {
-        "cargo install kanbrain"
-    };
+/// command that updates it, [`cargo_update_command`], and then the projects.
+fn cargo_update(program: Program, release: Option<&str>) -> String {
     format!(
-        "{} was installed with cargo: update it, and then every project's agent instructions, with\n\n  {install} && \
-         {} init --all",
-        program.name, program.name
+        "{} was installed with cargo: update it, and then every project's agent instructions, with\n\n  {} && {} init \
+         --all",
+        program.name,
+        cargo_update_command(program, release),
+        program.name
     )
+}
+
+/// The `cargo install` that updates `program` to `release` (`X.Y.Z`), or to the latest when it isn't known. The
+/// crate `kanbrain` on crates.io is the command line, whose latest cargo installs; the kanban app's, `kanbrain-app`,
+/// isn't there (GPUI comes from git), so it comes from the repository, at the release's tag, else at `main`, which is
+/// the latest release. The app is told apart by its name, `kanbrain`: [`Program`] says nothing else about it, and a
+/// field it gained would break code building one.
+pub fn cargo_update_command(program: Program, release: Option<&str>) -> String {
+    if program.name != "kanbrain" {
+        return "cargo install kanbrain".to_string();
+    }
+    let tag = release.map(|version| format!(" --tag v{version}")).unwrap_or_default();
+    format!("cargo install --locked --git https://github.com/singudotdev/kanbrain{tag} kanbrain-app")
 }
 
 /// The version at the end of the address a response's headers redirect to, `…/tag/vX.Y.Z`.
@@ -245,7 +253,7 @@ pub fn run_installer(dir: &Path, app: &str, captured: bool) -> Result<()> {
     Ok(())
 }
 
-/// [`update_program`] for `kb`.
+/// [`update_program`] for `kb`, which this always names.
 #[deprecated(since = "0.6.3", note = "use `update_program`, which names the program running in what it says")]
 pub fn update(central: &Path) -> Result<()> {
     update_program(central, Program { name: "kb" })
@@ -256,13 +264,14 @@ pub fn update(central: &Path) -> Result<()> {
 /// can't be replaced there. Installed with `cargo install`, it says how cargo updates it instead.
 pub fn update_program(central: &Path, program: Program) -> Result<()> {
     check_no_agent_working(central)?;
-    if let Some(said) = up_to_date(&newer_release(), program) {
+    let newer = newer_release();
+    if let Some(said) = up_to_date(&newer, program) {
         println!("{said}");
         return Ok(());
     }
     let exe = std::env::current_exe().context("finding this program's file")?;
     let Install::Installer { dir, app } = install_of(&exe)? else {
-        println!("{}", cargo_update(program));
+        println!("{}", cargo_update(program, newer.ok().flatten().as_deref()));
         return Ok(());
     };
     if cfg!(windows) {

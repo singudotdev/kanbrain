@@ -15,6 +15,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   PowerShell 5.1 completes no word starting with a single `-` (a tag to take off), which it takes for a parameter.
 - CI's lints (`cargo clippy` and `cargo doc`, warnings failing) run on macOS and Windows too, where code behind
   `cfg(windows)` or `cfg(not(unix))` is compiled.
+- `kanbrain-core`, for code built on it: `model::Comment::first_line` and `model::Task::doing_by(Author)`;
+  `store::Store::load_entries`, with each file skipped as a `store::Skipped` and why (`store::SkipReason`);
+  `cli::Step` and `cli::StepKind`, what `cli::init_steps`, `cli::rename_project_steps`, `cli::rename_repo_steps`,
+  `cli::move_repo_steps`, `cli::remove_repo_steps` and `cli::remove_project_steps` return; `cli::update::update_program`
+  and `cli::update::cargo_update_command`.
 
 ### Changed
 
@@ -35,8 +40,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Fixed
 
 - `kanbrain update`, the app's command line, names itself: `kanbrain X.Y.Z is the latest release`, and installed with
-  cargo, `cargo install --locked --git https://github.com/singudotdev/kanbrain kanbrain-app && kanbrain init --all`.
-  It said `kb`, and to run `cargo install kanbrain`, which installs the command line, not the app.
+  cargo, `cargo install --locked --git https://github.com/singudotdev/kanbrain --tag vX.Y.Z kanbrain-app && kanbrain
+  init --all`, the release it found. It said `kb`, and to run `cargo install kanbrain`, which installs the command
+  line, not the app. The app's **Update to X.Y.Z** gives the same command, where it said to "update it the same way".
 - `kb report --tag a,b` is refused with the error `kb list --tag a,b` gives: it counted only the first tag's
   tasks, without a word.
 - The kanban app started from the Start Menu, Finder or a desktop's launcher, without a console (on Windows it never

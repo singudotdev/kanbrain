@@ -2749,6 +2749,9 @@ fn projects_and_repositories_are_managed_from_the_projects_info() {
     board.ask_remove(src(&board, "blog/web"), false);
     press(&mut board, KeyCode::Char('y'));
     assert_eq!(labels(&board), ["store", "blog"]);
+    let web = code.path().canonicalize().unwrap().join("web/.brain");
+    let said = format!("unregistered {}: the kanban app no longer shows it", web.display());
+    assert_eq!(board.message(), Some(said.as_str()), "kept: what it did first, nothing deleted said");
     assert!(code.path().join("web/.brain").is_dir(), "unlinked, its tasks kept");
     assert!(matches!(board.mode, Mode::ManageProject(at) if at == src(&board, "blog")), "back on blog's other one");
     board.mode = Mode::Normal;
@@ -2775,11 +2778,13 @@ fn projects_and_repositories_are_managed_from_the_projects_info() {
     board.ask_remove(src(&board, "blog/mobile"), false);
     press(&mut board, KeyCode::Char('y'));
 
+    let api = code.path().canonicalize().unwrap().join("api/.brain");
     board.ask_remove(src(&board, "store"), true);
     press(&mut board, KeyCode::Char('d'));
     assert_eq!(labels(&board), ["blog"]);
     assert!(!code.path().join("api/.brain").exists(), "its tasks deleted too");
-    assert!(board.message().unwrap().starts_with("deleted "), "and said: {:?}", board.message());
+    let said = format!("deleted {}: its tasks, notes and decisions are gone", api.display());
+    assert_eq!(board.message(), Some(said.as_str()), "and said");
     assert!(matches!(board.mode, Mode::Normal));
 }
 

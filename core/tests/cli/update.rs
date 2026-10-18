@@ -106,16 +106,23 @@ fn an_update_to_the_release_already_installed_installs_nothing() {
 #[test]
 fn a_program_cargo_installed_is_told_how_cargo_updates_it() {
     assert_eq!(
-        cargo_update(KB),
+        cargo_update(KB, Some("9.0.0")),
         "kb was installed with cargo: update it, and then every project's agent instructions, with\n\n  \
          cargo install kanbrain && kb init --all"
     );
     // The crate `kanbrain` on crates.io is the command line: the app, `kanbrain-app`, comes from the repository.
     assert_eq!(
-        cargo_update(APP),
+        cargo_update(APP, Some("9.0.0")),
         "kanbrain was installed with cargo: update it, and then every project's agent instructions, with\n\n  \
-         cargo install --locked --git https://github.com/singudotdev/kanbrain kanbrain-app && kanbrain init --all"
+         cargo install --locked --git https://github.com/singudotdev/kanbrain --tag v9.0.0 kanbrain-app && kanbrain \
+         init --all"
     );
+    // The release unknown (GitHub didn't answer): `main`, which is the latest release.
+    assert_eq!(
+        cargo_update_command(APP, None),
+        "cargo install --locked --git https://github.com/singudotdev/kanbrain kanbrain-app"
+    );
+    assert_eq!(cargo_update_command(KB, None), "cargo install kanbrain");
 }
 
 /// A Windows folder with every character special in PowerShell's strings: `$` and a backtick, which a double-quoted

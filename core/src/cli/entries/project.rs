@@ -1,6 +1,7 @@
 //! `project`: its arguments, showing the project, and changing it.
 
 use super::super::manage;
+use super::super::manage::Step;
 use super::args::rest_as_text;
 use super::{ProjectChange, ProjectPart};
 use crate::brain::Brain;
@@ -73,11 +74,11 @@ pub(super) fn run_project(brain: &mut Brain, change: Option<ProjectChange>) -> R
         }
         Some(ProjectChange::Text(ProjectPart::Description, text)) => {
             brain.set_project_description(&text.read()?)?;
-            vec![format!("project {name}: description saved").into()]
+            vec![Step::other(format!("project {name}: description saved"))]
         }
         Some(ProjectChange::Text(ProjectPart::Notes, text)) => {
             brain.set_repo_notes(&text.read()?)?;
-            vec![format!("project {name}: repository role saved").into()]
+            vec![Step::other(format!("project {name}: repository role saved"))]
         }
         // `rename OLD NEW`, as other tools have it, would name the project "OLD NEW", names having spaces.
         Some(ProjectChange::Rename(new, false))

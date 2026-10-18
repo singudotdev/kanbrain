@@ -125,7 +125,8 @@ its data, migrated to the new version's format when it changed, after a backup (
 [Format versions and migrations](data-format.md#format-versions-and-migrations)). Installed with `cargo install`,
 `kb update` replaces nothing behind cargo's back: it prints `cargo install kanbrain && kb init --all` to run (and
 `kanbrain update`, for the app, which isn't on crates.io,
-`cargo install --locked --git https://github.com/singudotdev/kanbrain kanbrain-app && kanbrain init --all`).
+`cargo install --locked --git https://github.com/singudotdev/kanbrain --tag vX.Y.Z kanbrain-app && kanbrain init --all`,
+the release it found).
 
 The kanban app checks for a newer release when it opens and once a day, and offers it in the status bar:
 **Update to X.Y.Z** (`U`) does the same as `kb update`, then opens the new version. On Windows it closes first,

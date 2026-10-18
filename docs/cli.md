@@ -307,8 +307,8 @@ instructions, and its data, migrated to the new version's format when it changed
 program can't be replaced, it prints the PowerShell command to run once the app is closed. Installed with
 `cargo install`, it doesn't replace anything behind cargo's back: it prints `cargo install kanbrain && kb init --all`;
 `kanbrain update`, the app's, prints
-`cargo install --locked --git https://github.com/singudotdev/kanbrain kanbrain-app && kanbrain init --all`, as the app
-isn't on crates.io.
+`cargo install --locked --git https://github.com/singudotdev/kanbrain --tag vX.Y.Z kanbrain-app && kanbrain init --all`
+(the release it found), as the app isn't on crates.io.
 The installer only writes inside your home folder, so a `kb` elsewhere (`/usr/local/bin`, a build's `target/`) is
 refused with "install folder must be inside your home folder": reinstall it there instead.
 

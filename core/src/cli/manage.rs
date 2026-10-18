@@ -48,17 +48,10 @@ impl Step {
     pub(crate) fn new(kind: StepKind, line: String) -> Self {
         Self { kind, line }
     }
-}
 
-impl From<String> for Step {
-    fn from(line: String) -> Self {
-        Self::new(StepKind::Other, line)
-    }
-}
-
-impl From<&str> for Step {
-    fn from(line: &str) -> Self {
-        line.to_string().into()
+    /// A step no caller acts on, saying `line`.
+    pub(crate) fn other(line: impl Into<String>) -> Self {
+        Self::new(StepKind::Other, line.into())
     }
 }
 
@@ -73,13 +66,14 @@ pub(crate) fn lines(steps: Result<Vec<Step>>) -> Result<Vec<String>> {
     Ok(steps?.into_iter().map(|step| step.line).collect())
 }
 
-/// Renames project `old` to `new`: the registry, its shared card, and each of its repositories' cards.
+/// [`rename_project_steps`], each step as its line.
 #[deprecated(since = "0.6.3", note = "use `rename_project_steps`, which says what each line is")]
 pub fn rename_project(central: &Path, old: &str, new: &str) -> Result<Vec<String>> {
     lines(rename_project_steps(central, old, new))
 }
 
-/// [`rename_project`], each line a [`Step`].
+/// Renames project `old` to `new`: the registry, its shared card, and each of its repositories' cards.
+/// Returns what it did, a [`Step`] a line.
 pub fn rename_project_steps(central: &Path, old: &str, new: &str) -> Result<Vec<Step>> {
     projects::check_name(new)?;
     // From the checks to the cards: a project named `new` meanwhile would take this one's repositories.
@@ -89,7 +83,7 @@ pub fn rename_project_steps(central: &Path, old: &str, new: &str) -> Result<Vec<
         bail!("no project `{old}`");
     }
     if old == new {
-        return Ok(vec![format!("project `{old}` already has that name").into()]);
+        return Ok(vec![Step::other(format!("project `{old}` already has that name"))]);
     }
     if repos.iter().any(|r| r.project == new) {
         bail!("there's already a project `{new}`: move this one's repositories to it instead");
@@ -100,22 +94,23 @@ pub fn rename_project_steps(central: &Path, old: &str, new: &str) -> Result<Vec<
             projects::write_repo_card(&repo.dir, &RepoCard { project: new.to_string(), ..card })?;
         }
     }
-    Ok(vec![format!("renamed project `{old}` to `{new}`; its repositories and card follow").into()])
+    Ok(vec![Step::other(format!("renamed project `{old}` to `{new}`; its repositories and card follow"))])
 }
 
-/// Renames the repository whose `.brain/` is `dir` to `new` in its project, and rewrites its siblings' links to
-/// it (`old#3` becomes `new#3`).
+/// [`rename_repo_steps`], each step as its line.
 #[deprecated(since = "0.6.3", note = "use `rename_repo_steps`, which says what each line is")]
 pub fn rename_repo(central: &Path, dir: &Path, new: &str) -> Result<Vec<String>> {
     lines(rename_repo_steps(central, dir, new))
 }
 
-/// [`rename_repo`], each line a [`Step`].
+/// Renames the repository whose `.brain/` is `dir` to `new` in its project, and rewrites its siblings' links to
+/// it (`old#3` becomes `new#3`).
+/// Returns what it did, a [`Step`] a line.
 pub fn rename_repo_steps(central: &Path, dir: &Path, new: &str) -> Result<Vec<Step>> {
     let repo = registered(central, dir)?;
     let old = repo.name();
     if old == new {
-        return Ok(vec![format!("repository `{old}` already has that name").into()]);
+        return Ok(vec![Step::other(format!("repository `{old}` already has that name"))]);
     }
     let new = projects::repo_name(central, &repo.project, &repo.dir, Some(new))?;
     let card = projects::read_repo_card(&repo.dir).unwrap_or_else(|| RepoCard {
@@ -127,27 +122,28 @@ pub fn rename_repo_steps(central: &Path, dir: &Path, new: &str) -> Result<Vec<St
     projects::write_repo_card(&repo.dir, &RepoCard { repo: stored, ..card })?;
     let rewritten = rewrite_sibling_links(central, &repo, |link_repo| (link_repo == old).then(|| new.clone()))?;
     let mut done: Vec<Step> =
-        vec![format!("renamed repository `{old}` of project `{}` to `{new}`", repo.project).into()];
+        vec![Step::other(format!("renamed repository `{old}` of project `{}` to `{new}`", repo.project))];
     if rewritten > 0 {
         let entries = counted(rewritten, "entry", "entries");
-        done.push(format!("rewrote the links to it in {entries} of its other repositories").into());
+        done.push(Step::other(format!("rewrote the links to it in {entries} of its other repositories")));
     }
     Ok(done)
 }
 
-/// Moves the repository whose `.brain/` is `dir` to project `to`, created if new, as `kb init to` there would.
-/// Links between it and its old project's repositories are dropped on both sides: they'd name repositories of
-/// another project.
+/// [`move_repo_steps`], each step as its line.
 #[deprecated(since = "0.6.3", note = "use `move_repo_steps`, which says what each line is")]
 pub fn move_repo(central: &Path, dir: &Path, to: &str) -> Result<Vec<String>> {
     lines(move_repo_steps(central, dir, to))
 }
 
-/// [`move_repo`], each line a [`Step`].
+/// Moves the repository whose `.brain/` is `dir` to project `to`, created if new, as `kb init to` there would.
+/// Links between it and its old project's repositories are dropped on both sides: they'd name repositories of
+/// another project.
+/// Returns what it did, a [`Step`] a line.
 pub fn move_repo_steps(central: &Path, dir: &Path, to: &str) -> Result<Vec<Step>> {
     let repo = registered(central, dir)?;
     if repo.project == to {
-        return Ok(vec![format!("{} is already a repository of project `{to}`", repo.name()).into()]);
+        return Ok(vec![Step::other(format!("{} is already a repository of project `{to}`", repo.name()))]);
     }
     projects::check_name(to)?;
     let root = repo.dir.parent().filter(|_| repo.dir.is_dir()).context("its folder is gone: remove it instead")?;
@@ -163,7 +159,7 @@ pub fn move_repo_steps(central: &Path, dir: &Path, to: &str) -> Result<Vec<Step>
     // Said as a move, not as the `init` it runs: "… already exists" would lead.
     let mut done = vec![Step::new(StepKind::Moved, format!("moved {name} from project `{}` to `{to}`", repo.project))];
     if let (Some(name), Some(why)) = (&own, refused) {
-        done.push(format!("named after its folder in `{to}`, as `{name}` can't be: {why:#}").into());
+        done.push(Step::other(format!("named after its folder in `{to}`, as `{name}` can't be: {why:#}")));
     }
     done.extend(joined.into_iter().filter(|step| step.kind != StepKind::AlreadyExisted));
     // Its old project, left with no repository: the description goes to the new project when that has none, rather
@@ -173,18 +169,22 @@ pub fn move_repo_steps(central: &Path, dir: &Path, to: &str) -> Result<Vec<Step>
         if !description.is_empty() {
             if projects::read_description(central, to).is_empty() {
                 projects::write_description(central, to, &description)?;
-                done.push(
-                    format!("project `{}`'s description went with it to `{to}`, which had none", repo.project).into(),
-                );
+                done.push(Step::other(format!(
+                    "project `{}`'s description went with it to `{to}`, which had none",
+                    repo.project
+                )));
             } else {
-                done.push(format!("project `{}`'s description is dropped: `{to}` keeps its own", repo.project).into());
+                done.push(Step::other(format!(
+                    "project `{}`'s description is dropped: `{to}` keeps its own",
+                    repo.project
+                )));
             }
         }
         if projects::remove_description(central, &repo.project)? {
-            done.push(
-                format!("removed project `{}`'s card from the central brain: it had no other repository", repo.project)
-                    .into(),
-            );
+            done.push(Step::other(format!(
+                "removed project `{}`'s card from the central brain: it had no other repository",
+                repo.project
+            )));
         }
     }
     if dropped > 0 {
@@ -194,19 +194,22 @@ pub fn move_repo_steps(central: &Path, dir: &Path, to: &str) -> Result<Vec<Step>
     }
     // They describe the repository, which moved with them, but were written among its old project's.
     if projects::read_repo_card(&repo.dir).is_some_and(|card| !card.notes.is_empty()) {
-        done.push("kept its role's notes, written for its old project: `kb project notes -` replaces them".into());
+        done.push(Step::other(
+            "kept its role's notes, written for its old project: `kb project notes -` replaces them",
+        ));
     }
     Ok(done)
 }
 
-/// Takes the repository whose `.brain/` is `dir` out of its project, as `kb deinit` does, and drops its old
-/// siblings' links to it. With `purge`, its `.brain/` goes too: its tasks, notes and decisions.
+/// [`remove_repo_steps`], each step as its line.
 #[deprecated(since = "0.6.3", note = "use `remove_repo_steps`, which says what each line is")]
 pub fn remove_repo(central: &Path, dir: &Path, purge: bool) -> Result<Vec<String>> {
     lines(remove_repo_steps(central, dir, purge))
 }
 
-/// [`remove_repo`], each line a [`Step`].
+/// Takes the repository whose `.brain/` is `dir` out of its project, as `kb deinit` does, and drops its old
+/// siblings' links to it. With `purge`, its `.brain/` goes too: its tasks, notes and decisions.
+/// Returns what it did, a [`Step`] a line.
 pub fn remove_repo_steps(central: &Path, dir: &Path, purge: bool) -> Result<Vec<Step>> {
     let repo = registered(central, dir)?;
     unlink(central, &repo)?;
@@ -215,14 +218,11 @@ pub fn remove_repo_steps(central: &Path, dir: &Path, purge: bool) -> Result<Vec<
         return Ok(done);
     }
     if !purge {
-        done.push(
-            format!(
-                "kept {} with its tasks, notes and decisions: commands run here still use it (`--purge`, or the \
+        done.push(Step::other(format!(
+            "kept {} with its tasks, notes and decisions: commands run here still use it (`--purge`, or the \
                  app's Unlink and delete tasks, deletes them)",
-                repo.dir.display()
-            )
-            .into(),
-        );
+            repo.dir.display()
+        )));
         return Ok(done);
     }
     // Only ever a `.brain/` folder: `dir` comes from the registry, which a hand edit could point elsewhere.
@@ -240,14 +240,15 @@ pub fn remove_repo_steps(central: &Path, dir: &Path, purge: bool) -> Result<Vec<
     Ok(done)
 }
 
-/// Takes every repository of `project` out, as [`remove_repo`] does each, which removes the project's card with
-/// the last.
+/// [`remove_project_steps`], each step as its line.
 #[deprecated(since = "0.6.3", note = "use `remove_project_steps`, which says what each line is")]
 pub fn remove_project(central: &Path, project: &str, purge: bool) -> Result<Vec<String>> {
     lines(remove_project_steps(central, project, purge))
 }
 
-/// [`remove_project`], each line a [`Step`].
+/// Takes every repository of `project` out, as [`remove_repo`] does each, which removes the project's card with
+/// the last.
+/// Returns what it did, a [`Step`] a line.
 pub fn remove_project_steps(central: &Path, project: &str, purge: bool) -> Result<Vec<Step>> {
     let repos: Vec<Repo> = projects::load(central)?.into_iter().filter(|r| r.project == project).collect();
     if repos.is_empty() {
