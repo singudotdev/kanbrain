@@ -8,6 +8,7 @@
 //! - [`entries`]: the notes and decisions lists.
 //! - [`drawer`]: the selected entry's details, beside the board or list.
 //! - [`report`]: tracked time by task or tag.
+//! - [`startup`]: the window saying why the app couldn't open the board.
 //! - [`calendar`]: each day's interactions, for a day, week or month.
 //! - [`dialogs`]: the new / edit form, the text editor, confirmations, links, the command palette and the project
 //!   dialogs.
@@ -34,6 +35,7 @@ mod markdown;
 mod menu;
 mod pointer;
 mod report;
+pub mod startup;
 mod text;
 mod theme;
 mod topbar;
@@ -92,28 +94,35 @@ const FONTS: [&[u8]; 8] = [
     include_bytes!("../../fonts/lilex/Lilex-BoldItalic.ttf"),
 ];
 
+/// Loads the window's fonts: without them the text still shows, in whatever the system has.
+fn load_fonts(cx: &mut GpuiApp) {
+    if let Err(e) = cx.text_system().add_fonts(FONTS.iter().map(|&font| Cow::Borrowed(font)).collect()) {
+        eprintln!("kanbrain: couldn't load the window's fonts: {e:#}");
+    }
+}
+
+/// A window of `size` in the middle of the screen, with the app's id and icon.
+fn window_options(size: gpui::Size<gpui::Pixels>, cx: &GpuiApp) -> WindowOptions {
+    WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size, cx))),
+        app_id: Some(APP_ID.to_string()),
+        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+        icon: window_icon(),
+        ..Default::default()
+    }
+}
+
 /// Opens the window and runs until it's closed or the board quits.
 pub fn run(board: Board) {
     gpui_platform::application().run(move |cx: &mut GpuiApp| {
-        // Without them the text still shows, in whatever the system has.
-        if let Err(e) = cx.text_system().add_fonts(FONTS.iter().map(|&font| Cow::Borrowed(font)).collect()) {
-            eprintln!("kanbrain: couldn't load the window's fonts: {e:#}");
-        }
+        load_fonts(cx);
         cx.on_window_closed(|cx, _window| {
             if cx.windows().is_empty() {
                 cx.quit();
             }
         })
         .detach();
-        let bounds = Bounds::centered(None, size(px(1400.), px(860.)), cx);
-        let options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
-            app_id: Some(APP_ID.to_string()),
-            #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-            icon: window_icon(),
-            ..Default::default()
-        };
-        let opened = cx.open_window(options, |window, cx| {
+        let opened = cx.open_window(window_options(size(px(1400.), px(860.)), cx), |window, cx| {
             let title = match &board.scope {
                 Scope::Project(name) => format!("{name} · kanbrain"),
                 Scope::Repo(src) => format!("{} · kanbrain", board.sources[*src].label.as_deref().unwrap_or_default()),
