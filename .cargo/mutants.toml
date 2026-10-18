@@ -42,4 +42,7 @@ exclude_re = [
     # The app's entry point: opens the window, which no test runs (the state and window tests open the board
     # themselves, `Board::open`).
     'gui/src/main\.rs:.*replace main -> anyhow::Result<\(\)> with Ok\(\(\)\)',
+    # The build-time check of MIGRATIONS (a `const`, in no function): a mutant of it either fails the build or, with
+    # no step whose format to check, checks nothing either way.
+    'core/src/migrate\.rs:[0-9]+:[0-9]+: replace (\+= with -=|< with >)$',
 ]
