@@ -207,6 +207,7 @@ e2e/upgrade.sh       brains written by every released kb, opened by this build (
 e2e/update.sh        every released kb update installing this build (CI)
 e2e/smoke-app.sh     the release app starts, stays up and idles; a screenshot (CI; smoke-app.ps1 for Windows)
 e2e/agent.sh         a real agent working with kanbrain, scenario by scenario (run by hand)
+e2e/lib.sh           what the shell scripts share, sourced by them: `fail`, the agent variables `kb` reads, cleared to run it as a person
 docs/decisions/      why things are as they are, one decision a file (NNNN-title.md)
 xtask/               `cargo xtask notices kb|kanbrain` (the alias is in .cargo/config.toml): THIRD-PARTY-LICENSES.txt,
                      from cargo-about (about.toml) and licenses/ for what's compiled in but isn't a crate

@@ -19,6 +19,8 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
+# shellcheck source=e2e/lib.sh
+. "$(dirname "$0")/lib.sh"
 cargo build -q --manifest-path "$repo/Cargo.toml" --bin kb
 head_kb="$repo/target/debug/kb"
 releases="https://github.com/singudotdev/kanbrain/releases/download"
@@ -27,17 +29,11 @@ asset="kb-x86_64-unknown-linux-musl.tar.gz"
 work=$(mktemp -d "${TMPDIR:-/tmp}/kb-upgrade.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT
 
-fail() {
-    echo "FAIL: $*" >&2
-    exit 1
-}
-
 # `kb` from $1 in the throwaway home $2, as a person; `agent` runs it as an agent. No agent variable leaks in.
 person() {
     local bin=$1 home=$2
     shift 2
-    env -u CLAUDECODE -u AI_AGENT -u AGENT -u CODEX_SANDBOX -u CODEX_CI -u CODEX_THREAD_ID -u GEMINI_CLI \
-        -u KANBRAIN_AUTHOR HOME="$home" KANBRAIN_DIR="$home/central" XDG_CACHE_HOME="$home/.cache" \
+    env "${without_agent[@]}" HOME="$home" KANBRAIN_DIR="$home/central" XDG_CACHE_HOME="$home/.cache" \
         XDG_DATA_HOME="$home/.local/share" "$bin" "$@"
 }
 agent() {

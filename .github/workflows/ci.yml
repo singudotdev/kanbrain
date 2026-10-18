@@ -148,7 +148,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # Static checks first: shellcheck is on Ubuntu's runners.
       - if: runner.os == 'Linux'
-        run: shellcheck install.sh e2e/install.sh e2e/agent.sh e2e/upgrade.sh e2e/update.sh e2e/smoke-app.sh gui/icons/make.sh .github/plan.sh
+        run: shellcheck -x install.sh e2e/lib.sh e2e/install.sh e2e/agent.sh e2e/upgrade.sh e2e/update.sh e2e/smoke-app.sh gui/icons/make.sh .github/plan.sh
       # PowerShell's own analyzer, failing on what it rates an error.
       - if: runner.os == 'Windows'
         shell: pwsh
