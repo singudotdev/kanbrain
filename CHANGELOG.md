@@ -28,6 +28,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- `kb report --tag a,b` is refused with the error `kb list --tag a,b` gives: it counted only the first tag's
+  tasks, without a word.
 - `KANBRAIN_DIR` set but empty counts as unset, the platform data folder: `kb` or the kanban app wrote `format` into
   whatever folder it ran in, and the command then failed (`reading …: No such file or directory`). A relative one is
   refused with an error naming it, as it named another central brain from each folder `kb` ran in, hooks included; on

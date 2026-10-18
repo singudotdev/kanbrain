@@ -466,15 +466,7 @@ impl ListArgs {
                 "--json" => json = true,
                 "notes" | "note" => kinds.push(Kind::Note),
                 "decisions" | "decision" => kinds.push(Kind::Decision),
-                "--tag" => {
-                    let value = args.next().context("--tag needs a value")?;
-                    // One tag: a second would be dropped without a word.
-                    let mut tags = parse_tags(&value).into_iter();
-                    tag = tags.next();
-                    if tags.next().is_some() {
-                        bail!("--tag takes one tag, not `{value}`");
-                    }
-                }
+                "--tag" => tag = tag_option(args)?,
                 "all" => statuses.extend(Status::ALL),
                 // Anything else must be a status name.
                 other => match Status::parse(other) {
@@ -507,10 +499,7 @@ impl ReportArgs {
                     let value = args.next().with_context(|| format!("--group needs {groups}"))?;
                     report.group = Group::parse(&value).with_context(|| format!("--group must be {groups}"))?;
                 }
-                "--tag" => {
-                    let value = args.next().context("--tag needs a value")?;
-                    report.tag = parse_tags(&value).into_iter().next();
-                }
+                "--tag" => report.tag = tag_option(args)?,
                 "--save" => report.save = true,
                 // Anything else must be a period name.
                 other => match Unit::parse(other) {
@@ -521,6 +510,18 @@ impl ReportArgs {
         }
         Ok(report)
     }
+}
+
+/// The value of `list`'s or `report`'s `--tag`, next in `args`: one tag, or none for a value naming none (`#`).
+fn tag_option(args: &mut impl Iterator<Item = String>) -> Result<Option<String>> {
+    let value = args.next().context("--tag needs a value")?;
+    // One tag: a second would be dropped without a word.
+    let mut tags = parse_tags(&value).into_iter();
+    let tag = tags.next();
+    if tags.next().is_some() {
+        bail!("--tag takes one tag, not `{value}`");
+    }
+    Ok(tag)
 }
 
 /// Environment variables coding agents set in the commands they run, so `kb` can tell them from a

@@ -125,6 +125,16 @@ fn report_options() {
 }
 
 #[test]
+fn list_and_report_refuse_several_tags_alike() {
+    // `report` kept the first without a word, counting only its tasks; `list` refused.
+    for command in ["list", "report"] {
+        let error = parse(&[command, "--tag", "ops,ui"]).unwrap_err().to_string();
+        assert_eq!(error, "--tag takes one tag, not `ops,ui`", "{command}");
+        assert!(parse(&[command, "--tag", "#ops"]).is_ok(), "{command}");
+    }
+}
+
+#[test]
 fn the_usage_names_init_all_for_the_installers() {
     // install.sh and install.ps1 run `init --all` only when `--help` names it: an older version would take
     // `--all` for a project's name. Rewording this line would silently stop upgrades refreshing projects.
