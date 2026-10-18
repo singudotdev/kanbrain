@@ -50,5 +50,7 @@ remember when they moved, and track the time spent on them.
 | **comment** | a timestamped note added over time (like a GitHub/GitLab issue comment); can be edited and deleted |
 | **session** | one stretch of work on a task, from moving it to Doing to moving it out, e.g. 10:12–10:57 |
 
-> **Using this as a GitHub/GitLab wiki:** the pages only link to each other with relative links, so you can copy
-> `docs/*.md` into the project wiki as is. Rename `README.md` to `Home.md` for the wiki's start page.
+> **Using this as a GitHub/GitLab wiki:** the pages link to each other with relative links, so you can copy
+> `docs/*.md` into the project wiki as is. Rename `README.md` to `Home.md` for the wiki's start page. Only
+> [Development](development.md) also links outside them, to `../CONTRIBUTING.md` and the `decisions/` folder, which
+> a wiki copy doesn't carry: read those in the repository.

@@ -123,8 +123,8 @@ Asking it for "todos" or a plan, in any language, creates kanbrain tasks, not en
 list; questions don't get one. See [For coding agents](docs/agents.md) for what goes where.
 
 The output is kept small so it doesn't waste the agent's context, and the CLI costs nothing until it's called.
-`context` lists titles and ids only, capped at 20 per section. Write commands reply with one line, like
-`#4 Fix login 500 (doing) #auth`. `show ID` is how an agent reads one entry in full.
+`context` lists titles and ids only, capped at 20 per section (5 for the latest done). Write commands reply with
+one line, like `#4 Fix login 500 (doing) #auth`. `show ID` is how an agent reads one entry in full.
 
 ## 3. Commands you'll use most
 
@@ -150,7 +150,7 @@ The output is kept small so it doesn't waste the agent's context, and the CLI co
 | `kb list [doing\|todo\|parked\|done\|all] [notes] [decisions] [--tag T] [--json]` | print tasks as markdown |
 | `kb status` | the running tasks and their clocks, for status bars |
 | `kb report [hour\|day\|week\|month] [--group task\|tag] [--tag T] [--save]` | tracked time as markdown |
-| `kb update` | install the latest release over this one |
+| `kb update` | install the latest release over this one, then bring every project up to it (`kb init --all`) |
 | `kb completions bash\|zsh\|fish\|powershell` | tab completion of commands, ids, projects and tags |
 | `kanbrain` | open the kanban board (`?` opens the command palette, with every key; `u` undoes) |
 

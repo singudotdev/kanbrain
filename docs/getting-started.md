@@ -117,9 +117,13 @@ For tab completion of commands, ids and projects, see [`kb completions`](cli.md#
 ### Updating
 
 Run `kb update` (or `kanbrain update`), which runs the installer again for the apps you have, in the same
-folder; or run the installer yourself, with the same `--app`. It replaces the binaries; your data isn't touched.
-Then it brings the agent instructions of every project you ran `kb init` in up to the new version's
-([`kb init --all`](cli.md#kb-init---all)), so you don't have to run `init` in each one.
+folder; or run the installer yourself, with the same `--app`. On Windows, where a running program can't be replaced,
+`kb update` prints the PowerShell command to run instead, once the app is closed. The installer replaces the
+binaries, then brings every project you ran `kb init` in up to the new version
+([`kb init --all`](cli.md#kb-init---all)), so you don't have to run `init` in each one: its agent instructions, and
+its data, migrated to the new version's format when it changed, after a backup (see
+[Format versions and migrations](data-format.md#format-versions-and-migrations)). Installed with `cargo install`,
+`kb update` replaces nothing behind cargo's back: it prints `cargo install kanbrain && kb init --all` to run.
 
 The kanban app checks for a newer release when it opens and once a day, and offers it in the status bar:
 **Update to X.Y.Z** (`U`) does the same as `kb update`, then opens the new version. On Windows it closes first,

@@ -181,3 +181,18 @@ fn the_docs_name_every_variable_that_marks_an_agent() {
         }
     }
 }
+
+#[test]
+fn the_reference_shows_the_usage_as_printed() {
+    // On Windows, git may check the docs out with CRLF line endings.
+    let docs = include_str!("../../docs/cli.md").replace("\r\n", "\n");
+    // The first fenced block, with a language tag or without.
+    let block = docs.lines().skip_while(|line| !line.starts_with("```")).skip(1);
+    let shown: String = block.take_while(|line| *line != "```").flat_map(|line| [line, "\n"]).collect();
+    assert!(!shown.is_empty(), "docs/cli.md starts with the usage, in a fenced block");
+    let usage = usage(Program { name: "kb" });
+    // What follows `usage:`, up to the license.
+    let printed = usage.split_once("usage:\n").and_then(|(_, rest)| rest.split_once("\n\nkanbrain by")).map(|(u, _)| u);
+    let printed = format!("{}\n", printed.expect("usage: and the license"));
+    assert!(shown == printed, "docs/cli.md's usage is\n{shown}\nbut `kb --help` prints\n{printed}");
+}
