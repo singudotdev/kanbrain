@@ -21,6 +21,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The kanban app's new / edit form shows the tags as chips in their colors, each with × to take it off, instead of
   text: a comma or space after a tag typed, or picking one from the list, adds it as a chip.
 
+### Deprecated
+
+- `kanbrain-core`, for code built on it: `Brain::change_status`, `Brain::comment` and `Brain::describe`, which nothing
+  in kanbrain calls any more: `Brain::set_status`, `Brain::add_comment` and `Brain::set_description` do the same.
+
 ### Fixed
 
 - `KANBRAIN_DIR` set but empty counts as unset, the platform data folder: `kb` or the kanban app wrote `format` into

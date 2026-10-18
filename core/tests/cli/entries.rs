@@ -316,12 +316,12 @@ fn wait_ends_on_a_persons_answer_or_verdict() {
     assert_eq!(settled_on(&brain, task).unwrap(), format!("{head}: answered\n\nPer account"));
     // Answered and moved on before `wait` looked again: the answer to the question it found is still said.
     let asked_at = brain.entry(task).unwrap().comments.iter().rev().find(|c| c.question).unwrap().created;
-    brain.change_status(task, Status::Todo).unwrap();
+    brain.set_status(task, Status::Todo).unwrap();
     assert_eq!(
         settled(brain.entry(task).unwrap(), Some(asked_at)).unwrap(),
         format!("{head}: answered, now todo\n\nPer account")
     );
-    brain.change_status(task, Status::Parked).unwrap();
+    brain.set_status(task, Status::Parked).unwrap();
 
     brain.author = crate::model::Author::Agent;
     let decision = brain.propose(task, new("Use Redis")).unwrap();
@@ -399,7 +399,7 @@ fn a_task_moved_on_unanswered_says_so_rather_than_quote_an_older_comment_or_its_
     brain.author = crate::model::Author::Agent;
     brain.ask(task, "Per IP or per account?").unwrap();
     let asked_at = brain.entry(task).unwrap().comments.iter().rev().find(|c| c.question).unwrap().created;
-    brain.change_status(task, Status::Todo).unwrap();
+    brain.set_status(task, Status::Todo).unwrap();
     assert_eq!(
         settled(brain.entry(task).unwrap(), Some(asked_at)).unwrap(),
         format!("#{task} Rate-limit login: not waiting for an answer (todo)")

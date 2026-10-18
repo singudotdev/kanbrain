@@ -84,16 +84,19 @@ impl Brain {
     }
 
     /// Moves a task to `status`; `doing` starts its clock (refused for a person who already runs a task).
+    #[deprecated(since = "0.6.3", note = "use `Brain::set_status`, which also says whether the status changed")]
     pub fn change_status(&mut self, id: u32, status: Status) -> Result<()> {
         self.set_status(id, status).map(drop)
     }
 
     /// Adds a timestamped comment, e.g. progress notes from an agent.
+    #[deprecated(since = "0.6.3", note = "use `Brain::add_comment`")]
     pub fn comment(&mut self, id: u32, text: &str) -> Result<()> {
         self.add_comment(id, text).map(drop)
     }
 
     /// Replaces the description.
+    #[deprecated(since = "0.6.3", note = "use `Brain::set_description`")]
     pub fn describe(&mut self, id: u32, text: &str) -> Result<()> {
         self.set_description(id, text).map(drop)
     }
