@@ -13,7 +13,7 @@ fn repo(central: &Path, code: &Path, path: &str, project: &str) -> PathBuf {
     let root = code.join(path);
     fs::create_dir_all(&root).unwrap();
     init::init(&root, Some(project), None, central).unwrap();
-    root.join(PROJECT_DIR).canonicalize().unwrap()
+    projects::canonical(&root.join(PROJECT_DIR)).unwrap()
 }
 
 fn brain(central: &Path, dir: &Path) -> Brain {

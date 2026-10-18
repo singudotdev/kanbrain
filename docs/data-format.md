@@ -30,7 +30,9 @@ per project repository. You can read them, edit them, grep them and version them
 ## Projects
 
 The central brain's `projects.md` lists the repositories `init` registered: the project's name, then the path of
-the repository's `.brain/`. Several lines with the same name are one project's repositories.
+the repository's `.brain/`. Several lines with the same name are one project's repositories. On Windows the path is
+written without the `\\?\` prefix canonicalizing adds, unless the plain path would name another folder; one written
+with it (by an earlier kanbrain, or by hand) reads the same.
 
 ```markdown
 # Projects

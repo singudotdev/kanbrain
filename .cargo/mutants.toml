@@ -37,4 +37,7 @@ exclude_re = [
     'gui/src/ui/dialogs/merge\.rs:.*replace == with != in conflict_box$',
     # No waits for a busy file is what `busy_delays` gives off Windows, where the mutants run.
     'core/src/store\.rs:.*replace busy_delays -> &.static\[Duration\] with Vec::leak\(Vec::new\(\)\)',
+    # The app's entry point: opens the window, which no test runs (the state and window tests open the board
+    # themselves, `Board::open`).
+    'gui/src/main\.rs:.*replace main -> anyhow::Result<\(\)> with Ok\(\(\)\)',
 ]
