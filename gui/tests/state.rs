@@ -2746,10 +2746,11 @@ fn projects_and_repositories_are_managed_from_the_projects_info() {
     press(&mut board, KeyCode::Enter);
     assert_eq!(labels(&board), ["store", "blog/blog", "blog/web"]);
 
+    // As the registry has it, which the messages name.
+    let web = board.brain(src(&board, "blog/web")).store.dir().to_path_buf();
     board.ask_remove(src(&board, "blog/web"), false);
     press(&mut board, KeyCode::Char('y'));
     assert_eq!(labels(&board), ["store", "blog"]);
-    let web = code.path().canonicalize().unwrap().join("web/.brain");
     let said = format!("unregistered {}: the kanban app no longer shows it", web.display());
     assert_eq!(board.message(), Some(said.as_str()), "kept: what it did first, nothing deleted said");
     assert!(code.path().join("web/.brain").is_dir(), "unlinked, its tasks kept");
@@ -2778,7 +2779,7 @@ fn projects_and_repositories_are_managed_from_the_projects_info() {
     board.ask_remove(src(&board, "blog/mobile"), false);
     press(&mut board, KeyCode::Char('y'));
 
-    let api = code.path().canonicalize().unwrap().join("api/.brain");
+    let api = board.brain(src(&board, "store")).store.dir().to_path_buf();
     board.ask_remove(src(&board, "store"), true);
     press(&mut board, KeyCode::Char('d'));
     assert_eq!(labels(&board), ["blog"]);
