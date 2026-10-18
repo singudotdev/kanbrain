@@ -5,6 +5,7 @@ use super::*;
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
 use kanbrain_core::model::{Asked, Author, DecisionState, now};
 use kanbrain_core::store::Store;
+use std::cell::Cell;
 use tempfile::TempDir;
 
 /// An entry of the central brain, where these tests' entries are.
@@ -12,16 +13,18 @@ fn k(id: u32) -> Key {
     Key::new(0, id)
 }
 
-/// Presses `code` on the board, with no modifier.
+/// Presses `code` on the board, with no modifier: an input of its own, as the window runs each key.
 fn press(board: &mut Board, code: KeyCode) {
     board.on_key(KeyEvent::new(code, KeyModifiers::NONE));
+    board.input_done();
 }
 
 /// A board over a fresh folder holding tasks with these titles (ids from 1); the folder lives as long
-/// as the fixture.
+/// as the fixture. Its clock moves only by [`Fixture::later`].
 struct Fixture {
     board: Board,
     dir: TempDir,
+    now: Rc<Cell<Instant>>,
 }
 
 impl Fixture {
@@ -31,8 +34,17 @@ impl Fixture {
         for (title, id) in titles.iter().zip(1..) {
             store.save(&mut Task::new(id, (*title).to_string(), now())).unwrap();
         }
-        let board = Board::open(dir.path(), None).unwrap();
-        Self { board, dir }
+        let mut board = Board::open(dir.path(), None).unwrap();
+        let now = Rc::new(Cell::new(Instant::now()));
+        board.clock = Clock::new({
+            let now = Rc::clone(&now);
+            move || now.get()
+        });
+        Self { board, dir, now }
+    }
+
+    fn later(&self, by: Duration) {
+        self.now.set(self.now.get() + by);
     }
 
     fn press(&mut self, code: KeyCode) {
@@ -41,6 +53,7 @@ impl Fixture {
 
     fn shift(&mut self, code: KeyCode) {
         self.board.on_key(KeyEvent::new(code, KeyModifiers::SHIFT));
+        self.board.input_done();
     }
 
     fn type_text(&mut self, text: &str) {
@@ -384,7 +397,7 @@ fn a_save_that_stops_over_what_kb_wrote_says_it_once() {
     use kanbrain_core::brain::{Brain, NewEntry};
     let mut f = Fixture::new(&["feature"]);
     let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
-    // Saved within a second of the read that saw it: the stop says what that read said, and more.
+    // Saved by the key whose read saw it: the stop says what that read said, and more.
     f.press(KeyCode::Char('m'));
     f.type_text("mine");
     kb(&f).set_description(1, "the agent's plan").unwrap();
@@ -392,6 +405,15 @@ fn a_save_that_stops_over_what_kb_wrote_says_it_once() {
     assert_eq!(f.board.message(), Some("#1's description changed on disk"));
     f.press(KeyCode::Esc);
     let stop = "#1's description changed meanwhile: pick yours or theirs where you both changed it";
+    assert_eq!(f.board.message(), Some(stop));
+    f.board.discard_edit();
+    // Read by the window's timer just before: the stop goes beside it, so it's taken out the same.
+    f.press(KeyCode::Char('m'));
+    f.type_text("mine");
+    kb(&f).set_description(1, "the agent's other plan").unwrap();
+    f.board.reload().unwrap();
+    f.board.input_done();
+    f.press(KeyCode::Esc);
     assert_eq!(f.board.message(), Some(stop));
     f.board.discard_edit();
 
@@ -1004,9 +1026,9 @@ fn what_kb_changed_in_an_open_dialog_isnt_replaced_by_what_else_is_said() {
     // Said beside what the next key does: `catch_up` reads the brains right before it, which is when it's found.
     f.board.select(k(1));
     f.press(KeyCode::Char('e'));
+    f.press(KeyCode::Char('!'));
     kb(&f).set_status(1, Status::Doing).unwrap();
     reload(&mut f);
-    f.press(KeyCode::Char('!'));
     f.press(KeyCode::Enter);
     assert_eq!(f.board.message(), Some("#1 saved · #1's status changed on disk"));
     // Nor is it lost to a file found skipped by the same read.
@@ -1016,6 +1038,59 @@ fn what_kb_changed_in_an_open_dialog_isnt_replaced_by_what_else_is_said() {
     reload(&mut f);
     let said = f.board.message().unwrap();
     assert!(said.contains("#1's description changed on disk") && said.contains("0009-broken.md"), "{said}");
+}
+
+#[test]
+fn what_kb_changed_goes_beside_its_inputs_message_however_long_and_a_later_ones_while_it_has_just_shown() {
+    use kanbrain_core::brain::Brain;
+    let mut f = Fixture::new(&["Fix login"]);
+    let kb = |f: &Fixture| Brain::open(Store::at(f.dir.path()).unwrap()).unwrap();
+    let changed = |f: &mut Fixture, status| {
+        kb(f).set_status(1, status).unwrap();
+        f.board.reload().unwrap();
+    };
+    f.board.select(k(1));
+    // Read for the key that saves, which takes seconds on a slow disk or a busy machine: still said beside it.
+    f.press(KeyCode::Char('e'));
+    f.press(KeyCode::Char('!'));
+    changed(&mut f, Status::Doing);
+    f.later(Duration::from_secs(2));
+    f.press(KeyCode::Enter);
+    assert_eq!(f.board.message(), Some("#1 saved · #1's status changed on disk"));
+    // Read by the window's timer, or for the key before, right before the save: the form marked with it closes, so
+    // it's said beside the save.
+    f.press(KeyCode::Char('e'));
+    changed(&mut f, Status::Todo);
+    f.board.input_done();
+    f.press(KeyCode::Char('?'));
+    f.later(watch::INTERVAL.checked_sub(Duration::from_millis(1)).unwrap());
+    f.press(KeyCode::Enter);
+    assert_eq!(f.board.message(), Some("#1 saved · #1's status changed on disk"));
+    // Shown a while already: replaced, as any message.
+    f.press(KeyCode::Char('e'));
+    changed(&mut f, Status::Doing);
+    f.board.input_done();
+    f.press(KeyCode::Char('?'));
+    f.later(watch::INTERVAL);
+    f.press(KeyCode::Enter);
+    assert_eq!(f.board.message(), Some("#1 saved"));
+}
+
+#[test]
+fn a_board_prints_its_clock_by_name() {
+    assert_eq!(format!("{:?}", Clock::default()), "Clock");
+}
+
+#[test]
+fn a_message_shows_for_its_time_then_goes() {
+    let mut f = Fixture::new(&["Fix login"]);
+    f.board.notify("undone");
+    let at = f.now.get();
+    assert_eq!(f.board.message_at(at), Some("undone"));
+    assert_eq!(f.board.message_at((at + MESSAGE_TTL).checked_sub(Duration::from_millis(1)).unwrap()), Some("undone"));
+    assert_eq!(f.board.message_at(at + MESSAGE_TTL), None);
+    f.later(MESSAGE_TTL);
+    assert_eq!(f.board.message(), None);
 }
 
 #[test]
@@ -3265,6 +3340,19 @@ fn a_decision_already_decided_is_named_with_its_repository() {
     board.selected = Some(Key::new(src, accepted));
     board.accept_with_comment();
     assert_eq!(board.message(), Some(format!("shop/api #{accepted} is already accepted").as_str()));
+}
+
+#[test]
+fn whats_skipped_when_the_window_opens_is_replaced_by_a_message_once_it_was_shown() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("0009-broken.md"), "# no id\n").unwrap();
+    let mut board = Board::open(dir.path(), None).unwrap();
+    let skipped = board.message().unwrap().to_string();
+    assert!(skipped.contains("0009-broken.md"), "{skipped}");
+    let later = Instant::now() + watch::INTERVAL;
+    board.clock = Clock::new(move || later);
+    board.notify("undone");
+    assert_eq!(board.message(), Some("undone"));
 }
 
 #[test]

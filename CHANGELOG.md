@@ -44,6 +44,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - On Windows, a `kb` command or the app no longer fails when an antivirus, the search indexer or an editor has a
   brain's file open just as it's replaced or deleted (`Access is denied`, `being used by another process`): the
   rename or delete is tried again for up to about 1.3 seconds.
+- The kanban app no longer loses what `kb` changed in an open form or editor ("#1's status changed on disk"), nor a
+  file it found skipped, when the save or action it read for takes over a second, on a slow disk or a busy machine:
+  it's said beside that action's message for the whole key or click, not for a second.
 
 ## [0.6.2] - 2026-10-16
 
