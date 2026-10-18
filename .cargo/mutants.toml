@@ -10,6 +10,8 @@ minimum_test_timeout = 300
 exclude_re = [
     # Starts the installer and the app's processes: run by the installers' end-to-end checks, not by tests.
     'gui/src/update\.rs:.*replace (install|install_after_exit|install_now) -> Result',
+    # Starts that install in the background, and closes the app once it's done: no test runs the installer.
+    'gui/src/ui/mod\.rs:.*replace BrainView::install_update with \(\)',
     # The hover style of a list row: the window tests have no pointer to hover with.
     'gui/src/ui/list\.rs:.*delete ! in row',
     # The highlight of the form's tags list (by its line, so the row the list follows stays tested): a color, and the
