@@ -25,9 +25,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - `kanbrain-core`, for code built on it: `Brain::change_status`, `Brain::comment` and `Brain::describe`, which nothing
   in kanbrain calls any more: `Brain::set_status`, `Brain::add_comment` and `Brain::set_description` do the same.
+  `cli::update::update`, which always said `kb`: `cli::update::update_program` names the program running.
 
 ### Fixed
 
+- `kanbrain update`, the app's command line, names itself: `kanbrain X.Y.Z is the latest release`, and installed with
+  cargo, `cargo install --locked --git https://github.com/singudotdev/kanbrain kanbrain-app && kanbrain init --all`.
+  It said `kb`, and to run `cargo install kanbrain`, which installs the command line, not the app.
 - `kb report --tag a,b` is refused with the error `kb list --tag a,b` gives: it counted only the first tag's
   tasks, without a word.
 - `KANBRAIN_DIR` set but empty counts as unset, the platform data folder: `kb` or the kanban app wrote `format` into

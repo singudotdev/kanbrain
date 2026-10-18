@@ -367,7 +367,7 @@ impl Command {
             }
             Command::Update => {
                 platform::ensure_not_root()?;
-                return update::update(&projects::central_dir()?);
+                return update::update_program(&projects::central_dir()?, program);
             }
             Command::Init(name, repo) => {
                 platform::ensure_not_root()?;

@@ -3,6 +3,7 @@
 //! `init --all`, so none of that is repeated here. Never while an agent works on a task: `init --all` would rewrite
 //! its instructions and a migration its data mid-session.
 
+use super::Program;
 use crate::model::Author;
 use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
@@ -111,11 +112,28 @@ pub fn newer_release() -> Result<Option<String>> {
     Ok(newer(&latest, env!("CARGO_PKG_VERSION")).then_some(latest))
 }
 
-/// What `update` says instead of reinstalling, when the latest release is this one (or older, a build ahead of
-/// it); `None` to install: a newer release, or none found (the installer then says why it can't download).
-fn up_to_date(newer: &Result<Option<String>>) -> Option<String> {
+/// What `program`'s `update` says instead of reinstalling, when the latest release is this one (or older, a build
+/// ahead of it); `None` to install: a newer release, or none found (the installer then says why it can't download).
+fn up_to_date(newer: &Result<Option<String>>, program: Program) -> Option<String> {
     matches!(newer, Ok(None))
-        .then(|| format!("kb {} is the latest release: nothing to update", env!("CARGO_PKG_VERSION")))
+        .then(|| format!("{} {} is the latest release: nothing to update", program.name, env!("CARGO_PKG_VERSION")))
+}
+
+/// What `program`'s `update` says when cargo installed it, which keeps its own record of what it installed: the
+/// command that updates it, and then the projects. The crate `kanbrain` on crates.io is the command line; the kanban
+/// app's, `kanbrain-app`, isn't there (GPUI comes from git), so it comes from the repository, at `main`, the latest
+/// release.
+fn cargo_update(program: Program) -> String {
+    let install = if program.name == "kanbrain" {
+        "cargo install --locked --git https://github.com/singudotdev/kanbrain kanbrain-app"
+    } else {
+        "cargo install kanbrain"
+    };
+    format!(
+        "{} was installed with cargo: update it, and then every project's agent instructions, with\n\n  {install} && \
+         {} init --all",
+        program.name, program.name
+    )
 }
 
 /// The version at the end of the address a response's headers redirect to, `…/tag/vX.Y.Z`.
@@ -175,7 +193,7 @@ pub fn powershell_string(text: &str) -> String {
 }
 
 /// The PowerShell command that installs the latest release of `app` into `dir`, on Windows, where a running
-/// program's file can't be replaced, so `kb update` prints it for after kanbrain is closed.
+/// program's file can't be replaced, so `update` prints it, to run once the program and the app are closed.
 fn windows_update_command(dir: &Path, app: &str) -> String {
     format!(
         "{}; $env:KANBRAIN_APP = {}; $env:KANBRAIN_INSTALL_DIR = {}; irm {INSTALL_PS1} | iex",
@@ -227,21 +245,24 @@ pub fn run_installer(dir: &Path, app: &str, captured: bool) -> Result<()> {
     Ok(())
 }
 
-/// Runs the installer for the apps installed where this program is, into the same folder, unless an agent is
-/// working. On Windows it prints the PowerShell command instead, since a running program's file can't be replaced
-/// there. Installed with `cargo install`, it says to update the same way instead.
+/// [`update_program`] for `kb`.
+#[deprecated(since = "0.6.3", note = "use `update_program`, which names the program running in what it says")]
 pub fn update(central: &Path) -> Result<()> {
+    update_program(central, Program { name: "kb" })
+}
+
+/// `program`'s `update`: runs the installer for the apps installed where this program is, into the same folder,
+/// unless an agent is working. On Windows it prints the PowerShell command instead, since a running program's file
+/// can't be replaced there. Installed with `cargo install`, it says how cargo updates it instead.
+pub fn update_program(central: &Path, program: Program) -> Result<()> {
     check_no_agent_working(central)?;
-    if let Some(said) = up_to_date(&newer_release()) {
+    if let Some(said) = up_to_date(&newer_release(), program) {
         println!("{said}");
         return Ok(());
     }
     let exe = std::env::current_exe().context("finding this program's file")?;
     let Install::Installer { dir, app } = install_of(&exe)? else {
-        println!(
-            "kb was installed with cargo: update it, and then every project's agent instructions, with\n\n  \
-             cargo install kanbrain && kb init --all"
-        );
+        println!("{}", cargo_update(program));
         return Ok(());
     };
     if cfg!(windows) {
