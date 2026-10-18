@@ -12,6 +12,7 @@
 //! - [`menu`]: the right-click menu on an entry.
 //! - [`nav`]: moving the selection around the board.
 //! - [`palette`]: the command palette, every action with its key.
+//! - [`shown`]: text shown rather than typed into, selected with the mouse to copy.
 //! - [`sources`]: the central brain and every project repository, and the scope that filters them.
 
 mod actions;
@@ -24,6 +25,7 @@ mod menu;
 pub mod mode;
 mod nav;
 mod palette;
+mod shown;
 mod sources;
 #[cfg(test)]
 #[path = "../../tests/state.rs"]
@@ -35,6 +37,7 @@ pub use mode::{
     AddProject, CommentPicker, Confirm, Edit, Field, Form, FormTarget, LinkPicker, Manage, Mode, Pending, Picker,
     PickerKey, ProjectOption, QuickAdd, Target, Tell, Telling, WhereFor, WherePicker,
 };
+pub use shown::Shown;
 pub use sources::{Key, Scope, Source};
 
 use crate::text::editor::{LineInput, TextEditor};
@@ -238,6 +241,8 @@ pub struct Board {
     last_change: Vec<Change>,
     /// What `u` does next to `last_change`.
     next_undo: NextUndo,
+    /// The text shown, not typed into, that the mouse selected in, if any.
+    shown: Option<Shown>,
 }
 
 impl Board {
@@ -270,6 +275,7 @@ impl Board {
             clock: Clock::default(),
             last_change: Vec::new(),
             next_undo: NextUndo::Undo,
+            shown: None,
         };
         if let Some(src) = board.opened_in.as_ref().and_then(|dir| board.src_at(dir)) {
             let project = board.sources[src].project.clone().unwrap_or_default();

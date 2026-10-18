@@ -178,6 +178,13 @@ They show, top to bottom:
   one at a time), so relating and unrelating at once leaves no line;
 - **History**: every status change, `· agent` on those an agent made.
 
+Their text is selected with the mouse, to copy with `ctrl+c` (`cmd+c` on macOS): drag over it, double-click a word,
+triple-click a paragraph, `shift`+click to extend. A drag selects across one text's paragraphs, list items and code
+lines, all of a description say, but stops at its end: from one comment it doesn't run into the next. It copies
+the text as shown, without the markdown, a line break between them. A link still opens with a click. The same goes for
+the dialogs' text (Manage project's descriptions, a delete's confirmation, a merge's lines) and the status bar's
+message; a click outside the selected text drops the selection.
+
 ### Questions from agents
 
 When an agent needs your answer (`kb ask`) or proposes a decision (`kb propose`), its task goes to Parked with a

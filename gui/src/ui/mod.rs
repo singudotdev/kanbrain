@@ -15,6 +15,7 @@
 //! - [`mod@menu`]: the right-click menu.
 //! - [`dropdown`]: the project and tag filters' dropdowns.
 //! - [`markdown`]: descriptions and comments drawn as formatted text.
+//! - [`shown`]: text shown, not typed into, selected with the mouse to copy.
 //! - [`widgets`]: buttons, fields, pills and chips.
 //! - [`caret`]: the blinking text cursor.
 //! - [`mod@pointer`]: the mouse in text fields and the text editor.
@@ -35,6 +36,7 @@ mod markdown;
 mod menu;
 mod pointer;
 mod report;
+mod shown;
 pub mod startup;
 mod text;
 mod theme;
@@ -376,7 +378,8 @@ impl BrainView {
     }
 
     /// Ctrl+A / C / X / V (Cmd on macOS): select all, copy, cut and paste in the field or editor being
-    /// typed into, with the system clipboard. Returns whether `keystroke` was one of them.
+    /// typed into, with the system clipboard; copy takes the text selected in what's shown when the field has none
+    /// selected. Returns whether `keystroke` was one of them.
     fn clipboard(&mut self, keystroke: &Keystroke, cx: &mut Context<Self>) -> bool {
         let modifiers = &keystroke.modifiers;
         let shortcut = if cfg!(target_os = "macos") { modifiers.platform } else { modifiers.control };
@@ -386,7 +389,7 @@ impl BrainView {
         match keystroke.key.as_str() {
             "a" => self.board.select_all(),
             "c" => {
-                if let Some(text) = self.board.selected_text() {
+                if let Some(text) = self.board.copy_text() {
                     cx.write_to_clipboard(ClipboardItem::new_string(text));
                 }
             }
@@ -512,7 +515,7 @@ impl BrainView {
     /// Puts selected text in the primary selection, as Linux desktops do, for a middle-click to paste elsewhere.
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     fn share_selection(&mut self, cx: &mut Context<Self>) {
-        let Some(text) = self.board.selected_text() else { return };
+        let Some(text) = self.board.copy_text() else { return };
         if self.shared.as_ref() != Some(&text) {
             cx.write_to_primary(ClipboardItem::new_string(text.clone()));
             self.shared = Some(text);
@@ -528,6 +531,7 @@ impl BrainView {
 impl Render for BrainView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         widgets::next_frame(cx);
+        cx.set_global(shown::Drawn(false));
         let follow = std::mem::take(&mut self.follow);
         // The details opening or closing changes the board's width after this frame is laid out, with the
         // scroll to the selection worked out on the old one: it runs again once the new width is known.
@@ -562,6 +566,19 @@ impl Render for BrainView {
             .p_3()
             .child(div().flex_1().min_w_0().min_h_0().flex().flex_col().child(content))
             .children(drawer.map(|d| d.w(px(DRAWER_WIDTH)).flex_none()));
+        let topbar = topbar::draw(board, &self.scroll, follow, cx);
+        let status = status_bar(board, self.updating, cx);
+        // Over a dialog only its own text counts: a selection left under it would be copied from a field in it with
+        // nothing selected.
+        let under = std::mem::replace(&mut cx.global_mut::<shown::Drawn>().0, false);
+        let dialog = dialogs::draw(board, &self.scroll, follow, cx);
+        if dialog.is_none() {
+            cx.global_mut::<shown::Drawn>().0 = under;
+        }
+        // The menu shows no text to select.
+        if !cx.global::<shown::Drawn>().0 {
+            self.board.clear_shown();
+        }
         div()
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key_down))
@@ -573,18 +590,18 @@ impl Render for BrainView {
             .text_color(rgb(theme::TEXT))
             .font_family(theme::UI_FONT)
             .text_size(px(14.))
-            .child(topbar::draw(board, &self.scroll, follow, cx))
+            .child(topbar)
             .child(body)
-            .child(status_bar(board, self.updating, cx))
-            .children(dialogs::draw(board, &self.scroll, follow, cx))
-            .children(menu::draw(board, self.menu_at, cx))
+            .child(status)
+            .children(dialog)
+            .children(menu::draw(&self.board, self.menu_at, cx))
     }
 }
 
 /// The bottom bar: the latest message, or a tip; and where the files are, after the button to a newer release.
 fn status_bar(board: &Board, updating: bool, cx: &mut Context<BrainView>) -> Div {
     let left = match board.message() {
-        Some(msg) => div().text_color(rgb(theme::YELLOW)).child(msg.to_string()),
+        Some(msg) => shown::text(board, "message", theme::Line::raw(msg), cx).text_color(rgb(theme::YELLOW)),
         None if matches!(board.mode, Mode::Normal) && board.tab == Tab::Board => widgets::dim(match board.layout {
             Layout::Kanban => {
                 "Drag cards between columns · double-click opens one · v for a list · ? for commands and keys"

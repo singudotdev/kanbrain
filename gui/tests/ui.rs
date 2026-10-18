@@ -303,6 +303,14 @@ fn manage_project_draws_every_repository(cx: &mut gpui::TestAppContext) {
     let info = cx.debug_bounds("manage-project-button").expect("the bar has the manage button").center();
     cx.simulate_click(info, gpui::Modifiers::none());
     view.read_with(cx, |view, _| assert!(matches!(view.board.mode, crate::state::Mode::ManageProject(1))));
+    let folder = view.read_with(cx, |view, _| {
+        let brain = view.board.brain(1).store.dir();
+        brain.parent().expect("a repository's .brain/ is in it").display().to_string()
+    });
+    for (text, says) in [("text repo 1 notes", "notes".to_string()), ("text repo 1 folder", folder)] {
+        triple_click(cx, text);
+        assert_eq!(copied(cx), Some(says), "{text}");
+    }
     cx.simulate_keystrokes("escape");
     view.read_with(cx, |view, _| assert!(matches!(view.board.mode, crate::state::Mode::Normal)));
 }
@@ -1093,6 +1101,24 @@ fn conflicts_show_both_sides_and_are_picked_with_the_mouse(cx: &mut gpui::TestAp
     cx.simulate_keystrokes("escape");
     cx.run_until_parked();
     assert!(cx.debug_bounds("conflict 1").is_some(), "both conflicts drawn");
+    // Their lines are text to copy, and a drag over a side's doesn't pick it.
+    triple_click(cx, "text merge settled 1");
+    assert_eq!(copied(cx).as_deref(), Some("b\nc\nd"));
+    let mine = cx.debug_bounds("text merge-mine 0").expect("yours is drawn");
+    drag(cx, mine.origin + gpui::point(px(1.), px(5.)), mine.bottom_right() - gpui::point(px(1.), px(1.)));
+    assert_eq!(copied(cx).as_deref(), Some("A"));
+    view.read_with(cx, |view, _| {
+        let Mode::Edit(edit) = &view.board.mode else { panic!("the editor is open") };
+        assert!(edit.merge.as_ref().is_some_and(|m| m.conflicts().all(|c| c.pick.is_none())), "nothing picked");
+    });
+    // A double-click's first click picks the side, as any click does; its second selects the word under it.
+    double_click(cx, mine.origin + gpui::point(px(1.), px(5.)));
+    assert_eq!(copied(cx).as_deref(), Some("A"));
+    view.read_with(cx, |view, _| {
+        let Mode::Edit(edit) = &view.board.mode else { panic!("the editor is open") };
+        let picks: Vec<_> = edit.merge.as_ref().expect("still merging").conflicts().map(|c| c.pick).collect();
+        assert_eq!(picks, [Some(crate::text::merge::Pick::Mine), None], "yours picked by the first click");
+    });
     // A side, or a segment (conflict 1's third: both).
     click(cx, "merge-theirs-0");
     click(cx, "segment merge-pick-5");
@@ -1198,4 +1224,223 @@ fn what_kb_changed_goes_beside_the_inputs_message_and_the_next_inputs_replaces_i
     cx.run_until_parked();
     cx.simulate_keystrokes("? enter");
     assert_eq!(said(&view, cx).as_deref(), Some("#1 saved"));
+}
+
+/// Opens the details of task 1, its description `description` and its comments `comments`, saved: the next input
+/// reads the files again.
+fn details(view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext, description: &str, comments: &[&str]) {
+    view.update(cx, |view, cx| {
+        let brain = view.board.brain_mut(0);
+        brain.set_description(1, description).unwrap();
+        for body in comments {
+            brain.add_comment(1, body).unwrap();
+        }
+        view.board.selected = Some(crate::state::Key::new(0, 1));
+        view.board.drawer = true;
+        cx.notify();
+    });
+    cx.run_until_parked();
+}
+
+/// What the clipboard holds after ctrl+c (cmd+c on macOS).
+fn copied(cx: &mut gpui::VisualTestContext) -> Option<String> {
+    let ctrl = if cfg!(target_os = "macos") { "cmd" } else { "ctrl" };
+    cx.simulate_keystrokes(&format!("{ctrl}-c"));
+    cx.read_from_clipboard().and_then(|item| item.text())
+}
+
+/// Presses at `from`, drags to `to` and lets go there.
+fn drag(cx: &mut gpui::VisualTestContext, from: gpui::Point<gpui::Pixels>, to: gpui::Point<gpui::Pixels>) {
+    cx.simulate_mouse_down(from, MouseButton::Left, gpui::Modifiers::none());
+    cx.simulate_mouse_move(to, MouseButton::Left, gpui::Modifiers::none());
+    cx.simulate_mouse_up(to, MouseButton::Left, gpui::Modifiers::none());
+}
+
+#[gpui::test]
+fn a_drag_over_a_description_copies_its_blocks_as_shown_on_lines_of_their_own(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    details(&view, cx, "First **paragraph**\n\nSecond one\n\n- an item\n\n```\nlet code;\n```", &[]);
+    let text = cx.debug_bounds("text 0/1 description").expect("the description is drawn");
+    drag(cx, text.origin + gpui::point(px(1.), px(5.)), text.bottom_right() - gpui::point(px(1.), px(1.)));
+    assert_eq!(copied(cx).as_deref(), Some("First paragraph\nSecond one\nan item\nlet code;"));
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    {
+        let primary = view.update(cx, |_, cx| cx.read_from_primary()).and_then(|item| item.text());
+        assert_eq!(primary.as_deref(), Some("First paragraph\nSecond one\nan item\nlet code;"), "and the primary");
+    }
+}
+
+#[gpui::test]
+fn a_double_click_in_a_description_selects_a_word(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    details(&view, cx, "First paragraph", &[]);
+    let text = cx.debug_bounds("text 0/1 description").expect("the description is drawn");
+    double_click(cx, text.origin + gpui::point(px(2.), px(5.)));
+    assert_eq!(copied(cx).as_deref(), Some("First"));
+}
+
+#[gpui::test]
+fn a_drag_stays_in_the_comment_it_started_in(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    details(&view, cx, "", &["one", "two"]);
+    let first = cx.debug_bounds("thread comment 0").expect("the first comment is drawn");
+    let second = cx.debug_bounds("thread comment 1").expect("the second comment is drawn");
+    drag(cx, first.origin + gpui::point(px(9.), px(9.)), second.center());
+    let copied = copied(cx).expect("the first comment, from its heading");
+    assert!(copied.ends_with("\none") && !copied.contains("two"), "{copied:?}");
+}
+
+#[gpui::test]
+fn a_click_on_a_link_in_shown_text_still_opens_it(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    details(&view, cx, "[docs](https://x.dev)", &[]);
+    let text = cx.debug_bounds("text 0/1 description").expect("the description is drawn");
+    cx.simulate_click(text.origin + gpui::point(px(2.), px(5.)), gpui::Modifiers::none());
+    assert_eq!(cx.opened_url().as_deref(), Some("https://x.dev"));
+}
+
+#[gpui::test]
+fn copying_with_nothing_selected_leaves_the_clipboard_and_a_click_elsewhere_or_closing_drops_it(
+    cx: &mut gpui::TestAppContext,
+) {
+    let (view, cx, dir) = window(cx, &["a", "b"]);
+    cx.write_to_clipboard(gpui::ClipboardItem::new_string("before".into()));
+    assert_eq!(copied(cx).as_deref(), Some("before"), "nothing selected, nothing copied");
+    details(&view, cx, "Some text", &[]);
+    let select = |cx: &mut gpui::VisualTestContext| {
+        let text = cx.debug_bounds("text 0/1 description").expect("the description is drawn");
+        double_click(cx, text.origin + gpui::point(px(2.), px(5.)));
+    };
+    select(cx);
+    // A card dragged meanwhile still moves: cards aren't text to select.
+    let card = cx.debug_bounds("card 0/2").expect("card 2 is drawn").center();
+    let done = cx.debug_bounds("column done").expect("the done column is drawn").center();
+    cx.simulate_mouse_down(card, MouseButton::Left, gpui::Modifiers::none());
+    cx.simulate_mouse_move(card + gpui::point(px(10.), px(10.)), MouseButton::Left, gpui::Modifiers::none());
+    cx.simulate_mouse_move(done, MouseButton::Left, gpui::Modifiers::none());
+    cx.simulate_mouse_up(done, MouseButton::Left, gpui::Modifiers::none());
+    let (tasks, _) = Store::at(dir.path()).unwrap().load().unwrap();
+    assert_eq!(tasks.iter().find(|t| t.id == 2).unwrap().status, Status::Done, "the card moved");
+    view.read_with(cx, |view, _| assert_eq!(view.board.shown_text(), None, "the press on the card dropped it"));
+    // Shown no more, the selection goes with it, though no click said so.
+    details(&view, cx, "Some text", &[]);
+    select(cx);
+    assert_eq!(copied(cx).as_deref(), Some("Some"));
+    cx.write_to_clipboard(gpui::ClipboardItem::new_string("before".into()));
+    cx.simulate_keystrokes("escape");
+    next_frames(cx);
+    assert_eq!(copied(cx).as_deref(), Some("before"), "the details are closed");
+}
+
+/// Clicks three times near the start of the text `selector` names, as a triple-click: past a change line's padding.
+fn triple_click(cx: &mut gpui::VisualTestContext, selector: &'static str) {
+    let at = cx.debug_bounds(selector).unwrap_or_else(|| panic!("{selector} is drawn")).origin
+        + gpui::point(px(10.), px(5.));
+    for click_count in [1, 2, 3] {
+        let (button, modifiers, first_mouse) = (MouseButton::Left, gpui::Modifiers::none(), false);
+        cx.simulate_event(gpui::MouseDownEvent { position: at, button, modifiers, click_count, first_mouse });
+        cx.simulate_event(gpui::MouseUpEvent { position: at, button, modifiers, click_count });
+    }
+}
+
+#[test]
+fn a_selection_is_highlighted_across_spans_keeping_their_styles() {
+    use theme::{Span, Style};
+    let line = theme::Line::from(vec![Span::styled("ab", Style::new().bold()), Span::raw("cdé"), Span::raw("f")]);
+    let lit = text::highlighted(line, Some((1, 4)));
+    let spans: Vec<_> = lit.0.iter().filter(|s| !s.content.is_empty()).map(|s| (s.content.as_str(), s.style)).collect();
+    let selected = |style: Style| style.bg(theme::SELECTION);
+    assert_eq!(
+        spans,
+        [
+            ("a", Style::new().bold()),
+            ("b", selected(Style::new().bold())),
+            ("cd", selected(Style::new())),
+            ("é", Style::new()),
+            ("f", Style::new()),
+        ]
+    );
+    assert_eq!(text::highlighted(theme::Line::raw("ab"), None).0.len(), 1, "nothing selected, nothing split");
+}
+
+#[gpui::test]
+fn every_part_of_the_details_is_a_text_of_its_own_to_copy(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["Fix login"]);
+    view.update(cx, |view, cx| {
+        let brain = view.board.brain_mut(0);
+        brain.author = Author::Agent;
+        brain.update(1, "Fix login 500", vec!["auth".into()]).unwrap();
+        brain.ask(1, "Per IP or per account?").unwrap();
+        view.board.selected = Some(crate::state::Key::new(0, 1));
+        view.board.drawer = true;
+        cx.notify();
+    });
+    cx.run_until_parked();
+    let parts = [
+        ("text 0/1 title", "Fix login 500"),
+        ("text 0/1 tags", "auth"),
+        ("text 0/1 created", "created "),
+        ("text 0/1 question", "An agent asks, "),
+        ("text 0/1 status", "Parked for "),
+        ("text 0/1 time", "Tracked today "),
+        ("thread change 0", "An agent changed the title"),
+        ("text 0/1 history", ""),
+    ];
+    for (text, starts) in parts {
+        triple_click(cx, text);
+        let copied = copied(cx).unwrap_or_default();
+        assert!(!copied.is_empty() && copied.starts_with(starts), "{text}: {copied:?}");
+    }
+    // The question's comment, from its heading to its end.
+    let comment = cx.debug_bounds("thread comment 0").expect("the question is a comment too");
+    drag(cx, comment.origin + gpui::point(px(9.), px(9.)), comment.bottom_right() - gpui::point(px(1.), px(1.)));
+    assert!(copied(cx).is_some_and(|c| c.starts_with("Agent question") && c.ends_with("\nPer IP or per account?")));
+    // A delete's question, and the message saying what was done.
+    cx.simulate_keystrokes("x");
+    triple_click(cx, "text confirm");
+    assert!(copied(cx).is_some_and(|c| c.ends_with("Fix login 500")));
+    cx.simulate_keystrokes("escape s");
+    let said = view.read_with(cx, |view, _| view.board.message().map(str::to_string)).expect("s says what it did");
+    triple_click(cx, "text message");
+    assert_eq!(copied(cx), Some(said));
+}
+
+#[gpui::test]
+fn shift_click_extends_and_a_paragraphs_second_line_takes_clicks(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    details(&view, cx, "one\ntwo words", &[]);
+    let text = cx.debug_bounds("text 0/1 description").expect("the description is drawn");
+    cx.simulate_click(text.origin + gpui::point(px(1.), px(5.)), gpui::Modifiers::none());
+    cx.simulate_click(text.bottom_right() - gpui::point(px(1.), px(1.)), gpui::Modifiers::shift());
+    assert_eq!(copied(cx).as_deref(), Some("one\ntwo words"));
+    let at = gpui::point(text.left() + px(2.), text.bottom() - px(4.));
+    double_click(cx, at);
+    assert_eq!(copied(cx).as_deref(), Some("two"));
+    // A click without shift in the same text drops the selection, extending nothing.
+    cx.simulate_click(text.origin + gpui::point(px(1.), px(5.)), gpui::Modifiers::none());
+    view.read_with(cx, |view, _| assert_eq!(view.board.shown_text(), None));
+    // A paragraph after the first that wraps: its first row is under the first paragraph, not past its own end.
+    let row = text.size.height / 2.;
+    details(&view, cx, &format!("one\nalpha {}omega", "word ".repeat(40)), &[]);
+    let text = cx.debug_bounds("text 0/1 description").expect("the description is drawn");
+    double_click(cx, gpui::point(text.left() + px(2.), text.top() + row * 1.5));
+    assert_eq!(copied(cx).as_deref(), Some("alpha"), "{text:?}");
+}
+
+#[gpui::test]
+fn a_selection_under_a_dialog_isnt_copied_from_it(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    for keys in ["m", "e", "x"] {
+        details(&view, cx, "Some text", &[]);
+        let text = cx.debug_bounds("text 0/1 description").expect("the description is drawn");
+        double_click(cx, text.origin + gpui::point(px(2.), px(5.)));
+        assert_eq!(copied(cx).as_deref(), Some("Some"), "selected while nothing is over it");
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string("before".into()));
+        cx.simulate_keystrokes(keys);
+        next_frames(cx);
+        view.read_with(cx, |view, _| assert!(!matches!(view.board.mode, Mode::Normal), "`{keys}` opens a dialog"));
+        assert_eq!(copied(cx).as_deref(), Some("before"), "ctrl+c in the dialog opened by `{keys}`, nothing selected");
+        cx.simulate_keystrokes("escape");
+        next_frames(cx);
+    }
 }

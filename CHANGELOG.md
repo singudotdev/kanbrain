@@ -15,6 +15,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   PowerShell 5.1 completes no word starting with a single `-` (a tag to take off), which it takes for a parameter.
 - CI's lints (`cargo clippy` and `cargo doc`, warnings failing) run on macOS and Windows too, where code behind
   `cfg(windows)` or `cfg(not(unix))` is compiled.
+- The kanban app selects the text it shows with the mouse, to copy with `ctrl+c` (`cmd+c` on macOS) and, on Linux,
+  the primary selection: the details (title, tags, the question, description, comments, the thread's changes, history,
+  times), Manage project's descriptions and folders, a delete's confirmation, a merge's lines and the status bar's
+  message. Drag, double-click a word, triple-click a paragraph, `shift`+click to extend; a click elsewhere drops it. A
+  drag runs across one text's paragraphs, list items and code lines, not into the next comment, and copies them as
+  shown, without the markdown, on lines of their own. Links still open with a click, a field's selection is copied
+  first, and cards and list rows still drag rather than select.
 
 ### Changed
 

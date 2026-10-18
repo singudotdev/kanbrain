@@ -1,6 +1,6 @@
 //! Text as the window shows it: cut to a width, a date, and a field's text with its selection highlighted.
 
-use super::theme::{self, Line, Span, Style};
+use super::theme::{self, Line, Span};
 use chrono::{DateTime, Local};
 
 /// Cuts `s` to `width` characters, ending with `…` when shortened.
@@ -32,13 +32,26 @@ pub(super) fn when(dt: DateTime<Local>) -> String {
 
 /// Text being typed into, the characters from `start` to `end` of `selection` highlighted.
 pub(super) fn edited(text: &str, selection: Option<(usize, usize)>) -> Line {
-    let Some((start, end)) = selection else { return Line::raw(text) };
-    let (a, b) = (byte_at(text, start), byte_at(text, end));
-    Line::from(vec![
-        Span::raw(&text[..a]),
-        Span::styled(&text[a..b], Style::new().bg(theme::SELECTION)),
-        Span::raw(&text[b..]),
-    ])
+    highlighted(Line::raw(text), selection)
+}
+
+/// `line` with the characters from `start` to `end` of `selection` on the selection's background, each span keeping
+/// its other styles.
+pub(super) fn highlighted(line: Line, selection: Option<(usize, usize)>) -> Line {
+    let Some((start, end)) = selection else { return line };
+    let mut spans = Vec::with_capacity(line.0.len() + 2);
+    let mut at = 0;
+    for Span { content, style } in line.0 {
+        let len = content.chars().count();
+        // The selection's part of this span, in its own characters.
+        let (a, b) = (start.clamp(at, at + len) - at, end.clamp(at, at + len) - at);
+        let (a, b) = (byte_at(&content, a), byte_at(&content, b));
+        spans.push(Span::styled(&content[..a], style));
+        spans.push(Span::styled(&content[a..b], style.bg(theme::SELECTION)));
+        spans.push(Span::styled(&content[b..], style));
+        at += len;
+    }
+    Line::from(spans)
 }
 
 /// Byte offset of character `at` in `text`; past the last character means the end.
