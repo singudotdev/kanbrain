@@ -20,6 +20,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `cli::Step` and `cli::StepKind`, what `cli::init_steps`, `cli::rename_project_steps`, `cli::rename_repo_steps`,
   `cli::move_repo_steps`, `cli::remove_repo_steps` and `cli::remove_project_steps` return; `cli::update::update_program`
   and `cli::update::cargo_update_command`.
+- The kanban app selects the text it shows with the mouse, to copy with `ctrl+c` (`cmd+c` on macOS) and, on Linux,
+  the primary selection: the details (title, tags, the question, description, comments, the thread's changes, history,
+  times), Manage project's descriptions and folders, a delete's confirmation, a merge's lines and the status bar's
+  message. Drag, double-click a word, triple-click a paragraph, `shift`+click to extend; a click elsewhere drops it. A
+  drag runs across one text's paragraphs, list items and code lines, not into the next comment, and copies them as
+  shown, without the markdown, on lines of their own. Links still open with a click, a field's selection is copied
+  first, and cards and list rows still drag rather than select.
 
 ### Changed
 

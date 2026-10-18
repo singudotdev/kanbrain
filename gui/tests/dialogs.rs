@@ -76,8 +76,8 @@ fn a_merge_says_how_many_conflicts_are_left_and_keeps_empty_lines() {
     conflicts.pick(Pick::Theirs);
     assert_eq!(merge::heading(&conflicts), "All picked: use the result");
     // A region's last line break isn't one more line; the empty lines it holds are.
-    assert_eq!(merge::shown("- form title\n\n"), "- form title\n");
-    assert_eq!(merge::shown("\nShip\n"), "\nShip");
+    assert_eq!(merge::as_drawn("- form title\n\n"), "- form title\n");
+    assert_eq!(merge::as_drawn("\nShip\n"), "\nShip");
     // A side that shows nothing says what it is.
     assert_eq!(merge::side_note(""), Some("(removed)"));
     assert_eq!(merge::side_note("\n"), Some("(an empty line)"));

@@ -102,7 +102,10 @@ how many more are below (`↓ 4 more · type to filter`) and above (`↑ 2 above
 
 In every field and the editor, `ctrl+a` selects all, `ctrl+c` / `ctrl+x` / `ctrl+v` copy, cut and paste with the
 system clipboard (`cmd` on macOS), and `shift` with the arrows, `home` or `end` selects text. Typing or pasting
-replaces the selection.
+replaces the selection. Text shown rather than typed into (the details, the dialogs' text, the conflicts' sides, the
+status bar's message) is selected with the mouse, and `ctrl+c` copies it as shown, without the markdown, a line break
+between paragraphs, list items and code lines; a field with text selected copies its own first. Cards and list rows
+aren't text to select: dragging them moves them, and their title and tags are selected in the details.
 
 ## Mouse
 
@@ -123,6 +126,7 @@ replaces the selection.
 | click an entry under "Related" | go to it |
 | click a link in a description or comment | open it in the browser |
 | click in text | place the cursor |
-| drag, `shift`+click | select text |
-| double-click / triple-click in text | select a word / the line; dragging on extends by words / lines |
-| middle-click in text (Linux) | paste the primary selection (the text last selected, in any app) |
+| drag, `shift`+click | select text; in text shown, across its paragraphs (all of a description, one comment), not into the next |
+| double-click / triple-click in text | select a word / the line (in text shown, the paragraph); dragging on extends by words / lines |
+| click outside the text shown selected | drop its selection |
+| middle-click in text (Linux) | paste the primary selection (the text last selected, in any app, text shown too) |

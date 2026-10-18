@@ -59,6 +59,16 @@ impl TextEditor {
         Self { lines, row, col, anchor: None, grab: None, modified: false }
     }
 
+    /// An editor over `lines` as given, the cursor at the start: for text the window shows rather than edits,
+    /// selected with the mouse. Each line is a piece of text drawn as one, which may hold newlines: a selection
+    /// takes them as any other character, and copies them.
+    pub fn of_lines(mut lines: Vec<String>) -> Self {
+        if lines.is_empty() {
+            lines.push(String::new());
+        }
+        Self { lines, row: 0, col: 0, anchor: None, grab: None, modified: false }
+    }
+
     /// The text, without trailing whitespace.
     pub fn text(&self) -> String {
         self.lines.join("\n").trim_end().to_string()

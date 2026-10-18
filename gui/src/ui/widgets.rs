@@ -218,7 +218,7 @@ pub fn tag_chip(board: &Board, tag: &str) -> Div {
 }
 
 /// `tag`'s chip, in its color (see [`Board::tag_colors`]), reading `label` instead of the bare name, e.g. `#devops`.
-pub fn labeled_chip(board: &Board, tag: &str, label: String) -> Div {
+pub fn labeled_chip(board: &Board, tag: &str, label: impl IntoElement) -> Div {
     let (bg, fg) = board.tag_colors(tag).unwrap_or((theme::HOVER, TEXT));
     div()
         .flex_none()
@@ -252,13 +252,13 @@ pub fn section(title: impl Into<SharedString>, actions: impl IntoIterator<Item =
         .child(div().flex().gap_1().children(actions))
 }
 
-/// Secondary text.
-pub fn dim(text: impl Into<SharedString>) -> Div {
-    div().text_color(rgb(DIM)).child(text.into())
+/// Secondary text: a string, or text the mouse selects.
+pub fn dim(text: impl IntoElement) -> Div {
+    div().text_color(rgb(DIM)).child(text)
 }
 
 /// Secondary text in the small size: hints under fields, counts, dates.
-pub fn dim_small(text: impl Into<SharedString>) -> Div {
+pub fn dim_small(text: impl IntoElement) -> Div {
     dim(text).text_size(px(12.))
 }
 

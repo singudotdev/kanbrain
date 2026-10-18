@@ -27,6 +27,12 @@ exclude_re = [
     # Which row of the editor draws the cursor (`index == row`, by its line, so the selection's rows stay tested):
     # painted, and the window tests read bounds, not what's painted.
     'gui/src/ui/dialogs/editor\.rs:56:.*replace == with != in draw',
+    # Which paragraph of a text a point is over: only a point exactly on the line between two paragraphs, to the
+    # sub-pixel, is taken otherwise by `<=` (as the first's last row rather than the next one's first).
+    'gui/src/ui/pointer\.rs:102:.*replace < with <= in Hit::column$',
+    # Which line a point between lines is taken as: only a point exactly on a line's bottom edge, to the sub-pixel, is
+    # taken otherwise by `<=` (as that line's rather than the next one's).
+    'gui/src/ui/pointer\.rs:123:.*replace < with <= in at$',
     # Which field a mouse press makes the one typed into: the state tests drive keys, and the window tests read bounds
     # without a pointer to press with.
     'gui/src/ui/pointer\.rs:.*replace focus with \(\)',
