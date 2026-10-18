@@ -84,6 +84,12 @@ pub fn check(dir: &Path) -> Result<()> {
     }
 }
 
+/// Whether the brain in `dir` is one a newer kanbrain wrote, which nothing in it may be written for: not its
+/// entries, nor its card or the repository's agent files around it.
+pub(crate) fn too_new(dir: &Path) -> bool {
+    check(dir).is_err_and(|e| e.is::<TooNew>())
+}
+
 /// Brings the brain in `store` to [`FORMAT`], and returns what it did, one line each; nothing for a brain already
 /// there.
 pub fn migrate(store: &Store) -> Result<Vec<String>> {

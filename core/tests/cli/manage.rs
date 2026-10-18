@@ -52,7 +52,7 @@ fn renaming_a_project_moves_its_card_and_repositories() {
     let (central, code) = folders();
     let api = repo(central.path(), code.path(), "api", "shop");
     repo(central.path(), code.path(), "web", "shop");
-    repo(central.path(), code.path(), "blog", "blog");
+    let blog = repo(central.path(), code.path(), "blog", "blog");
     projects::write_description(central.path(), "shop", "An online shop.").unwrap();
 
     assert!(rename_project(central.path(), "shop", "blog").is_err(), "taken");
@@ -61,6 +61,7 @@ fn renaming_a_project_moves_its_card_and_repositories() {
     assert_eq!(projects::read_description(central.path(), "store"), "An online shop.");
     assert_eq!(projects::read_description(central.path(), "shop"), "", "the old card is gone");
     assert_eq!(projects::read_repo_card(&api).unwrap().project, "store");
+    assert_eq!(projects::read_repo_card(&blog).unwrap().project, "blog", "another project's card stays");
 }
 
 #[test]

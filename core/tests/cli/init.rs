@@ -418,6 +418,96 @@ fn init_all_renames_nothing_in_a_central_brain_a_newer_kanbrain_wrote() {
     assert_eq!(fs::read_to_string(&registry).unwrap(), old, "left as that kanbrain wrote it");
 }
 
+/// Every file under `root` and what it holds, to tell whether anything in it was written.
+fn files_under(root: &Path) -> std::collections::BTreeMap<std::path::PathBuf, Vec<u8>> {
+    let mut files = std::collections::BTreeMap::new();
+    let mut dirs = vec![root.to_path_buf()];
+    while let Some(dir) = dirs.pop() {
+        for entry in fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else {
+                files.insert(path.clone(), fs::read(&path).unwrap());
+            }
+        }
+    }
+    files
+}
+
+/// Makes the brain of the repository at `root` one a newer kanbrain wrote.
+fn written_by_a_newer_kanbrain(root: &Path) {
+    let newer = crate::migrate::FORMAT + 1;
+    fs::write(root.join(PROJECT_DIR).join(crate::migrate::FORMAT_FILE), format!("{newer}\n")).unwrap();
+}
+
+#[test]
+fn init_all_writes_nothing_into_a_repository_a_newer_kanbrain_wrote() {
+    let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let [api, web] = ["api", "web"].map(|name| code.path().join(name));
+    for root in [&api, &web] {
+        fs::create_dir(root).unwrap();
+        init(root, Some("shop"), None, central.path()).unwrap();
+    }
+    // Everything `init --all` would otherwise fix in it: a project named as before 0.4.0 (renamed, with its
+    // repositories' cards), a repository name links can't hold, a card on another project's name, an older section
+    // in both agent files and hooks to add back.
+    let dir = |root: &Path| projects::canonical(&root.join(PROJECT_DIR)).unwrap();
+    let registry = format!("# Projects\n\n- -shop: {}\n- -shop: {}\n", dir(&api).display(), dir(&web).display());
+    fs::write(central.path().join(projects::REGISTRY_FILE), registry).unwrap();
+    let card = |project: &str, repo: Option<&str>| projects::RepoCard {
+        project: project.into(),
+        repo: repo.map(str::to_string),
+        notes: String::new(),
+    };
+    projects::write_repo_card(&dir(&api), &card("old", Some("My Work-api"))).unwrap();
+    projects::write_repo_card(&dir(&web), &card("-shop", None)).unwrap();
+    let old = format!("# Rules\n\n{START}\nold advice\n{END}\n");
+    for file in ["CLAUDE.md", "AGENTS.md"] {
+        fs::write(api.join(file), &old).unwrap();
+    }
+    fs::write(web.join("CLAUDE.md"), &old).unwrap();
+    fs::remove_file(api.join(claude::SETTINGS)).unwrap();
+    written_by_a_newer_kanbrain(&api);
+    let before = files_under(&api);
+
+    let done = init_all(central.path()).unwrap();
+    assert_eq!(files_under(&api), before, "nothing written in it: {done:?}");
+    let said: Vec<&String> = done.iter().filter(|l| l.contains("newer kanbrain")).collect();
+    assert_eq!(said.len(), 1, "said once: {done:?}");
+    assert!(said[0].contains(": left alone: ") && said[0].contains("`kb update`"), "{done:?}");
+    let renamed = "renamed project `-shop` to `shop`; its repositories and card follow, but `My Work-api`'s \
+                   .brain/project.md, left alone, keeps `-shop` until `kb update`";
+    assert!(done.iter().any(|l| l == renamed), "{done:?}");
+    // The others are brought up to date, and the project stays one: the registry is the central brain's.
+    assert!(fs::read_to_string(web.join("CLAUDE.md")).unwrap().contains("## Project memory: kanbrain"), "{done:?}");
+    assert_eq!(projects::read_repo_card(&dir(&web)).unwrap().project, "shop");
+    let repos = projects::load(central.path()).unwrap();
+    assert!(repos.iter().all(|r| r.project == "shop"), "{repos:?}");
+}
+
+#[test]
+fn init_refuses_a_repository_a_newer_kanbrain_wrote() {
+    let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let api = code.path().join("api");
+    fs::create_dir(&api).unwrap();
+    init(&api, Some("shop"), None, central.path()).unwrap();
+    fs::write(api.join("CLAUDE.md"), format!("# Rules\n\n{START}\nold advice\n{END}\n")).unwrap();
+    written_by_a_newer_kanbrain(&api);
+    let (before, registry) = (files_under(&api), files_under(central.path()));
+    // Again as it is, into another project (a move), and registered in another central brain.
+    for name in [None, Some("blog")] {
+        let error = init(&api, name, None, central.path()).unwrap_err();
+        assert!(error.downcast_ref::<crate::migrate::TooNew>().is_some(), "{error:#}");
+        assert_eq!(files_under(&api), before, "{name:?}");
+        assert_eq!(files_under(central.path()), registry, "{name:?}");
+    }
+    let other = tempfile::tempdir().unwrap();
+    assert!(init(&api, None, None, other.path()).is_err());
+    assert_eq!(files_under(&api), before);
+    assert!(projects::load(other.path()).unwrap().is_empty(), "not registered");
+}
+
 #[test]
 fn init_all_renames_a_repository_whose_card_keeps_a_name_links_cant_hold() {
     let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());

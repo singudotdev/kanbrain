@@ -30,12 +30,20 @@ pub fn rename_project(central: &Path, old: &str, new: &str) -> Result<Vec<String
         bail!("there's already a project `{new}`: move this one's repositories to it instead");
     }
     projects::rename(central, old, new)?;
-    for repo in repos.iter().filter(|r| r.project == old && r.dir.is_dir()) {
+    // A brain a newer kanbrain wrote keeps its card on the old name, which `init --all` fixes once `kb` reads it.
+    let (left, current): (Vec<&Repo>, Vec<&Repo>) =
+        repos.iter().filter(|r| r.project == old && r.dir.is_dir()).partition(|r| crate::migrate::too_new(&r.dir));
+    for repo in current {
         if let Some(card) = projects::read_repo_card(&repo.dir) {
             projects::write_repo_card(&repo.dir, &RepoCard { project: new.to_string(), ..card })?;
         }
     }
-    Ok(vec![format!("renamed project `{old}` to `{new}`; its repositories and card follow")])
+    let done = format!("renamed project `{old}` to `{new}`; its repositories and card follow");
+    if left.is_empty() {
+        return Ok(vec![done]);
+    }
+    let names: Vec<String> = left.iter().map(|r| format!("`{}`'s", r.name())).collect();
+    Ok(vec![format!("{done}, but {} .brain/project.md, left alone, keeps `{old}` until `kb update`", names.join(", "))])
 }
 
 /// Renames the repository whose `.brain/` is `dir` to `new` in its project, and rewrites its siblings' links to

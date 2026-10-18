@@ -23,6 +23,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- `kb init --all`, so `kb update`, writes nothing into a repository whose `.brain/` a newer kanbrain wrote, which it
+  says it leaves alone: it still rewrote that repository's `.brain/project.md` (a project or repository renamed, a
+  card on an old project name), its `CLAUDE.md` / `AGENTS.md` section and its Claude Code hooks. Renaming its project
+  (there or with `kb project rename`) renames it in the registry and says its card keeps the old name until
+  `kb update`. `kb init` in such a repository is refused before anything is written, saying to update.
 - The kanban app started from the Start Menu, Finder or a desktop's launcher, without a console (on Windows it never
   has one), says an error before the board opens in a small window titled "kanbrain couldn't open", with Copy (the
   message, for a bug report) and Close (or Enter, Esc), and exits with a failing code: running as root, a relative
