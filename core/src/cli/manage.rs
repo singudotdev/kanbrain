@@ -203,7 +203,7 @@ fn rewrite_sibling_links(central: &Path, repo: &Repo, change: impl Fn(&str) -> O
 fn rewrite_links(dir: &Path, change: impl Fn(&str) -> Option<String>) -> Result<usize> {
     let store = Store::at(dir)?;
     let _lock = store.lock()?;
-    let (tasks, _) = store.load()?;
+    let (tasks, _) = store.load_entries()?;
     let mut changed = 0;
     for mut task in tasks {
         if rewrite(&mut task, &change) {

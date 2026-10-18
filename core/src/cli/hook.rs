@@ -172,7 +172,7 @@ fn remind(event: HookEvent, input: &Value, cwd: &Path, central: &Path) -> Option
         ));
     }
     // A brain that can't be read only loses the reminder, never the turn.
-    let tasks = Store::at(&dir).and_then(|s| s.load()).map(|(tasks, _)| tasks).unwrap_or_default();
+    let tasks = Store::at(&dir).and_then(|s| s.load_entries()).map(|(tasks, _)| tasks).unwrap_or_default();
     // Each one: with subagents, an agent may have several running.
     reminders.extend(tasks.iter().filter(|t| uncommented(t)).map(|task| {
         // Which session started it isn't known, so the agent of another, or one that crashed, is told
@@ -200,7 +200,7 @@ fn remind(event: HookEvent, input: &Value, cwd: &Path, central: &Path) -> Option
 fn tell_of_comments(cwd: &Path) -> Option<String> {
     let dir = store::find_project(cwd)?;
     // A brain that can't be read only loses the word, never the tool call.
-    let (tasks, _) = Store::at(&dir).and_then(|s| s.load()).ok()?;
+    let (tasks, _) = Store::at(&dir).and_then(|s| s.load_entries()).ok()?;
     let told: Vec<String> = tasks
         .iter()
         .filter(|task| unanswered(task))

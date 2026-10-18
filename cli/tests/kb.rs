@@ -437,7 +437,10 @@ fn files_that_dont_read_as_entries_are_named_on_stderr() {
     std::fs::write(repo.path().join(".brain/2024-01-15.md"), "# Daily\n").unwrap();
     for args in [&["list"][..], &["show", "7"]] {
         let stderr = String::from_utf8(run(args).stderr).unwrap();
-        assert!(stderr.contains("kb: skipped 0007-broken.md"), "{args:?}: {stderr}");
+        assert!(
+            stderr.contains("kb: skipped 0007-broken.md: missing `- id:` line; fix the file or remove it\n"),
+            "{args:?}: {stderr}"
+        );
         assert!(!stderr.contains("2024-01-15"), "{args:?}: {stderr}");
     }
 }

@@ -355,7 +355,7 @@ fn an_agent_giving_the_users_verdict_answers_the_task_that_asked() {
     brain.ask(elsewhere, &format!("Is web#{cache} merged?")).unwrap();
     assert!(brain.resolve(cache, DecisionState::Rejected, "not now").unwrap());
     assert!(matches!(brain.entry(elsewhere).unwrap().asked(), Some(Asked::Waiting(_))), "web#N isn't #N");
-    let reread = Store::at(brain.store.dir()).unwrap().load().unwrap().0;
+    let reread = Store::at(brain.store.dir()).unwrap().load_entries().unwrap().0;
     let task = reread.iter().find(|t| t.id == task).unwrap();
     assert!(matches!(task.asked(), Some(Asked::Answered(_))), "and so from the file");
 }

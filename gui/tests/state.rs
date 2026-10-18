@@ -66,7 +66,7 @@ impl Fixture {
 
     /// The task as its file says, independent of the board's memory.
     fn on_disk(&self, id: u32) -> Task {
-        let (tasks, _) = Store::at(self.dir.path()).unwrap().load().unwrap();
+        let (tasks, _) = Store::at(self.dir.path()).unwrap().load_entries().unwrap();
         tasks.into_iter().find(|t| t.id == id).unwrap()
     }
 }
@@ -1582,7 +1582,7 @@ fn a_dialog_on_an_entry_deleted_meanwhile_closes() {
     board.select(Key::new(1, 1));
     press(&mut board, KeyCode::Char('e'));
     let api = Store::at(code.path().join("api/.brain")).unwrap();
-    api.delete(&api.load().unwrap().0[0]).unwrap();
+    api.delete(&api.load_entries().unwrap().0[0]).unwrap();
     board.reload().unwrap();
     assert_eq!(board.message(), Some("closed: shop/api #1 is gone, deleted or moved meanwhile"));
 }

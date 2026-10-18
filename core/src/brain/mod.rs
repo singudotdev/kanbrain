@@ -23,7 +23,7 @@ pub use report::{Group, Report, ReportRow, ReportView, Slot};
 use crate::api::ApiError;
 use crate::model::{Author, Kind, RepoLink, Status, Task, now};
 use crate::projects::{self, ProjectInfo};
-use crate::store::{self, Store};
+use crate::store::{self, Skipped, Store};
 use crate::tags::TagColors;
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
@@ -58,6 +58,11 @@ impl Brain {
     /// Loads every entry and the tag colors, knowing the central brain if `central` is given. A brain in an older
     /// data format is migrated first, as it's opened to be changed (see [`crate::migrate`]).
     fn open_with(store: Store, central: Option<PathBuf>) -> Result<Self> {
+        Self::open_skipping(store, central).map(|(brain, _)| brain)
+    }
+
+    /// [`Brain::open_with`], with the files its load skipped, which [`Brain::warnings`] says only as text.
+    fn open_skipping(store: Store, central: Option<PathBuf>) -> Result<(Self, Vec<Skipped>)> {
         crate::migrate::migrate(&store)?;
         let mut brain = Self {
             store,
@@ -68,15 +73,16 @@ impl Brain {
             central,
             author: Author::Human,
         };
-        brain.reload()?;
-        Ok(brain)
+        let skipped = brain.reload_skipping()?;
+        Ok((brain, skipped))
     }
 
     /// Loads every entry and the tag colors as the files have them, writing nothing: for reading a brain
     /// nobody is working in, such as another repository's to show links to it, or to complete a command
     /// line. [`Brain::open`] also repairs what it finds, in files that may be in another git repository.
     pub fn read_only(store: Store) -> Result<Self> {
-        let (tasks, warnings) = store.load()?;
+        let (tasks, skipped) = store.load_entries()?;
+        let warnings = skipped.iter().map(ToString::to_string).collect();
         let tag_colors = store.load_tag_colors()?;
         Ok(Self { store, tasks, tag_colors, warnings, project: None, central: None, author: Author::Human })
     }
@@ -87,11 +93,22 @@ impl Brain {
         Self::open_with(store, Some(central.to_path_buf()))
     }
 
+    /// [`Brain::open_in`], with the files its load skipped, typed: for the command line, which says only those an
+    /// entry's.
+    pub(crate) fn open_in_skipping(store: Store, central: &Path) -> Result<(Self, Vec<Skipped>)> {
+        Self::open_skipping(store, Some(central.to_path_buf()))
+    }
+
     /// Re-reads every file from disk.
     pub fn reload(&mut self) -> Result<()> {
-        let (tasks, warnings) = self.store.load()?;
+        self.reload_skipping().map(drop)
+    }
+
+    /// [`Brain::reload`], returning the files it skipped, which [`Brain::warnings`] says as text.
+    fn reload_skipping(&mut self) -> Result<Vec<Skipped>> {
+        let (tasks, skipped) = self.store.load_entries()?;
         self.tasks = tasks;
-        self.warnings = warnings;
+        self.warnings = skipped.iter().map(ToString::to_string).collect();
         self.renumber_shared_ids()?;
         self.keep_one_person_doing()?;
         self.drop_dangling_links()?;
@@ -99,7 +116,8 @@ impl Brain {
         self.tag_colors = self.store.load_tag_colors()?;
         self.project = projects::info(self.store.dir(), self.central.as_deref());
         self.drop_dangling_repo_links()?;
-        self.sync_tag_colors()
+        self.sync_tag_colors()?;
+        Ok(skipped)
     }
 
     /// The entry with this id.

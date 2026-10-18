@@ -1,6 +1,6 @@
 //! The data folder: one `NNNN-slug.md` file per task, `tags.md`, and exported reports in `reports/`.
 
-use crate::model::{Task, slugify};
+use crate::model::{ParseError, Task, slugify};
 use crate::projects;
 use crate::tags::TagColors;
 use anyhow::{Context, Result, bail};
@@ -32,6 +32,43 @@ pub struct Store {
     dir: PathBuf,
     /// While recording (see [`Store::record`]), each file written or deleted as it was before.
     journal: RefCell<Option<Vec<Change>>>,
+}
+
+/// A markdown file [`Store::load_entries`] didn't read as an entry, said as `{file}: {why}`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Skipped {
+    /// Its name in the brain's folder.
+    pub file: String,
+    /// Why it isn't an entry.
+    pub why: SkipReason,
+}
+
+/// Why a file isn't an entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SkipReason {
+    /// It has no `- id:` line: other markdown, which a central brain kept in a notes vault holds, rather than an entry.
+    NoId,
+    /// An entry with a line that doesn't read (a session or history line), saying which.
+    Broken(String),
+    /// The file couldn't be read, with the system's error.
+    Unreadable(String),
+}
+
+impl std::fmt::Display for Skipped {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.file, self.why)
+    }
+}
+
+impl std::fmt::Display for SkipReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SkipReason::NoId => f.write_str(crate::model::MISSING_ID),
+            SkipReason::Broken(why) | SkipReason::Unreadable(why) => f.write_str(why),
+        }
+    }
 }
 
 /// A file a change wrote or deleted: what it held before and after, `None` where it didn't exist.
@@ -229,28 +266,40 @@ impl Store {
     }
 
     /// Returns the parsed tasks plus a warning for every file that could not be read.
+    #[deprecated(since = "0.6.3", note = "use `Store::load_entries`, which says why each file was skipped")]
     pub fn load(&self) -> Result<(Vec<Task>, Vec<String>)> {
+        let (tasks, skipped) = self.load_entries()?;
+        Ok((tasks, skipped.iter().map(ToString::to_string).collect()))
+    }
+
+    /// Returns the parsed tasks, and every markdown file that didn't read as one, with why.
+    pub fn load_entries(&self) -> Result<(Vec<Task>, Vec<Skipped>)> {
         // Every read goes through here: a brain a newer kanbrain wrote is refused before anything misreads it.
         crate::migrate::check(&self.dir)?;
         let mut tasks = Vec::new();
-        let mut warnings = Vec::new();
+        let mut skipped = Vec::new();
         let entries = fs::read_dir(&self.dir).with_context(|| format!("reading {}", self.dir.display()))?;
         for entry in entries {
             let path = entry?.path();
             if !is_task_file(&path) {
                 continue;
             }
-            let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
-            let parsed = read_text(&path).map_err(|e| e.to_string()).and_then(|text| Task::from_markdown(&text));
+            let file = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+            let parsed = read_text(&path).map_err(|e| SkipReason::Unreadable(e.to_string())).and_then(|text| {
+                Task::parse(&text).map_err(|e| match e {
+                    ParseError::MissingId => SkipReason::NoId,
+                    ParseError::Line(why) => SkipReason::Broken(why),
+                })
+            });
             match parsed {
                 Ok(mut task) => {
                     task.path = Some(path);
                     tasks.push(task);
                 }
-                Err(e) => warnings.push(format!("{name}: {e}")),
+                Err(why) => skipped.push(Skipped { file, why }),
             }
         }
-        Ok((tasks, warnings))
+        Ok((tasks, skipped))
     }
 
     /// Writes atomically and renames the file when the title (slug) changed.

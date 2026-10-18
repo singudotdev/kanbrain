@@ -47,7 +47,7 @@ pub(super) fn wait(brain: &Brain, id: u32, timeout: Option<Duration>) -> Result<
     let started = std::time::Instant::now();
     let mut watch = Watch::default();
     loop {
-        if let Some(said) = watch.look(id, brain.store.load().map(|(tasks, _)| tasks)) {
+        if let Some(said) = watch.look(id, brain.store.load_entries().map(|(tasks, _)| tasks)) {
             println!("{}", said?);
             return Ok(());
         }

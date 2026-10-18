@@ -28,7 +28,7 @@ use crate::api::json::Summary;
 use crate::brain::{Brain, Group, ReportView};
 use crate::model::{Asked, Author, Kind, Status, Task, fmt_clock, infallible, now, parse_tags};
 use crate::period::{Period, Unit};
-use crate::store::{self, Store};
+use crate::store::{self, SkipReason, Skipped, Store};
 use crate::{export, platform, projects};
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Local};
@@ -413,8 +413,8 @@ impl Command {
                 // Opened as the entry commands open it, repairs and all, so the ids it lists are the ones they take:
                 // a sync conflict copy listed under its original's id would be ambiguous.
                 let _lock = store.lock()?;
-                let brain = Brain::open_in(store, &central)?;
-                say_skipped(&brain);
+                let (brain, skipped) = Brain::open_in_skipping(store, &central)?;
+                say_skipped(&skipped);
                 let tasks = &brain.tasks;
                 if args.json {
                     println!("{}", list_json(tasks, &args)?);
@@ -590,7 +590,7 @@ pub(crate) fn every_brain(central: &Path) -> Result<Vec<(String, Vec<Task>)>> {
         .chain(repos.iter().map(|repo| (format!("{} ", repo.label(&repos)), repo.dir.clone())));
     Ok(brains
         .filter(|(_, dir)| dir.is_dir())
-        .filter_map(|(label, dir)| Some((label, Store::at(dir).and_then(|store| store.load()).ok()?.0)))
+        .filter_map(|(label, dir)| Some((label, Store::at(dir).and_then(|store| store.load_entries()).ok()?.0)))
         .collect())
 }
 
@@ -628,8 +628,9 @@ fn run_entries(store: Store, central: &Path, mut args: EntryArgs) -> Result<()> 
     // Held from reading the files to writing them, so parallel commands each see the others' changes; opening may
     // write too, as it repairs. `wait` lets go once open, not to hold it while it waits.
     let lock = store.lock()?;
-    let brain = Brain { author, ..Brain::open_in(store, central)? };
-    say_skipped(&brain);
+    let (brain, skipped) = Brain::open_in_skipping(store, central)?;
+    let brain = Brain { author, ..brain };
+    say_skipped(&skipped);
     let _lock = (!matches!(args.command, EntryCommand::Wait(..))).then_some(lock);
     args.run(brain)
 }
@@ -638,10 +639,10 @@ fn run_entries(store: Store, central: &Path, mut args: EntryArgs) -> Result<()> 
 /// the task again, though its file is there. A file is an entry's when it's broken as only one is (a bad history
 /// line, say), or named as one (`0007-title.md`); markdown of other names, or dated (`2024-01-15.md`), with no id is
 /// left unsaid: a central brain kept in a notes vault holds many.
-fn say_skipped(brain: &Brain) {
-    let entry_file = |warning: &&String| store::entry_named(warning) || !warning.contains(crate::model::MISSING_ID);
-    for warning in brain.warnings.iter().filter(entry_file) {
-        eprintln!("kb: skipped {warning}; fix the file or remove it");
+fn say_skipped(skipped: &[Skipped]) {
+    let entry_file = |file: &&Skipped| store::entry_named(&file.file) || file.why != SkipReason::NoId;
+    for file in skipped.iter().filter(entry_file) {
+        eprintln!("kb: skipped {file}; fix the file or remove it");
     }
 }
 

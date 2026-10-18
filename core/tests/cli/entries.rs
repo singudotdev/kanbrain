@@ -369,7 +369,7 @@ fn waiting_on_an_entry_missing_from_one_look_carries_on() {
     let mut brain = Brain::open(crate::store::Store::at(dir.path()).unwrap()).unwrap();
     let task = brain.add(NewEntry { title: "Rate-limit login".into(), ..NewEntry::default() }).unwrap();
     brain.ask(task, "Per IP or per account?").unwrap();
-    let asked = || Ok(brain.store.load().unwrap().0);
+    let asked = || Ok(brain.store.load_entries().unwrap().0);
     // Gone from one look, as a file renamed for a new title is gone between listing and reading it.
     let mut watch = Watch::default();
     assert!(watch.look(task, asked()).is_none());
@@ -384,7 +384,7 @@ fn waiting_on_an_entry_missing_from_one_look_carries_on() {
 
     brain.author = crate::model::Author::Human;
     brain.add_comment(task, "Per account").unwrap();
-    let answered = watch.look(task, Ok(brain.store.load().unwrap().0)).unwrap().unwrap();
+    let answered = watch.look(task, Ok(brain.store.load_entries().unwrap().0)).unwrap().unwrap();
     assert_eq!(answered, format!("#{task} Rate-limit login: answered\n\nPer account"));
 }
 

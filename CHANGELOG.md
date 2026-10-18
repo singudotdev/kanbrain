@@ -26,6 +26,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `kanbrain-core`, for code built on it: `Brain::change_status`, `Brain::comment` and `Brain::describe`, which nothing
   in kanbrain calls any more: `Brain::set_status`, `Brain::add_comment` and `Brain::set_description` do the same.
   `cli::update::update`, which always said `kb`: `cli::update::update_program` names the program running.
+  `store::Store::load`, whose warnings are text: `Store::load_entries` gives each file skipped as a `Skipped`, with
+  why (`SkipReason`), and says it the same way.
 
 ### Fixed
 
