@@ -19,6 +19,7 @@
 //! - [`widgets`]: buttons, fields, pills and chips.
 //! - [`caret`]: the blinking text cursor.
 //! - [`mod@pointer`]: the mouse in text fields and the text editor.
+//! - [`scrollbar`]: the board's scrollbars, to see and drag its scroll.
 //! - [`theme`]: colors, fonts and styled text.
 //! - [`keys`]: GPUI's keystrokes as the board's keys, and keys as people write them.
 //! - [`text`]: text cut to a width, dates, and a field's text with its selection.
@@ -36,6 +37,7 @@ mod markdown;
 mod menu;
 mod pointer;
 mod report;
+mod scrollbar;
 mod shown;
 pub mod startup;
 mod text;
