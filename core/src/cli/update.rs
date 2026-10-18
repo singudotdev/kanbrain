@@ -4,8 +4,6 @@
 //! its instructions and a migration its data mid-session.
 
 use crate::model::{Author, Status};
-use crate::projects;
-use crate::store::Store;
 use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -76,13 +74,8 @@ pub fn install_of(exe: &Path) -> Result<Install> {
 /// `shop/api #3 title` (`#3 title` in the central brain), as `kb status` names them: an update waits for them. A
 /// brain that can't be read, such as one a newer kanbrain wrote, has none to wait for.
 pub fn agents_working(central: &Path) -> Result<Vec<String>> {
-    let repos = projects::load(central)?;
-    let brains = std::iter::once((String::new(), central.to_path_buf()))
-        .chain(repos.iter().map(|repo| (format!("{} ", repo.label(&repos)), repo.dir.clone())));
     let mut working = Vec::new();
-    // A deleted repository's folder isn't there to read, and opening its store would make it again.
-    for (label, dir) in brains.filter(|(_, dir)| dir.is_dir()) {
-        let Ok((tasks, _)) = Store::at(dir).and_then(|store| store.load()) else { continue };
+    for (label, tasks) in super::every_brain(central)? {
         working.extend(
             tasks
                 .iter()

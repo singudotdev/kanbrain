@@ -1,4 +1,5 @@
 use super::*;
+use crate::store::Store;
 
 #[test]
 fn the_apps_found_beside_this_one_are_updated() {

@@ -563,14 +563,9 @@ fn author(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Result<Author> {
 /// which project, and several are joined: `shop/api #3 Fix login 00:42:17 · blog #1 Post 00:05:00 · 2 waiting`. A brain
 /// it can't read (one a newer kanbrain wrote, say) is left out rather than the whole line lost.
 fn status_line(central: &Path, now: DateTime<Local>) -> Result<String> {
-    let mut brains = vec![(None, central.to_path_buf())];
-    let repos = projects::load(central)?;
-    brains.extend(repos.iter().map(|r| (Some(r.label(&repos)), r.dir.clone())));
     let mut running = Vec::new();
     let mut waiting = 0;
-    for (name, dir) in brains.into_iter().filter(|(_, dir)| dir.is_dir()) {
-        let Ok((tasks, _)) = Store::at(&dir).and_then(|store| store.load()) else { continue };
-        let project = name.map(|n| format!("{n} ")).unwrap_or_default();
+    for (project, tasks) in every_brain(central)? {
         for (task, clock) in tasks.iter().filter_map(|t| Some((t, t.running_for(now)?))) {
             running.push(format!("{project}#{} {} {}", task.id, task.title, fmt_clock(clock)));
         }
@@ -583,6 +578,20 @@ fn status_line(central: &Path, now: DateTime<Local>) -> Result<String> {
         running.push(format!("{waiting} waiting"));
     }
     Ok(running.join(" · "))
+}
+
+/// The entries of the central brain, then of every registered repository, each brain's with what `kb status` names it
+/// by before an id: nothing for the central brain, `shop/api ` for a repository. A brain that can't be read (one a
+/// newer kanbrain wrote, say) is left out, as is a deleted repository's: its folder isn't there to read, and opening
+/// its store would make it again.
+pub(crate) fn every_brain(central: &Path) -> Result<Vec<(String, Vec<Task>)>> {
+    let repos = projects::load(central)?;
+    let brains = std::iter::once((String::new(), central.to_path_buf()))
+        .chain(repos.iter().map(|repo| (format!("{} ", repo.label(&repos)), repo.dir.clone())));
+    Ok(brains
+        .filter(|(_, dir)| dir.is_dir())
+        .filter_map(|(label, dir)| Some((label, Store::at(dir).and_then(|store| store.load()).ok()?.0)))
+        .collect())
 }
 
 /// The `.brain/` `deinit` takes out: `project`'s, else the one here. Not through `Store::open_named`, which refuses a
