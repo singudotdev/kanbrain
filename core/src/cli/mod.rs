@@ -655,9 +655,7 @@ fn list_sections<'a>(tasks: &'a [Task], args: &ListArgs) -> Vec<(&'static str, V
     let tagged = |t: &&Task| args.tag.as_ref().is_none_or(|tag| t.tags.contains(tag));
     let mut sections = Vec::new();
     for &status in &args.statuses {
-        let mut matching: Vec<&Task> =
-            tasks.iter().filter(|t| t.is_task() && t.status == status).filter(tagged).collect();
-        matching.sort_by(|a, b| b.status_since().cmp(&a.status_since()).then(b.id.cmp(&a.id)));
+        let matching = crate::brain::column(tasks, status).into_iter().filter(tagged).collect();
         sections.push((status.as_str(), matching));
     }
     for &kind in &args.kinds {

@@ -129,9 +129,7 @@ impl Brain {
 
     /// Tasks with `status`, most recently moved there first.
     pub fn column(&self, status: Status) -> Vec<&Task> {
-        let mut tasks: Vec<&Task> = self.tasks.iter().filter(|t| t.is_task() && t.status == status).collect();
-        tasks.sort_by(|a, b| b.status_since().cmp(&a.status_since()).then(b.id.cmp(&a.id)));
-        tasks
+        column(&self.tasks, status)
     }
 
     /// Entries that link to the one with this id, oldest first.
@@ -314,6 +312,13 @@ impl Brain {
         }
         Ok(())
     }
+}
+
+/// [`Brain::column`] of `tasks`, for `list`, which reads them without a `Brain`'s other parts.
+pub(crate) fn column(tasks: &[Task], status: Status) -> Vec<&Task> {
+    let mut column: Vec<&Task> = tasks.iter().filter(|t| t.is_task() && t.status == status).collect();
+    column.sort_by(|a, b| b.status_since().cmp(&a.status_since()).then(b.id.cmp(&a.id)));
+    column
 }
 
 /// Whether `task` is in `doing` because a person started it.
