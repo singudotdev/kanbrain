@@ -105,7 +105,11 @@ fn hand_typed_history_and_missing_status() {
 
 #[test]
 fn missing_id_is_an_error() {
-    assert!(Task::from_markdown("# no id\n").is_err());
+    assert_eq!(Task::from_markdown("# no id\n").unwrap_err(), "missing `- id:` line");
+    assert_eq!(Task::parse("# no id\n").unwrap_err(), ParseError::MissingId);
+    // A broken line is said as it always was, for code that reads the text.
+    let broken = "# Broken\n\n- id: 2\n\n## Sessions\n\n- nonsense\n";
+    assert_eq!(Task::from_markdown(broken).unwrap_err(), "bad session line: nonsense");
 }
 
 #[test]
