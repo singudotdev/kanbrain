@@ -218,7 +218,8 @@ A brain in a format **newer** than your kanbrain knows (a teammate's `.brain/` f
 is refused entirely, neither read nor written, since an older version would misread what it doesn't know and
 rewriting it would lose it: commands on it fail and the kanban app leaves it out, both saying to update with
 `kb update`. Nor is anything written around it: `kb init` there is refused, and `kb init --all` (so `kb update`) says
-it and leaves its `.brain/project.md`, agent files and hooks as they are.
+it and leaves its `.brain/project.md`, agent files and hooks as they are. Renaming, moving or removing a repository of
+its project, which rewrites the links on both sides, is refused too.
 
 The release notes say when a version changes the format.
 

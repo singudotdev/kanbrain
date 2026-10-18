@@ -487,6 +487,37 @@ fn init_all_writes_nothing_into_a_repository_a_newer_kanbrain_wrote() {
 }
 
 #[test]
+fn init_all_renames_no_repository_whose_sibling_a_newer_kanbrain_wrote() {
+    let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let [api, web, docs] = ["api", "web", "docs"].map(|name| code.path().join(name));
+    for root in [&api, &web, &docs] {
+        fs::create_dir(root).unwrap();
+        init(root, Some("shop"), None, central.path()).unwrap();
+    }
+    // api's name, as a version before 0.4.0 gave it, would be renamed, and web's links to it rewritten.
+    let dir = projects::canonical(&api.join(PROJECT_DIR)).unwrap();
+    let card = projects::read_repo_card(&dir).unwrap();
+    projects::write_repo_card(&dir, &projects::RepoCard { repo: Some("My Api".into()), ..card }).unwrap();
+    let old = format!("# Rules\n\n{START}\nold advice\n{END}\n");
+    for root in [&api, &web, &docs] {
+        fs::write(root.join("CLAUDE.md"), &old).unwrap();
+    }
+    written_by_a_newer_kanbrain(&web);
+    let (before, card) = (files_under(&web), fs::read(dir.join(projects::PROJECT_FILE)).unwrap());
+
+    let done = init_all(central.path()).unwrap();
+    assert_eq!(files_under(&web), before, "{done:?}");
+    assert_eq!(fs::read(dir.join(projects::PROJECT_FILE)).unwrap(), card, "api keeps its name: {done:?}");
+    assert_eq!(done.iter().filter(|l| l.contains("newer kanbrain")).count(), 1, "said once: {done:?}");
+    let kept = "shop/My Api: keeps the name `My Api`, which links can't hold, until `kb update`: `web`'s links to it \
+                can't be rewritten";
+    assert!(done.iter().any(|l| l == kept), "{done:?}");
+    for root in [&api, &docs] {
+        assert!(fs::read_to_string(root.join("CLAUDE.md")).unwrap().contains("## Project memory"), "{done:?}");
+    }
+}
+
+#[test]
 fn init_refuses_a_repository_a_newer_kanbrain_wrote() {
     let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let api = code.path().join("api");

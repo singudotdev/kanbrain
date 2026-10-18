@@ -55,6 +55,7 @@ pub fn rename_repo(central: &Path, dir: &Path, new: &str) -> Result<Vec<String>>
         return Ok(vec![format!("repository `{old}` already has that name")]);
     }
     let new = projects::repo_name(central, &repo.project, &repo.dir, Some(new))?;
+    refuse_too_new(central, &repo)?;
     let card = projects::read_repo_card(&repo.dir).unwrap_or_else(|| RepoCard {
         project: repo.project.clone(),
         repo: None,
@@ -83,6 +84,7 @@ pub fn move_repo(central: &Path, dir: &Path, to: &str) -> Result<Vec<String>> {
     let root = repo.dir.parent().filter(|_| repo.dir.is_dir()).context("its folder is gone: remove it instead")?;
     // Its name in the project it leaves: joining another may cost it a name of its own.
     let name = repo.name();
+    refuse_too_new(central, &repo)?;
     let dropped = unlink(central, &repo)?;
     // A name of its own (`kb project repo`) goes with it, unless the project it joins has one by that name.
     let own = projects::read_repo_card(&repo.dir).and_then(|card| card.repo);
@@ -130,6 +132,7 @@ pub fn move_repo(central: &Path, dir: &Path, to: &str) -> Result<Vec<String>> {
 /// siblings' links to it. With `purge`, its `.brain/` goes too: its tasks, notes and decisions.
 pub fn remove_repo(central: &Path, dir: &Path, purge: bool) -> Result<Vec<String>> {
     let repo = registered(central, dir)?;
+    refuse_too_new(central, &repo)?;
     unlink(central, &repo)?;
     let mut done = init::deinit(&repo.dir, central)?;
     if !repo.dir.is_dir() {
@@ -179,6 +182,23 @@ fn registered(central: &Path, dir: &Path) -> Result<Repo> {
         .into_iter()
         .find(|r| projects::same_dir(&r.dir, dir))
         .with_context(|| format!("{} isn't a registered repository", dir.display()))
+}
+
+/// Refuses, before anything is written, a change to `repo` when its brain or another repository's of its project is
+/// one a newer kanbrain wrote: the links between them change on both sides, and such a brain can be neither read nor
+/// written.
+fn refuse_too_new(central: &Path, repo: &Repo) -> Result<()> {
+    crate::migrate::refuse_too_new(&repo.dir)?;
+    for sibling in siblings(central, repo)? {
+        crate::migrate::refuse_too_new(&sibling.dir).with_context(|| {
+            format!(
+                "changed nothing, as `{}`, another repository of project `{}`, would change too",
+                sibling.name(),
+                repo.project
+            )
+        })?;
+    }
+    Ok(())
 }
 
 /// Drops the links between `repo` and the other repositories of its project, on both sides. Returns how many

@@ -84,10 +84,19 @@ pub fn check(dir: &Path) -> Result<()> {
     }
 }
 
-/// Whether the brain in `dir` is one a newer kanbrain wrote, which nothing in it may be written for: not its
-/// entries, nor its card or the repository's agent files around it.
+/// Refuses, with [`TooNew`], a brain a newer kanbrain wrote, which nothing may be written for: not its entries, nor
+/// its card, the repository's agent files around it or its links to the project's other repositories. Only that: a
+/// brain whose format can't be read (a damaged `format` file) is left to what opens it to say.
+pub(crate) fn refuse_too_new(dir: &Path) -> Result<()> {
+    match check(dir) {
+        Err(e) if e.is::<TooNew>() => Err(e),
+        _ => Ok(()),
+    }
+}
+
+/// Whether [`refuse_too_new`] refuses the brain in `dir`.
 pub(crate) fn too_new(dir: &Path) -> bool {
-    check(dir).is_err_and(|e| e.is::<TooNew>())
+    refuse_too_new(dir).is_err()
 }
 
 /// Brings the brain in `store` to [`FORMAT`], and returns what it did, one line each; nothing for a brain already

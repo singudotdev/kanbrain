@@ -143,7 +143,10 @@ Run inside one of the project's repositories (or with `--project`):
 | `kb project move PROJECT…` | moves this repository to another project, created if new; its links to the old project's repositories are dropped, on both sides |
 | `kb project remove [--purge]` | takes every repository of the project out, as `deinit` does each; `--purge` deletes their `.brain/` too |
 
-The kanban app does the same from **Manage project** (`I`).
+The kanban app does the same from **Manage project** (`I`). Renaming, moving or removing a repository rewrites its
+siblings' links to it, so when its `.brain/` or another repository's of the project was written by a newer kanbrain,
+it's refused before anything is written, saying to update with `kb update`; so are `kb deinit` and `kb init NAME`
+(a move) there.
 
 ### `kb init --all`
 
@@ -154,11 +157,12 @@ command before anything is written; a repository's is said and left alone, nothi
 `.brain/` and `.brain/project.md` nor its agent files and hooks; renaming its project renames it in the registry
 only), and one that can't be migrated is said, without stopping the others. Then the names: a project an older
 version named as none can be now (such as one starting with `-`, or `central` in any case) is renamed, so is a
-repository named after a folder its links can't hold (`My App`), and a repository's `.brain/project.md` left on its
-project's old name is fixed. Last, its agent instructions: the section in each agent file that already has it, and
-the Claude Code hooks where `CLAUDE.md` has it. A repository whose section you took out by hand gets everything but
-the section, and in one whose folder is gone nothing is written. It prints what it changed, one line per repository
-and file.
+repository named after a folder its links can't hold (`My App`) unless another of its project is one a newer
+kanbrain wrote (said: their links to it would change), and a repository's `.brain/project.md` left on its project's
+old name is fixed. Last, its agent instructions: the section in each agent file that already has it, and the Claude
+Code hooks where `CLAUDE.md` has it. A repository whose section you took out by hand gets everything but the
+section, and in one whose folder is gone nothing is written. It prints what it changed, one line per repository and
+file.
 
 The installer runs it after installing, and so does `kb update`, so upgrading updates every project. Run it
 yourself after installing another way, such as building from source.
