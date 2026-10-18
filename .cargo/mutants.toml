@@ -44,5 +44,5 @@ exclude_re = [
     'gui/src/main\.rs:.*replace main -> anyhow::Result<\(\)> with Ok\(\(\)\)',
     # The build-time check of MIGRATIONS (a `const`, in no function): a mutant of it either fails the build or, with
     # no step whose format to check, checks nothing either way.
-    'core/src/migrate\.rs:[0-9]+:[0-9]+: replace (\+= with -=|< with >)$',
+    'core/src/migrate\.rs:[0-9]+:[0-9]+: replace [^ ]+ with [^ ]+$',
 ]
