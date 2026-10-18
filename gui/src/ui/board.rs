@@ -256,7 +256,7 @@ fn asked(task: &Task) -> Option<Div> {
     let comment = match task.asked()? {
         Asked::Waiting(comment) | Asked::Answered(comment) => comment,
     };
-    let first = comment.body.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or_default();
+    let first = comment.first_line();
     Some(
         div()
             .flex()

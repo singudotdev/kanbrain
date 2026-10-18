@@ -287,7 +287,7 @@ fn interactions(task: &Task, from: DateTime<Local>, to: DateTime<Local>, now: Da
         events.push(event(session.start.max(from), What::Worked { end }));
     }
     for comment in task.comments.iter().filter(|c| within(c.created)) {
-        let excerpt = comment.body.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or_default().to_string();
+        let excerpt = comment.first_line().to_string();
         events.push(event(comment.created, What::Commented { excerpt }));
     }
     events

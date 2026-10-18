@@ -148,6 +148,11 @@ pub struct Comment {
 }
 
 impl Comment {
+    /// Its first line that isn't blank, trimmed: what a list, a card or an excerpt shows of it.
+    pub fn first_line(&self) -> &str {
+        self.body.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or_default()
+    }
+
     /// A plain comment by `author`.
     pub fn new(created: DateTime<Local>, body: String, author: Author) -> Self {
         Self { created, edited: None, body, author, question: false, answer: false, unknown: Vec::new() }
