@@ -21,14 +21,20 @@ mod manage;
 pub mod update;
 
 pub use entries::{AddArgs, EntryArgs, EntryCommand, ProjectChange, ProjectPart, TagChange, Text};
+#[expect(deprecated, reason = "kept for code built on kanbrain-core: the `_steps` functions replace them")]
 pub use init::init;
+pub use init::init_steps;
+pub use manage::{
+    Step, StepKind, move_repo_steps, remove_project_steps, remove_repo_steps, rename_project_steps, rename_repo_steps,
+};
+#[expect(deprecated, reason = "kept for code built on kanbrain-core: the `_steps` functions replace them")]
 pub use manage::{move_repo, remove_project, remove_repo, rename_project, rename_repo};
 
 use crate::api::json::Summary;
 use crate::brain::{Brain, Group, ReportView};
-use crate::model::{Asked, Author, Kind, Status, Task, fmt_clock, now, parse_tags};
+use crate::model::{Asked, Author, Kind, Status, Task, fmt_clock, infallible, now, parse_tags};
 use crate::period::{Period, Unit};
-use crate::store::{self, Store};
+use crate::store::{self, SkipReason, Skipped, Store};
 use crate::{export, platform, projects};
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Local};
@@ -367,7 +373,7 @@ impl Command {
             }
             Command::Update => {
                 platform::ensure_not_root()?;
-                return update::update(&projects::central_dir()?);
+                return update::update_program(&projects::central_dir()?, program);
             }
             Command::Init(name, repo) => {
                 platform::ensure_not_root()?;
@@ -375,7 +381,7 @@ impl Command {
                     bail!("init works on the current directory; leave out --project");
                 }
                 let root = std::env::current_dir().context("reading the current directory")?;
-                init::init(&root, name.as_deref(), repo.as_deref(), &projects::central_dir()?)?
+                init::init_steps(&root, name.as_deref(), repo.as_deref(), &projects::central_dir()?)?
                     .iter()
                     .for_each(|line| println!("{line}"));
                 return Ok(());
@@ -401,7 +407,7 @@ impl Command {
                 platform::ensure_not_root()?;
                 let central = projects::central_dir()?;
                 let dir = deinit_dir(&central, project)?;
-                manage::remove_repo(&central, &dir, purge)?.iter().for_each(|line| println!("{line}"));
+                manage::remove_repo_steps(&central, &dir, purge)?.iter().for_each(|step| println!("{step}"));
                 return Ok(());
             }
             _ => platform::ensure_not_root()?,
@@ -413,8 +419,8 @@ impl Command {
                 // Opened as the entry commands open it, repairs and all, so the ids it lists are the ones they take:
                 // a sync conflict copy listed under its original's id would be ambiguous.
                 let _lock = store.lock()?;
-                let brain = Brain::open_in(store, &central)?;
-                say_skipped(&brain);
+                let (brain, skipped) = Brain::open_in_skipping(store, &central)?;
+                say_skipped(&skipped);
                 let tasks = &brain.tasks;
                 if args.json {
                     println!("{}", list_json(tasks, &args)?);
@@ -466,15 +472,7 @@ impl ListArgs {
                 "--json" => json = true,
                 "notes" | "note" => kinds.push(Kind::Note),
                 "decisions" | "decision" => kinds.push(Kind::Decision),
-                "--tag" => {
-                    let value = args.next().context("--tag needs a value")?;
-                    // One tag: a second would be dropped without a word.
-                    let mut tags = parse_tags(&value).into_iter();
-                    tag = tags.next();
-                    if tags.next().is_some() {
-                        bail!("--tag takes one tag, not `{value}`");
-                    }
-                }
+                "--tag" => tag = tag_option(args)?,
                 "all" => statuses.extend(Status::ALL),
                 // Anything else must be a status name.
                 other => match Status::parse(other) {
@@ -507,10 +505,7 @@ impl ReportArgs {
                     let value = args.next().with_context(|| format!("--group needs {groups}"))?;
                     report.group = Group::parse(&value).with_context(|| format!("--group must be {groups}"))?;
                 }
-                "--tag" => {
-                    let value = args.next().context("--tag needs a value")?;
-                    report.tag = parse_tags(&value).into_iter().next();
-                }
+                "--tag" => report.tag = tag_option(args)?,
                 "--save" => report.save = true,
                 // Anything else must be a period name.
                 other => match Unit::parse(other) {
@@ -521,6 +516,18 @@ impl ReportArgs {
         }
         Ok(report)
     }
+}
+
+/// The value of `list`'s or `report`'s `--tag`, next in `args`: one tag, or none for a value naming none (`#`).
+fn tag_option(args: &mut impl Iterator<Item = String>) -> Result<Option<String>> {
+    let value = args.next().context("--tag needs a value")?;
+    // One tag: a second would be dropped without a word.
+    let mut tags = parse_tags(&value).into_iter();
+    let tag = tags.next();
+    if tags.next().is_some() {
+        bail!("--tag takes one tag, not `{value}`");
+    }
+    Ok(tag)
 }
 
 /// Environment variables coding agents set in the commands they run, so `kb` can tell them from a
@@ -562,14 +569,9 @@ fn author(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Result<Author> {
 /// which project, and several are joined: `shop/api #3 Fix login 00:42:17 · blog #1 Post 00:05:00 · 2 waiting`. A brain
 /// it can't read (one a newer kanbrain wrote, say) is left out rather than the whole line lost.
 fn status_line(central: &Path, now: DateTime<Local>) -> Result<String> {
-    let mut brains = vec![(None, central.to_path_buf())];
-    let repos = projects::load(central)?;
-    brains.extend(repos.iter().map(|r| (Some(r.label(&repos)), r.dir.clone())));
     let mut running = Vec::new();
     let mut waiting = 0;
-    for (name, dir) in brains.into_iter().filter(|(_, dir)| dir.is_dir()) {
-        let Ok((tasks, _)) = Store::at(&dir).and_then(|store| store.load()) else { continue };
-        let project = name.map(|n| format!("{n} ")).unwrap_or_default();
+    for (project, tasks) in every_brain(central)? {
         for (task, clock) in tasks.iter().filter_map(|t| Some((t, t.running_for(now)?))) {
             running.push(format!("{project}#{} {} {}", task.id, task.title, fmt_clock(clock)));
         }
@@ -582,6 +584,20 @@ fn status_line(central: &Path, now: DateTime<Local>) -> Result<String> {
         running.push(format!("{waiting} waiting"));
     }
     Ok(running.join(" · "))
+}
+
+/// The entries of the central brain, then of every registered repository, each brain's with what `kb status` names it
+/// by before an id: nothing for the central brain, `shop/api ` for a repository. A brain that can't be read (one a
+/// newer kanbrain wrote, say) is left out, as is a deleted repository's: its folder isn't there to read, and opening
+/// its store would make it again.
+pub(crate) fn every_brain(central: &Path) -> Result<Vec<(String, Vec<Task>)>> {
+    let repos = projects::load(central)?;
+    let brains = std::iter::once((String::new(), central.to_path_buf()))
+        .chain(repos.iter().map(|repo| (format!("{} ", repo.label(&repos)), repo.dir.clone())));
+    Ok(brains
+        .filter(|(_, dir)| dir.is_dir())
+        .filter_map(|(label, dir)| Some((label, Store::at(dir).and_then(|store| store.load_entries()).ok()?.0)))
+        .collect())
 }
 
 /// The `.brain/` `deinit` takes out: `project`'s, else the one here. Not through `Store::open_named`, which refuses a
@@ -618,8 +634,9 @@ fn run_entries(store: Store, central: &Path, mut args: EntryArgs) -> Result<()> 
     // Held from reading the files to writing them, so parallel commands each see the others' changes; opening may
     // write too, as it repairs. `wait` lets go once open, not to hold it while it waits.
     let lock = store.lock()?;
-    let brain = Brain { author, ..Brain::open_in(store, central)? };
-    say_skipped(&brain);
+    let (brain, skipped) = Brain::open_in_skipping(store, central)?;
+    let brain = Brain { author, ..brain };
+    say_skipped(&skipped);
     let _lock = (!matches!(args.command, EntryCommand::Wait(..))).then_some(lock);
     args.run(brain)
 }
@@ -628,10 +645,10 @@ fn run_entries(store: Store, central: &Path, mut args: EntryArgs) -> Result<()> 
 /// the task again, though its file is there. A file is an entry's when it's broken as only one is (a bad history
 /// line, say), or named as one (`0007-title.md`); markdown of other names, or dated (`2024-01-15.md`), with no id is
 /// left unsaid: a central brain kept in a notes vault holds many.
-fn say_skipped(brain: &Brain) {
-    let entry_file = |warning: &&String| store::entry_named(warning) || !warning.contains(crate::model::MISSING_ID);
-    for warning in brain.warnings.iter().filter(entry_file) {
-        eprintln!("kb: skipped {warning}; fix the file or remove it");
+fn say_skipped(skipped: &[Skipped]) {
+    let entry_file = |file: &&Skipped| store::entry_named(&file.file) || file.why != SkipReason::NoId;
+    for file in skipped.iter().filter(entry_file) {
+        eprintln!("kb: skipped {file}; fix the file or remove it");
     }
 }
 
@@ -654,9 +671,7 @@ fn list_sections<'a>(tasks: &'a [Task], args: &ListArgs) -> Vec<(&'static str, V
     let tagged = |t: &&Task| args.tag.as_ref().is_none_or(|tag| t.tags.contains(tag));
     let mut sections = Vec::new();
     for &status in &args.statuses {
-        let mut matching: Vec<&Task> =
-            tasks.iter().filter(|t| t.is_task() && t.status == status).filter(tagged).collect();
-        matching.sort_by(|a, b| b.status_since().cmp(&a.status_since()).then(b.id.cmp(&a.id)));
+        let matching = crate::brain::column(tasks, status).into_iter().filter(tagged).collect();
         sections.push((status.as_str(), matching));
     }
     for &kind in &args.kinds {
@@ -685,13 +700,13 @@ fn list_markdown(tasks: &[Task], args: &ListArgs) -> String {
         if !out.is_empty() {
             out.push('\n');
         }
-        writeln!(out, "## {heading}\n").expect("writing to a String cannot fail");
+        infallible(writeln!(out, "## {heading}\n"));
         for task in entries {
             out.push_str("- ");
-            crate::api::text::head(&mut out, task).expect("writing to a String cannot fail");
+            infallible(crate::api::text::head(&mut out, task));
             // As `context` says it: a parked task's question, a decision not in force.
             if let Some(note) = crate::api::text::state_note(task) {
-                write!(out, " · {note}").expect("writing to a String cannot fail");
+                infallible(write!(out, " · {note}"));
             }
             out.push('\n');
         }

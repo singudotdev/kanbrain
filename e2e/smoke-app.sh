@@ -9,6 +9,8 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
+# shellcheck source=e2e/lib.sh
+. "$(dirname "$0")/lib.sh"
 app=${1:-$repo/target/release/kanbrain}
 out=${2:-$repo/target/smoke}
 # Percent of one core the idle app may use, averaged over the measure.
@@ -21,13 +23,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-fail() {
-    echo "FAIL: $*" >&2
-    exit 1
-}
-
 export HOME="$work/home" KANBRAIN_DIR="$work/home/central"
-unset CLAUDECODE AI_AGENT AGENT CODEX_SANDBOX CODEX_CI CODEX_THREAD_ID GEMINI_CLI KANBRAIN_AUTHOR
+unset "${agent_variables[@]}"
 mkdir -p "$KANBRAIN_DIR" "$out"
 # The app takes `kb`'s commands with arguments: the demo tasks, none running.
 "$app" add --tag auth "Rate-limit the login endpoint" >/dev/null

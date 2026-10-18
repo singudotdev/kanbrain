@@ -15,6 +15,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   PowerShell 5.1 completes no word starting with a single `-` (a tag to take off), which it takes for a parameter.
 - CI's lints (`cargo clippy` and `cargo doc`, warnings failing) run on macOS and Windows too, where code behind
   `cfg(windows)` or `cfg(not(unix))` is compiled.
+- `kanbrain-core`, for code built on it: `model::Comment::first_line` and `model::Task::doing_by(Author)`;
+  `store::Store::load_entries`, with each file skipped as a `store::Skipped` and why (`store::SkipReason`);
+  `cli::Step` and `cli::StepKind`, what `cli::init_steps`, `cli::rename_project_steps`, `cli::rename_repo_steps`,
+  `cli::move_repo_steps`, `cli::remove_repo_steps` and `cli::remove_project_steps` return; `cli::update::update_program`
+  and `cli::update::cargo_update_command`.
 - The kanban app selects the text it shows with the mouse, to copy with `ctrl+c` (`cmd+c` on macOS) and, on Linux,
   the primary selection: the details (title, tags, the question, description, comments, the thread's changes, history,
   times), Manage project's descriptions and folders, a delete's confirmation, a merge's lines and the status bar's
@@ -39,8 +44,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   kanbrain's by hand, and `deinit` leaves it and says to remove it. Variables set before `kb`
   (`KANBRAIN_DIR=… kb context`) made it kanbrain's before, and `deinit` took it out.
 
+### Deprecated
+
+- `kanbrain-core`, for code built on it: `Brain::change_status`, `Brain::comment` and `Brain::describe`, which nothing
+  in kanbrain calls any more: `Brain::set_status`, `Brain::add_comment` and `Brain::set_description` do the same.
+  `cli::update::update`, which always said `kb`: `cli::update::update_program` names the program running.
+  `store::Store::load`, whose warnings are text: `Store::load_entries` gives each file skipped as a `Skipped`, with
+  why (`SkipReason`), and says it the same way.
+  `cli::init`, `cli::rename_project`, `cli::rename_repo`, `cli::move_repo`, `cli::remove_repo` and
+  `cli::remove_project`, which return text: their `_steps` versions give each line as a `Step`, with what it was
+  (`StepKind`: a move, links dropped, the tasks deleted…), and say it the same way.
+
 ### Fixed
 
+- `kanbrain update`, the app's command line, names itself: `kanbrain X.Y.Z is the latest release`, and installed with
+  cargo, `cargo install --locked --git https://github.com/singudotdev/kanbrain --tag vX.Y.Z kanbrain-app && kanbrain
+  init --all`, the release it found. It said `kb`, and to run `cargo install kanbrain`, which installs the command
+  line, not the app. The app's **Update to X.Y.Z** gives the same command, where it said to "update it the same way".
+- `kb report --tag a,b` is refused with the error `kb list --tag a,b` gives: it counted only the first tag's
+  tasks, without a word.
 - `kb init --all`, so `kb update`, writes nothing into a repository whose `.brain/` a newer kanbrain wrote, which it
   says it leaves alone: it still rewrote that repository's `.brain/project.md` (a project or repository renamed, a
   card on an old project name), its `CLAUDE.md` / `AGENTS.md` section and its Claude Code hooks. Renaming its project

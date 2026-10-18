@@ -29,7 +29,7 @@ impl Fixture {
 
     /// What's on disk, independent of the brain's in-memory state.
     fn reloaded(&self) -> Vec<Task> {
-        let (mut tasks, warnings) = Store::at(self.dir.path()).unwrap().load().unwrap();
+        let (mut tasks, warnings) = Store::at(self.dir.path()).unwrap().load_entries().unwrap();
         assert!(warnings.is_empty(), "{warnings:?}");
         tasks.sort_by_key(|t| t.id);
         tasks

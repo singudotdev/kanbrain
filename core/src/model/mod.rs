@@ -8,8 +8,9 @@ mod markdown;
 mod text;
 mod time;
 
-pub(crate) use markdown::MISSING_ID;
+pub(crate) use markdown::{MISSING_ID, ParseError};
 pub use markdown::{not_a_link, parse_links};
+pub(crate) use text::infallible;
 pub use text::{counted, one_line, parse_tags, sanitize_comment, sanitize_description, slugify};
 #[cfg(test)]
 pub use time::parse_ts;
@@ -148,6 +149,11 @@ pub struct Comment {
 }
 
 impl Comment {
+    /// Its first line that isn't blank, trimmed: what a list, a card or an excerpt shows of it.
+    pub fn first_line(&self) -> &str {
+        self.body.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or_default()
+    }
+
     /// A plain comment by `author`.
     pub fn new(created: DateTime<Local>, body: String, author: Author) -> Self {
         Self { created, edited: None, body, author, question: false, answer: false, unknown: Vec::new() }
@@ -515,6 +521,12 @@ impl Task {
     /// an older version, or edited by hand) counts as a person's.
     pub fn started_by(&self) -> Author {
         self.history.iter().rev().find(|c| c.to == Status::Doing).map_or(Author::Human, |c| c.by)
+    }
+
+    /// Whether this is a task in `doing` that `by` started: a person has one at most, and an update waits for an
+    /// agent's.
+    pub fn doing_by(&self, by: Author) -> bool {
+        self.is_task() && self.status == Status::Doing && self.started_by() == by
     }
 
     /// When the status last changed (or the task was created, if never); used for sorting.

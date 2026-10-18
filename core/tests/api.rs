@@ -355,7 +355,7 @@ fn an_agent_giving_the_users_verdict_answers_the_task_that_asked() {
     brain.ask(elsewhere, &format!("Is web#{cache} merged?")).unwrap();
     assert!(brain.resolve(cache, DecisionState::Rejected, "not now").unwrap());
     assert!(matches!(brain.entry(elsewhere).unwrap().asked(), Some(Asked::Waiting(_))), "web#N isn't #N");
-    let reread = Store::at(brain.store.dir()).unwrap().load().unwrap().0;
+    let reread = Store::at(brain.store.dir()).unwrap().load_entries().unwrap().0;
     let task = reread.iter().find(|t| t.id == task).unwrap();
     assert!(matches!(task.asked(), Some(Asked::Answered(_))), "and so from the file");
 }
@@ -368,4 +368,20 @@ fn a_question_a_person_asks_waits_for_an_answer_like_an_agents() {
     assert!(matches!(brain.entry(task).unwrap().asked(), Some(Asked::Waiting(_))), "not its own answer");
     brain.add_comment(task, "eu-west").unwrap();
     assert!(matches!(brain.entry(task).unwrap().asked(), Some(Asked::Answered(_))));
+}
+
+#[test]
+fn search_says_how_many_more_matched_than_it_lists() {
+    use crate::api::text::SEARCH_LIMIT;
+    let (mut brain, _dir) = brain();
+    for n in 0..SEARCH_LIMIT {
+        brain.add(new(Kind::Task, &format!("Login step {n}"))).unwrap();
+    }
+    let all = brain.search_text("login");
+    assert_eq!(all.lines().count(), SEARCH_LIMIT, "exactly the limit, nothing more to say: {all}");
+    brain.add(new(Kind::Task, "Login again")).unwrap();
+    brain.add(new(Kind::Task, "Login once more")).unwrap();
+    let capped = brain.search_text("login");
+    assert_eq!(capped.lines().count(), SEARCH_LIMIT + 1, "{capped}");
+    assert!(capped.ends_with("- … 2 more: add words to narrow it down\n"), "{capped}");
 }

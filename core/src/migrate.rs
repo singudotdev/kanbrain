@@ -37,6 +37,18 @@ pub struct Migration {
 /// Every step, in order: `MIGRATIONS[i]` brings a brain from format `i + 1` to `i + 2`.
 pub const MIGRATIONS: &[Migration] = &[];
 
+// One step for each format after the first, each to the format after its index's: `migrate` takes the steps up to
+// FORMAT by slicing, so a bumped FORMAT without its step (or a step without the bump) fails the build here rather
+// than panic on a user's brain.
+const _: () = {
+    assert!(MIGRATIONS.len() == (FORMAT - 1) as usize, "MIGRATIONS needs one step per format after the first");
+    let mut i = 0;
+    while i < MIGRATIONS.len() {
+        assert!(MIGRATIONS[i].to as usize == i + 2, "MIGRATIONS[i] brings a brain to format i + 2");
+        i += 1;
+    }
+};
+
 /// A brain in a format newer than [`FORMAT`]: written by a newer kanbrain, so this one leaves it alone.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TooNew {

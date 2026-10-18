@@ -1,4 +1,5 @@
 use super::*;
+use crate::store::Store;
 
 #[test]
 fn the_apps_found_beside_this_one_are_updated() {
@@ -64,9 +65,13 @@ fn an_update_waits_for_the_agents_tasks_in_doing_only() {
     let working = brain.add(NewEntry { title: "rate-limit the login".into(), ..NewEntry::default() }).unwrap();
     brain.set_status(working, Status::Doing).unwrap();
     // `kb update` itself says so, before it looks for a release.
-    let err = update(central.path()).unwrap_err().to_string();
+    let err = update_program(central.path(), KB).unwrap_err().to_string();
     assert!(err.contains(&format!("shop #{working} rate-limit the login")), "as kb status names it: {err}");
     assert!(!err.contains("my own work"), "{err}");
+    // As the deprecated `update`, for `kb`, still does.
+    #[expect(deprecated, reason = "what it still does is under test")]
+    let old = update(central.path()).unwrap_err().to_string();
+    assert_eq!(old, err);
 
     std::fs::remove_dir_all(repo.path()).unwrap();
     assert!(check_no_agent_working(central.path()).is_ok(), "a deleted repository has no agent at work");
@@ -84,12 +89,40 @@ fn an_update_runs_the_installer_without_the_choices_left_from_an_uninstall() {
     assert!(INSTALLER_CHOICES.iter().all(|var| ps1.contains(&format!("Env:{var}"))), "{ps1}");
 }
 
+/// The two programs that update: `kb`, and the kanban app taking `kb`'s commands.
+const KB: Program = Program { name: "kb" };
+const APP: Program = Program { name: "kanbrain" };
+
 #[test]
 fn an_update_to_the_release_already_installed_installs_nothing() {
-    let said = up_to_date(&Ok(None)).expect("nothing newer");
+    let said = up_to_date(&Ok(None), KB).expect("nothing newer");
     assert_eq!(said, format!("kb {} is the latest release: nothing to update", env!("CARGO_PKG_VERSION")));
-    assert_eq!(up_to_date(&Ok(Some("9.0.0".into()))), None, "a newer one is installed");
-    assert_eq!(up_to_date(&Err(anyhow::anyhow!("offline"))), None, "the installer says why it can't download");
+    assert_eq!(up_to_date(&Ok(Some("9.0.0".into())), KB), None, "a newer one is installed");
+    assert_eq!(up_to_date(&Err(anyhow::anyhow!("offline")), KB), None, "the installer says why it can't download");
+    let said = up_to_date(&Ok(None), APP).expect("nothing newer");
+    assert_eq!(said, format!("kanbrain {} is the latest release: nothing to update", env!("CARGO_PKG_VERSION")));
+}
+
+#[test]
+fn a_program_cargo_installed_is_told_how_cargo_updates_it() {
+    assert_eq!(
+        cargo_update(KB, Some("9.0.0")),
+        "kb was installed with cargo: update it, and then every project's agent instructions, with\n\n  \
+         cargo install kanbrain && kb init --all"
+    );
+    // The crate `kanbrain` on crates.io is the command line: the app, `kanbrain-app`, comes from the repository.
+    assert_eq!(
+        cargo_update(APP, Some("9.0.0")),
+        "kanbrain was installed with cargo: update it, and then every project's agent instructions, with\n\n  \
+         cargo install --locked --git https://github.com/singudotdev/kanbrain --tag v9.0.0 kanbrain-app && kanbrain \
+         init --all"
+    );
+    // The release unknown (GitHub didn't answer): `main`, which is the latest release.
+    assert_eq!(
+        cargo_update_command(APP, None),
+        "cargo install --locked --git https://github.com/singudotdev/kanbrain kanbrain-app"
+    );
+    assert_eq!(cargo_update_command(KB, None), "cargo install kanbrain");
 }
 
 /// A Windows folder with every character special in PowerShell's strings: `$` and a backtick, which a double-quoted

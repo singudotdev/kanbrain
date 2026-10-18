@@ -301,8 +301,13 @@ impl BrainView {
             return;
         }
         cx.spawn(async move |this, cx| {
-            let Ok(central) = this.update(cx, |this, _| this.board.central.clone()) else { return };
-            let installed = cx.background_executor().spawn(async move { update::install(&central) }).await;
+            let Ok((central, release)) =
+                this.update(cx, |this, _| (this.board.central.clone(), this.board.available.clone()))
+            else {
+                return;
+            };
+            let installed =
+                cx.background_executor().spawn(async move { update::install(&central, release.as_deref()) }).await;
             this.update(cx, |this, cx| match installed {
                 Ok(()) => cx.quit(),
                 Err(e) => {

@@ -121,7 +121,7 @@ fn dragging_a_card_onto_a_column_moves_it(cx: &mut gpui::TestAppContext) {
     cx.simulate_mouse_move(done, MouseButton::Left, gpui::Modifiers::none());
     cx.simulate_mouse_up(done, MouseButton::Left, gpui::Modifiers::none());
     view.read_with(cx, |view, _| assert_eq!(view.board.selected, Some(crate::state::Key::new(0, 1))));
-    let (tasks, _) = Store::at(dir.path()).unwrap().load().unwrap();
+    let (tasks, _) = Store::at(dir.path()).unwrap().load_entries().unwrap();
     let moved = tasks.iter().find(|t| t.id == 1).unwrap();
     assert_eq!(moved.status, Status::Done, "the move is saved");
 }
@@ -137,7 +137,7 @@ fn the_list_layout_draws_rows_that_drag_onto_a_section(cx: &mut gpui::TestAppCon
     cx.simulate_mouse_move(row + gpui::point(px(10.), px(10.)), MouseButton::Left, gpui::Modifiers::none());
     cx.simulate_mouse_move(done, MouseButton::Left, gpui::Modifiers::none());
     cx.simulate_mouse_up(done, MouseButton::Left, gpui::Modifiers::none());
-    let (tasks, _) = Store::at(dir.path()).unwrap().load().unwrap();
+    let (tasks, _) = Store::at(dir.path()).unwrap().load_entries().unwrap();
     assert_eq!(tasks.iter().find(|t| t.id == 1).unwrap().status, Status::Done, "the move is saved");
     cx.simulate_keystrokes("v");
     assert!(cx.debug_bounds("card 0/1").is_some(), "v brings the columns back");
@@ -157,7 +157,7 @@ fn a_columns_plus_opens_the_form_with_that_column_picked(cx: &mut gpui::TestAppC
     let doing = cx.debug_bounds("form-status doing").expect("the column picker is drawn").center();
     cx.simulate_click(doing, gpui::Modifiers::none());
     cx.simulate_keystrokes("enter");
-    let (tasks, _) = Store::at(dir.path()).unwrap().load().unwrap();
+    let (tasks, _) = Store::at(dir.path()).unwrap().load_entries().unwrap();
     let new = tasks.iter().find(|t| t.title == "x").expect("created");
     assert_eq!(new.status, Status::Doing, "the column clicked in the picker");
 }
@@ -755,7 +755,7 @@ fn a_click_on_the_tags_list_puts_the_tag_clicked_though_a_reload_moved_it(cx: &m
     let perf = cx.debug_bounds("tag option 0").expect("listed first").center();
     // Another program tags an entry with one sorting ahead, which the click's catching up reads.
     let store = Store::at(dir.path()).unwrap();
-    let mut other = store.load().unwrap().0.into_iter().find(|t| t.id == 2).unwrap();
+    let mut other = store.load_entries().unwrap().0.into_iter().find(|t| t.id == 2).unwrap();
     other.tags = vec!["ape".into()];
     store.save(&mut other).unwrap();
     cx.simulate_click(perf, gpui::Modifiers::none());
@@ -1319,7 +1319,7 @@ fn copying_with_nothing_selected_leaves_the_clipboard_and_a_click_elsewhere_or_c
     cx.simulate_mouse_move(card + gpui::point(px(10.), px(10.)), MouseButton::Left, gpui::Modifiers::none());
     cx.simulate_mouse_move(done, MouseButton::Left, gpui::Modifiers::none());
     cx.simulate_mouse_up(done, MouseButton::Left, gpui::Modifiers::none());
-    let (tasks, _) = Store::at(dir.path()).unwrap().load().unwrap();
+    let (tasks, _) = Store::at(dir.path()).unwrap().load_entries().unwrap();
     assert_eq!(tasks.iter().find(|t| t.id == 2).unwrap().status, Status::Done, "the card moved");
     view.read_with(cx, |view, _| assert_eq!(view.board.shown_text(), None, "the press on the card dropped it"));
     // Shown no more, the selection goes with it, though no click said so.

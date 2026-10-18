@@ -121,6 +121,18 @@ fn list_gives_a_sync_conflict_copy_an_id_of_its_own() {
 }
 
 #[test]
+fn update_waits_for_an_agents_task_in_doing() {
+    // Refused before it asks GitHub for a release, so nothing goes out: `update` reaches its check from the command line.
+    let central = tempdir();
+    let mut start = kb_command(central.path(), central.path());
+    ok(&start.args(["add", "--start", "Rate-limit the login"]).env("KANBRAIN_AUTHOR", "agent").output().unwrap());
+    let out = kb(central.path(), central.path(), &["update"], "");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success(), "{stderr}");
+    assert!(stderr.contains("agents are working on #1 Rate-limit the login"), "{stderr}");
+}
+
+#[test]
 fn errors_go_to_stderr_with_a_failing_exit_code() {
     let (central, dir) = (tempdir(), tempdir());
     let run = |args: &[&str]| kb(dir.path(), central.path(), args, "");
@@ -425,7 +437,10 @@ fn files_that_dont_read_as_entries_are_named_on_stderr() {
     std::fs::write(repo.path().join(".brain/2024-01-15.md"), "# Daily\n").unwrap();
     for args in [&["list"][..], &["show", "7"]] {
         let stderr = String::from_utf8(run(args).stderr).unwrap();
-        assert!(stderr.contains("kb: skipped 0007-broken.md"), "{args:?}: {stderr}");
+        assert!(
+            stderr.contains("kb: skipped 0007-broken.md: missing `- id:` line; fix the file or remove it\n"),
+            "{args:?}: {stderr}"
+        );
         assert!(!stderr.contains("2024-01-15"), "{args:?}: {stderr}");
     }
 }

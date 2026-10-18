@@ -4,7 +4,7 @@
 use super::{Board, Manage, Mode, Picker, PickerKey, ProjectOption, Request, Scope, Target};
 use crate::text::event::{KeyCode, KeyEvent};
 use anyhow::Result;
-use kanbrain_core::cli;
+use kanbrain_core::cli::{self, Step, StepKind};
 
 impl Board {
     /// Asks for the project's new name, starting from the one it has.
@@ -107,17 +107,17 @@ impl Board {
         let (done, project) = match manage {
             Manage::RenameProject { name, .. } => {
                 let new = name.search.text().trim().to_string();
-                (cli::rename_project(&self.central, &project, &new), new)
+                (cli::rename_project_steps(&self.central, &project, &new), new)
             }
             Manage::RenameRepo { name, .. } => {
-                (cli::rename_repo(&self.central, &dir, name.search.text().trim()), project)
+                (cli::rename_repo_steps(&self.central, &dir, name.search.text().trim()), project)
             }
             Manage::MoveRepo { picker, .. } => {
                 let Some(to) = self.move_options(src, picker).into_iter().nth(sel).map(|o| o.name().to_string()) else {
                     self.notify("type the project's name");
                     return;
                 };
-                (cli::move_repo(&self.central, &dir, &to), to)
+                (cli::move_repo_steps(&self.central, &dir, &to), to)
             }
             // Removing has its own keys, which `key_manage` runs.
             Manage::Remove { .. } => return,
@@ -138,13 +138,13 @@ impl Board {
         let dir = self.brain(src).store.dir().to_path_buf();
         let project = self.sources[src].project.clone().unwrap_or_default();
         let done = if whole {
-            cli::remove_project(&self.central, &project, purge)
+            cli::remove_project_steps(&self.central, &project, purge)
         } else {
-            cli::remove_repo(&self.central, &dir, purge)
+            cli::remove_repo_steps(&self.central, &dir, purge)
         };
         // Deleting the tasks is what matters to say, more than the unregistering that leads.
         let mut deleted: Vec<String> =
-            done.iter().flatten().filter(|line| line.starts_with("deleted ")).cloned().collect();
+            done.iter().flatten().filter(|step| step.kind == StepKind::Deleted).map(ToString::to_string).collect();
         if self.reloaded(done) {
             match deleted.len() {
                 0 => {}
@@ -168,13 +168,13 @@ impl Board {
 
     /// After a change to projects: re-reads every brain and says what was done (its first line), or why nothing
     /// was. Returns whether it was done.
-    fn reloaded(&mut self, done: Result<Vec<String>>) -> bool {
+    fn reloaded(&mut self, done: Result<Vec<Step>>) -> bool {
         match done {
             Ok(done) => {
                 let result = self.reload();
                 self.report_error(result);
-                if let Some(first) = done.first() {
-                    self.notify(first.clone());
+                if let Some(first) = done.into_iter().next() {
+                    self.notify(first.line);
                 }
                 true
             }

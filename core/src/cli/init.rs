@@ -8,6 +8,7 @@
 //! repository's, often committed with it, so deleting them is left to the user.
 
 use super::claude;
+use super::manage::{Step, StepKind};
 use crate::model::counted;
 use crate::projects;
 use crate::store::{self, PROJECT_DIR, Store};
@@ -74,27 +75,33 @@ The user follows them live on a kanban board: keep it showing what you're doing 
   tags), `link ID OTHER…` (an id here, or `REPO#ID` in another repository of the project); `-` reads text from
   stdin. Never edit the files in `.brain/` by hand: `kb` keeps them consistent.";
 
+/// [`init_steps`], each step as its line.
+#[deprecated(since = "0.6.3", note = "use `init_steps`, which says what each line is")]
+pub fn init(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path) -> Result<Vec<String>> {
+    super::manage::lines(init_steps(root, name, repo, central))
+}
+
 /// Makes `root` a repository of project `name` (else the one its card names, else one named after
 /// the folder), named `repo` in it (else as [`projects::repo_name`] picks): creates its `.brain/` and card,
 /// registers it in `central` (joining the project's other repositories if it has some), creates the project's
 /// shared card if it's new, and writes or refreshes the section in each agent file of `root` (creating
-/// `CLAUDE.md` if there's none). Returns what it did, one line each.
+/// `CLAUDE.md` if there's none). Returns what it did, a [`Step`] a line.
 ///
 /// A repository of another project, still there, is moved to `name` as `kb project move` moves it: the links
 /// between it and its old project's repositories go, and so does that project's card if it was the last.
-pub fn init(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path) -> Result<Vec<String>> {
+pub fn init_steps(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path) -> Result<Vec<Step>> {
     // Refused before anything is written: its card and agent files go with a brain this version can't read.
     crate::migrate::refuse_too_new(&root.join(PROJECT_DIR))?;
     if let Some(to) = name
         && let Ok(dir) = projects::canonical(&root.join(PROJECT_DIR))
         && projects::load(central)?.iter().any(|r| projects::same_dir(&r.dir, &dir) && r.project != to)
     {
-        let mut done = super::manage::move_repo(central, &dir, to)?;
+        let mut done = super::manage::move_repo_steps(central, &dir, to)?;
         // Moved already: a name it can't take is said beside the move, not instead of it.
         if let Some(repo) = repo {
-            match super::manage::rename_repo(central, &dir, repo) {
-                Ok(lines) => done.extend(lines),
-                Err(e) => done.push(format!("kept the name it has: {e:#}")),
+            match super::manage::rename_repo_steps(central, &dir, repo) {
+                Ok(steps) => done.extend(steps),
+                Err(e) => done.push(Step::other(format!("kept the name it has: {e:#}"))),
             }
         }
         return Ok(done);
@@ -102,10 +109,10 @@ pub fn init(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path)
     join(root, name, repo, central)
 }
 
-/// What [`init`] does for a folder that isn't a repository of another project: [`super::manage::move_repo`] runs
+/// What [`init_steps`] does for a folder that isn't a repository of another project: [`super::manage::move_repo`] runs
 /// it once the repository has left its old project.
-pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path) -> Result<Vec<String>> {
-    let mut done = Vec::new();
+pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path) -> Result<Vec<Step>> {
+    let mut done: Vec<Step> = Vec::new();
     let dir = root.join(PROJECT_DIR);
     // The registry holds a path a line; one with a line break would read as a second, made-up registration.
     if root.to_string_lossy().contains(['\n', '\r']) {
@@ -126,11 +133,13 @@ pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central:
         bail!("{} is the central brain, not a project's: run `kb init` in a project's folder", dir.display());
     }
     if dir.is_dir() {
-        done.push(format!("{} already exists", dir.display()));
+        done.push(Step::new(StepKind::AlreadyExisted, format!("{} already exists", dir.display())));
     } else {
         Store::at(&dir)?;
-        done.push(format!("created {}: kanbrain uses it from here and every folder below", dir.display()));
-        done.push("commit it to share tasks, notes and decisions with the project, or add it to .gitignore".into());
+        done.push(Step::other(format!("created {}: kanbrain uses it from here and every folder below", dir.display())));
+        done.push(Step::other(
+            "commit it to share tasks, notes and decisions with the project, or add it to .gitignore",
+        ));
     }
     // Registered by its absolute path, so the kanban app finds it from anywhere.
     let dir = projects::canonical(&dir).with_context(|| format!("reading {}", dir.display()))?;
@@ -169,10 +178,10 @@ pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central:
     }
     projects::register(central, &project, &dir)?;
     if projects::ensure_description(central, &project)? {
-        done.push(format!(
+        done.push(Step::other(format!(
             "created project `{project}`'s card in the central brain: describe the project with `kb project \
              describe` or from the kanban app (or let the agent do it); all its repositories share it"
-        ));
+        )));
     }
     let repos = projects::load(central)?;
     let here =
@@ -183,14 +192,14 @@ pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central:
         .map(projects::Repo::name)
         .collect();
     if others.is_empty() {
-        done.push(format!(
+        done.push(Step::other(format!(
             "registered as project `{here}`: the kanban app shows it, and `--project {here}` reaches it"
-        ));
+        )));
     } else {
-        done.push(format!(
+        done.push(Step::other(format!(
             "registered as `{here}`, a repository of project `{project}` with {}: they share its card",
             others.join(", ")
-        ));
+        )));
     }
     // A folder moved or renamed by hand leaves its old place registered: said, since only the user knows if
     // this is it.
@@ -198,21 +207,20 @@ pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central:
         let name = gone.name();
         // Its name kept for it, this one took another (`repo_name`): once the old place is out, it can take that one
         // back.
-        done.push(format!(
+        done.push(Step::other(format!(
             "`{project}/{name}`'s folder is gone ({}): if this is it, moved here, take the old place out with \
              `kb --project {project}/{name} deinit`, then `kb project repo {name}` here",
             gone.dir.display()
-        ));
+        )));
     }
     let existing: Vec<&str> = AGENT_FILES.into_iter().filter(|name| root.join(name).is_file()).collect();
     let targets = if existing.is_empty() { vec![DEFAULT_AGENT_FILE] } else { existing };
-    done.extend(write_agent_files(root, &targets)?.into_iter().map(|(_, line)| line));
+    done.extend(write_agent_files(root, &targets)?.into_iter().map(|(_, line)| Step::other(line)));
     if !on_path(std::env::var_os("PATH"), "kb") {
-        done.push(
+        done.push(Step::other(
             "`kb` isn't on your PATH, and agents and the hooks run it: install the command line too \
-             (the installer's `--app both`)"
-                .into(),
-        );
+             (the installer's `--app both`)",
+        ));
     }
     Ok(done)
 }
@@ -245,8 +253,8 @@ fn rename_unreachable_projects(central: &Path) -> Result<Vec<String>> {
             .find(|name| projects::check_name(name).is_ok() && !names.contains(name))
             .expect("more names than projects");
         // One that fails is said, as `init --all` says each repository it couldn't bring up to date.
-        match super::manage::rename_project(central, &old, &new) {
-            Ok(lines) => done.extend(lines),
+        match super::manage::rename_project_steps(central, &old, &new) {
+            Ok(steps) => done.extend(steps.into_iter().map(|step| step.line)),
             Err(e) => done.push(format!("couldn't rename project `{old}`: {e:#}")),
         }
         names.push(new);
@@ -282,7 +290,9 @@ pub fn init_all(central: &Path) -> Result<Vec<String>> {
                 ));
             } else {
                 let fixed = projects::repo_name(central, &repo.project, &repo.dir, None)?;
-                done.extend(super::manage::rename_repo(central, &repo.dir, &fixed)?);
+                done.extend(
+                    super::manage::rename_repo_steps(central, &repo.dir, &fixed)?.into_iter().map(|step| step.line),
+                );
             }
         }
         // A card left on a project's old name, renamed while this folder was away.
@@ -434,37 +444,40 @@ fn on_path(path: Option<std::ffi::OsString>, name: &str) -> bool {
 /// card if it was its last repository, and takes the section out of each agent file of the repository
 /// (deleting a file left empty, which `init` created). `.brain/` is left as it is: whether it goes is
 /// [`super::manage::remove_repo`]'s. Returns what it did, one line each.
-pub fn deinit(dir: &Path, central: &Path) -> Result<Vec<String>> {
+pub fn deinit(dir: &Path, central: &Path) -> Result<Vec<Step>> {
     let Some(repo) = projects::unregister(central, dir)? else {
         bail!("{} isn't a registered project: there's nothing to deinit", dir.display());
     };
-    let mut done = vec![format!("unregistered {}: the kanban app no longer shows it", repo.dir.display())];
+    let mut done: Vec<Step> =
+        vec![Step::other(format!("unregistered {}: the kanban app no longer shows it", repo.dir.display()))];
     let others: Vec<String> =
         projects::load(central)?.iter().filter(|r| r.project == repo.project).map(projects::Repo::name).collect();
     if !others.is_empty() {
-        done.push(format!(
-            "project `{}` keeps its card for its other repositories: {}",
-            repo.project,
-            others.join(", ")
-        ));
+        let line =
+            format!("project `{}` keeps its card for its other repositories: {}", repo.project, others.join(", "));
+        done.push(Step::new(StepKind::KeptCard, line));
     } else if projects::remove_description(central, &repo.project)? {
-        done.push(format!("removed project `{}`'s card from the central brain", repo.project));
+        done.push(Step::other(format!("removed project `{}`'s card from the central brain", repo.project)));
     }
     let Some(root) = repo.dir.parent().filter(|_| repo.dir.is_dir()) else {
-        done.push(format!("{} is gone, so there was nothing else to undo", repo.dir.display()));
+        done.push(Step::other(format!("{} is gone, so there was nothing else to undo", repo.dir.display())));
         return Ok(done);
     };
     match claude::remove_hooks(root) {
         Ok((change, edited)) => {
             match change {
                 claude::Change::Unchanged => {}
-                claude::Change::Written => done.push(format!("removed kanbrain's hooks from {}", claude::SETTINGS)),
-                claude::Change::Removed => done.push(format!("removed {}: it only held the hooks", claude::SETTINGS)),
+                claude::Change::Written => {
+                    done.push(Step::other(format!("removed kanbrain's hooks from {}", claude::SETTINGS)));
+                }
+                claude::Change::Removed => {
+                    done.push(Step::other(format!("removed {}: it only held the hooks", claude::SETTINGS)));
+                }
             }
             let todo = "kanbrain left it in place; if it's kanbrain's, remove it yourself";
-            done.extend(edited.iter().map(|hook| looks_like_kanbrains(hook, todo)));
+            done.extend(edited.iter().map(|hook| Step::other(looks_like_kanbrains(hook, todo))));
         }
-        Err(e) => done.push(format!("left the Claude Code hooks in place: {e:#}")),
+        Err(e) => done.push(Step::other(format!("left the Claude Code hooks in place: {e:#}"))),
     }
     for name in AGENT_FILES {
         let path = root.join(name);
@@ -475,10 +488,10 @@ pub fn deinit(dir: &Path, central: &Path) -> Result<Vec<String>> {
         }
         if after.trim().is_empty() {
             store::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
-            done.push(format!("removed {name}: it only held the \"Project memory\" section"));
+            done.push(Step::other(format!("removed {name}: it only held the \"Project memory\" section")));
         } else {
             store::write_file(&path, &after)?;
-            done.push(format!("removed the \"Project memory\" section from {name}"));
+            done.push(Step::other(format!("removed the \"Project memory\" section from {name}")));
         }
     }
     Ok(done)

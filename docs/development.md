@@ -147,10 +147,10 @@ The crates use the **Rust 2024 edition**. Shared versions and lints are in the w
 | [`similar`](https://docs.rs/similar) | 3.2 | `gui`: the line diff and three-way merge of what the editor and `kb` changed meanwhile (`text::merge`) |
 | [`tempfile`](https://docs.rs/tempfile) | 3 | tests only: temporary data folders |
 
-The minimum supported Rust version of the core and the command line is **1.88** (`rust-version` in `core/Cargo.toml` and
-`cli/Cargo.toml`): the code uses let chains (`if a && let Some(b) = c`), which edition 2024 allows from Rust 1.88. Cargo
-picks dependency versions that still support it. CI checks it with Rust 1.88, and it's fine to develop on any newer
-Rust.
+The minimum supported Rust version of the core and the command line is **1.88** (`rust-version` in the workspace's
+`Cargo.toml`, which both inherit): the code uses let chains (`if a && let Some(b) = c`), which edition 2024 allows from
+Rust 1.88. Cargo picks dependency versions that still support it. CI checks it with Rust 1.88, and it's fine to develop
+on any newer Rust.
 The kanban app follows GPUI, which needs a recent stable Rust.
 Keep `Cargo.lock` committed: kanbrain is an application, and the lockfile makes builds reproducible.
 
@@ -175,13 +175,19 @@ core/src/            kanbrain-core: shared by both programs
 │   ├── mod.rs       Program (the binary's name), Command parsing, `--project`, `list`, `status`, `report`, `path`, usage
 │   ├── claude.rs    the Claude Code hooks `init` merges into .claude/settings.local.json (and `deinit` takes out)
 │   ├── hook.rs      `kb hook prompt|stop|edit|tool`: the hooks' checks that hold an agent to describing the project first, and to `kb` for the brain's files, and tell it of the user's comments
-│   ├── entries.rs   agent commands by id: `add`, `show`, `search`, status changes, `comment`, `ask`, `wait`, `propose`, `accept`/`reject`, `describe`, `rename`, `tag`, `link`, `project`, `context`
+│   ├── entries/     agent commands by id: `add`, `show`, `search`, status changes, `comment`, `ask`, `wait`, `propose`, `accept`/`reject`, `describe`, `rename`, `tag`, `link`, `project`, `context`
+│   │   ├── mod.rs   their arguments (EntryArgs, EntryCommand, AddArgs, Text), parsing and running them
+│   │   ├── args.rs  ids, text words (`-` for stdin, `--`), titles and links
+│   │   ├── tags.rs  `tag`: changes to an entry's tags, or renaming a tag everywhere
+│   │   ├── project.rs `project`: showing the project, or changing it
+│   │   ├── wait.rs  `wait`: polling until an entry no longer waits on a person, and what it then prints
+│   │   └── show.rs  printing an entry (`show`, each command's confirmation) and search results
 │   ├── completions.rs `completions bash|zsh|fish|powershell`: the scripts, and `complete`, the ids, projects and tags they offer
 │   ├── update.rs    `update`, and the app's: the latest release asked for, the installer run again for the apps beside this one, into the same folder (a macOS bundle's says which), once no agent has a task in doing
 │   ├── init.rs      `init`: the repository's .brain/ and card, its registration, the "Project memory" section in CLAUDE.md / AGENTS.md; `init --all` brings every registered brain up to this version: migrates its data (after a backup), renames the projects and repositories older versions named as none can be now, fixes each repository's .brain/project.md, then refreshes its agent instructions; `deinit` undoes `init`
-│   └── manage.rs    renaming a project or a repository, moving a repository to another project, removing them (`deinit --purge`, `project remove`), rewriting or dropping the links between repositories
+│   └── manage.rs    renaming a project or a repository, moving a repository to another project, removing them (`deinit --purge`, `project remove`), rewriting or dropping the links between repositories; what each did, as Steps (a line each, and what it was)
 ├── api/             operations by id for the CLI, with typed refusals (ApiError)
-│   ├── mod.rs       add, change_status, comment, describe, link, full-text search
+│   ├── mod.rs       add, link, full-text search; change_status, comment and describe, deprecated for set_status, add_comment and set_description (brain/actions.rs)
 │   ├── json.rs      entries as JSON, one line without empty fields (Entry, Summary)
 │   ├── text.rs      entries as compact text for agents: `show`, one-line answers, capped `search`
 │   └── context.rs   the markdown summary agents read first: the project's card, capped sections, latest comments
@@ -207,6 +213,7 @@ e2e/upgrade.sh       brains written by every released kb, opened by this build (
 e2e/update.sh        every released kb update installing this build (CI)
 e2e/smoke-app.sh     the release app starts, stays up and idles; a screenshot (CI; smoke-app.ps1 for Windows)
 e2e/agent.sh         a real agent working with kanbrain, scenario by scenario (run by hand)
+e2e/lib.sh           what the shell scripts share, sourced by them: `fail`, the agent variables `kb` reads, cleared to run it as a person
 docs/decisions/      why things are as they are, one decision a file (NNNN-title.md)
 xtask/               `cargo xtask notices kb|kanbrain` (the alias is in .cargo/config.toml): THIRD-PARTY-LICENSES.txt,
                      from cargo-about (about.toml) and licenses/ for what's compiled in but isn't a crate

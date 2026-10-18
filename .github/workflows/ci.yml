@@ -148,7 +148,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # Static checks first: shellcheck is on Ubuntu's runners.
       - if: runner.os == 'Linux'
-        run: shellcheck install.sh e2e/install.sh e2e/agent.sh e2e/upgrade.sh e2e/update.sh e2e/smoke-app.sh gui/icons/make.sh .github/plan.sh
+        run: shellcheck -x install.sh e2e/lib.sh e2e/install.sh e2e/agent.sh e2e/upgrade.sh e2e/update.sh e2e/smoke-app.sh gui/icons/make.sh .github/plan.sh
       # PowerShell's own analyzer, failing on what it rates an error.
       - if: runner.os == 'Windows'
         shell: pwsh
@@ -232,8 +232,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      # Keep in sync with `rust-version` in core/Cargo.toml and cli/Cargo.toml. The kanban app follows GPUI's
-      # own requirements instead, so this checks the default members: the core and the command line.
+      # Keep in sync with `rust-version` in the workspace's Cargo.toml, which the core and the command line inherit.
+      # The kanban app follows GPUI's own requirements instead, so this checks the default members.
       - uses: dtolnay/rust-toolchain@1.88
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --locked

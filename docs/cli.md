@@ -210,7 +210,7 @@ $ kb list
 | `all` | every status, done included | |
 | `notes` / `decisions` | also list notes and/or decisions after the tasks, newest first; given alone, only those | |
 | `--json` | a JSON array of `{ id, kind, title, status, decision, asked, tags }` in the same order, on one line: `status` only on tasks, `decision` only on decisions, `asked` only on a task an agent asked about | markdown |
-| `--tag TAG` | only entries with this tag (`prod` or `#prod`): tasks, and the notes and decisions listed | all |
+| `--tag TAG` | only entries with this tag (`prod` or `#prod`; one, `a,b` is refused): tasks, and the notes and decisions listed | all |
 
 Examples:
 
@@ -249,7 +249,7 @@ task named with its repository.
 | `hour` / `day` / `week` / `month` | period, the one containing now | `week` |
 | `--group task` | one row per task, with its tags | ✓ |
 | `--group tag` | one row per tag | |
-| `--tag TAG` | only tasks with this tag (`prod` or `#prod`) | all |
+| `--tag TAG` | only tasks with this tag (`prod` or `#prod`; one, `a,b` is refused) | all |
 | `--save` | also write the file to `<data folder>/reports/` and print its path to stderr | off |
 
 Examples:
@@ -312,7 +312,10 @@ or parked (park a stale one yourself), it runs the installer for the latest rele
 instructions, and its data, migrated to the new version's format when it changed, after a backup (see
 [Format versions and migrations](data-format.md#format-versions-and-migrations)). On Windows, where a running
 program can't be replaced, it prints the PowerShell command to run once the app is closed. Installed with
-`cargo install`, it doesn't replace anything behind cargo's back: it prints `cargo install kanbrain && kb init --all`.
+`cargo install`, it doesn't replace anything behind cargo's back: it prints `cargo install kanbrain && kb init --all`;
+`kanbrain update`, the app's, prints
+`cargo install --locked --git https://github.com/singudotdev/kanbrain --tag vX.Y.Z kanbrain-app && kanbrain init --all`
+(the release it found), as the app isn't on crates.io.
 The installer only writes inside your home folder, so a `kb` elsewhere (`/usr/local/bin`, a build's `target/`) is
 refused with "install folder must be inside your home folder": reinstall it there instead.
 

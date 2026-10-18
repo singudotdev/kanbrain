@@ -1,5 +1,9 @@
+use super::project::project_text;
+use super::wait::{Watch, minutes, settled};
 use super::*;
+use crate::api::ApiError;
 use crate::model::{Author, Changed};
+use crate::projects::ProjectInfo;
 
 fn parse(args: &[&str]) -> Result<EntryArgs> {
     let (name, rest) = args.split_first().unwrap();
@@ -312,12 +316,12 @@ fn wait_ends_on_a_persons_answer_or_verdict() {
     assert_eq!(settled_on(&brain, task).unwrap(), format!("{head}: answered\n\nPer account"));
     // Answered and moved on before `wait` looked again: the answer to the question it found is still said.
     let asked_at = brain.entry(task).unwrap().comments.iter().rev().find(|c| c.question).unwrap().created;
-    brain.change_status(task, Status::Todo).unwrap();
+    brain.set_status(task, Status::Todo).unwrap();
     assert_eq!(
         settled(brain.entry(task).unwrap(), Some(asked_at)).unwrap(),
         format!("{head}: answered, now todo\n\nPer account")
     );
-    brain.change_status(task, Status::Parked).unwrap();
+    brain.set_status(task, Status::Parked).unwrap();
 
     brain.author = crate::model::Author::Agent;
     let decision = brain.propose(task, new("Use Redis")).unwrap();
@@ -365,7 +369,7 @@ fn waiting_on_an_entry_missing_from_one_look_carries_on() {
     let mut brain = Brain::open(crate::store::Store::at(dir.path()).unwrap()).unwrap();
     let task = brain.add(NewEntry { title: "Rate-limit login".into(), ..NewEntry::default() }).unwrap();
     brain.ask(task, "Per IP or per account?").unwrap();
-    let asked = || Ok(brain.store.load().unwrap().0);
+    let asked = || Ok(brain.store.load_entries().unwrap().0);
     // Gone from one look, as a file renamed for a new title is gone between listing and reading it.
     let mut watch = Watch::default();
     assert!(watch.look(task, asked()).is_none());
@@ -380,7 +384,7 @@ fn waiting_on_an_entry_missing_from_one_look_carries_on() {
 
     brain.author = crate::model::Author::Human;
     brain.add_comment(task, "Per account").unwrap();
-    let answered = watch.look(task, Ok(brain.store.load().unwrap().0)).unwrap().unwrap();
+    let answered = watch.look(task, Ok(brain.store.load_entries().unwrap().0)).unwrap().unwrap();
     assert_eq!(answered, format!("#{task} Rate-limit login: answered\n\nPer account"));
 }
 
@@ -395,7 +399,7 @@ fn a_task_moved_on_unanswered_says_so_rather_than_quote_an_older_comment_or_its_
     brain.author = crate::model::Author::Agent;
     brain.ask(task, "Per IP or per account?").unwrap();
     let asked_at = brain.entry(task).unwrap().comments.iter().rev().find(|c| c.question).unwrap().created;
-    brain.change_status(task, Status::Todo).unwrap();
+    brain.set_status(task, Status::Todo).unwrap();
     assert_eq!(
         settled(brain.entry(task).unwrap(), Some(asked_at)).unwrap(),
         format!("#{task} Rate-limit login: not waiting for an answer (todo)")

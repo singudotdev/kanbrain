@@ -1,3 +1,5 @@
+#![expect(deprecated, reason = "what the functions the `_steps` ones replace still say, word for word, is under test")]
+
 use super::*;
 
 #[test]
@@ -167,8 +169,8 @@ fn init_and_deinit_tell_of_a_hook_that_looks_like_kanbrains_and_leave_it_as_it_i
     let told = ".claude/settings.local.json: a hook for Stop runs `cd /x && '/Users/John Doe/bin/kb' hook stop`, \
                 which looks like kanbrain's `kb hook stop`: kanbrain left it in place; if it's kanbrain's, remove it \
                 yourself";
-    assert!(done.iter().any(|line| line == told), "{done:?}");
-    assert!(done.iter().any(|line| line.starts_with("removed kanbrain's hooks")), "the others: {done:?}");
+    assert!(done.iter().any(|step| step.line == told), "{done:?}");
+    assert!(done.iter().any(|step| step.line.starts_with("removed kanbrain's hooks")), "the others: {done:?}");
     assert_eq!(
         fs::read_to_string(&settings).unwrap().parse::<serde_json::Value>().unwrap(),
         theirs.parse::<serde_json::Value>().unwrap()
@@ -183,7 +185,7 @@ fn deinit_takes_out_hooks_an_older_kanbrain_took_as_its_own_by_their_path() {
     let pathed = fs::read_to_string(&settings).unwrap().replace("\"kb ", "\"/home/josé/.local/bin/kb ");
     fs::write(&settings, pathed).unwrap();
     let done = deinit(&root.path().join(".brain").canonicalize().unwrap(), central.path()).unwrap();
-    assert!(done.iter().any(|line| line.starts_with("removed .claude/settings.local.json")), "{done:?}");
+    assert!(done.iter().any(|step| step.line.starts_with("removed .claude/settings.local.json")), "{done:?}");
     assert!(!settings.exists());
 }
 
@@ -222,7 +224,7 @@ fn deinit_takes_out_a_repository_whose_folder_is_gone() {
     let dir = projects::canonical(&root.join(".brain")).unwrap();
     fs::remove_dir_all(&root).unwrap();
     let done = deinit(&dir, central.path()).unwrap();
-    assert!(done.last().unwrap().contains("is gone"), "{done:?}");
+    assert!(done.last().unwrap().line.contains("is gone"), "{done:?}");
     assert_eq!(projects::load(central.path()).unwrap(), []);
 }
 

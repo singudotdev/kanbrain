@@ -2,6 +2,7 @@
 //! `kb` beside it and every project's agent instructions, as `kb update` does. Neither while an agent works.
 
 use anyhow::{Context, Result, bail};
+use kanbrain_core::cli::Program;
 use kanbrain_core::cli::update::{self, Install};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -35,13 +36,18 @@ pub fn take_failure() -> Option<String> {
 
 /// Installs the latest release over this app and starts it, unless an agent is working on a task in a project
 /// under `central`. Once it returns, this app is to close: on Windows, the installer waits for that to replace it.
-pub fn install(central: &Path) -> Result<()> {
+/// `release` is the version found, which an app cargo installed is told to install.
+pub fn install(central: &Path, release: Option<&str>) -> Result<()> {
     update::check_no_agent_working(central)?;
     // Before installing: on Linux, the running program's path reads as deleted once it's replaced. It may read so
     // already, replaced by a `kb update` since this app started: the file to start again is the new one there.
     let exe = running_file(std::env::current_exe().context("finding this program's file")?);
     let Install::Installer { dir, app } = update::install_of(&exe)? else {
-        bail!("kanbrain was installed with cargo: update it the same way");
+        let command = update::cargo_update_command(Program { name: "kanbrain" }, release);
+        bail!(
+            "kanbrain was installed with cargo: update it, and then every project's agent instructions, with \
+             {command} && kanbrain init --all"
+        );
     };
     if cfg!(windows) { install_after_exit(&exe, &dir, app) } else { install_now(&exe, &dir, app) }
 }

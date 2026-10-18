@@ -66,7 +66,7 @@ impl Fixture {
 
     /// The task as its file says, independent of the board's memory.
     fn on_disk(&self, id: u32) -> Task {
-        let (tasks, _) = Store::at(self.dir.path()).unwrap().load().unwrap();
+        let (tasks, _) = Store::at(self.dir.path()).unwrap().load_entries().unwrap();
         tasks.into_iter().find(|t| t.id == id).unwrap()
     }
 }
@@ -1582,7 +1582,7 @@ fn a_dialog_on_an_entry_deleted_meanwhile_closes() {
     board.select(Key::new(1, 1));
     press(&mut board, KeyCode::Char('e'));
     let api = Store::at(code.path().join("api/.brain")).unwrap();
-    api.delete(&api.load().unwrap().0[0]).unwrap();
+    api.delete(&api.load_entries().unwrap().0[0]).unwrap();
     board.reload().unwrap();
     assert_eq!(board.message(), Some("closed: shop/api #1 is gone, deleted or moved meanwhile"));
 }
@@ -1789,7 +1789,7 @@ fn a_shown_project_taken_out_from_the_command_line_shows_all() {
     let (central, code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
     board.set_scope(Scope::Project("blog".into()));
-    kanbrain_core::cli::remove_repo(central.path(), &code.path().join("blog/.brain"), false).unwrap();
+    kanbrain_core::cli::remove_repo_steps(central.path(), &code.path().join("blog/.brain"), false).unwrap();
     board.reload().unwrap();
     assert_eq!(board.scope, Scope::All, "not a blank scope");
 }
@@ -1799,13 +1799,13 @@ fn a_shown_project_renamed_from_the_command_line_stays_shown() {
     let (central, code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
     board.set_scope(Scope::Project("shop".into()));
-    kanbrain_core::cli::rename_project(central.path(), "shop", "store").unwrap();
+    kanbrain_core::cli::rename_project_steps(central.path(), "shop", "store").unwrap();
     board.reload().unwrap();
     assert_eq!(board.scope, Scope::Project("store".into()), "under its new name");
 
     // Its last repository joining a project that has others is no rename: all of them.
     board.set_scope(Scope::Project("blog".into()));
-    kanbrain_core::cli::move_repo(central.path(), &code.path().join("blog/.brain"), "store").unwrap();
+    kanbrain_core::cli::move_repo_steps(central.path(), &code.path().join("blog/.brain"), "store").unwrap();
     board.reload().unwrap();
     assert_eq!(board.scope, Scope::All);
 }
@@ -2746,9 +2746,13 @@ fn projects_and_repositories_are_managed_from_the_projects_info() {
     press(&mut board, KeyCode::Enter);
     assert_eq!(labels(&board), ["store", "blog/blog", "blog/web"]);
 
+    // As the registry has it, which the messages name.
+    let web = board.brain(src(&board, "blog/web")).store.dir().to_path_buf();
     board.ask_remove(src(&board, "blog/web"), false);
     press(&mut board, KeyCode::Char('y'));
     assert_eq!(labels(&board), ["store", "blog"]);
+    let said = format!("unregistered {}: the kanban app no longer shows it", web.display());
+    assert_eq!(board.message(), Some(said.as_str()), "kept: what it did first, nothing deleted said");
     assert!(code.path().join("web/.brain").is_dir(), "unlinked, its tasks kept");
     assert!(matches!(board.mode, Mode::ManageProject(at) if at == src(&board, "blog")), "back on blog's other one");
     board.mode = Mode::Normal;
@@ -2775,11 +2779,13 @@ fn projects_and_repositories_are_managed_from_the_projects_info() {
     board.ask_remove(src(&board, "blog/mobile"), false);
     press(&mut board, KeyCode::Char('y'));
 
+    let api = board.brain(src(&board, "store")).store.dir().to_path_buf();
     board.ask_remove(src(&board, "store"), true);
     press(&mut board, KeyCode::Char('d'));
     assert_eq!(labels(&board), ["blog"]);
     assert!(!code.path().join("api/.brain").exists(), "its tasks deleted too");
-    assert!(board.message().unwrap().starts_with("deleted "), "and said: {:?}", board.message());
+    let said = format!("deleted {}: its tasks, notes and decisions are gone", api.display());
+    assert_eq!(board.message(), Some(said.as_str()), "and said");
     assert!(matches!(board.mode, Mode::Normal));
 }
 
@@ -3256,21 +3262,21 @@ fn a_shown_project_follows_command_line_changes_seen_by_the_watcher() {
     let (central, code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
     board.set_scope(Scope::Project("shop".into()));
-    kanbrain_core::cli::rename_project(central.path(), "shop", "store").unwrap();
+    kanbrain_core::cli::rename_project_steps(central.path(), "shop", "store").unwrap();
     // As the watcher hands it over: the cards' folder changed.
     board.reload_changed(&[kanbrain_core::projects::cards_dir(central.path())]).unwrap();
     assert_eq!(board.scope, Scope::Project("store".into()), "renamed");
 
     // A one-repository project's repository moved to a project of its own is the same project renamed.
     board.set_scope(Scope::Project("blog".into()));
-    kanbrain_core::cli::move_repo(central.path(), &code.path().join("blog/.brain"), "journal").unwrap();
+    kanbrain_core::cli::move_repo_steps(central.path(), &code.path().join("blog/.brain"), "journal").unwrap();
     board.reload().unwrap();
     assert_eq!(board.scope, Scope::Project("journal".into()));
 
     // Split across two projects before the board looks again: neither is it.
     board.set_scope(Scope::Project("store".into()));
-    kanbrain_core::cli::move_repo(central.path(), &code.path().join("web/.brain"), "front").unwrap();
-    kanbrain_core::cli::move_repo(central.path(), &code.path().join("api/.brain"), "back").unwrap();
+    kanbrain_core::cli::move_repo_steps(central.path(), &code.path().join("web/.brain"), "front").unwrap();
+    kanbrain_core::cli::move_repo_steps(central.path(), &code.path().join("api/.brain"), "back").unwrap();
     board.reload().unwrap();
     assert_eq!(board.scope, Scope::All, "store is gone, split in two");
 }

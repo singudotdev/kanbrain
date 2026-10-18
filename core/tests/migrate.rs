@@ -3,7 +3,7 @@ use crate::model::Task;
 
 /// A step of test format 2: every task's title in capitals, as a change to every entry would.
 fn shout(store: &Store) -> Result<()> {
-    let (tasks, _) = store.load()?;
+    let (tasks, _) = store.load_entries()?;
     for mut task in tasks {
         task.title = task.title.to_uppercase();
         store.save(&mut task)?;
@@ -75,7 +75,7 @@ fn a_brain_a_newer_kanbrain_wrote_is_refused_entirely() {
     let (_dir, store) = brain_with("from the future");
     store::write_file(&store.dir().join(FORMAT_FILE), &format!("{}\n", FORMAT + 1)).unwrap();
     let too_new = |e: anyhow::Error| e.downcast::<TooNew>().unwrap().format;
-    assert_eq!(too_new(store.load().unwrap_err()), FORMAT + 1, "not even read");
+    assert_eq!(too_new(store.load_entries().unwrap_err()), FORMAT + 1, "not even read");
     assert_eq!(too_new(migrate(&store).unwrap_err()), FORMAT + 1, "nor migrated down");
     assert!(crate::brain::Brain::open(Store::at(store.dir()).unwrap()).is_err(), "nor opened");
     assert!(crate::migrate::too_new(store.dir()));

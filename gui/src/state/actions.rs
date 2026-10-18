@@ -198,7 +198,7 @@ impl Board {
 
     /// Whether `key` is a task an agent has in doing.
     pub(super) fn agent_working(&self, key: Key) -> bool {
-        self.task(key).is_some_and(|t| t.is_task() && t.status == Status::Doing && t.started_by() == Author::Agent)
+        self.task(key).is_some_and(|t| t.doing_by(Author::Agent))
     }
 
     /// Whether a save on `key` asks [`Tell`]'s question first: an agent is working on it, and it wasn't answered.

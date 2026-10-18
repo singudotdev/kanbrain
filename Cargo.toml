@@ -8,6 +8,9 @@ default-members = ["core", "cli"]
 [workspace.package]
 version = "0.6.2"
 edition = "2024"
+# The core's and the command line's, which CI's "minimum Rust version" job builds with; the kanban app follows
+# GPUI's requirements instead, so it doesn't inherit it.
+rust-version = "1.88"
 repository = "https://github.com/singudotdev/kanbrain"
 license = "AGPL-3.0-only"
 

@@ -15,6 +15,8 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
+# shellcheck source=e2e/lib.sh
+. "$(dirname "$0")/lib.sh"
 cargo build -q --release --manifest-path "$repo/Cargo.toml" --bin kb
 built="$repo/target/release/kb"
 
@@ -26,11 +28,6 @@ cleanup() {
     rm -rf -- "$work"
 }
 trap cleanup EXIT
-
-fail() {
-    echo "FAIL: $*" >&2
-    exit 1
-}
 
 # The release assets install.sh downloads on this system, as the Release workflow names them.
 case "$(uname -s)" in

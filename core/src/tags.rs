@@ -1,5 +1,6 @@
 //! Tag colors: a 16-color palette assigned without repeats, stored in `tags.md`.
 
+use crate::model::infallible;
 use std::fmt::Write;
 
 /// Named xterm-256 colors, so they render the same in terminals without truecolor support.
@@ -94,7 +95,7 @@ impl TagColors {
     pub fn to_markdown(&self) -> String {
         let names: Vec<&str> = PALETTE.iter().map(|(name, _)| *name).collect();
         let entries = self.entries.iter().fold(String::new(), |mut out, (tag, color)| {
-            writeln!(out, "- {tag}: {}", color.name()).expect("writing to a String cannot fail");
+            infallible(writeln!(out, "- {tag}: {}", color.name()));
             out
         });
         format!("# Tag colors\n\nEdit freely. Colors: {}, or #rrggbb.\n\n{entries}", names.join(", "))
