@@ -51,4 +51,7 @@ exclude_re = [
     'gui/src/ui/startup\.rs:.*delete ! in fail$',
     # The fonts the text is drawn in: how it looks, and the window tests read bounds, not glyphs.
     'gui/src/ui/mod\.rs:.*replace load_fonts with \(\)',
+    # Which phase of a window-wide mouse event a scrollbar acts in: it acts once either way, and only another listener
+    # stopping the event between the two phases could tell. Acting in neither (`with false`) is caught.
+    'gui/src/ui/scrollbar\.rs:.*(replace bubbling -> bool with true|replace == with != in bubbling)$',
 ]

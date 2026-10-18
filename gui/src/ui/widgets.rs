@@ -118,6 +118,12 @@ pub(super) fn next_frame(cx: &mut GpuiApp) {
     cx.default_global::<FieldScrolls>().frame += 1;
 }
 
+/// How many times the board's view has been drawn: for tests to tell whether something drew it again.
+#[cfg(test)]
+pub(super) fn frames(cx: &GpuiApp) -> u64 {
+    cx.try_global::<FieldScrolls>().map_or(0, |scrolls| scrolls.frame)
+}
+
 /// A one-line text field: the text with its cursor while `active`, else the text or `placeholder`.
 /// The mouse places the cursor and selects, and first makes it the field being typed into.
 pub fn text_field(

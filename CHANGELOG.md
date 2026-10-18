@@ -22,6 +22,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   drag runs across one text's paragraphs, list items and code lines, not into the next comment, and copies them as
   shown, without the markdown, on lines of their own. Links still open with a click, a field's selection is copied
   first, and cards and list rows still drag rather than select.
+- The kanban app's board shows scrollbars where it scrolls: one beside a column whose cards don't all show, one under
+  the columns when the window is too narrow for them. Drag the thumb to scroll; a press beside it jumps there.
 
 ### Changed
 
@@ -57,6 +59,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `kb init` and `kb context` no longer add a second copy of a hook that runs `kb` at a quoted path with spaces
   (`'/Users/John Doe/bin/kb' context`) beside it, and `kb deinit` takes it out with the rest. `kb deinit` no longer
   takes out a hook of the user's that only looks like kanbrain's (`true&&/usr/bin/kb hook tool`, `kb.sh hook tool`).
+- In a window smaller than the kanban app's board, the mouse wheel scrolled the column under the pointer and the
+  board sideways at once. The vertical wheel now scrolls only the column, a horizontal wheel or `shift`+wheel only
+  the board; a touchpad scrolls each way its fingers go, a slanting swipe both.
 - `KANBRAIN_DIR` set but empty counts as unset, the platform data folder: `kb` or the kanban app wrote `format` into
   whatever folder it ran in, and the command then failed (`reading …: No such file or directory`). A relative one is
   refused with an error naming it, as it named another central brain from each folder `kb` ran in, hooks included; on
