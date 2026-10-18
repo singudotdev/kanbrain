@@ -83,6 +83,8 @@ The user follows them live on a kanban board: keep it showing what you're doing 
 /// A repository of another project, still there, is moved to `name` as `kb project move` moves it: the links
 /// between it and its old project's repositories go, and so does that project's card if it was the last.
 pub fn init(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path) -> Result<Vec<String>> {
+    // Refused before anything is written: its card and agent files go with a brain this version can't read.
+    crate::migrate::refuse_too_new(&root.join(PROJECT_DIR))?;
     if let Some(to) = name
         && let Ok(dir) = projects::canonical(&root.join(PROJECT_DIR))
         && projects::load(central)?.iter().any(|r| projects::same_dir(&r.dir, &dir) && r.project != to)
@@ -255,20 +257,33 @@ fn rename_unreachable_projects(central: &Path) -> Result<Vec<String>> {
 /// Brings every registered repository up to this version: its data format, migrated with the central brain's
 /// (see [`crate::migrate`]), and its agent instructions, the section in each of its agent files that has one
 /// and Claude Code's hooks where `CLAUDE.md` has it. A repository whose files have no section (taken out by
-/// hand) keeps them as they are, and one whose folder is gone is left alone. Returns what changed, one line
-/// each, naming the repository.
+/// hand) keeps them as they are, and one whose folder is gone, or whose brain a newer kanbrain wrote, is left
+/// alone. Returns what changed, one line each, naming the repository.
 pub fn init_all(central: &Path) -> Result<Vec<String>> {
     // Migrated first: a brain a newer kanbrain wrote stops it before anything is written.
     let mut done = migrate_all(central, &projects::load(central)?)?;
     done.extend(rename_unreachable_projects(central)?);
     let repos = projects::load(central)?;
     let mut current = 0;
-    for repo in repos.iter().filter(|r| r.dir.is_dir()) {
+    // One a newer kanbrain wrote, said by `migrate_all`, gets nothing written: not even its card or agent files.
+    for repo in repos.iter().filter(|r| r.dir.is_dir() && !crate::migrate::too_new(&r.dir)) {
         // Named after a folder whose name links can't hold (`My App`), by a version before 0.4.0: renamed.
         let name = repo.name();
         if projects::check_repo_name(&name).is_err() {
-            let fixed = projects::repo_name(central, &repo.project, &repo.dir, None)?;
-            done.extend(super::manage::rename_repo(central, &repo.dir, &fixed)?);
+            // Its siblings' links to it change with it, and one a newer kanbrain wrote can't be.
+            let left =
+                repos.iter().find(|r| r.project == repo.project && r.dir.is_dir() && crate::migrate::too_new(&r.dir));
+            if let Some(left) = left {
+                done.push(format!(
+                    "{}: keeps the name `{name}`, which links can't hold, until `kb update`: `{}`'s links to it can't \
+                     be rewritten",
+                    repo.label(&repos),
+                    left.name()
+                ));
+            } else {
+                let fixed = projects::repo_name(central, &repo.project, &repo.dir, None)?;
+                done.extend(super::manage::rename_repo(central, &repo.dir, &fixed)?);
+            }
         }
         // A card left on a project's old name, renamed while this folder was away.
         if let Some(card) = projects::read_repo_card(&repo.dir).filter(|card| card.project != repo.project) {
@@ -316,7 +331,7 @@ fn migrate_all(central: &Path, repos: &[projects::Repo]) -> Result<Vec<String>> 
     for repo in repos.iter().filter(|r| r.dir.is_dir()) {
         match Store::at(&repo.dir).and_then(|store| crate::migrate::migrate(&store)) {
             Ok(lines) => done.extend(lines),
-            Err(e) if e.downcast_ref::<crate::migrate::TooNew>().is_some() => {
+            Err(e) if e.is::<crate::migrate::TooNew>() => {
                 done.push(format!("{}: left alone: {e}", repo.label(repos)));
             }
             Err(e) => done.push(format!(

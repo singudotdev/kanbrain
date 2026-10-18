@@ -30,12 +30,20 @@ pub fn rename_project(central: &Path, old: &str, new: &str) -> Result<Vec<String
         bail!("there's already a project `{new}`: move this one's repositories to it instead");
     }
     projects::rename(central, old, new)?;
-    for repo in repos.iter().filter(|r| r.project == old && r.dir.is_dir()) {
+    // A brain a newer kanbrain wrote keeps its card on the old name, which `init --all` fixes once `kb` reads it.
+    let (left, current): (Vec<&Repo>, Vec<&Repo>) =
+        repos.iter().filter(|r| r.project == old && r.dir.is_dir()).partition(|r| crate::migrate::too_new(&r.dir));
+    for repo in current {
         if let Some(card) = projects::read_repo_card(&repo.dir) {
             projects::write_repo_card(&repo.dir, &RepoCard { project: new.to_string(), ..card })?;
         }
     }
-    Ok(vec![format!("renamed project `{old}` to `{new}`; its repositories and card follow")])
+    let done = format!("renamed project `{old}` to `{new}`; its repositories and card follow");
+    if left.is_empty() {
+        return Ok(vec![done]);
+    }
+    let names: Vec<String> = left.iter().map(|r| format!("`{}`'s", r.name())).collect();
+    Ok(vec![format!("{done}, but {} .brain/project.md, left alone, keeps `{old}` until `kb update`", names.join(", "))])
 }
 
 /// Renames the repository whose `.brain/` is `dir` to `new` in its project, and rewrites its siblings' links to
@@ -47,6 +55,7 @@ pub fn rename_repo(central: &Path, dir: &Path, new: &str) -> Result<Vec<String>>
         return Ok(vec![format!("repository `{old}` already has that name")]);
     }
     let new = projects::repo_name(central, &repo.project, &repo.dir, Some(new))?;
+    refuse_too_new(central, &repo)?;
     let card = projects::read_repo_card(&repo.dir).unwrap_or_else(|| RepoCard {
         project: repo.project.clone(),
         repo: None,
@@ -75,6 +84,7 @@ pub fn move_repo(central: &Path, dir: &Path, to: &str) -> Result<Vec<String>> {
     let root = repo.dir.parent().filter(|_| repo.dir.is_dir()).context("its folder is gone: remove it instead")?;
     // Its name in the project it leaves: joining another may cost it a name of its own.
     let name = repo.name();
+    refuse_too_new(central, &repo)?;
     let dropped = unlink(central, &repo)?;
     // A name of its own (`kb project repo`) goes with it, unless the project it joins has one by that name.
     let own = projects::read_repo_card(&repo.dir).and_then(|card| card.repo);
@@ -122,6 +132,7 @@ pub fn move_repo(central: &Path, dir: &Path, to: &str) -> Result<Vec<String>> {
 /// siblings' links to it. With `purge`, its `.brain/` goes too: its tasks, notes and decisions.
 pub fn remove_repo(central: &Path, dir: &Path, purge: bool) -> Result<Vec<String>> {
     let repo = registered(central, dir)?;
+    refuse_too_new(central, &repo)?;
     unlink(central, &repo)?;
     let mut done = init::deinit(&repo.dir, central)?;
     if !repo.dir.is_dir() {
@@ -171,6 +182,23 @@ fn registered(central: &Path, dir: &Path) -> Result<Repo> {
         .into_iter()
         .find(|r| projects::same_dir(&r.dir, dir))
         .with_context(|| format!("{} isn't a registered repository", dir.display()))
+}
+
+/// Refuses, before anything is written, a change to `repo` when its brain or another repository's of its project is
+/// one a newer kanbrain wrote: the links between them change on both sides, and such a brain can be neither read nor
+/// written.
+fn refuse_too_new(central: &Path, repo: &Repo) -> Result<()> {
+    crate::migrate::refuse_too_new(&repo.dir)?;
+    for sibling in siblings(central, repo)? {
+        crate::migrate::refuse_too_new(&sibling.dir).with_context(|| {
+            format!(
+                "changed nothing, as `{}`, another repository of project `{}`, would change too",
+                sibling.name(),
+                repo.project
+            )
+        })?;
+    }
+    Ok(())
 }
 
 /// Drops the links between `repo` and the other repositories of its project, on both sides. Returns how many
