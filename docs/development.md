@@ -147,10 +147,10 @@ The crates use the **Rust 2024 edition**. Shared versions and lints are in the w
 | [`similar`](https://docs.rs/similar) | 3.2 | `gui`: the line diff and three-way merge of what the editor and `kb` changed meanwhile (`text::merge`) |
 | [`tempfile`](https://docs.rs/tempfile) | 3 | tests only: temporary data folders |
 
-The minimum supported Rust version of the core and the command line is **1.88** (`rust-version` in `core/Cargo.toml` and
-`cli/Cargo.toml`): the code uses let chains (`if a && let Some(b) = c`), which edition 2024 allows from Rust 1.88. Cargo
-picks dependency versions that still support it. CI checks it with Rust 1.88, and it's fine to develop on any newer
-Rust.
+The minimum supported Rust version of the core and the command line is **1.88** (`rust-version` in the workspace's
+`Cargo.toml`, which both inherit): the code uses let chains (`if a && let Some(b) = c`), which edition 2024 allows from
+Rust 1.88. Cargo picks dependency versions that still support it. CI checks it with Rust 1.88, and it's fine to develop
+on any newer Rust.
 The kanban app follows GPUI, which needs a recent stable Rust.
 Keep `Cargo.lock` committed: kanbrain is an application, and the lockfile makes builds reproducible.
 
