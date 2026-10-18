@@ -4,7 +4,7 @@
 
 use super::text::{head, state_note};
 use crate::brain::Brain;
-use crate::model::{Asked, Comment, Kind, Status, Task, fmt_age, fmt_clock, now};
+use crate::model::{Asked, Comment, Kind, Status, Task, fmt_age, fmt_clock, infallible, now};
 use crate::projects::ProjectInfo;
 use std::fmt::Write;
 
@@ -20,7 +20,7 @@ impl Brain {
     /// `- #id title #tag`.
     pub fn context_markdown(&self) -> String {
         let mut out = String::new();
-        self.write_context(&mut out).expect("writing to a String cannot fail");
+        infallible(self.write_context(&mut out));
         out
     }
 

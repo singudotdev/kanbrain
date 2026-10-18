@@ -26,7 +26,7 @@ pub use manage::{move_repo, remove_project, remove_repo, rename_project, rename_
 
 use crate::api::json::Summary;
 use crate::brain::{Brain, Group, ReportView};
-use crate::model::{Asked, Author, Kind, Status, Task, fmt_clock, now, parse_tags};
+use crate::model::{Asked, Author, Kind, Status, Task, fmt_clock, infallible, now, parse_tags};
 use crate::period::{Period, Unit};
 use crate::store::{self, Store};
 use crate::{export, platform, projects};
@@ -693,13 +693,13 @@ fn list_markdown(tasks: &[Task], args: &ListArgs) -> String {
         if !out.is_empty() {
             out.push('\n');
         }
-        writeln!(out, "## {heading}\n").expect("writing to a String cannot fail");
+        infallible(writeln!(out, "## {heading}\n"));
         for task in entries {
             out.push_str("- ");
-            crate::api::text::head(&mut out, task).expect("writing to a String cannot fail");
+            infallible(crate::api::text::head(&mut out, task));
             // As `context` says it: a parked task's question, a decision not in force.
             if let Some(note) = crate::api::text::state_note(task) {
-                write!(out, " · {note}").expect("writing to a String cannot fail");
+                infallible(write!(out, " · {note}"));
             }
             out.push('\n');
         }

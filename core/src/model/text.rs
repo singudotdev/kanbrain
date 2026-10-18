@@ -15,6 +15,12 @@ pub fn parse_tags(s: &str) -> Vec<String> {
     tags
 }
 
+/// Unwraps what writing into a `String` returned: `fmt::Write` for `String` never fails, so an error could only come
+/// from a `Display` that breaks its contract, a bug.
+pub(crate) fn infallible(written: std::fmt::Result) {
+    written.expect("writing to a String cannot fail");
+}
+
 /// `1 session`, `3 sessions`: `n` with its noun, `one` for one and `many` otherwise (`0 sessions`).
 pub fn counted(n: usize, one: &str, many: &str) -> String {
     format!("{n} {}", if n == 1 { one } else { many })

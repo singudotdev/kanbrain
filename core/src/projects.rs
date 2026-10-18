@@ -14,7 +14,7 @@
 //! Entries outside any project live in the central brain: `$KANBRAIN_DIR`, else the platform
 //! data folder.
 
-use crate::model::slugify;
+use crate::model::{infallible, slugify};
 use crate::store::{self, Store};
 use anyhow::{Context, Result, bail};
 use std::ffi::OsString;
@@ -288,7 +288,7 @@ fn save(central: &Path, repos: &[Repo]) -> Result<()> {
          with the same name are one project's repositories. The kanban app shows them all.\n\n",
     );
     for r in repos {
-        writeln!(text, "- {}: {}", r.project, r.dir.display()).expect("writing to a String cannot fail");
+        infallible(writeln!(text, "- {}: {}", r.project, r.dir.display()));
     }
     store::write_file(&central.join(REGISTRY_FILE), &text)
 }
@@ -330,11 +330,11 @@ pub fn read_repo_card(dir: &Path) -> Option<RepoCard> {
 pub fn write_repo_card(dir: &Path, card: &RepoCard) -> Result<()> {
     let mut text = format!("# {}\n", card.project);
     if let Some(repo) = &card.repo {
-        writeln!(text, "- repo: {repo}").expect("writing to a String cannot fail");
+        infallible(writeln!(text, "- repo: {repo}"));
     }
     let notes = card.notes.trim();
     if !notes.is_empty() {
-        write!(text, "\n{notes}\n").expect("writing to a String cannot fail");
+        infallible(write!(text, "\n{notes}\n"));
     }
     store::write_file(&dir.join(PROJECT_FILE), &text)
 }

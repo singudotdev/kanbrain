@@ -49,7 +49,7 @@
 //! `shop-api` repository. Other `- key:` lines, link words and `##` sections are kept and written back (see
 //! [`Unknown`]).
 
-use super::text::{one_line, parse_tags};
+use super::text::{infallible, one_line, parse_tags};
 use super::time::{fmt_dur, fmt_ts, now, parse_ts};
 use super::{
     Activity, Author, Changed, Comment, DecisionState, Kind, RepoLink, Session, Status, StatusChange, Task, Unknown,
@@ -61,7 +61,7 @@ impl Task {
     /// The task as a markdown file (see the format at the top of this module).
     pub fn to_markdown(&self) -> String {
         let mut out = String::new();
-        self.write_markdown(&mut out).expect("writing to a String cannot fail");
+        infallible(self.write_markdown(&mut out));
         out
     }
 

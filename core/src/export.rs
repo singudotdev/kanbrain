@@ -1,7 +1,7 @@
 //! Reports as markdown: what the desktop app's report shows, as tables.
 
 use crate::brain::{Group, Report, ReportView};
-use crate::model::{fmt_dur, slugify};
+use crate::model::{fmt_dur, infallible, slugify};
 use crate::period::Unit;
 use chrono::{DateTime, Datelike, Duration, Local};
 use std::fmt::{self, Write};
@@ -9,7 +9,7 @@ use std::fmt::{self, Write};
 /// Markdown version of a report.
 pub fn to_markdown(report: &Report, view: &ReportView, now: DateTime<Local>) -> String {
     let mut out = String::new();
-    write_report(&mut out, report, view, now).expect("writing to a String cannot fail");
+    infallible(write_report(&mut out, report, view, now));
     out
 }
 

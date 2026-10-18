@@ -41,4 +41,6 @@ exclude_re = [
     'gui/src/ui/dialogs/merge\.rs:.*replace == with != in conflict_box$',
     # No waits for a busy file is what `busy_delays` gives off Windows, where the mutants run.
     'core/src/store\.rs:.*replace busy_delays -> &.static\[Duration\] with Vec::leak\(Vec::new\(\)\)',
+    # Writing into a String never fails, so a body that doesn't check what it returned does what this one does.
+    'core/src/model/text\.rs:.*replace infallible with \(\)',
 ]

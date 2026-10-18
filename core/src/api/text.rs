@@ -5,7 +5,7 @@
 
 use super::ApiError;
 use crate::brain::Brain;
-use crate::model::{Author, Comment, DecisionState, Task, ThreadItem, counted, fmt_age, fmt_dur, now};
+use crate::model::{Author, Comment, DecisionState, Task, ThreadItem, counted, fmt_age, fmt_dur, infallible, now};
 use chrono::{DateTime, Local};
 use std::fmt::Write;
 
@@ -22,11 +22,11 @@ pub const SEARCH_LIMIT: usize = 20;
 pub fn line(task: &Task) -> String {
     let mut state = if task.is_task() { task.status.as_str() } else { task.kind.as_str() }.to_string();
     if let Some(also) = state_note(task) {
-        write!(state, ", {also}").expect("writing to a String cannot fail");
+        infallible(write!(state, ", {also}"));
     }
     let mut line = format!("#{} {} ({state})", task.id, task.title);
     for tag in &task.tags {
-        write!(line, " #{tag}").expect("writing to a String cannot fail");
+        infallible(write!(line, " #{tag}"));
     }
     line
 }
@@ -59,7 +59,7 @@ fn comment_heading(comment: &Comment) -> String {
         heading.push_str(" · question");
     }
     if let Some(edited) = comment.edited {
-        write!(heading, " (edited {})", when(edited)).expect("writing to a String cannot fail");
+        infallible(write!(heading, " (edited {})", when(edited)));
     }
     heading
 }
@@ -75,7 +75,7 @@ impl Brain {
     pub fn entry_text(&self, id: u32) -> Result<String, ApiError> {
         let task = self.entry(id)?;
         let mut out = String::new();
-        self.write_entry(&mut out, task).expect("writing to a String cannot fail");
+        infallible(self.write_entry(&mut out, task));
         Ok(out)
     }
 
@@ -87,10 +87,10 @@ impl Brain {
         }
         let mut out = String::new();
         for task in found.iter().take(SEARCH_LIMIT) {
-            writeln!(out, "- {}", line(task)).expect("writing to a String cannot fail");
+            infallible(writeln!(out, "- {}", line(task)));
         }
         if let Some(more) = found.len().checked_sub(SEARCH_LIMIT).filter(|&n| n > 0) {
-            writeln!(out, "- … {more} more: add words to narrow it down").expect("writing to a String cannot fail");
+            infallible(writeln!(out, "- … {more} more: add words to narrow it down"));
         }
         out
     }
