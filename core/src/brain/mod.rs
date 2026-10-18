@@ -124,7 +124,7 @@ impl Brain {
 
     /// The task in `doing` that a person started, if any: there's one at most.
     pub fn person_doing(&self) -> Option<u32> {
-        self.tasks.iter().find(|t| started_by_person(t)).map(|t| t.id)
+        self.tasks.iter().find(|t| t.doing_by(Author::Human)).map(|t| t.id)
     }
 
     /// Tasks with `status`, most recently moved there first.
@@ -274,7 +274,7 @@ impl Brain {
     /// can leave several there, and all but the most recently started are parked. Agents' tasks are left
     /// alone.
     fn keep_one_person_doing(&mut self) -> Result<()> {
-        let doing = |t: &&mut Task| started_by_person(t);
+        let doing = |t: &&mut Task| t.doing_by(Author::Human);
         let Some(latest) = self.tasks.iter_mut().filter(doing).map(|t| (t.status_since(), t.id)).max() else {
             return Ok(());
         };
@@ -319,11 +319,6 @@ pub(crate) fn column(tasks: &[Task], status: Status) -> Vec<&Task> {
     let mut column: Vec<&Task> = tasks.iter().filter(|t| t.is_task() && t.status == status).collect();
     column.sort_by(|a, b| b.status_since().cmp(&a.status_since()).then(b.id.cmp(&a.id)));
     column
-}
-
-/// Whether `task` is in `doing` because a person started it.
-fn started_by_person(task: &Task) -> bool {
-    task.is_task() && task.status == Status::Doing && task.started_by() == Author::Human
 }
 
 /// Where a kind's related entries are listed: notes and decisions (what a task needs to know) before tasks.

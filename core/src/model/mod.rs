@@ -517,6 +517,12 @@ impl Task {
         self.history.iter().rev().find(|c| c.to == Status::Doing).map_or(Author::Human, |c| c.by)
     }
 
+    /// Whether this is a task in `doing` that `by` started: a person has one at most, and an update waits for an
+    /// agent's.
+    pub fn doing_by(&self, by: Author) -> bool {
+        self.is_task() && self.status == Status::Doing && self.started_by() == by
+    }
+
     /// When the status last changed (or the task was created, if never); used for sorting.
     pub fn status_since(&self) -> DateTime<Local> {
         self.history.last().map_or(self.created, |c| c.at)

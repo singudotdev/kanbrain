@@ -3,7 +3,7 @@
 //! `init --all`, so none of that is repeated here. Never while an agent works on a task: `init --all` would rewrite
 //! its instructions and a migration its data mid-session.
 
-use crate::model::{Author, Status};
+use crate::model::Author;
 use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -77,10 +77,7 @@ pub fn agents_working(central: &Path) -> Result<Vec<String>> {
     let mut working = Vec::new();
     for (label, tasks) in super::every_brain(central)? {
         working.extend(
-            tasks
-                .iter()
-                .filter(|t| t.is_task() && t.status == Status::Doing && t.started_by() == Author::Agent)
-                .map(|t| format!("{label}#{} {}", t.id, t.title)),
+            tasks.iter().filter(|t| t.doing_by(Author::Agent)).map(|t| format!("{label}#{} {}", t.id, t.title)),
         );
     }
     Ok(working)
