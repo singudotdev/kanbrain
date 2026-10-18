@@ -344,21 +344,34 @@ fn write_agent_files(root: &Path, targets: &[&str]) -> Result<Vec<(bool, String)
     let mut done = Vec::new();
     // Claude Code's hooks go with its file; agents that read only AGENTS.md have no use for them.
     if targets.contains(&"CLAUDE.md") {
-        done.push(match claude::add_hooks(root) {
-            Ok(claude::Change::Unchanged) => (false, format!("{} already has kanbrain's hooks", claude::SETTINGS)),
-            Ok(_) => (
-                true,
-                format!(
-                    "added kanbrain's hooks to {}: Claude Code reads `kb context` when a session starts and \
-                     after compaction, reminds an agent with every prompt and at the end of its turn to \
-                     describe the project while it isn't, sends it to `kb` when it would write the brain's \
-                     files itself, and tells it of your comments on a task it's working on with its next tool",
-                    claude::SETTINGS
-                ),
-            ),
+        match claude::add_hooks(root) {
+            Ok((change, edited)) => {
+                if change == claude::Change::Written {
+                    done.push((
+                        true,
+                        format!(
+                            "added kanbrain's hooks to {}: Claude Code reads `kb context` when a session starts and \
+                             after compaction, reminds an agent with every prompt and at the end of its turn to \
+                             describe the project while it isn't, sends it to `kb` when it would write the brain's \
+                             files itself, and tells it of your comments on a task it's working on with its next tool",
+                            claude::SETTINGS
+                        ),
+                    ));
+                } else if edited.is_empty() {
+                    done.push((false, format!("{} already has kanbrain's hooks", claude::SETTINGS)));
+                }
+                done.extend(edited.iter().map(|hook| {
+                    let todo = format!(
+                        "kanbrain added none beside it; if it's kanbrain's, replace it with `{0}` so kanbrain can \
+                         update and remove it, and if it isn't, add one running `{0}` for {1} beside it",
+                        hook.hook, hook.event
+                    );
+                    (false, looks_like_kanbrains(hook, &todo))
+                }));
+            }
             // The section still works without them, so a settings file it can't read doesn't stop init.
-            Err(e) => (false, format!("left out the Claude Code hooks: {e:#}")),
-        });
+            Err(e) => done.push((false, format!("left out the Claude Code hooks: {e:#}"))),
+        }
     }
     for &name in targets {
         let path = root.join(name);
@@ -387,6 +400,23 @@ fn write_agent_files(root: &Path, targets: &[&str]) -> Result<Vec<(bool, String)
         done.push((true, format!("{what} {name}: the \"Project memory\" section tells agents how to use the brain")));
     }
     Ok(done)
+}
+
+/// What's said of a hook that looks like kanbrain's but isn't (see [`claude::Edited`]): what it runs, then `todo`,
+/// what kanbrain did with it and what's left to the user.
+fn looks_like_kanbrains(hook: &claude::Edited, todo: &str) -> String {
+    // Its line breaks and other control characters escaped, so that it's said on one line.
+    let shown: String = hook
+        .command
+        .chars()
+        .map(|c| if c.is_control() { c.escape_default().to_string() } else { c.to_string() })
+        .collect();
+    format!(
+        "{}: a hook for {} runs `{shown}`, which looks like kanbrain's `{}`: {todo}",
+        claude::SETTINGS,
+        hook.event,
+        hook.hook
+    )
 }
 
 /// Whether a program named `name` is in one of the folders of `path`, a `PATH` value.
@@ -419,12 +449,18 @@ pub fn deinit(dir: &Path, central: &Path) -> Result<Vec<Step>> {
         return Ok(done);
     };
     match claude::remove_hooks(root) {
-        Ok(claude::Change::Unchanged) => {}
-        Ok(claude::Change::Written) => {
-            done.push(Step::other(format!("removed kanbrain's hooks from {}", claude::SETTINGS)));
-        }
-        Ok(claude::Change::Removed) => {
-            done.push(Step::other(format!("removed {}: it only held the hooks", claude::SETTINGS)));
+        Ok((change, edited)) => {
+            match change {
+                claude::Change::Unchanged => {}
+                claude::Change::Written => {
+                    done.push(Step::other(format!("removed kanbrain's hooks from {}", claude::SETTINGS)));
+                }
+                claude::Change::Removed => {
+                    done.push(Step::other(format!("removed {}: it only held the hooks", claude::SETTINGS)));
+                }
+            }
+            let todo = "kanbrain left it in place; if it's kanbrain's, remove it yourself";
+            done.extend(edited.iter().map(|hook| Step::other(looks_like_kanbrains(hook, todo))));
         }
         Err(e) => done.push(Step::other(format!("left the Claude Code hooks in place: {e:#}"))),
     }
