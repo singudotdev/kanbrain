@@ -27,6 +27,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - The kanban app's new / edit form shows the tags as chips in their colors, each with × to take it off, instead of
   text: a comma or space after a tag typed, or picking one from the list, adds it as a chip.
+- A Claude Code hook is kanbrain's, for `kb init`, `kb context` and `kb deinit` to update or take out, only as `init`
+  writes it (`kb hook tool`) or with `kb` given by a plain path: letters (`é` too), digits and `_ . / : -`, a leading
+  `~/` in bash, and in quotes also spaces and `( )` (`'/Users/John Doe/bin/kb' hook tool`). A Windows path's `\`s
+  only in `'…'` for bash (`'C:\Users\John Doe\AppData\Local\Programs\kanbrain\kb.exe' hook tool`), or after `& `
+  under `"shell": "powershell"`; or the exec form (`"command"` the path, `"args"` the arguments). Anything else is
+  the user's. One that looks like kanbrain's (`kb` followed by the hook's words anywhere in it: variables set before
+  it, another command, a `$`, other quotes) gets none of kanbrain's beside it: `init` says so, to replace it or add
+  kanbrain's by hand, and `deinit` leaves it and says to remove it. Variables set before `kb`
+  (`KANBRAIN_DIR=… kb context`) made it kanbrain's before, and `deinit` took it out.
 
 ### Fixed
 
@@ -36,6 +45,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `KANBRAIN_DIR`, or a brain it can't read or a newer kanbrain wrote only went to stderr, so the app just didn't open.
   The error still goes to stderr too, and alone on Linux without a display (over ssh, or under `sudo`); `kanbrain`
   with arguments, the command line, is unchanged. The release smoke checks fail on that window or that error.
+- `kb init` and `kb context` no longer add a second copy of a hook that runs `kb` at a quoted path with spaces
+  (`'/Users/John Doe/bin/kb' context`) beside it, and `kb deinit` takes it out with the rest. `kb deinit` no longer
+  takes out a hook of the user's that only looks like kanbrain's (`true&&/usr/bin/kb hook tool`, `kb.sh hook tool`).
 - `KANBRAIN_DIR` set but empty counts as unset, the platform data folder: `kb` or the kanban app wrote `format` into
   whatever folder it ran in, and the command then failed (`reading …: No such file or directory`). A relative one is
   refused with an error naming it, as it named another central brain from each folder `kb` ran in, hooks included; on
