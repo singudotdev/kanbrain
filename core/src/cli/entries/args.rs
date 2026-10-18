@@ -7,10 +7,16 @@ use anyhow::{Result, anyhow, bail};
 /// The words `search` looks for, without the first `--`, which only ends the options: `kb search -- --` looks for
 /// `--`.
 pub(super) fn search_words(mut words: Vec<String>) -> String {
+    drop_options_end(&mut words);
+    words.join(" ")
+}
+
+/// Takes the first `--` out of `words`: it only says where options end (see `cli::options`), and the text is what
+/// follows, a later `--` included.
+fn drop_options_end(words: &mut Vec<String>) {
     if let Some(at) = words.iter().position(|w| w == "--") {
         words.remove(at);
     }
-    words.join(" ")
 }
 
 /// The links typed in `value`; a word that isn't one is refused rather than left out.
@@ -59,10 +65,7 @@ pub(super) fn id_and_text(args: &mut Vec<String>, needs: &str) -> Result<(u32, T
 /// The remaining words as one text, or `-` alone for stdin; `needs` says what's missing without them.
 pub(super) fn rest_as_text(args: &mut Vec<String>, needs: &str) -> Result<Text> {
     let mut words = std::mem::take(args);
-    // Only says where options end (see `cli::options`); the text is what follows.
-    if let Some(at) = words.iter().position(|w| w == "--") {
-        words.remove(at);
-    }
+    drop_options_end(&mut words);
     match words.as_slice() {
         [] => bail!("{needs}: TEXT, or - to read it from stdin"),
         [dash] if dash == "-" => Ok(Text::Stdin),
