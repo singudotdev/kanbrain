@@ -86,14 +86,13 @@ impl Board {
     /// new entry goes where the filter points, never somewhere the window doesn't say. The selected
     /// entry's brain is highlighted, as the likeliest.
     pub(super) fn ask_where(&mut self, then: WhereFor) {
-        let picker = Picker::default();
-        let candidates = self.where_candidates(&picker, then);
+        let candidates = self.where_candidates(&Picker::default(), then);
         if let [(src, _)] = candidates[..] {
             return self.open_new_in(src, then);
         }
         let selected = self.selected.map(|k| k.src);
         let sel = candidates.iter().position(|&(src, _)| Some(src) == selected).unwrap_or(0);
-        self.mode = Mode::Where(WherePicker { picker: Picker { sel, ..picker }, then });
+        self.mode = Mode::Where(WherePicker { picker: Picker::at(sel), then });
     }
 
     /// Opens what the "which project?" picker was asked for, in its candidate at `index`.
@@ -129,15 +128,8 @@ impl Board {
     /// selection goes to what's shown, and the status bar says where it went.
     fn move_entry(&mut self, key: Key, to: usize) {
         let from = self.entry_name(key);
-        // Two brains of `sources` at once, one to take from and one to give to.
-        let moved = if key.src < to {
-            let (left, right) = self.sources.split_at_mut(to);
-            left[key.src].brain.move_to(key.id, &mut right[0].brain)
-        } else {
-            let (left, right) = self.sources.split_at_mut(key.src);
-            right[0].brain.move_to(key.id, &mut left[to].brain)
-        };
-        let id = match moved {
+        let (here, there) = self.two_brains_mut(key.src, to);
+        let id = match here.move_to(key.id, there) {
             Ok(id) => id,
             Err(e) => return self.notify_error(&e),
         };

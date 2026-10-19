@@ -293,10 +293,10 @@ impl Board {
 
     /// Opens the tag dropdown, on the first tag the search filters by.
     pub fn open_tags(&mut self) {
-        let picker = Picker::default();
         let chosen = self.search_tags();
-        let sel = self.tag_candidates(&picker).iter().position(|t| t.as_ref().is_some_and(|t| chosen.contains(t)));
-        self.mode = Mode::Tags(Picker { sel: sel.unwrap_or(0), ..picker });
+        let sel =
+            self.tag_candidates(&Picker::default()).iter().position(|t| t.as_ref().is_some_and(|t| chosen.contains(t)));
+        self.mode = Mode::Tags(Picker::at(sel.unwrap_or(0)));
     }
 
     /// Runs the dropdown's candidate at `index` on the search box, which holds every filter: a tag

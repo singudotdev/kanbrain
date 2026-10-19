@@ -9,8 +9,8 @@ use kanbrain_core::cli::{self, Step, StepKind};
 impl Board {
     /// Asks for the project's new name, starting from the one it has.
     pub fn ask_rename_project(&mut self, src: usize) {
-        let name = self.sources[src].project.clone().unwrap_or_default();
-        self.mode = Mode::Manage(Manage::RenameProject { src, name: Picker::named(&name) });
+        let name = Picker::named(self.project_name(src));
+        self.mode = Mode::Manage(Manage::RenameProject { src, name });
     }
 
     /// Asks for the repository's new name in its project, starting from the one it has.
@@ -103,7 +103,7 @@ impl Board {
         let Mode::Manage(manage) = &self.mode else { return };
         let src = manage.src();
         let dir = self.brain(src).store.dir().to_path_buf();
-        let project = self.sources[src].project.clone().unwrap_or_default();
+        let project = self.project_name(src).to_string();
         let (done, project) = match manage {
             Manage::RenameProject { name, .. } => {
                 let new = name.search.text().trim().to_string();
@@ -136,7 +136,7 @@ impl Board {
     /// `purge`, and goes back to the board.
     fn remove(&mut self, src: usize, whole: bool, purge: bool) {
         let dir = self.brain(src).store.dir().to_path_buf();
-        let project = self.sources[src].project.clone().unwrap_or_default();
+        let project = self.project_name(src).to_string();
         let done = if whole {
             cli::remove_project_steps(&self.central, &project, purge)
         } else {

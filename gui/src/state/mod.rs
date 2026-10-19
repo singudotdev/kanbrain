@@ -307,7 +307,7 @@ impl Board {
             shown: None,
         };
         if let Some(src) = board.opened_in.as_ref().and_then(|dir| board.src_at(dir)) {
-            let project = board.sources[src].project.clone().unwrap_or_default();
+            let project = board.project_name(src).to_string();
             let repos = board.repos_of(&project).count();
             board.scope = if repos > 1 { Scope::Repo(src) } else { Scope::Project(project) };
         }

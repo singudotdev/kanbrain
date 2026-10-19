@@ -355,7 +355,7 @@ impl Form {
             && self.field != field
             && let Some(picker) = &mut self.project
         {
-            *picker = Picker { sel: src, ..Picker::default() };
+            *picker = Picker::at(src);
         }
         self.field = field;
         self.tag_sel = None;
@@ -672,6 +672,11 @@ pub enum PickerKey {
 }
 
 impl Picker {
+    /// An empty search, its row `sel` highlighted.
+    pub fn at(sel: usize) -> Self {
+        Self { sel, ..Self::default() }
+    }
+
     /// A name field holding `name`, selected so typing replaces it.
     pub fn named(name: &str) -> Self {
         let mut search = LineInput::new(name);
