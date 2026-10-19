@@ -74,7 +74,7 @@ impl Board {
 
     /// What copying takes: the text selected in the field being typed into, else the shown text selected, as a field
     /// with the keys keeps them.
-    pub fn copy_text(&self) -> Option<String> {
+    pub fn copy_text(&mut self) -> Option<String> {
         self.selected_text().or_else(|| self.shown_text())
     }
 }

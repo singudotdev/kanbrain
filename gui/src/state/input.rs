@@ -4,8 +4,7 @@
 
 use super::nav::Step;
 use super::{
-    Board, COLUMNS, CommentPicker, Edit, Field, Form, Manage, Mode, Picker, PickerKey, Tab, Target, Telling,
-    WherePicker,
+    Board, COLUMNS, CommentPicker, Edit, Field, Form, Mode, Picker, PickerKey, Tab, Target, Telling, WherePicker,
 };
 use crate::text::editor::{LineInput, Outcome, Pointer, TextEditor};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -526,26 +525,10 @@ impl Board {
     }
 
     /// The text selected in the field being typed into, to copy.
-    pub fn selected_text(&self) -> Option<String> {
-        match &self.mode {
-            Mode::Search => self.search.selected_text().map(str::to_string),
-            Mode::Form(form) => form.active().and_then(LineInput::selected_text).map(str::to_string),
-            Mode::QuickAdd(add) => add.title.selected_text().map(str::to_string),
-            Mode::Links(picker) => picker.rows.search.selected_text().map(str::to_string),
-            Mode::Scopes(picker) | Mode::Tags(picker) | Mode::Where(WherePicker { picker, .. }) => {
-                picker.search.selected_text().map(str::to_string)
-            }
-            Mode::Palette(picker) => picker.search.selected_text().map(str::to_string),
-            Mode::AddProject(add) => add.picker.search.selected_text().map(str::to_string),
-            Mode::Tell(tell) => tell.note.selected_text().map(str::to_string),
-            Mode::Manage(manage) => match manage {
-                Manage::RenameProject { name: picker, .. }
-                | Manage::RenameRepo { name: picker, .. }
-                | Manage::MoveRepo { picker, .. } => picker.search.selected_text().map(str::to_string),
-                Manage::Remove { .. } => None,
-            },
-            Mode::Edit(edit) => edit.merge.is_none().then(|| edit.editor.selected_text()).flatten(),
-            Mode::Normal | Mode::Confirm(_) | Mode::ManageProject(_) | Mode::Menu(_) | Mode::Comments(_) => None,
+    pub fn selected_text(&mut self) -> Option<String> {
+        match self.typing()? {
+            Typing::Line(input) => input.selected_text().map(str::to_string),
+            Typing::Text(editor) => editor.selected_text(),
         }
     }
 

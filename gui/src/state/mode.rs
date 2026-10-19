@@ -312,17 +312,6 @@ impl Form {
     }
 
     /// The field being typed into; `None` on the column picker, which takes no text.
-    pub fn active(&self) -> Option<&LineInput> {
-        match self.field {
-            Field::Title => Some(&self.title),
-            Field::Tags => Some(&self.tag_input),
-            Field::Links => Some(&self.related.search),
-            Field::Project => self.project.as_ref().map(|p| &p.search),
-            Field::Status => None,
-        }
-    }
-
-    /// The field being typed into, to change.
     pub fn active_mut(&mut self) -> Option<&mut LineInput> {
         match self.field {
             Field::Title => Some(&mut self.title),
