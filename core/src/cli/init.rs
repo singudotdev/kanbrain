@@ -48,6 +48,12 @@ The user follows them live on a kanban board: keep it showing what you're doing 
   `park ID`. Doing isn't limited for you: several of your tasks can run at once. Never park, finish or move a task
   you didn't start (the user's, or another session's). A pull request, issue, CI run, commit or page named in a
   comment or body goes with its link, `[PR #39](URL)`, not just `PR #39`: the user opens it from the board.
+- Before ending a turn in which you changed the repository: that change is on a task you started (create it now if
+  you skipped it), the turn's work is commented there, and a finished task is `done`. Work that goes through a pull
+  request is finished once every check has passed and it's merged; until then its task stays in Doing. Nothing is
+  `done` without its evidence commented first: the tests or checks run and their result, or what shows it works (a
+  CI run's link, the output, a screenshot). What you couldn't check isn't done: `ask ID TEXT` the user to check it,
+  saying what's left and how.
 - Splitting work between subagents: give each part that changes the repository its own task, and run the board
   yourself: `add --start` it before launching the subagent, then `comment` its result and `done` it. Subagents
   only do the work; lookups and research get no task. `kb` commands can run in parallel.

@@ -132,7 +132,13 @@ fn context_starts_with_what_the_project_is_about() {
     let context = brain.context_markdown();
     assert!(context.contains("Not described yet. Before other work, describe the application"), "{context}");
     assert!(context.contains("`kb project describe -`"), "{context}");
-    assert!(context.contains("Its role isn't described yet: `kb project notes -`"), "{context}");
+    assert!(
+        context.contains(
+            "Its role isn't described yet. Before other work, describe it from the README and manifests: \
+             `kb project notes -`"
+        ),
+        "{context}"
+    );
 }
 
 #[test]
