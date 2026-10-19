@@ -8,11 +8,10 @@ week or month. There's nothing to turn on, and nothing extra to do: moving cards
 - **Moving a task to Doing starts its clock**: a **session** opens. Every task in Doing has its own clock running.
 - **You run one task at a time, per brain.** Starting another while one of yours is in Doing is refused, saying
   which: park or finish it first. Nothing is parked for you. The central brain and each project repository have
-  their own Doing, so tasks in different projects can run at once; the top bar lists every running task, each with
-  its own **Park**.
+  their own Doing, so tasks in different projects can run at once.
 - **Agents aren't limited.** An agent that splits its work between subagents runs one task per subagent, beside
   yours. Running tasks are marked in **cyan** when you started them and in **green** when an agent did (the card's
-  border, its clock, the top bar). Each task tracks its own time; totals count by the clock (see [Reports](#reports)).
+  border, its clock). Each task tracks its own time; totals count by the clock (see [Reports](#reports)).
 - **Moving a task out of Doing** (to Parked, Done or To do), or deleting it, stops its clock.
 - **Closing the window doesn't stop the clock.** The open session is on disk, so time keeps counting while the board
   is closed, and when an agent works through the command line. Use **Park & quit** to stop your clocks for the day;
@@ -20,10 +19,9 @@ week or month. There's nothing to turn on, and nothing extra to do: moving cards
 
 The same rules apply everywhere: on the board, with `kb start ID` from a terminal or an agent.
 
-The bar under the toolbar shows each running task, its clock, its total time and today's total for every task, with
-**Park** and **Park & quit** (`Q`) buttons. Click the task's name to open it. With nothing running, it says **Idle**.
-Cards show their tracked total, the running one its clock (▶), and the details show today, this week and the
-total, with the number of sessions.
+The running tasks show in **Doing**. The projects row, under the toolbar, ends with today's total for every task
+(**Today 2h 10m**) and, while a task runs, **Park & quit** (`Q`). Cards show their tracked total, the running one its
+clock (▶), and the details show today, this week and the total, with the number of sessions.
 
 Sessions are saved in the task file under `## Sessions` (see [Data format](data-format.md)), next to the status history.
 
@@ -61,7 +59,7 @@ The **Report** tab (`4`) shows the tracked time of the **current week**, **group
   text.
 - **Totals count by the clock.** Each task row shows that task's own time, but time several tasks ran at once
   (yours beside an agent's, or an agent's subagents) counts **once** in the total, the column totals, each tag's
-  row, the calendar's days and the top bar's **Today**: a task of 1 h and one of 2 h that overlapped for 30
+  row, the calendar's days and the projects row's **Today**: a task of 1 h and one of 2 h that overlapped for 30
   minutes took 2 h 30 m. So task rows can add up to more than the total.
 - A task with several tags counts under **each** of them when grouping by tag, so tag rows can add up to more than
   the total too.
