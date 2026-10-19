@@ -48,6 +48,11 @@ Lints, which must be warning-free (pedantic is on, see below):
 cargo clippy --workspace --all-targets
 ```
 
+Code for another system (`cfg(windows)`, `cfg(not(unix))`) is only linted for it. Windows' can be checked from Linux
+(`rustup target add x86_64-pc-windows-msvc`, then `--target x86_64-pc-windows-msvc`), the app included; macOS's only
+for the core and the command line (`--target aarch64-apple-darwin -p kanbrain-core -p kanbrain`), as GPUI's Metal
+shaders need Xcode. CI lints on all three.
+
 Formatting (`rustfmt.toml`):
 
 ```sh
@@ -137,15 +142,15 @@ The crates use the **Rust 2024 edition**. Shared versions and lints are in the w
 | [`pulldown-cmark`](https://docs.rs/pulldown-cmark) | 0.13 | `gui`: parsing descriptions and comments to draw them as markdown; the version Zed uses |
 | [`fs4`](https://docs.rs/fs4) | 1.1 | each brain's write lock, an advisory lock on a file in the cache (`Store::lock`) |
 | `gpui_platform` | Zed 1.23.2 (git) | `gui`: GPUI's window system backends, Wayland and X11 on Linux |
-| [`image`](https://docs.rs/image) | 0.25 | `gui`: decoding the window icon (PNG) |
+| [`image`](https://docs.rs/image) | 0.25 | `gui`, Linux and FreeBSD only: decoding the window icon (PNG) for X11; only its `png` feature |
 | [`winresource`](https://docs.rs/winresource) | 0.1 | `gui`, Windows only, at build time: the program's icon and version in its `.exe` |
 | [`similar`](https://docs.rs/similar) | 3.2 | `gui`: the line diff and three-way merge of what the editor and `kb` changed meanwhile (`text::merge`) |
 | [`tempfile`](https://docs.rs/tempfile) | 3 | tests only: temporary data folders |
 
-The minimum supported Rust version of the core and the command line is **1.88** (`rust-version` in `core/Cargo.toml` and
-`cli/Cargo.toml`): the code uses let chains (`if a && let Some(b) = c`), which edition 2024 allows from Rust 1.88. Cargo
-picks dependency versions that still support it. CI checks it with Rust 1.88, and it's fine to develop on any newer
-Rust.
+The minimum supported Rust version of the core and the command line is **1.88** (`rust-version` in the workspace's
+`Cargo.toml`, which both inherit): the code uses let chains (`if a && let Some(b) = c`), which edition 2024 allows from
+Rust 1.88. Cargo picks dependency versions that still support it. CI checks it with Rust 1.88, and it's fine to develop
+on any newer Rust.
 The kanban app follows GPUI, which needs a recent stable Rust.
 Keep `Cargo.lock` committed: kanbrain is an application, and the lockfile makes builds reproducible.
 
@@ -170,13 +175,19 @@ core/src/            kanbrain-core: shared by both programs
 │   ├── mod.rs       Program (the binary's name), Command parsing, `--project`, `list`, `status`, `report`, `path`, usage
 │   ├── claude.rs    the Claude Code hooks `init` merges into .claude/settings.local.json (and `deinit` takes out)
 │   ├── hook.rs      `kb hook prompt|stop|edit|tool`: the hooks' checks that hold an agent to describing the project first, and to `kb` for the brain's files, and tell it of the user's comments
-│   ├── entries.rs   agent commands by id: `add`, `show`, `search`, status changes, `comment`, `ask`, `propose`, `accept`/`reject`, `describe`, `rename`, `tag`, `link`, `context`
-│   ├── completions.rs `completions bash|zsh|fish`: the scripts, and `complete`, the ids, projects and tags they offer
+│   ├── entries/     agent commands by id: `add`, `show`, `search`, status changes, `comment`, `ask`, `wait`, `propose`, `accept`/`reject`, `describe`, `rename`, `tag`, `link`, `project`, `context`
+│   │   ├── mod.rs   their arguments (EntryArgs, EntryCommand, AddArgs, Text), parsing and running them
+│   │   ├── args.rs  ids, text words (`-` for stdin, `--`), titles and links
+│   │   ├── tags.rs  `tag`: changes to an entry's tags, or renaming a tag everywhere
+│   │   ├── project.rs `project`: showing the project, or changing it
+│   │   ├── wait.rs  `wait`: polling until an entry no longer waits on a person, and what it then prints
+│   │   └── show.rs  printing an entry (`show`, each command's confirmation) and search results
+│   ├── completions.rs `completions bash|zsh|fish|powershell`: the scripts, and `complete`, the ids, projects and tags they offer
 │   ├── update.rs    `update`, and the app's: the latest release asked for, the installer run again for the apps beside this one, into the same folder (a macOS bundle's says which), once no agent has a task in doing
-│   ├── init.rs      `init`: the repository's .brain/ and card, its registration, the "Project memory" section in CLAUDE.md / AGENTS.md; `init --all` refreshes every registered repository's; `deinit` undoes it
-│   └── manage.rs    renaming a project or a repository, moving a repository to another project, removing them (`deinit --purge`, `project remove`), rewriting or dropping the links between repositories
+│   ├── init.rs      `init`: the repository's .brain/ and card, its registration, the "Project memory" section in CLAUDE.md / AGENTS.md; `init --all` brings every registered brain up to this version: migrates its data (after a backup), renames the projects and repositories older versions named as none can be now, fixes each repository's .brain/project.md, then refreshes its agent instructions; `deinit` undoes `init`
+│   └── manage.rs    renaming a project or a repository, moving a repository to another project, removing them (`deinit --purge`, `project remove`), rewriting or dropping the links between repositories; what each did, as Steps (a line each, and what it was)
 ├── api/             operations by id for the CLI, with typed refusals (ApiError)
-│   ├── mod.rs       add, change_status, comment, describe, link, full-text search
+│   ├── mod.rs       add, link, full-text search; change_status, comment and describe, deprecated for set_status, add_comment and set_description (brain/actions.rs)
 │   ├── json.rs      entries as JSON, one line without empty fields (Entry, Summary)
 │   ├── text.rs      entries as compact text for agents: `show`, one-line answers, capped `search`
 │   └── context.rs   the markdown summary agents read first: the project's card, capped sections, latest comments
@@ -202,6 +213,7 @@ e2e/upgrade.sh       brains written by every released kb, opened by this build (
 e2e/update.sh        every released kb update installing this build (CI)
 e2e/smoke-app.sh     the release app starts, stays up and idles; a screenshot (CI; smoke-app.ps1 for Windows)
 e2e/agent.sh         a real agent working with kanbrain, scenario by scenario (run by hand)
+e2e/lib.sh           what the shell scripts share, sourced by them: `fail`, the agent variables `kb` reads, cleared to run it as a person
 docs/decisions/      why things are as they are, one decision a file (NNNN-title.md)
 xtask/               `cargo xtask notices kb|kanbrain` (the alias is in .cargo/config.toml): THIRD-PARTY-LICENSES.txt,
                      from cargo-about (about.toml) and licenses/ for what's compiled in but isn't a crate
@@ -211,12 +223,14 @@ gui/build.rs         embeds the icon into kanbrain.exe when building for Windows
 gui/icons/           the app's icons, made from docs/images/logo.svg by make.sh: .ico (Windows), .icns (macOS), 128 px PNG (X11)
 gui/fonts/           IBM Plex Sans and Lilex (from Zed's repository, with their licenses), embedded: the window's text and code
 gui/src/             kanbrain: the kanban app, and `cli::Program` when given arguments
-├── main.rs          entry point: --help / --version, the root check, opening the window
+├── main.rs          entry point: the command line given arguments, else the root and display checks and opening the window (an error before the board opens shown in a window, ui/startup.rs)
 ├── update.rs        the app's update: a newer release asked for daily, installed in place of the app (on Windows by PowerShell once it closes), which then starts again
 ├── watch.rs         polls the data folders (names, sizes, times) every second, naming those other programs changed
 ├── state/           what's on screen and every action, without GPUI (tested without a window)
 │   ├── mod.rs       Board: the brains, the scope, the tab and the board's layout (Layout: kanban or list), the selected entry (by Key), the details, search, report view, status message, what the window must do (Request: $EDITOR, the folder dialog, the update), a newer release found; columns and lists
-│   ├── mode.rs      the dialogs and fields that take the keys (Mode): search, form, quick add, editor, confirm, links, project and tag dropdowns, which project a quick-added task goes in or an entry moves to, Manage project, command palette, adding a project (AddProject, ProjectOption), renaming, moving or removing a project or repository (Manage)
+│   ├── mode/        the dialogs and fields that take the keys (Mode): search, form, quick add, editor, confirm, links, an entry's comments (Comments), project and tag dropdowns, which project a quick-added task goes in or an entry moves to, the right-click menu (Menu), Manage project, command palette, adding a project (AddProject, ProjectOption), renaming, moving or removing a project or repository (Manage), whether a save tells the agent working on the task (Tell)
+│   │   ├── form.rs  the new / edit form's fields (Form, FormTarget, Field) and what typing in them holds
+│   │   └── edit.rs  the text editor's dialog (Edit) and what it edits (Target)
 │   ├── actions.rs   status changes and drops, asking which brain a new entry goes in when the scope shows several, moving an entry to another brain, the editor's save, deletes, links, undo (recording what each change writes), reload, park & quit, export
 │   ├── decisions.rs the questions and decisions waiting on you: which, the next one, answering, accepting or rejecting
 │   ├── form.rs      the new / edit form (its tags to pick, related entries, column and project) and quick add
@@ -226,6 +240,7 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
 │   ├── menu.rs      the right-click menu: the table's actions for that entry, each one of its keys (MenuPicker)
 │   ├── palette.rs   the command palette (`?`): the table's actions that work now, in sections (the selected entry, the tab, everywhere), searchable; choosing one presses its key
 │   ├── nav.rs       moving the selection between cards, columns and list rows
+│   ├── shown.rs     the selection in text shown rather than typed into (Shown: which text, its pieces as drawn, a TextEditor over them), and what copying takes
 │   └── sources.rs   the central brain and every project repository (Source), entries by Key { src, id }, the Scope filter, merged reports and calendars, adding a project from a picked folder (`cli::init`)
 ├── text/            text editing with a selection
 │   ├── mod.rs       the editors and the key presses they take, without any drawing
@@ -233,21 +248,23 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
 │   ├── merge.rs     the three-way line merge of what the editor and `kb` changed meanwhile (Merge, its conflicts and picks)
 │   └── event.rs     KeyCode / KeyEvent / KeyModifiers: what GPUI keystrokes become
 └── ui/              the window: draws the Board with GPUI and turns clicks, drags and keys into its calls
-    ├── mod.rs       BrainView (the root view), the window and its app id, ticking, watching, the status bar, `action` buttons, clipboard, the system's folder dialog, $EDITOR
+    ├── mod.rs       BrainView (the root view), the window and its app id, ticking, watching, the status bar, `action` buttons, clipboard, the system's folder dialog, $EDITOR, GPUI's app (a panic connecting to the window system an exit with 1)
     ├── keys.rs      GPUI keystrokes → the board's keys, and keys as people write them (`Ctrl+C`)
     ├── text.rs      text cut to a width, dates, a field's text with its selection highlighted
-    ├── topbar.rs    the logo, tabs, the project filter and + Add project, the shown project's description, search and the tag filter, New / Reload / Commands; the running tasks with Park and Park & quit
-    ├── board.rs     the columns, cards (dragged as DraggedCard), quick add, "Show N older"
+    ├── topbar.rs    the logo, tabs, Kanban / List, search and the tag filter, "N waiting for you", New / Reload / Commands; under them the project filter, the shown project's description, Manage project and + Add project, today's total and Park & quit
+    ├── board.rs     the columns, cards (dragged as DraggedCard), quick add, "Show N older"; each scrolled only by the wheel's own way (`each_axis`)
     ├── list.rs      the board's list layout: a section per status, a row per task, dragged like cards
     ├── drawer.rs    the details beside the board or list
     ├── entries.rs   the notes and decisions lists
     ├── report.rs    the report tab
+    ├── display.rs   Linux and FreeBSD only: whether there's a display to show the board on, and the one named answers (Wayland's socket, the X server's socket or TCP port), before GPUI would run headless or panic
+    ├── startup.rs   the small window saying why the app couldn't open the board or its window (no console to print it to when started from a menu), with Copy, closed by Enter, Esc or Close; none without a display on Linux (`display.rs`)
     ├── calendar.rs  the calendar tab: day, week and month
     ├── dialogs/     dialogs over the window; a delete's confirmation in mod.rs
     │   ├── form.rs     the new / edit form: project, title, tags, related entries, column
     │   ├── editor.rs   the text editor for descriptions, comments and project text
-│   ├── merge.rs    the conflicts of a merge, shown in the editor's place: yours beside theirs, to pick
-│   ├── tell.rs     Tell the agent?, asked on saving a task an agent is working on
+    │   ├── merge.rs    the conflicts of a merge, shown in the editor's place: yours beside theirs, to pick
+    │   ├── tell.rs     Tell the agent?, asked on saving a task an agent is working on
     │   ├── pickers.rs  the link picker, which project, the command palette
     │   ├── project.rs  Manage project: description, repositories, the week's time, and the buttons that manage them
     │   ├── manage.rs   renaming a project or repository, moving a repository, removing either
@@ -257,6 +274,8 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
     ├── dropdown.rs  dropdowns with a search box (the project filter and the tag filters), and the list and row every dropdown and picker is built from
     ├── widgets.rs   buttons, segmented controls, text fields, tag chips, cards, tooltips
     ├── pointer.rs   the mouse in text fields and the editor: place the cursor, drag to select, double/triple-click, middle-click paste
+    ├── scrollbar.rs the board's scrollbars: a thumb drawn from the scroll once laid out, dragged to scroll (`bar`, `thumb`, `painted`, `thumb_color`)
+    ├── shown.rs     text shown, not typed into, selected with the mouse (Selectable: the pieces of one text as drawn, highlighted; `Drawn` drops a selection no longer shown, or left under a dialog)
     ├── caret.rs     the text cursor: a thin line drawn over the text, blinking (`Blink`, restarted on every input); a one-line field scrolled to keep it in view (`keep_in_view`)
     └── theme.rs     colors, fonts, status colors, styled text
 
@@ -291,12 +310,14 @@ every second / before each input ──▶ Watcher::changed ──▶ Board::rel
   sessions, and appends a `StatusChange` to the history only when the status really changes. The `- status:` line in
   the file is the truth; the history is the record of how the task got there.
 - **Modes** (`state::Mode`): `Normal`, `Search`, `Form`, `QuickAdd`, `Edit` (text editor with a `Target`: description,
-  new or existing comment, a decision's reason, a project's description or a repository's notes), `Confirm` (a
-  delete, or the update), `Links`, `Scopes` and `Tags` (the dropdowns), `Where` (which brain a quick-added task goes
-  in, or an entry moves to), `Menu` (the right-click menu), `ManageProject`, `Palette` (the command
-  palette), `AddProject` (naming a picked folder's project) and `Manage` (renaming, moving or removing from Manage
-  project). A reload points an open one at its brains' new places (`Mode::remap`). `on_key` takes the current mode out, handles the
-  key, and each handler puts back the mode to continue in.
+  new or existing comment, a decision's reason, a project's description or a repository's notes), `Confirm` (deleting
+  an entry, `Confirm::Delete`, or a comment, `Confirm::DeleteComment`, or the update), `Links`, `Comments` (an entry's
+  comments, to edit or delete one), `Scopes` and `Tags` (the dropdowns), `Where` (which brain a quick-added task goes
+  in, or an entry moves to), `Menu` (the right-click menu), `ManageProject`, `Palette` (the command palette),
+  `AddProject` (naming a picked folder's project), `Manage` (renaming, moving or removing from Manage project) and
+  `Tell` (whether a save on a task an agent is working on tells it, with a note). A reload points an open one at its
+  brains' new places (`Mode::remap`). `on_key` takes the current mode out, handles the key, and each handler puts back
+  the mode to continue in.
 - **A button is its key.** `ui::action(id, label, kind, code, cx)` makes a button that presses its key through
   `BrainView::press`, with the key in its tooltip. So a button can never do something its key wouldn't, and the state
   tests, which drive the board with keys, cover the buttons too. Clicks that aren't keys (select, open, drop, focus a
@@ -362,55 +383,63 @@ the module includes its test file with a hook at its end, and the file starts wi
 mod tests;
 ```
 
-The path is relative to the module's folder. `autotests = false` in each crate stops Cargo from also building these
-files as integration tests. Keep them inside the crate: rust-analyzer doesn't follow `#[path]` out of it.
+The path is relative to the module's folder. A test file grown too long becomes a folder, as a module does:
+`gui/tests/state/mod.rs` holds the fixtures, and a file beside it each area of the board's tests. `autotests = false`
+in each crate stops Cargo from also building these files as integration tests. Keep them inside the crate: rust-analyzer doesn't follow `#[path]` out of it.
 
 | module | covers |
 | --- | --- |
 | `brain` | status history, columns, one person's task in doing and agents' unlimited (a second start refused, loading parks the extra ones), sessions, comments, links, renames and deletes, ids never given twice, moving to another brain, reports, the calendar's days and filters, the decision template |
-| `api`, `cli` | agent operations and their refusals, links to other repositories, compact text and JSON, `context`'s caps, command parsing, `--project`, `list` output, usage, completion scripts and candidates, which apps `update` installs and where (a macOS bundle's folder), whether a release is newer, an update waiting for agents' tasks in doing and not a person's |
-| `cli::init` | the agent section written, updated in place and left alone when unclosed; `init --all` updating every registered repository that has it, and no other; registering repositories and joining them into a project; `deinit` taking it all back but `.brain/`; the Claude Code hooks added once beside other settings, and removed leaving them as they were; `kb hook` asking with every prompt and reminding once a turn while the project or this repository's role isn't described, and of a task an agent started and left uncommented, and silent once they are; `kb hook tool` telling an agent of the user's comment on its task until it comments, and not of what came before it started; `kb hook stop` counting only the agent's comments; `kb context` adding the hooks a release added only where kanbrain's are; `kb hook edit` refusing a write to a brain's file, through a link or a `..` too, and leaving a notes vault's own files and a repository kept in the central brain to the agent |
-| `projects` | the registry and its labels, cards, moving a repository between projects, refusing two repositories with one name |
-| `migrate` | every format after the first having its step; an old brain backed up, then migrated step by step and only once, resuming from where it is; a brain in a newer format refused, read or written |
-| `cli::manage` | two folders named alike getting distinct repository names (`--repo` refused when taken); renaming a repository rewriting its siblings' links; renaming a project with its card and repositories; moving a repository dropping its links to the old project; removing keeping or deleting the tasks, and a whole project |
+| `api`, `cli` | agent operations and their refusals, links to other repositories, compact text and JSON, `context`'s caps, command parsing, `--project`, `list` output, usage (and `docs/cli.md`'s copy of it, `docs/agents.md`'s command table), completion scripts and candidates, which apps `update` installs and where (a macOS bundle's folder), whether a release is newer, an update waiting for agents' tasks in doing and not a person's |
+| `cli::init` | the agent section written, updated in place and left alone when unclosed; a CRLF file keeping its line endings, a second `init` leaving it as it is, a section an older kanbrain wrote into it with LF mended, and `deinit` taking the section out cleanly; a file holding only a byte order mark taken for empty; `init --all` updating every registered repository that has it, and no other, nor writing anything into one a newer kanbrain wrote, where `init` is refused; registering repositories and joining them into a project, never one whose path isn't valid Unicode, and on Windows by their plain path; `deinit` taking it all back but `.brain/`; the Claude Code hooks added once beside other settings, and removed leaving them as they were; `kb hook` asking with every prompt and reminding once a turn while the project or this repository's role isn't described, and of a task an agent started and left uncommented, and silent once they are; `kb hook tool` telling an agent of the user's comment on its task until it comments, and not of what came before it started; `kb hook stop` counting only the agent's comments; `kb context` adding the hooks a release added only where kanbrain's are; `kb hook edit` refusing a write to a brain's file, through a link or a `..` too, and leaving a notes vault's own files and a repository kept in the central brain to the agent |
+| `projects` | the registry and its labels, cards, moving a repository between projects, refusing two repositories with one name; Windows' verbatim `\\?\` prefix taken off a path only where the plain one names the same folder, and a registry written with it still matching |
+| `migrate` | every format after the first having its step; an old brain backed up, then migrated step by step and only once, resuming from where it is; a brain in a newer format refused, read or written, and a damaged `format` file not taken for one |
+| `cli::manage` | two folders named alike getting distinct repository names (`--repo` refused when taken); renaming a repository rewriting its siblings' links; renaming a project with its card and repositories; nothing written when one of the project's brains is one a newer kanbrain wrote; moving a repository dropping its links to the old project; removing keeping or deleting the tasks, and a whole project |
 | `model` | file round trip, what a newer version wrote kept, hand-typed history, missing id, status changes recorded once, search matching, tags, slugs, heading rules, timestamps, ages, overlapping time counted once |
-| `store` | renaming on title change, unreadable files become warnings, `tags.md` isn't a task, whole-file writes |
+| `store` | renaming on title change, unreadable files become warnings, `tags.md` isn't a task, whole-file writes, a busy file tried again (on Windows only) |
 | `tags` | no color repeats until the palette is used up, `tags.md` round trip, custom colors |
 | `period`, `export` | period bounds and stepping, report tables |
 | `enums` | generated `ALL` / `position` / `next`, `parse` as the inverse of `as_str` |
-| `state` (gui) | the board driven by keys over a temporary folder: the palette offering only what works now, moving between cards and columns, moving cards, drops, quick add, the form, the tags it offers and picks and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, nothing asked once your task stops, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from Manage project, the update offered once a newer release is found and refused while an agent works, the details' buttons acting on the entry from the calendar too, the form's tags highlight after a paste, a cut or a reload, an edit saving only what was changed in the form over what `kb` changed meanwhile (also when the list of brains changes while it's open), a save merging what `kb` changed meanwhile in a description, comment, project description or role and stopping over the lines both changed, to pick yours, theirs or both in each (in either case, yours for the rest, merged again once `kb` changes the text again), or over a title, which `ctrl+t` takes as `kb` left it, a save stopping after the agent's question asking it again with the note, a comment moved meanwhile not saved over another, a verdict `kb` gave meanwhile not overturned unseen, an open form or editor marked, and said once, when `kb` changed what it edits or the task's status, said once too when a save stops over it, a comment's delete taking the comment asked about wherever it is now, or none if it changed, opening one on a task an agent has in doing saying so, a brain found while the board acts locked and read again under its lock, saving a task an agent is working on asking whether to tell it (with a note, or just saving, or back), undone in one, and the question kept across a reload and closed with its entry |
+| `state` (gui) | the board driven by keys over a temporary folder: the palette offering only what works now, moving between cards and columns, moving cards, drops, quick add, the form, the tags it offers and picks, held as chips (added by a separator typed or pasted, taken off with ×), and its related entries, the editor, deletes, search and tag filters per tab, tabs, links, several brains and the project filter, a new entry going where the filter points and its form picking another brain, moving an entry to another one, the right-click menu's items and keys, the command palette, nothing asked once your task stops, the report, the calendar, selection kept across reloads, only changed brains read again, undo and redo, adding a project from a picked folder (its name, and joining one), renaming, moving and removing projects and repositories from Manage project, the update offered once a newer release is found and refused while an agent works, the details' buttons acting on the entry from the calendar too, the form's tags highlight after a paste, a cut or a reload, an edit saving only what was changed in the form over what `kb` changed meanwhile (also when the list of brains changes while it's open), a save merging what `kb` changed meanwhile in a description, comment, project description or role and stopping over the lines both changed, to pick yours, theirs or both in each (in either case, yours for the rest, merged again once `kb` changes the text again), or over a title, which `ctrl+t` takes as `kb` left it, a save stopping after the agent's question asking it again with the note, a comment moved meanwhile not saved over another, a verdict `kb` gave meanwhile not overturned unseen, an open form or editor marked, and said once, when `kb` changed what it edits or the task's status, beside what the input's action says however long it takes (and the next input's until shown a second), said once too when a save stops over it, a message expiring after its time, a comment's delete taking the comment asked about wherever it is now, or none if it changed, opening one on a task an agent has in doing saying so, a brain found while the board acts locked and read again under its lock, saving a task an agent is working on asking whether to tell it (with a note, or just saving, or back), undone in one, and the question kept across a reload and closed with its entry |
 | `dialogs` (gui) | the delete question naming the entry, what removing one repository or several says, Manage project scrolling to the repository it's opened from, the editor naming what its text belongs to, the form's and editor's titles marked `changed on disk`, the editor's unsaved dot kept last, a merge's title counting the conflicts left, its lines keeping their empty ones, and a side showing nothing saying what it is |
 | `keys` (gui) | no key running two things on one tab; what the menu offers named and described; every key in `docs/keybindings.md` on its tabs |
 | `editor` (gui) | line editing (split/join), unicode, wrapping; one-line cursor editing, line breaks pasted into one line (a lone `\r` too) as one space, as `kb add` takes a title; selecting, copying and replacing; mouse selection by character, word and line |
+| `shown` (gui) | selecting text shown: a drag across a text's pieces copied on lines of their own, words and pieces by double and triple clicks, shift+click extending only in the same text as drawn, the range each piece highlights, a field's selection copied first |
 | `merge` (gui) | a three-way merge of the editor's text and `kb`'s: lines only one side changed merged (the last line too, with or without a line break after it), the same change on both no conflict, changes that only touch merged (a line edited and one added after it) but lines added at one place or within the other's not, lines both changed a conflict between settled lines, picks making the text and moving to the next conflict, the rest taking one side without undoing the picks made, and moving between conflicts stopping at the ends |
 | `markdown` (gui) | inline styles and link ranges, kept line breaks, heading levels, numbered and task lists, nesting, code, quotes, tables, rules |
+| `main` (gui) | the command line's errors going to stderr only, the app's failure to open the board shown too |
+| `display` (gui, Linux) | no display saying to run it from the desktop session; a Wayland socket found as libwayland does (absolute, in `XDG_RUNTIME_DIR`, none without it, `WAYLAND_SOCKET` already connected) and one nothing answers at saying to unset it; X display names to their sockets (local and abstract, a host's TCP port, names it doesn't read left to GPUI) and one with no server saying so; real Unix, abstract and TCP listeners answering |
+| `startup` (gui) | the startup error window drawing the error, Copy putting it on the clipboard, closed by Enter, Esc or Close and not by other keys; opened in a running app, as when the board's window can't open; the Windows smoke check knowing its title |
 | `update` (gui) | a program replaced on disk since it started restarting from the new file |
 | `watch` (gui) | new, changed, renamed and deleted files are noticed once, naming the folder; temporary files aren't; own writes are taken as seen |
 | `xtask` | the notices list each license with the crates under it and leave this workspace's out; each program carries Rust's standard library and what else it embeds (musl, the app's fonts in `gui/fonts/`) |
-| `ui` (gui) | in a real (test) window: GPUI keystrokes to keys, shortcut names, clicks and double-clicks on cards (in every brain), a right click's menu acting on its card, dragging a card onto a column, closing the details (no + under ✕ once they close; a click or a double-click on ✕ opening nothing), reloading after another program's change, acting right after one without undoing it, opening an entry from the calendar, buttons pressed while typing, dropdowns that scroll to the highlighted row and how many rows each shows, the form's tag list and a click picking one, the list following its highlight, clipboard shortcuts, + Add project through the folder dialog, a one-line field scrolling sideways to keep its cursor in view, one shown again starting at its start, conflicts drawn with both sides and picked with a click, and the form's line with the title `kb` gave, taken with its button |
+| `ui` (gui) | a panic's message, as GPUI failing to connect to the window system says it; in a real (test) window: windows opening centered with the app id and logo, GPUI keystrokes to keys, shortcut names, clicks and double-clicks on cards (in every brain), a right click's menu acting on its card, dragging a card onto a column, the wheel, shift with it and a touchpad scrolling only their own way in a window smaller than the board, the column's and the board's scrollbars dragged, wheeled over, lit as the pointer comes and goes, and taking dropped cards, a drag ended with its bar, and their thumb's size, place and color, closing the details (no + under ✕ once they close; a click or a double-click on ✕ opening nothing), reloading after another program's change, acting right after one without undoing it, what that change marked said beside the key's message and replaced by a later one, opening an entry from the calendar, buttons pressed while typing, today's total and Park & quit (only while a task of yours runs, not an agent's alone) in the projects row with no bar of running tasks under it, dropdowns that scroll to the highlighted row and how many rows each shows, the form's tag list and a click picking one, the list following its highlight, clipboard shortcuts, + Add project through the folder dialog, a one-line field scrolling sideways to keep its cursor in view, one shown again starting at its start, conflicts drawn with both sides and picked with a click, the form's line with the title `kb` gave, taken with its button, and text shown selected with the mouse: a drag over a description's blocks copying them as shown (to the primary selection too), a double-click's word, a drag stopping at its comment's end, a link still opening on a click, nothing copied with nothing selected, after a click elsewhere (a card's drag, which still moves it), once the details close or from under a dialog, and a merge side not picked by a drag that selected, while a double-click picks it and then selects the word |
 
 ### The command line, from outside
 
 `cli/tests/kb.rs` runs the built `kb` the way agents and scripts do, over temporary folders: an agent's session from
 `init` to `context`, text read from stdin with `-`, one-line JSON, errors on stderr with a failing exit code and the
-usage, `--project` from another folder, completion candidates, the hooks asking until the project is described, the edit
-hook refusing a write to `.brain/` (and a `~` path read as the home folder), `tag` and `rename` and what they say when
-nothing changed, bash running `kb completions bash` itself to complete `tag`'s id and then its signed tags, and sixteen
-commands run at once losing no change and no id (the brain's write lock). They're Cargo integration tests
-(`CARGO_BIN_EXE_kb`), so they see only what the binary prints.
+usage, `--project` from another folder, completion candidates, the hooks asking until the project is described, the
+edit hook refusing a write to `.brain/` (and a `~` path read as the home folder), `tag` and `rename` and what they
+say when nothing changed, bash running `kb completions bash` itself to complete `tag`'s id and then its signed tags,
+PowerShell completing through `kb completions powershell` (`pwsh`, and on Windows also 5.1; skipped only off CI
+without `pwsh`), quoting what it inserts and reading `kb`'s UTF-8 under any code page, an empty `KANBRAIN_DIR` read
+as unset rather than the current folder and a relative one refused, and sixteen commands run at once losing no
+change and no id (the brain's write lock). They're Cargo integration tests (`CARGO_BIN_EXE_kb`), so they see only
+what the binary prints.
 
 ### Installers, end to end
 
 `e2e/install.sh` (Linux, macOS) and `e2e/install.ps1` (Windows) package this build of `kb` as a release asset, serve
 it over HTTP on `127.0.0.1` and install it with `install.sh` / `install.ps1` into a throwaway home, as a user would
 (`KANBRAIN_BASE_URL` points the installer at it). They check that the download's checksum is verified and a wrong
-one refused, that the installed `kb` is this build, that `init --all` brought a registered project's agent section up
-to date, that uninstalling takes it out, and that `--purge` deletes the central brain's files and kanbrain's locks
-and backups in the cache, leftover temporary files included, and keeps a file kanbrain didn't create. Both also
-install the kanban app (`kb` standing in for it, so GPUI isn't built) and check its launcher: the menu entry and
-icon on Linux, the app bundle on macOS, the Start Menu shortcut on Windows, where both apps install at once. CI runs
-them on all three systems, after `shellcheck` on the shell scripts and PSScriptAnalyzer on the PowerShell ones;
-locally they need cargo and Python.
+one refused, that the installed `kb` is this build, that `init --all` brought a registered project's agent section
+up to date, that uninstalling takes it out, and that `--purge` deletes the central brain's files and kanbrain's
+locks and backups in the cache, leftover temporary files included, keeps a file kanbrain didn't create, and refuses
+a relative `KANBRAIN_DIR`. Both also install the kanban app (`kb` standing in for it, so GPUI isn't built) and check
+its launcher: the menu entry and icon on Linux, the app bundle on macOS, the Start Menu shortcut on Windows, where
+both apps install at once. CI runs them on all three systems, after `shellcheck` on the shell scripts and
+PSScriptAnalyzer on the PowerShell ones; locally they need cargo and Python.
 
 ### Upgrades, end to end
 
@@ -435,9 +464,11 @@ same job, also when `install.sh` changes.
 ### The app, started
 
 `e2e/smoke-app.sh` (Linux, macOS) and `e2e/smoke-app.ps1` (Windows) start the release build of the kanban app on a
-few demo tasks, check that it stays up and idles (at most 3% of a core: with nothing running it redraws once a
-minute), and save a screenshot for a person to look at. CI runs them on all three systems, Linux under Xvfb with
-Mesa's software Vulkan, and keeps the screenshots as the run's artifacts.
+few demo tasks, check that it stays up, with the board rather than the window saying why it couldn't open it (on
+Linux, that with no display, a dead `WAYLAND_DISPLAY` or a dead `DISPLAY` it fails saying why), and idles (at most
+3% of a core: with nothing running it redraws once a minute), and save a screenshot for a person to look at. CI
+runs them on all three systems, Linux under Xvfb with Mesa's software Vulkan, and keeps the screenshots as the
+run's artifacts.
 
 ### Mutation testing
 
@@ -446,6 +477,11 @@ again: a change no test notices is behavior nothing guards. CI runs it on each p
 fails on a mutant no test catches. `.cargo/mutants.toml` lists what no test can tell apart (starting the installer,
 a hover style), each with why; anything else missed is a test to write. Locally, run it from a clean checkout
 (`git worktree add`) outside the repository (see `TMPDIR` above): it copies the working tree as it is when it starts.
+A mutant of how the central brain is found can make `kb` drop the tests' `KANBRAIN_DIR` and fall back to the platform
+data folder: core's own tests fall back to a temporary folder instead, and the tests that run the `kb` binary point
+`XDG_DATA_HOME` and `HOME` inside their own (`fallback_inside` in `cli/tests/kb.rs`). Windows takes that folder from
+the system, so there, run the tests on a machine whose central brain you don't mind; elsewhere, setting
+`XDG_DATA_HOME` to a scratch folder for the whole run covers anything else.
 
 ### Agents, end to end
 
@@ -481,9 +517,10 @@ The kanban app's look is checked by running it (`KANBRAIN_DIR=/tmp/t cargo run -
 `.github/workflows/ci.yml` runs on every push to `main` and `develop` and every pull request, each job as the change
 needs it (see below):
 
-- `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and the docs with
-  `cargo doc --workspace --no-deps --document-private-items` failing on warnings; and the published crates
-  packaged as they'd be published (`cargo publish --dry-run -p kanbrain-core -p kanbrain`)
+- `cargo clippy --workspace --all-targets -- -D warnings` and the docs with
+  `cargo doc --workspace --no-deps --document-private-items` failing on warnings, on Linux, macOS and Windows (code
+  behind `cfg(windows)` or `cfg(not(unix))` is only compiled there); on Linux also `cargo fmt --all --check`, and
+  the published crates packaged as they'd be published (`cargo publish --dry-run -p kanbrain-core -p kanbrain`)
 - `cargo deny check`: dependency licenses, sources and security advisories, as `deny.toml` allows them; and the
   third-party notices still generate (`cargo xtask notices`, through cargo-about), with every license accepted
 - the installers end to end on Linux, macOS and Windows (`e2e/install.sh`, `e2e/install.ps1`, the latter in

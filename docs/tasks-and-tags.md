@@ -49,8 +49,8 @@ box, so it stays quick with many projects: type part of a name, then click it or
 
 `P` opens the dropdown from the keyboard. Started from inside a project, the app opens on it. With a project shown, the bar also shows
 its description, shared by its repositories, and with one repository shown, that repository's role; **Edit** changes
-them (`E` the description). **Manage project**, before **+ Add project** at the end of the bar (`I`), shows the whole project: its description, each repository with
-its folder, notes, tasks per status and what's running, and the time tracked this week.
+them (`E` the description). **Manage project** (`I`), before **+ Add project**, shows the whole project: its description,
+each repository with its folder, notes, tasks per status and what's running, and the time tracked this week.
 
 It's also where a project is managed:
 
@@ -117,8 +117,8 @@ one of yours already runs there: then the move is refused. The button only shows
 
 ### The new / edit form
 
-**+ New task** (`n`) and **Edit title and tags** (`e`) open a form with the **title**, the **tags** (separated by
-commas or spaces), and **Related**, the entries to link it to, which can stay empty. With several brains shown, a new
+**+ New task** (`n`) and **Edit title and tags** (`e`) open a form with the **title**, the **tags** (each a chip
+in its color, with × to take it off; a comma or space after one typed adds it), and **Related**, the entries to link it to, which can stay empty. With several brains shown, a new
 entry also has **Project**, the brain it goes to: the one the filter or the selected card points at, to begin with.
 A new task also has a
 **Column**, To do unless you pick another: a column's `+` opens the form with that column picked, and **+ New task**
@@ -144,8 +144,8 @@ gives the agent your comment with its next step (see [For coding agents](agents.
 yours on its task. In the tags field, the tags already used by entries
 of the same kind (task tags for a task, note tags for a note) drop down below it, each with how many use it, so you can
 reuse the same names: those it holds are left out, and while you type a tag, only those containing it show, the first
-starting with it highlighted, or a line saying it'll be a new one. A click, or `↓` `↑` and `enter`, puts the tag in
-place of the one typed; with none highlighted (a whole tag or a new one typed, or `↑` off the first), `enter` saves. The
+starting with it highlighted, or a line saying it'll be a new one. A click, or `↓` `↑` and `enter`, adds the tag as a
+chip in place of the one typed; with none highlighted (a whole tag or a new one typed, or `↑` off the first), `enter` saves. The
 title can't be empty.
 
 ### Status history
@@ -177,6 +177,13 @@ They show, top to bottom:
   another of the same kind, by the same one of you in the same second, joins it (saving the form relates its entries
   one at a time), so relating and unrelating at once leaves no line;
 - **History**: every status change, `· agent` on those an agent made.
+
+Their text is selected with the mouse, to copy with `ctrl+c` (`cmd+c` on macOS): drag over it, double-click a word,
+triple-click a paragraph, `shift`+click to extend. A drag selects across one text's paragraphs, list items and code
+lines, all of a description say, but stops at its end: from one comment it doesn't run into the next. It copies
+the text as shown, without the markdown, a line break between them. A link still opens with a click. The same goes for
+the dialogs' text (Manage project's descriptions, a delete's confirmation, a merge's lines) and the status bar's
+message; a click outside the selected text drops the selection.
 
 ### Questions from agents
 

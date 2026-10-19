@@ -1,19 +1,18 @@
-//! The top of the window: tabs, the search box and the window's buttons; under them, the task whose
-//! clock is running (time is always tracked), with today's total.
+//! The top of the window: tabs, the search box and the window's buttons; under them, the projects filter, with
+//! today's tracked total (time is always tracked).
 
 use super::dropdown::{Dropdown, Row};
 use super::markdown;
 use super::pointer::TextBox;
-use super::theme::{self, BORDER, YELLOW};
-use super::widgets::{self, Kind, dim, dim_small, segment, segmented, small, tag_chips};
+use super::theme::{self, BORDER};
+use super::widgets::{self, Kind, dim, dim_small, segment, segmented, small};
 use super::{BrainView, Scrolls, action};
-use crate::state::{Board, Key, Layout, Mode, Picker, Scope, Tab, When};
+use crate::state::{Board, Layout, Mode, Picker, Scope, Tab, When};
 use crate::text::event::KeyCode;
 use gpui::{
-    ClickEvent, Context, Div, ElementId, FontWeight, Image, ImageFormat, ScrollHandle, Stateful, div, img, prelude::*,
-    px, rgb,
+    ClickEvent, Context, Div, FontWeight, Image, ImageFormat, ScrollHandle, Stateful, div, img, prelude::*, px, rgb,
 };
-use kanbrain_core::model::{Kind as EntryKind, Status, Task, counted, fmt_clock, fmt_dur, now, worked};
+use kanbrain_core::model::{Kind as EntryKind, Status, counted, fmt_dur, now, worked};
 use kanbrain_core::period::{Period, Unit};
 
 /// The New button's longest label, whose width it keeps on every tab.
@@ -36,28 +35,40 @@ static LOGO: std::sync::LazyLock<std::sync::Arc<Image>> = std::sync::LazyLock::n
 });
 
 /// Tabs, search, new entry and the window's buttons; the projects filter, with the shown project's
-/// card; then the running tasks.
+/// card and today's total. The running tasks show only in Doing, which the columns have room for.
 pub fn draw(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<BrainView>) -> Div {
     div()
+        .debug_selector(|| "top bar".into())
         .flex()
         .flex_col()
         .flex_none()
         .child(toolbar(board, scroll, follow, cx))
         .child(scope_bar(board, scroll, follow, cx))
-        .child(running_bar(board, cx))
 }
 
 /// Which brains are shown: a button naming the scope (all, the central brain, a project, or one
 /// repository of a project with several) that opens a dropdown with a search box, so it works with
 /// many projects; for a project, what it's about, with buttons to describe it; and a button to add a
-/// project. While there are none, only that button, with what a project is.
+/// project; then today's total. While there are none, only that button, with what a project is, and the total.
 fn scope_bar(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<BrainView>) -> Div {
     let add = action("add-project", "+ Add project", Kind::Ghost, KeyCode::Char('A'), cx)
         .debug_selector(|| "add-project-button".into());
-    let bar = div().flex().items_start().gap_3().px_3().py_1p5().border_b_1().border_color(rgb(BORDER));
+    let bar = div()
+        .debug_selector(|| "scope bar".into())
+        .flex()
+        .items_start()
+        .gap_3()
+        .px_3()
+        .py_1p5()
+        .border_b_1()
+        .border_color(rgb(BORDER));
     if board.sources.len() < 2 {
         let hint = "No projects yet: add a code folder to keep its tasks, notes and decisions next to its code.";
-        return bar.items_center().child(add).child(dim_small(hint));
+        return bar
+            .items_center()
+            .child(add)
+            .child(dim_small(hint).flex_1().min_w_0().truncate())
+            .child(today(board, cx));
     }
     let name = board.scopes().into_iter().find(|(s, _)| *s == board.scope).map_or_else(String::new, |(_, n)| n);
     let button = action("scope", format!("Project: {name}  ▾"), Kind::Secondary, KeyCode::Char('P'), cx);
@@ -74,6 +85,7 @@ fn scope_bar(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<Bra
                 .debug_selector(|| "manage-project-button".into())
         }))
         .child(add)
+        .child(today(board, cx))
 }
 
 /// The dropdown under the project button: every scope matching its search, a project's repositories
@@ -242,80 +254,25 @@ fn layout_switch(board: &Board, cx: &mut Context<BrainView>) -> Div {
     segmented(segments).when(!shown, Styled::invisible)
 }
 
-/// Each running task with its clock, or "idle"; today's tracked total; Park and Park & quit.
-fn running_bar(board: &Board, cx: &mut Context<BrainView>) -> Div {
-    let now = now();
+/// Today's tracked total and, while a task of yours runs, Park & quit, which leaves agents' tasks running: the running
+/// tasks themselves show in Doing.
+fn today(board: &Board, cx: &mut Context<BrainView>) -> Div {
     let (from, to) = Period::current(Unit::Day).bounds();
     // By the clock: tasks that ran at once (yours beside an agent's) count that time once.
-    let today = worked(board.sources.iter().flat_map(|s| &s.brain.tasks), from, to, now);
-    let bar = div()
+    let today = worked(board.sources.iter().flat_map(|s| &s.brain.tasks), from, to, now());
+    let mine = board.any_mine_running();
+    // As tall as the row's buttons, so it lines up with them in a row aligned to its top.
+    div()
         .flex()
         .flex_none()
         .items_center()
-        .gap_3()
-        .px_3()
-        .py_1p5()
-        .border_b_1()
-        .border_color(rgb(BORDER))
-        .text_size(px(13.));
-    let running = board.running();
-    let bar = if running.is_empty() {
-        bar.child(div().text_color(rgb(YELLOW)).font_weight(FontWeight::SEMIBOLD).child("■ Idle"))
-            .child(dim("Nothing is running: drag a card to Doing, or press s on it."))
-    } else {
-        // Each brain runs its own task, so there can be several: one per project repository.
-        let items = running.iter().map(|&(key, task)| running_item(board, key, task, now, cx));
-        bar.child(div().flex().flex_wrap().items_center().gap_x_4().gap_y_1().min_w_0().children(items))
-    };
-    bar.child(div().flex_1()).child(dim(format!("Today {}", fmt_dur(today))).flex_none()).children(
-        (!running.is_empty()).then(|| small(action("park-quit", "Park & quit", Kind::Ghost, KeyCode::Char('Q'), cx))),
-    )
-}
-
-/// One running task: where it is, its title and tags, its clock and total, and a Park button.
-fn running_item(
-    board: &Board,
-    key: Key,
-    task: &Task,
-    now: chrono::DateTime<chrono::Local>,
-    cx: &mut Context<BrainView>,
-) -> Div {
-    let place = board.sources[key.src].label.as_ref().map(|l| format!("{l} ")).unwrap_or_default();
-    div()
-        .flex()
-        .items_center()
         .gap_2()
-        .min_w_0()
-        .child(div().text_color(rgb(theme::running_color(task))).font_weight(FontWeight::SEMIBOLD).child("▶"))
-        .child(
-            div()
-                .id(ElementId::Name(format!("running {}/{}", key.src, key.id).into()))
-                .min_w_0()
-                .truncate()
-                .font_weight(FontWeight::SEMIBOLD)
-                .cursor_pointer()
-                .hover(|s| s.text_color(rgb(theme::ACCENT)))
-                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.open_entry(key))))
-                .child(format!("{place}#{} {}", task.id, task.title)),
-        )
-        .child(tag_chips(board, &task.tags).flex_nowrap().flex_none())
-        .child(
-            div()
-                .text_color(rgb(theme::running_color(task)))
-                .font_family(theme::EDITOR_FONT)
-                .child(fmt_clock(task.running_for(now).unwrap_or_default())),
-        )
-        .child(dim_small(format!("total {}", fmt_dur(task.total(now)))))
-        .child(
-            small(widgets::button(
-                ElementId::Name(format!("park {}/{}", key.src, key.id).into()),
-                "Park",
-                Kind::Secondary,
-            ))
-            .on_click(
-                cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.set_status(key, Status::Parked))),
-            ),
-        )
+        .h(px(30.))
+        .pl_3()
+        .border_l_1()
+        .border_color(rgb(BORDER))
+        .child(dim(format!("Today {}", fmt_dur(today))).debug_selector(|| "today total".into()))
+        .children(mine.then(|| small(action("park-quit", "Park & quit", Kind::Ghost, KeyCode::Char('Q'), cx))))
 }
 
 /// Width of the tag filters' dropdown.

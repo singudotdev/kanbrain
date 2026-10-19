@@ -123,7 +123,8 @@ Asking it for "todos" or a plan, in any language, creates kanbrain tasks, not en
 list; questions don't get one. See [For coding agents](docs/agents.md) for what goes where.
 
 The output is kept small so it doesn't waste the agent's context, and the CLI costs nothing until it's called.
-`context` lists titles and ids only, capped at 20 per section. Write commands reply with one line, like
+`context` lists titles and ids, capped at 20 per section (5 for the latest done), and the first line of the latest
+comment of a task in doing or parked, usually where the work stopped. Write commands reply with one line, like
 `#4 Fix login 500 (doing) #auth`. `show ID` is how an agent reads one entry in full.
 
 ## 3. Commands you'll use most
@@ -150,8 +151,8 @@ The output is kept small so it doesn't waste the agent's context, and the CLI co
 | `kb list [doing\|todo\|parked\|done\|all] [notes] [decisions] [--tag T] [--json]` | print tasks as markdown |
 | `kb status` | the running tasks and their clocks, for status bars |
 | `kb report [hour\|day\|week\|month] [--group task\|tag] [--tag T] [--save]` | tracked time as markdown |
-| `kb update` | install the latest release over this one |
-| `kb completions bash\|zsh\|fish` | tab completion of commands, ids, projects and tags |
+| `kb update` | install the latest release over this one, then bring every project up to it (`kb init --all`) |
+| `kb completions bash\|zsh\|fish\|powershell` | tab completion of commands, ids, projects and tags |
 | `kanbrain` | open the kanban board (`?` opens the command palette, with every key; `u` undoes) |
 
 The entry commands and `list` accept `--json` (all but `wait`, `context` and `project`).
@@ -161,10 +162,8 @@ The entry commands and `list` accept `--json` (all but `wait`, `context` and `pr
 ## Key ideas
 
 - **Tasks** move across To do → Doing → Parked → Done. Every move is recorded with its date.
-- **One task of yours in Doing at a time**, per brain: starting another while one runs is refused, so nothing gets
-  set aside behind your back. Agents aren't limited: one splitting its work between subagents runs a task per
-  subagent. Running tasks show in cyan when you started them, in green when an agent did. On the board, **Park &
-  quit** (`Q`) ends the day.
+- **One task of yours in Doing at a time**, per brain; agents run several
+  ([Time tracking](docs/time-tracking.md#how-it-works)). On the board, **Park & quit** (`Q`) ends the day.
 - **Notes** record what you learned. **Decisions** record what was chosen and why, using the ADR sections Context,
   Decision and Consequences. Both link to tasks by id. A decision an agent proposes waits for you to accept or
   reject it.

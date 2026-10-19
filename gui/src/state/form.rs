@@ -1,33 +1,33 @@
 //! The new / edit form and the quick-add field: what typing in them and saving them changes.
 
 use super::{
-    Board, Field, Form, FormTarget, Key, Mode, Pending, QuickAdd, Tab, Telling, WhereFor, changed_on_disk, listed,
+    Board, Changed, Field, Form, FormTarget, Key, Mode, Pending, QuickAdd, Tab, Telling, WhereFor, changed_on_disk,
+    listed,
 };
 use crate::text::editor::LineInput;
 use anyhow::Result;
 use kanbrain_core::brain::NewEntry;
-use kanbrain_core::model::{Kind, Status, Task, parse_tags};
+use kanbrain_core::model::{Kind, Status, Task};
 use std::collections::BTreeMap;
 
 impl Board {
     /// The kind of entry the form makes or changes, and the tags entries of that kind already use in
     /// its brain, each with how many use it, to pick from: a task's form offers task tags, not those of notes or
-    /// decisions. Those the field holds are left out but the one being typed, and while one is typed, only those
-    /// containing it ([`Form::typed_tag`]), as the dropdowns filter.
+    /// decisions. Those the field holds as chips are left out, and while one is typed, only those containing it
+    /// ([`Form::typed_tag`]), as the dropdowns filter.
     pub fn form_tags(&self, form: &Form) -> (Kind, Vec<(String, usize)>) {
         let (src, kind) = match form.target {
             FormTarget::New(src, kind, _) => (src, kind),
             FormTarget::Edit(key) => (key.src, self.task(key).map_or(Kind::Task, |t| t.kind)),
         };
         let typed = form.typed_tag();
-        let held = parse_tags(form.tags.text());
         let mut uses = BTreeMap::new();
         for tag in self.brain(src).tasks.iter().filter(|t| t.kind == kind).flat_map(|t| &t.tags) {
             *uses.entry(tag.as_str()).or_insert(0) += 1;
         }
         let tags = uses
             .into_iter()
-            .filter(|&(tag, _)| tag.contains(typed.as_str()) && (tag == typed || !held.iter().any(|h| h == tag)))
+            .filter(|&(tag, _)| tag.contains(typed.as_str()) && !form.tags.iter().any(|held| held == tag))
             .map(|(tag, n)| (tag.to_string(), n))
             .collect();
         (kind, tags)
@@ -47,23 +47,23 @@ impl Board {
     /// What `kb` changed, since the edit form opened, of its entry's title, tags, related entries and status, said for
     /// the status bar; `None` if nothing, or on a new entry's form.
     pub(super) fn form_changed_on_disk(&self, form: &Form) -> Option<String> {
-        self.form_changed_but(form, "")
+        self.form_changed_but(form, None)
     }
 
     /// What [`form_changed_on_disk`](Self::form_changed_on_disk) says but for `field`, which a save that stops over
     /// it is about to say.
-    fn form_changed_but(&self, form: &Form, field: &str) -> Option<String> {
+    fn form_changed_but(&self, form: &Form, but: Option<Changed>) -> Option<String> {
         let (FormTarget::Edit(key), Some(opened)) = (form.target, &form.opened) else { return None };
         let now = self.task(key)?;
         let related = self.related_keys(key);
         let relinked = related.len() != opened.links.len() || related.iter().any(|k| !opened.links.contains(k));
         let fields = [
-            (now.title != opened.title, "title"),
-            (now.tags != opened.tags, "tags"),
-            (relinked, "related entries"),
-            (now.status != opened.status, "status"),
+            (now.title != opened.title, Changed::Title),
+            (now.tags != opened.tags, Changed::Tags),
+            (relinked, Changed::Related),
+            (now.status != opened.status, Changed::Status),
         ];
-        changed_on_disk(&self.entry_name(key), &fields.map(|(changed, name)| (changed && name != field, name)))
+        changed_on_disk(&self.entry_name(key), &fields.map(|(changed, field)| (changed && Some(field) != but, field)))
     }
 
     /// Opens the form for changing the selected entry's title and tags.
@@ -86,7 +86,7 @@ impl Board {
             self.mode = Mode::Form(form);
             return;
         }
-        let tags = parse_tags(form.tags.text());
+        let tags = form.tags_to_save();
         match form.target {
             FormTarget::New(src, kind, status) => self.create(src, kind, title, tags, form.links, status),
             FormTarget::Edit(key) => {
@@ -106,7 +106,10 @@ impl Board {
                 };
                 if let Some(now) = renamed {
                     let name = self.entry_name(key);
-                    self.unsay_found(self.form_changed_on_disk(&form), self.form_changed_but(&form, "title"));
+                    self.unsay_found(
+                        self.form_changed_on_disk(&form),
+                        self.form_changed_but(&form, Some(Changed::Title)),
+                    );
                     self.notify(format!(
                         "{name}'s title changed meanwhile, to “{now}”: save again to keep yours, ctrl+t to take it"
                     ));
@@ -146,7 +149,8 @@ impl Board {
                 // As every other edit says it was saved.
                 if saved && related {
                     let said = format!("{} saved", self.entry_name(key));
-                    let fields = [(!same_title, "title"), (!same_tags, "tags"), (!same_links, "related entries")];
+                    let fields =
+                        [(!same_title, Changed::Title), (!same_tags, Changed::Tags), (!same_links, Changed::Related)];
                     match (telling, listed(&fields)) {
                         (Telling::Tell(note), Some(changed)) => {
                             self.tell_agent(key, &format!("the {changed}"), &note, &said);
@@ -222,6 +226,13 @@ impl Board {
         let Mode::Form(form) = &mut self.mode else { return };
         form.set_src(src);
         form.go_to(Field::Title);
+    }
+
+    /// Takes `tag` off the form's entry, from the × on its chip.
+    pub fn untag_in_form(&mut self, tag: &str) {
+        if let Mode::Form(form) = &mut self.mode {
+            form.tags.retain(|held| held != tag);
+        }
     }
 
     /// Unchecks a related entry, from the × on its chip.

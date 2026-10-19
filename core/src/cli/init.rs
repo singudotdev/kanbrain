@@ -8,6 +8,7 @@
 //! repository's, often committed with it, so deleting them is left to the user.
 
 use super::claude;
+use super::manage::{Step, StepKind};
 use crate::model::counted;
 use crate::projects;
 use crate::store::{self, PROJECT_DIR, Store};
@@ -24,6 +25,8 @@ const DEFAULT_AGENT_FILE: &str = "CLAUDE.md";
 const START: &str = "<!-- kanbrain:start -->";
 /// See [`START`].
 const END: &str = "<!-- kanbrain:end -->";
+/// UTF-8's byte order mark, which some Windows editors start a file with.
+const BOM: &str = "\u{FEFF}";
 
 /// The section. Read at the start of every session, so it's short, yet the whole CLI an agent needs is
 /// here. It has to win over the agent's own habits: Claude Code, for one, has a built-in to-do list,
@@ -72,25 +75,33 @@ The user follows them live on a kanban board: keep it showing what you're doing 
   tags), `link ID OTHER…` (an id here, or `REPO#ID` in another repository of the project); `-` reads text from
   stdin. Never edit the files in `.brain/` by hand: `kb` keeps them consistent.";
 
+/// [`init_steps`], each step as its line.
+#[deprecated(since = "0.6.3", note = "use `init_steps`, which says what each line is")]
+pub fn init(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path) -> Result<Vec<String>> {
+    super::manage::lines(init_steps(root, name, repo, central))
+}
+
 /// Makes `root` a repository of project `name` (else the one its card names, else one named after
 /// the folder), named `repo` in it (else as [`projects::repo_name`] picks): creates its `.brain/` and card,
 /// registers it in `central` (joining the project's other repositories if it has some), creates the project's
 /// shared card if it's new, and writes or refreshes the section in each agent file of `root` (creating
-/// `CLAUDE.md` if there's none). Returns what it did, one line each.
+/// `CLAUDE.md` if there's none). Returns what it did, a [`Step`] a line.
 ///
 /// A repository of another project, still there, is moved to `name` as `kb project move` moves it: the links
 /// between it and its old project's repositories go, and so does that project's card if it was the last.
-pub fn init(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path) -> Result<Vec<String>> {
+pub fn init_steps(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path) -> Result<Vec<Step>> {
+    // Refused before anything is written: its card and agent files go with a brain this version can't read.
+    crate::migrate::refuse_too_new(&root.join(PROJECT_DIR))?;
     if let Some(to) = name
-        && let Ok(dir) = root.join(PROJECT_DIR).canonicalize()
+        && let Ok(dir) = projects::canonical(&root.join(PROJECT_DIR))
         && projects::load(central)?.iter().any(|r| projects::same_dir(&r.dir, &dir) && r.project != to)
     {
-        let mut done = super::manage::move_repo(central, &dir, to)?;
+        let mut done = super::manage::move_repo_steps(central, &dir, to)?;
         // Moved already: a name it can't take is said beside the move, not instead of it.
         if let Some(repo) = repo {
-            match super::manage::rename_repo(central, &dir, repo) {
-                Ok(lines) => done.extend(lines),
-                Err(e) => done.push(format!("kept the name it has: {e:#}")),
+            match super::manage::rename_repo_steps(central, &dir, repo) {
+                Ok(steps) => done.extend(steps),
+                Err(e) => done.push(Step::other(format!("kept the name it has: {e:#}"))),
             }
         }
         return Ok(done);
@@ -98,14 +109,23 @@ pub fn init(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path)
     join(root, name, repo, central)
 }
 
-/// What [`init`] does for a folder that isn't a repository of another project: [`super::manage::move_repo`] runs
+/// What [`init_steps`] does for a folder that isn't a repository of another project: [`super::manage::move_repo`] runs
 /// it once the repository has left its old project.
-pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path) -> Result<Vec<String>> {
-    let mut done = Vec::new();
+pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central: &Path) -> Result<Vec<Step>> {
+    let mut done: Vec<Step> = Vec::new();
     let dir = root.join(PROJECT_DIR);
     // The registry holds a path a line; one with a line break would read as a second, made-up registration.
     if root.to_string_lossy().contains(['\n', '\r']) {
         bail!("{} has a line break in its path: kanbrain can't register it", root.display());
+    }
+    // Nor one `projects.md`, a UTF-8 file, can't hold: written lossily, it would name another folder. The canonical
+    // one, which is what's written: a link with a Unicode name can lead to a folder without one.
+    if fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf()).to_str().is_none() {
+        bail!(
+            "{} has a folder name that isn't valid Unicode, which projects.md can't hold: kanbrain can't register it; \
+             rename that folder",
+            root.display()
+        );
     }
     // Registered, its `.brain/` would be both the central brain and a project's, and taking it out with `--purge`
     // would delete every project's registration and card.
@@ -113,14 +133,16 @@ pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central:
         bail!("{} is the central brain, not a project's: run `kb init` in a project's folder", dir.display());
     }
     if dir.is_dir() {
-        done.push(format!("{} already exists", dir.display()));
+        done.push(Step::new(StepKind::AlreadyExisted, format!("{} already exists", dir.display())));
     } else {
         Store::at(&dir)?;
-        done.push(format!("created {}: kanbrain uses it from here and every folder below", dir.display()));
-        done.push("commit it to share tasks, notes and decisions with the project, or add it to .gitignore".into());
+        done.push(Step::other(format!("created {}: kanbrain uses it from here and every folder below", dir.display())));
+        done.push(Step::other(
+            "commit it to share tasks, notes and decisions with the project, or add it to .gitignore",
+        ));
     }
     // Registered by its absolute path, so the kanban app finds it from anywhere.
-    let dir = dir.canonicalize().with_context(|| format!("reading {}", dir.display()))?;
+    let dir = projects::canonical(&dir).with_context(|| format!("reading {}", dir.display()))?;
     let folder = root.canonicalize().ok().and_then(|r| Some(r.file_name()?.to_string_lossy().into_owned()));
     let card = projects::read_repo_card(&dir);
     // Re-run without a name, it stays in the project the registry has it in, which a rename while its folder was
@@ -156,10 +178,10 @@ pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central:
     }
     projects::register(central, &project, &dir)?;
     if projects::ensure_description(central, &project)? {
-        done.push(format!(
+        done.push(Step::other(format!(
             "created project `{project}`'s card in the central brain: describe the project with `kb project \
              describe` or from the kanban app (or let the agent do it); all its repositories share it"
-        ));
+        )));
     }
     let repos = projects::load(central)?;
     let here =
@@ -170,14 +192,14 @@ pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central:
         .map(projects::Repo::name)
         .collect();
     if others.is_empty() {
-        done.push(format!(
+        done.push(Step::other(format!(
             "registered as project `{here}`: the kanban app shows it, and `--project {here}` reaches it"
-        ));
+        )));
     } else {
-        done.push(format!(
+        done.push(Step::other(format!(
             "registered as `{here}`, a repository of project `{project}` with {}: they share its card",
             others.join(", ")
-        ));
+        )));
     }
     // A folder moved or renamed by hand leaves its old place registered: said, since only the user knows if
     // this is it.
@@ -185,21 +207,20 @@ pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central:
         let name = gone.name();
         // Its name kept for it, this one took another (`repo_name`): once the old place is out, it can take that one
         // back.
-        done.push(format!(
+        done.push(Step::other(format!(
             "`{project}/{name}`'s folder is gone ({}): if this is it, moved here, take the old place out with \
              `kb --project {project}/{name} deinit`, then `kb project repo {name}` here",
             gone.dir.display()
-        ));
+        )));
     }
     let existing: Vec<&str> = AGENT_FILES.into_iter().filter(|name| root.join(name).is_file()).collect();
     let targets = if existing.is_empty() { vec![DEFAULT_AGENT_FILE] } else { existing };
-    done.extend(write_agent_files(root, &targets)?.into_iter().map(|(_, line)| line));
+    done.extend(write_agent_files(root, &targets)?.into_iter().map(|(_, line)| Step::other(line)));
     if !on_path(std::env::var_os("PATH"), "kb") {
-        done.push(
+        done.push(Step::other(
             "`kb` isn't on your PATH, and agents and the hooks run it: install the command line too \
-             (the installer's `--app both`)"
-                .into(),
-        );
+             (the installer's `--app both`)",
+        ));
     }
     Ok(done)
 }
@@ -232,8 +253,8 @@ fn rename_unreachable_projects(central: &Path) -> Result<Vec<String>> {
             .find(|name| projects::check_name(name).is_ok() && !names.contains(name))
             .expect("more names than projects");
         // One that fails is said, as `init --all` says each repository it couldn't bring up to date.
-        match super::manage::rename_project(central, &old, &new) {
-            Ok(lines) => done.extend(lines),
+        match super::manage::rename_project_steps(central, &old, &new) {
+            Ok(steps) => done.extend(steps.into_iter().map(|step| step.line)),
             Err(e) => done.push(format!("couldn't rename project `{old}`: {e:#}")),
         }
         names.push(new);
@@ -244,20 +265,35 @@ fn rename_unreachable_projects(central: &Path) -> Result<Vec<String>> {
 /// Brings every registered repository up to this version: its data format, migrated with the central brain's
 /// (see [`crate::migrate`]), and its agent instructions, the section in each of its agent files that has one
 /// and Claude Code's hooks where `CLAUDE.md` has it. A repository whose files have no section (taken out by
-/// hand) keeps them as they are, and one whose folder is gone is left alone. Returns what changed, one line
-/// each, naming the repository.
+/// hand) keeps them as they are, and one whose folder is gone, or whose brain a newer kanbrain wrote, is left
+/// alone. Returns what changed, one line each, naming the repository.
 pub fn init_all(central: &Path) -> Result<Vec<String>> {
     // Migrated first: a brain a newer kanbrain wrote stops it before anything is written.
     let mut done = migrate_all(central, &projects::load(central)?)?;
     done.extend(rename_unreachable_projects(central)?);
     let repos = projects::load(central)?;
     let mut current = 0;
-    for repo in repos.iter().filter(|r| r.dir.is_dir()) {
+    // One a newer kanbrain wrote, said by `migrate_all`, gets nothing written: not even its card or agent files.
+    for repo in repos.iter().filter(|r| r.dir.is_dir() && !crate::migrate::too_new(&r.dir)) {
         // Named after a folder whose name links can't hold (`My App`), by a version before 0.4.0: renamed.
         let name = repo.name();
         if projects::check_repo_name(&name).is_err() {
-            let fixed = projects::repo_name(central, &repo.project, &repo.dir, None)?;
-            done.extend(super::manage::rename_repo(central, &repo.dir, &fixed)?);
+            // Its siblings' links to it change with it, and one a newer kanbrain wrote can't be.
+            let left =
+                repos.iter().find(|r| r.project == repo.project && r.dir.is_dir() && crate::migrate::too_new(&r.dir));
+            if let Some(left) = left {
+                done.push(format!(
+                    "{}: keeps the name `{name}`, which links can't hold, until `kb update`: `{}`'s links to it can't \
+                     be rewritten",
+                    repo.label(&repos),
+                    left.name()
+                ));
+            } else {
+                let fixed = projects::repo_name(central, &repo.project, &repo.dir, None)?;
+                done.extend(
+                    super::manage::rename_repo_steps(central, &repo.dir, &fixed)?.into_iter().map(|step| step.line),
+                );
+            }
         }
         // A card left on a project's old name, renamed while this folder was away.
         if let Some(card) = projects::read_repo_card(&repo.dir).filter(|card| card.project != repo.project) {
@@ -305,7 +341,7 @@ fn migrate_all(central: &Path, repos: &[projects::Repo]) -> Result<Vec<String>> 
     for repo in repos.iter().filter(|r| r.dir.is_dir()) {
         match Store::at(&repo.dir).and_then(|store| crate::migrate::migrate(&store)) {
             Ok(lines) => done.extend(lines),
-            Err(e) if e.downcast_ref::<crate::migrate::TooNew>().is_some() => {
+            Err(e) if e.is::<crate::migrate::TooNew>() => {
                 done.push(format!("{}: left alone: {e}", repo.label(repos)));
             }
             Err(e) => done.push(format!(
@@ -323,21 +359,34 @@ fn write_agent_files(root: &Path, targets: &[&str]) -> Result<Vec<(bool, String)
     let mut done = Vec::new();
     // Claude Code's hooks go with its file; agents that read only AGENTS.md have no use for them.
     if targets.contains(&"CLAUDE.md") {
-        done.push(match claude::add_hooks(root) {
-            Ok(claude::Change::Unchanged) => (false, format!("{} already has kanbrain's hooks", claude::SETTINGS)),
-            Ok(_) => (
-                true,
-                format!(
-                    "added kanbrain's hooks to {}: Claude Code reads `kb context` when a session starts and \
-                     after compaction, reminds an agent with every prompt and at the end of its turn to \
-                     describe the project while it isn't, sends it to `kb` when it would write the brain's \
-                     files itself, and tells it of your comments on a task it's working on with its next tool",
-                    claude::SETTINGS
-                ),
-            ),
+        match claude::add_hooks(root) {
+            Ok((change, edited)) => {
+                if change == claude::Change::Written {
+                    done.push((
+                        true,
+                        format!(
+                            "added kanbrain's hooks to {}: Claude Code reads `kb context` when a session starts and \
+                             after compaction, reminds an agent with every prompt and at the end of its turn to \
+                             describe the project while it isn't, sends it to `kb` when it would write the brain's \
+                             files itself, and tells it of your comments on a task it's working on with its next tool",
+                            claude::SETTINGS
+                        ),
+                    ));
+                } else if edited.is_empty() {
+                    done.push((false, format!("{} already has kanbrain's hooks", claude::SETTINGS)));
+                }
+                done.extend(edited.iter().map(|hook| {
+                    let todo = format!(
+                        "kanbrain added none beside it; if it's kanbrain's, replace it with `{0}` so kanbrain can \
+                         update and remove it, and if it isn't, add one running `{0}` for {1} beside it",
+                        hook.hook, hook.event
+                    );
+                    (false, looks_like_kanbrains(hook, &todo))
+                }));
+            }
             // The section still works without them, so a settings file it can't read doesn't stop init.
-            Err(e) => (false, format!("left out the Claude Code hooks: {e:#}")),
-        });
+            Err(e) => done.push((false, format!("left out the Claude Code hooks: {e:#}"))),
+        }
     }
     for &name in targets {
         let path = root.join(name);
@@ -368,6 +417,23 @@ fn write_agent_files(root: &Path, targets: &[&str]) -> Result<Vec<(bool, String)
     Ok(done)
 }
 
+/// What's said of a hook that looks like kanbrain's but isn't (see [`claude::Edited`]): what it runs, then `todo`,
+/// what kanbrain did with it and what's left to the user.
+fn looks_like_kanbrains(hook: &claude::Edited, todo: &str) -> String {
+    // Its line breaks and other control characters escaped, so that it's said on one line.
+    let shown: String = hook
+        .command
+        .chars()
+        .map(|c| if c.is_control() { c.escape_default().to_string() } else { c.to_string() })
+        .collect();
+    format!(
+        "{}: a hook for {} runs `{shown}`, which looks like kanbrain's `{}`: {todo}",
+        claude::SETTINGS,
+        hook.event,
+        hook.hook
+    )
+}
+
 /// Whether a program named `name` is in one of the folders of `path`, a `PATH` value.
 fn on_path(path: Option<std::ffi::OsString>, name: &str) -> bool {
     let file = format!("{name}{}", std::env::consts::EXE_SUFFIX);
@@ -378,31 +444,40 @@ fn on_path(path: Option<std::ffi::OsString>, name: &str) -> bool {
 /// card if it was its last repository, and takes the section out of each agent file of the repository
 /// (deleting a file left empty, which `init` created). `.brain/` is left as it is: whether it goes is
 /// [`super::manage::remove_repo`]'s. Returns what it did, one line each.
-pub fn deinit(dir: &Path, central: &Path) -> Result<Vec<String>> {
+pub fn deinit(dir: &Path, central: &Path) -> Result<Vec<Step>> {
     let Some(repo) = projects::unregister(central, dir)? else {
         bail!("{} isn't a registered project: there's nothing to deinit", dir.display());
     };
-    let mut done = vec![format!("unregistered {}: the kanban app no longer shows it", repo.dir.display())];
+    let mut done: Vec<Step> =
+        vec![Step::other(format!("unregistered {}: the kanban app no longer shows it", repo.dir.display()))];
     let others: Vec<String> =
         projects::load(central)?.iter().filter(|r| r.project == repo.project).map(projects::Repo::name).collect();
     if !others.is_empty() {
-        done.push(format!(
-            "project `{}` keeps its card for its other repositories: {}",
-            repo.project,
-            others.join(", ")
-        ));
+        let line =
+            format!("project `{}` keeps its card for its other repositories: {}", repo.project, others.join(", "));
+        done.push(Step::new(StepKind::KeptCard, line));
     } else if projects::remove_description(central, &repo.project)? {
-        done.push(format!("removed project `{}`'s card from the central brain", repo.project));
+        done.push(Step::other(format!("removed project `{}`'s card from the central brain", repo.project)));
     }
     let Some(root) = repo.dir.parent().filter(|_| repo.dir.is_dir()) else {
-        done.push(format!("{} is gone, so there was nothing else to undo", repo.dir.display()));
+        done.push(Step::other(format!("{} is gone, so there was nothing else to undo", repo.dir.display())));
         return Ok(done);
     };
     match claude::remove_hooks(root) {
-        Ok(claude::Change::Unchanged) => {}
-        Ok(claude::Change::Written) => done.push(format!("removed kanbrain's hooks from {}", claude::SETTINGS)),
-        Ok(claude::Change::Removed) => done.push(format!("removed {}: it only held the hooks", claude::SETTINGS)),
-        Err(e) => done.push(format!("left the Claude Code hooks in place: {e:#}")),
+        Ok((change, edited)) => {
+            match change {
+                claude::Change::Unchanged => {}
+                claude::Change::Written => {
+                    done.push(Step::other(format!("removed kanbrain's hooks from {}", claude::SETTINGS)));
+                }
+                claude::Change::Removed => {
+                    done.push(Step::other(format!("removed {}: it only held the hooks", claude::SETTINGS)));
+                }
+            }
+            let todo = "kanbrain left it in place; if it's kanbrain's, remove it yourself";
+            done.extend(edited.iter().map(|hook| Step::other(looks_like_kanbrains(hook, todo))));
+        }
+        Err(e) => done.push(Step::other(format!("left the Claude Code hooks in place: {e:#}"))),
     }
     for name in AGENT_FILES {
         let path = root.join(name);
@@ -412,11 +487,11 @@ pub fn deinit(dir: &Path, central: &Path) -> Result<Vec<String>> {
             continue;
         }
         if after.trim().is_empty() {
-            fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
-            done.push(format!("removed {name}: it only held the \"Project memory\" section"));
+            store::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
+            done.push(Step::other(format!("removed {name}: it only held the \"Project memory\" section")));
         } else {
             store::write_file(&path, &after)?;
-            done.push(format!("removed the \"Project memory\" section from {name}"));
+            done.push(Step::other(format!("removed the \"Project memory\" section from {name}")));
         }
     }
     Ok(done)
@@ -428,31 +503,57 @@ pub fn deinit(dir: &Path, central: &Path) -> Result<Vec<String>> {
 fn section(text: &str) -> Option<(usize, usize)> {
     let end = text.find(END)? + END.len();
     let start = text[..end].rfind(START)?;
-    Some((start, if text[end..].starts_with('\n') { end + 1 } else { end }))
+    // `\n\r\n` is what an older kanbrain left in a CRLF file: its section ended with `\n`, and the `\r\n`
+    // after the end marker it found there stayed, so both go, or the blank line they make would stay for good.
+    let eol = ["\n\r\n", "\r\n", "\n"].into_iter().find(|eol| text[end..].starts_with(eol)).unwrap_or("");
+    Some((start, end + eol.len()))
+}
+
+/// The line break `text` uses, `\r\n` or `\n`, for the section and the blank lines around it: git's
+/// `core.autocrlf` checks agent files out with CRLF on Windows, and a section written with LF into one
+/// would never equal what's there, so every `init` would rewrite it. It's the first line break of the
+/// user's text, before the section, else after it, as editors go by the first: a file with both is one
+/// an older kanbrain wrote its section with LF into, and the section's own breaks are kanbrain's. A
+/// file with no other text goes by its last break, which that older section left as the CRLF it found.
+fn line_break(text: &str) -> &'static str {
+    let outside = match section(text) {
+        Some((start, end)) => [&text[..start], &text[end..]].into_iter().find(|part| part.contains('\n')),
+        None => Some(text),
+    };
+    match outside.and_then(|part| part.find('\n').map(|at| &part[..at])) {
+        Some(line) if line.ends_with('\r') => "\r\n",
+        None if text.ends_with("\r\n") => "\r\n",
+        Some(_) | None => "\n",
+    }
 }
 
 /// `text` with the section between the markers: replaced where it already is, else appended after
-/// a blank line.
+/// a blank line. Written with `text`'s line breaks.
 fn with_section(text: &str) -> String {
-    let block = format!("{START}\n{SECTION}\n{END}\n");
+    let eol = line_break(text);
+    let block = format!("{START}\n{SECTION}\n{END}\n").replace('\n', eol);
     if let Some((start, end)) = section(text) {
         return format!("{}{block}{}", &text[..start], &text[end..]);
     }
+    // A byte order mark alone is an empty file to the user (`trim` keeps it: it isn't whitespace).
     match text.trim_end() {
-        "" => block,
-        kept => format!("{kept}\n\n{block}"),
+        kept @ ("" | BOM) => format!("{kept}{block}"),
+        kept => format!("{kept}{eol}{eol}{block}"),
     }
 }
 
-/// `text` without the section, and without the blank line `with_section` put before it.
+/// `text` without the section, and without the blank line `with_section` put before it. Empty, for the
+/// file to be removed, when nothing but a byte order mark is left.
 fn without_section(text: &str) -> String {
     let Some((start, end)) = section(text) else { return text.to_string() };
+    let eol = line_break(text);
     let before = text[..start].trim_end();
-    let after = text[end..].trim_start_matches('\n');
+    let after = text[end..].trim_start_matches(['\r', '\n']);
     match (before, after) {
-        ("", after) => after.to_string(),
-        (before, "") => format!("{before}\n"),
-        (before, after) => format!("{before}\n\n{after}"),
+        ("" | BOM, "") => String::new(),
+        ("" | BOM, after) => format!("{before}{after}"),
+        (before, "") => format!("{before}{eol}"),
+        (before, after) => format!("{before}{eol}{eol}{after}"),
     }
 }
 

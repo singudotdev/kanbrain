@@ -5,6 +5,133 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-10-19
+
+### Added
+
+- `kb completions powershell`: tab completion in PowerShell (5.1 and 7, on Windows, Linux and macOS), as bash, zsh
+  and fish have it, each id's title as its tooltip. Load it from `$PROFILE` with
+  `kb completions powershell | Out-String | Invoke-Expression`. A project with a space, or a tag or project holding a
+  character PowerShell reads otherwise (`$`, quotes, the typographic ones `‘ ’ ‚ ‛ “ ” „` too, brackets, wildcards
+  `* ?`, a leading dash `– — ―` it reads as `-`…), comes in single quotes, each single quote doubled. Windows
+  PowerShell 5.1 completes no word starting with a single `-` (a tag to take off), which it takes for a parameter.
+- `kanbrain-core`, for code built on it: `model::Comment::first_line`, `model::Task::doing_by(Author)` and
+  `model::Task::waits_for_answer`; `store::Store::load_entries`, with each file skipped as a `store::Skipped` and why
+  (`store::SkipReason`); `cli::Step` and `cli::StepKind`, what `cli::init_steps`, `cli::rename_project_steps`,
+  `cli::rename_repo_steps`, `cli::move_repo_steps`, `cli::remove_repo_steps` and `cli::remove_project_steps` return;
+  `cli::update::update_program` and `cli::update::cargo_update_command`.
+- The kanban app selects the text it shows with the mouse, to copy with `ctrl+c` (`cmd+c` on macOS) and, on Linux,
+  the primary selection: the details (title, tags, the question, description, comments, the thread's changes, history,
+  times), Manage project's descriptions and folders, a delete's confirmation, a merge's lines and the status bar's
+  message. Drag, double-click a word, triple-click a paragraph, `shift`+click to extend; a click elsewhere drops it. A
+  drag runs across one text's paragraphs, list items and code lines, not into the next comment, and copies them as
+  shown, without the markdown, on lines of their own. Links still open with a click, a field's selection is copied
+  first, and cards and list rows still drag rather than select.
+- The kanban app's board shows scrollbars where it scrolls: one beside a column whose cards don't all show, one under
+  the columns when the window is too narrow for them. Drag the thumb to scroll; a press beside it jumps there.
+
+### Changed
+
+- The kanban app has no bar of running tasks above the columns, which take its row: the running tasks show in Doing,
+  each card with its clock (`p` or a drag parks it), and "■ Idle" said what an empty Doing does; with one project
+  shown, an empty Doing says that **All** shows what runs elsewhere. Today's total and, while a task of yours runs,
+  **Park & quit** (`Q`) end the projects row, after **+ Add project**.
+- The kanban app's new / edit form shows the tags as chips in their colors, each with × to take it off, instead of
+  text: a comma or space after a tag typed, or picking one from the list, adds it as a chip.
+- A Claude Code hook is kanbrain's, for `kb init`, `kb context` and `kb deinit` to update or take out, only as `init`
+  writes it (`kb hook tool`) or with `kb` given by a plain path: letters (`é` too), digits and `_ . / : -`, a leading
+  `~/` in bash, and in quotes also spaces and `( )` (`'/Users/John Doe/bin/kb' hook tool`). A Windows path's `\`s
+  only in `'…'` for bash (`'C:\Users\John Doe\AppData\Local\Programs\kanbrain\kb.exe' hook tool`), or after `& `
+  under `"shell": "powershell"`; or the exec form (`"command"` the path, `"args"` the arguments). Anything else is
+  the user's. One that looks like kanbrain's (`kb` followed by the hook's words anywhere in it: variables set before
+  it, another command, a `$`, other quotes) gets none of kanbrain's beside it: `init` says so, to replace it or add
+  kanbrain's by hand, and `deinit` leaves it and says to remove it.
+
+### Deprecated
+
+- `kanbrain-core`, for code built on it: `Brain::change_status`, `Brain::comment` and `Brain::describe`, which nothing
+  in kanbrain calls any more: `Brain::set_status`, `Brain::add_comment` and `Brain::set_description` do the same.
+  `cli::update::update`, which always said `kb`: `cli::update::update_program` names the program running.
+  `store::Store::load`, whose warnings are text: `Store::load_entries` gives each file skipped as a `Skipped`, with
+  why (`SkipReason`), and says it the same way.
+  `cli::init`, `cli::rename_project`, `cli::rename_repo`, `cli::move_repo`, `cli::remove_repo` and
+  `cli::remove_project`, which return text: their `_steps` versions give each line as a `Step`, with what it was
+  (`StepKind`: a move, links dropped, the tasks deleted…), and say it the same way.
+
+### Fixed
+
+- `kanbrain update`, the app's command line, names itself: `kanbrain X.Y.Z is the latest release`, and installed with
+  cargo, `cargo install --locked --git https://github.com/singudotdev/kanbrain --tag vX.Y.Z kanbrain-app && kanbrain
+  init --all`, the release it found. It said `kb`, and to run `cargo install kanbrain`, which installs the command
+  line, not the app. The app's **Update to X.Y.Z** gives the same command, where it said to "update it the same way".
+- `kb report --tag a,b` is refused with the error `kb list --tag a,b` gives: it counted only the first tag's
+  tasks, without a word.
+- `kb init --all`, so `kb update`, writes nothing into a repository whose `.brain/` a newer kanbrain wrote, which it
+  says it leaves alone: it still rewrote that repository's `.brain/project.md` (a project or repository renamed, a
+  card on an old project name), its `CLAUDE.md` / `AGENTS.md` section and its Claude Code hooks. Renaming its project
+  (there or with `kb project rename`) renames it in the registry and says its card keeps the old name until
+  `kb update`. `kb init` in such a repository is refused before anything is written, saying to update. A repository
+  whose name `init --all` would fix keeps it, said, while another of its project is such a one: renaming it rewrote
+  its card and some siblings' links, then failed on that one, and `init --all` stopped there, so `kb update` failed.
+  `kb project repo`, `kb project move`, `kb project remove`, `kb deinit`, `kb init NAME` (a move) and the app's
+  Manage project refuse the same way, before anything is written, when the repository's or a sibling's brain is one.
+- The kanban app started from the Start Menu, Finder or a desktop's launcher, without a console (on Windows it never
+  has one), says an error before the board opens in a small window titled "kanbrain couldn't open", with Copy (the
+  message, for a bug report) and Close (or Enter, Esc), and exits with a failing code: running as root, a relative
+  `KANBRAIN_DIR`, or a brain it can't read or a newer kanbrain wrote only went to stderr, so the app just didn't open;
+  a board's window that can't open said it on stderr only and exited with 0. The error still goes to stderr too;
+  `kanbrain` with arguments, the command line, is unchanged. The release smoke checks fail on that window or that
+  error.
+- The kanban app on Linux and FreeBSD without a display (over ssh, under `sudo -u other`, no `WAYLAND_DISPLAY` or
+  `DISPLAY`) exits with a failing code and says on stderr only to run it from the desktop session: GPUI ran
+  headless, the board's window unseen, and the app never ended. A display named but dead fails the same way, saying
+  so: a `WAYLAND_DISPLAY` nothing answers at (or with no `XDG_RUNTIME_DIR` for it) says to unset it to use X11, a
+  `DISPLAY` with no X server there says `no X server at DISPLAY=…`; GPUI panicked (exit 101), on X11 only after a
+  TCP timeout of minutes. A display that refuses the app later (X authorization) exits with a failing code and
+  GPUI's reason instead of a panic. The Linux smoke check runs the app with none, a dead `WAYLAND_DISPLAY` and a
+  dead `DISPLAY`.
+- `kb init` and `kb context` no longer add a second copy of a hook that runs `kb` at a quoted path with spaces
+  beside it, and `kb deinit` takes it out with the rest. `kb deinit` (and `--purge`) takes only kanbrain's hooks out
+  of a matcher group in `.claude/settings.local.json`, keeping a hook of the user's in the same `hooks` list, and the
+  group unless kanbrain's were all it held: it took the whole group out, the user's hooks with it, and a hook of the
+  user's that only looks like kanbrain's (`true&&/usr/bin/kb hook tool`, `kb.sh hook tool`,
+  `KANBRAIN_DIR=… kb context`) too.
+- In a window smaller than the kanban app's board, the mouse wheel scrolled the column under the pointer and the
+  board sideways at once. The vertical wheel now scrolls only the column, a horizontal wheel or `shift`+wheel only
+  the board; a touchpad scrolls each way its fingers go, a slanting swipe both.
+- `KANBRAIN_DIR` set but empty counts as unset, the platform data folder: `kb` or the kanban app wrote `format` into
+  whatever folder it ran in, and the command then failed (`reading …: No such file or directory`). A relative one is
+  refused with an error naming it, as it named another central brain from each folder `kb` ran in, hooks included; on
+  Windows `\todo` and `D:todo` are relative too. One starting with `~`, which only a shell expands (not inside quotes,
+  nor in a systemd environment.d file), says so. `install.sh --purge` and `install.ps1`'s purge refuse a relative one
+  the same way.
+- `kb update` on Windows prints the install folder in single quotes in the PowerShell command it gives: in double
+  quotes, a `$` or a backtick in the folder's name was expanded, so the update went elsewhere. A typographic single
+  quote (`‘ ’ ‚ ‛`) in the folder's name, which PowerShell also reads as one, no longer breaks the app's update on
+  Windows either.
+- `kb init` keeps the line endings of a CRLF `CLAUDE.md` / `AGENTS.md` (git's `core.autocrlf` on Windows): it wrote
+  the section with LF and left the CRLF after its end marker, so once git checked the file out again as CRLF (a
+  clone, a pull touching it), `init` and `init --all` said it updated the file and rewrote it with mixed line endings
+  and one more blank line. The section, and the blank line before it, now go in with the line break of the text
+  around it, so a second `init` leaves the file unchanged; a section an older kanbrain wrote that way is mended to
+  CRLF, its stray blank line taken out. `kb deinit` takes the section out of a CRLF file without leaving a `\r` or a
+  blank line, and removes a file left holding only a byte order mark, which `init` no longer follows with two blank
+  lines.
+- On Windows, a `kb` command or the app no longer fails when an antivirus, the search indexer or an editor has a
+  brain's file open just as it's replaced or deleted (`Access is denied`, `being used by another process`): the
+  rename or delete is tried again for up to about 1.3 seconds.
+- The kanban app no longer loses what `kb` changed in an open form or editor ("#1's status changed on disk"), nor a
+  file it found skipped, when the save or action it read for takes over a second, on a slow disk or a busy machine:
+  it's said beside that action's message for the whole key or click, not for a second.
+- On Windows, `kb init` registers a repository in `projects.md` as `C:\code\api\.brain` (a share's as
+  `\\server\share\…`), not the `\\?\C:\…` canonicalizing gives, which `projects.md`, `kb`'s output and the
+  kanban app showed. The prefix stays where the plain path would name something else (a name ending in a dot or
+  space, a device name such as `con`, `con.tar.gz`, `COM¹` or `CONIN$`, more than `MAX_PATH`). A registry an earlier
+  kanbrain wrote with the prefix reads plain, and is written without it the next time `kb` writes `projects.md`
+  (`init`, `deinit`, a move or rename). `kb init` refuses a folder whose path isn't valid Unicode, which
+  `projects.md`, a UTF-8 file, can't hold, also when reached through a link: it used to register a garbled path,
+  naming another folder.
+
 ## [0.6.2] - 2026-10-16
 
 ### Added

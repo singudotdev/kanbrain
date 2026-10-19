@@ -6,7 +6,7 @@
 #   $env:KANBRAIN_APP         = "gui"         # cli (default): the command line `kb`; gui: the kanban app
 #                                           # `kanbrain`; both. Both use the same tasks.
 #                                           # With UNINSTALL/PURGE the default is both.
-#   $env:KANBRAIN_VERSION     = "v0.6.2"      # default: latest
+#   $env:KANBRAIN_VERSION     = "v0.6.3"      # default: latest
 #   $env:KANBRAIN_INSTALL_DIR = "D:\tools"    # default: %LOCALAPPDATA%\Programs\kanbrain
 #   $env:KANBRAIN_UNINSTALL   = "1"           # remove the app(s) (your tasks are kept)
 #   $env:KANBRAIN_PURGE       = "1"           # remove the app(s) AND your central brain's data: entries, tags.md,
@@ -146,6 +146,10 @@ function Install-Kanbrain {
 
         $owned = @()
         if ($purge) {
+            # As kb refuses it: a relative path (`\todo` and `D:todo` too) names a different folder from each folder.
+            if ($env:KANBRAIN_DIR -and $env:KANBRAIN_DIR -notmatch '^([A-Za-z]:[\\/]|[\\/]{2})') {
+                throw "kanbrain: KANBRAIN_DIR must be an absolute path, not '$env:KANBRAIN_DIR': set it to the folder's full path"
+            }
             $full = [IO.Path]::GetFullPath($data).TrimEnd('\', '/')
             $homes = @("$env:USERPROFILE".TrimEnd('\'), "$HOME".TrimEnd('\', '/')) | Where-Object { $_ }
             $unsafe = @([IO.Path]::GetPathRoot($full).TrimEnd('\', '/')) + $homes

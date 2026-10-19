@@ -12,6 +12,7 @@
 //! - [`menu`]: the right-click menu on an entry.
 //! - [`nav`]: moving the selection around the board.
 //! - [`palette`]: the command palette, every action with its key.
+//! - [`shown`]: text shown rather than typed into, selected with the mouse to copy.
 //! - [`sources`]: the central brain and every project repository, and the scope that filters them.
 
 mod actions;
@@ -24,9 +25,10 @@ mod menu;
 pub mod mode;
 mod nav;
 mod palette;
+mod shown;
 mod sources;
 #[cfg(test)]
-#[path = "../../tests/state.rs"]
+#[path = "../../tests/state/mod.rs"]
 mod tests;
 
 pub use keys::{Action, When};
@@ -35,10 +37,12 @@ pub use mode::{
     AddProject, CommentPicker, Confirm, Edit, Field, Form, FormTarget, LinkPicker, Manage, Mode, Pending, Picker,
     PickerKey, ProjectOption, QuickAdd, Target, Tell, Telling, WhereFor, WherePicker,
 };
+pub use shown::Shown;
 pub use sources::{Key, Scope, Source};
 
-use crate::text::editor::{LineInput, TextEditor};
+use crate::text::editor::LineInput;
 use crate::text::merge::{self, Merged};
+use crate::watch;
 use anyhow::Result;
 use kanbrain_core::brain::{CalendarView, ReportView};
 use kanbrain_core::model::{Kind, Status, Task};
@@ -46,6 +50,7 @@ use kanbrain_core::period::{Period, Unit};
 use kanbrain_core::projects;
 use kanbrain_core::store::Change;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 /// How long a status bar message shows.
@@ -143,6 +148,78 @@ enum NextUndo {
     Redo,
 }
 
+/// Where the board reads the time its messages are said and read at: the window's, whose tests move it by hand, as a
+/// loaded machine can stall a thread for seconds between a key and what checks its message.
+#[derive(Clone)]
+pub struct Clock(Rc<dyn Fn() -> Instant>);
+
+impl Clock {
+    /// A clock reading `now`, as the window's executor gives it.
+    pub fn new(now: impl Fn() -> Instant + 'static) -> Self {
+        Self(Rc::new(now))
+    }
+
+    /// The time it reads now.
+    fn now(&self) -> Instant {
+        (self.0)()
+    }
+}
+
+impl Default for Clock {
+    fn default() -> Self {
+        Self::new(Instant::now)
+    }
+}
+
+impl std::fmt::Debug for Clock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Clock")
+    }
+}
+
+/// Who said the status bar's message, for what's said next.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Said {
+    /// An action: what's said next replaces it.
+    Action,
+    /// A read of the brains, in the input still running: said only once, so that input's action goes beside it,
+    /// however long it takes to write.
+    Found,
+    /// A read whose input is over, or that no input made (opening, the window's timer): the next action's message goes
+    /// beside it until it was shown for `watch::INTERVAL`, as a save right after the timer read would close the form
+    /// marked with it before it could be read; replaced after.
+    FoundBefore,
+}
+
+/// A status bar message: what each said, the newest first, and them together as the bar shows them.
+#[derive(Debug)]
+struct Message {
+    /// What each said: an action's, and what a read found that it goes beside.
+    parts: Vec<String>,
+    /// The parts as shown, one after the other.
+    shown: String,
+    /// When it was said: it expires after `MESSAGE_TTL`.
+    at: Instant,
+    /// Who said it.
+    by: Said,
+}
+
+impl Message {
+    /// `parts`, said at `at` by `by`.
+    fn new(parts: Vec<String>, at: Instant, by: Said) -> Self {
+        Self { shown: parts.join(" · "), parts, at, by }
+    }
+
+    /// Whether it's what a read found that what's said at `now` goes beside: see [`Said`].
+    fn found_at(&self, now: Instant) -> bool {
+        match self.by {
+            Said::Found => true,
+            Said::FoundBefore => now.saturating_duration_since(self.at) < watch::INTERVAL,
+            Said::Action => false,
+        }
+    }
+}
+
 /// Everything the window shows and remembers.
 #[derive(Debug)]
 pub struct Board {
@@ -185,13 +262,16 @@ pub struct Board {
     pub request: Option<Request>,
     /// A newer release's version, once the window found one out.
     pub available: Option<String>,
-    /// Status bar message, when it was set (it expires after `MESSAGE_TTL`), and whether it's what a read of the
-    /// brains found rather than what an action did: said only once, so the action that read for goes beside it.
-    message: Option<(String, Instant, bool)>,
+    /// Status bar message.
+    message: Option<Message>,
+    /// The time messages are said and read at.
+    pub clock: Clock,
     /// The files the last change wrote, as they were before and after, for `u` to put back.
     last_change: Vec<Change>,
     /// What `u` does next to `last_change`.
     next_undo: NextUndo,
+    /// The text shown, not typed into, that the mouse selected in, if any.
+    shown: Option<Shown>,
 }
 
 impl Board {
@@ -221,15 +301,19 @@ impl Board {
             request: None,
             available: None,
             message: None,
+            clock: Clock::default(),
             last_change: Vec::new(),
             next_undo: NextUndo::Undo,
+            shown: None,
         };
         if let Some(src) = board.opened_in.as_ref().and_then(|dir| board.src_at(dir)) {
-            let project = board.sources[src].project.clone().unwrap_or_default();
+            let project = board.project_name(src).to_string();
             let repos = board.repos_of(&project).count();
             board.scope = if repos > 1 { Scope::Repo(src) } else { Scope::Project(project) };
         }
         board.after_load();
+        // Opening isn't an input: what it found shows, and the first key's message replaces it.
+        board.input_done();
         Ok(board)
     }
 
@@ -240,41 +324,50 @@ impl Board {
 
     /// Shows `msg` in the status bar for a few seconds.
     pub fn notify(&mut self, msg: impl Into<String>) {
-        self.say(&msg.into(), false);
+        self.say(&msg.into(), Said::Action);
     }
 
     /// Shows what a read of the brains found (a file skipped, `kb` changing what a dialog edits), which the action
     /// that read for, said next, doesn't replace: it's said only once.
     fn notify_found(&mut self, msg: impl Into<String>) {
-        self.say(&msg.into(), true);
+        self.say(&msg.into(), Said::Found);
     }
 
     /// Shows `msg`, after what a read found just before, if that's what's shown.
-    fn say(&mut self, msg: &str, found: bool) {
+    fn say(&mut self, msg: &str, by: Said) {
         // Plain text: the command line's messages, which these often are, quote names in markdown's backticks.
-        let mut msg = msg.replace('`', "");
-        if let Some((said, at, true)) = &self.message
-            && at.elapsed() < Duration::from_secs(1)
-            && *said != msg
+        let msg = msg.replace('`', "");
+        let now = self.clock.now();
+        let found = self.message.take().filter(|said| said.found_at(now) && said.shown != msg).map(|said| said.parts);
+        let parts = std::iter::once(msg).chain(found.into_iter().flatten()).collect();
+        self.message = Some(Message::new(parts, now, by));
+    }
+
+    /// Ends the input the window ran, from the read before it to its action: what that read found, its action had
+    /// its turn to go beside, and what's said next replaces it.
+    pub fn input_done(&mut self) {
+        if let Some(said) = &mut self.message
+            && said.by == Said::Found
         {
-            msg = format!("{msg} · {said}");
+            said.by = Said::FoundBefore;
         }
-        self.message = Some((msg, Instant::now(), found));
     }
 
     /// Puts `rest` in the status bar in place of `found`, what a read just said there: a save that stops over part
-    /// of it is about to say that part, with what to do. The rest of what the read found stays.
+    /// of it is about to say that part, with what to do, beside the rest. One that what follows doesn't go beside is
+    /// replaced by it anyway.
     fn unsay_found(&mut self, found: Option<String>, rest: Option<String>) {
-        let (Some(found), Some((said, _, true))) = (found, &mut self.message) else { return };
+        let (Some(found), Some(said)) = (found, &mut self.message) else { return };
+        if said.by == Said::Action {
+            return;
+        }
         // As `say` keeps it.
         let (found, rest) = (found.replace('`', ""), rest.map(|rest| rest.replace('`', "")));
-        let parts: Vec<&str> =
-            said.split(" · ").filter_map(|part| if part == found { rest.as_deref() } else { Some(part) }).collect();
-        if parts.is_empty() {
-            self.message = None;
-        } else {
-            *said = parts.join(" · ");
-        }
+        let parts: Vec<String> = std::mem::take(&mut said.parts)
+            .into_iter()
+            .filter_map(|part| if part == found { rest.clone() } else { Some(part) })
+            .collect();
+        self.message = (!parts.is_empty()).then(|| Message::new(parts, said.at, said.by));
     }
 
     /// Shows what went wrong in the status bar, with its causes.
@@ -284,7 +377,15 @@ impl Board {
 
     /// The status bar message, while it hasn't expired.
     pub fn message(&self) -> Option<&str> {
-        self.message.as_ref().filter(|(_, at, _)| at.elapsed() < MESSAGE_TTL).map(|(msg, ..)| msg.as_str())
+        self.message_at(self.clock.now())
+    }
+
+    /// The status bar message at `now`, while it hasn't expired by then.
+    pub fn message_at(&self, now: Instant) -> Option<&str> {
+        self.message
+            .as_ref()
+            .filter(|said| now.saturating_duration_since(said.at) < MESSAGE_TTL)
+            .map(|said| said.shown.as_str())
     }
 
     /// Re-reads every brain, and the list of projects, which may have gained or lost one. The
@@ -379,6 +480,7 @@ impl Board {
     /// Marks the open edit form or editor once `kb` changed what it edits, and says what, once: the save that follows
     /// is the user's call, made knowing it. One waiting for [`Tell`]'s answer too: the agent may finish the task then.
     fn mark_changed_on_disk(&mut self) {
+        self.refresh_theirs_title();
         self.merge_again();
         let said = match &self.mode {
             Mode::Edit(edit) => self.edit_mark(edit),
@@ -403,37 +505,35 @@ impl Board {
         self.notify_found(said);
     }
 
-    /// Merges again the open conflicts of a text `kb` changed again while they were picked, which show its old text
-    /// otherwise; and shows in the form the title `kb` gives now, in place of the one a save stopped over, as the one
-    /// saving again keeps yours over. Picks made are lost, as the conflicts may not be the same.
-    fn merge_again(&mut self) {
-        if let Mode::Form(form) = &self.mode
-            && form.theirs_title.is_some()
-            && let Some(task) = form.target.key().and_then(|key| self.task(key))
-        {
-            let title = task.title.clone();
-            if let Mode::Form(form) = &mut self.mode {
-                if let Some(opened) = &mut form.opened {
-                    opened.title.clone_from(&title);
-                }
-                form.theirs_title = Some(title);
-            }
+    /// Shows in the form the title `kb` gives now, in place of the one a save stopped over, as the one saving again
+    /// keeps yours over.
+    fn refresh_theirs_title(&mut self) {
+        let Mode::Form(form) = &self.mode else { return };
+        let Some(task) = form.theirs_title.as_ref().and(form.target.key()).and_then(|key| self.task(key)) else {
             return;
+        };
+        let title = task.title.clone();
+        if let Mode::Form(form) = &mut self.mode {
+            if let Some(opened) = &mut form.opened {
+                opened.title.clone_from(&title);
+            }
+            form.theirs_title = Some(title);
         }
+    }
+
+    /// Merges again the open conflicts of a text `kb` changed again while they were picked, which show its old text
+    /// otherwise. Picks made are lost, as the conflicts may not be the same.
+    fn merge_again(&mut self) {
         let Mode::Edit(edit) = &self.mode else { return };
         // Another comment at its index isn't merged with, which would put that comment in the editor: the text typed
         // comes back, for the save to stop over (`same_comment`).
         if edit.merge.is_some()
-            && let Target::Comment(key, _) = edit.target
-            && !self.same_comment(edit)
+            && let Some(stop) = self.comment_moved(edit)
         {
-            let name = self.entry_name(key);
             if let Mode::Edit(edit) = &mut self.mode {
                 edit.merge = None;
             }
-            return self.notify_found(format!(
-                "{name}'s comments changed around this one meanwhile: copy your text, then ctrl+d"
-            ));
+            return self.notify_found(stop);
         }
         let (Some(merge), Some(now)) = (&edit.merge, self.text_of(edit.target)) else { return };
         if now == merge.theirs {
@@ -446,10 +546,7 @@ impl Board {
             Merged::Clean(text) => {
                 // All of theirs is the text as it is: nothing to save.
                 let theirs = text == now;
-                edit.base = now;
-                edit.merge = None;
-                edit.editor = TextEditor::new(&text);
-                edit.editor.modified = !theirs;
+                edit.settle(now, &text);
                 if theirs {
                     format!("{name} changed again: it's theirs as it is now, esc closes")
                 } else {
@@ -644,14 +741,48 @@ impl Board {
     }
 }
 
+/// What of an entry, a project or a repository `kb` may change while a dialog edits it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Changed {
+    /// An entry's title.
+    Title,
+    /// An entry's tags.
+    Tags,
+    /// The entries related to an entry.
+    Related,
+    /// A task's status.
+    Status,
+    /// An entry's description.
+    Description,
+    /// What else the editor edits: a comment, a verdict's, a project's description or a repository's role.
+    Comment,
+    /// A decision's verdict being given.
+    Verdict,
+}
+
+impl Changed {
+    /// How the status bar names it.
+    fn word(self) -> &'static str {
+        match self {
+            Self::Title => "title",
+            Self::Tags => "tags",
+            Self::Related => "related entries",
+            Self::Status => "status",
+            Self::Description => "description",
+            Self::Comment => "comment",
+            Self::Verdict => "verdict",
+        }
+    }
+}
+
 /// "#1's title and status changed on disk", naming the fields of `name`'s entry that changed; `None` if none did.
-fn changed_on_disk(name: &str, fields: &[(bool, &str)]) -> Option<String> {
+fn changed_on_disk(name: &str, fields: &[(bool, Changed)]) -> Option<String> {
     listed(fields).map(|fields| format!("{name}'s {fields} changed on disk"))
 }
 
 /// The fields marked changed, as a sentence lists them ("title, tags and status"); `None` if none is.
-fn listed(fields: &[(bool, &str)]) -> Option<String> {
-    let changed: Vec<&str> = fields.iter().filter(|(changed, _)| *changed).map(|(_, field)| *field).collect();
+fn listed(fields: &[(bool, Changed)]) -> Option<String> {
+    let changed: Vec<&str> = fields.iter().filter(|(changed, _)| *changed).map(|(_, field)| field.word()).collect();
     let (last, rest) = changed.split_last()?;
     Some(if rest.is_empty() { (*last).to_string() } else { format!("{} and {last}", rest.join(", ")) })
 }

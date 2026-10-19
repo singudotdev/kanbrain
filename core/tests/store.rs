@@ -14,8 +14,8 @@ fn save_renames_on_title_change_and_loads_back() {
         fs::read_dir(dir.path()).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
     assert_eq!(names, ["0003-second-title.md"]);
 
-    let (tasks, warnings) = store.load().unwrap();
-    assert_eq!(warnings, Vec::<String>::new());
+    let (tasks, warnings) = store.load_entries().unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
     assert_eq!(tasks[0].title, "Second title");
 }
 
@@ -29,7 +29,7 @@ fn saving_never_writes_over_a_file_that_didnt_parse() {
     let copy = dir.path().join("0001-fix (conflicted copy).md");
     fs::rename(dir.path().join("0001-fix.md"), &copy).unwrap();
     fs::write(dir.path().join("0001-fix.md"), "not an entry").unwrap();
-    let (mut tasks, warnings) = store.load().unwrap();
+    let (mut tasks, warnings) = store.load_entries().unwrap();
     assert_eq!((tasks.len(), warnings.len()), (1, 1), "{warnings:?}");
     tasks[0].description = "mine".into();
     let refused = store.save(&mut tasks[0]).unwrap_err().to_string();
@@ -46,7 +46,7 @@ fn a_file_renamed_only_in_case_keeps_its_name_and_its_content() {
     // As a sync tool or a hand rename leaves it; on macOS and Windows it's the same file as 0005-fix-login.md.
     let renamed = dir.path().join("0005-Fix-Login.md");
     fs::rename(dir.path().join("0005-fix-login.md"), &renamed).unwrap();
-    let (mut tasks, _) = store.load().unwrap();
+    let (mut tasks, _) = store.load_entries().unwrap();
     tasks[0].description = "kept".into();
     store.save(&mut tasks[0]).unwrap();
 
@@ -67,7 +67,7 @@ fn files_an_editor_saved_with_a_byte_order_mark_read_as_without() {
     fs::write(dir.path().join(LAST_ID_FILE), "\u{feff}7\n").unwrap();
     fs::write(dir.path().join(TAGS_FILE), "\u{feff}- prod: #112233\n").unwrap();
 
-    let (tasks, warnings) = store.load().unwrap();
+    let (tasks, warnings) = store.load_entries().unwrap();
     assert!(warnings.is_empty(), "{warnings:?}");
     assert_eq!(tasks[0].title, "Fix login", "the title, not untitled");
     assert_eq!(store.last_id(), 7);
@@ -97,7 +97,7 @@ fn unreadable_files_become_warnings() {
     let store = Store::at(dir.path()).unwrap();
     fs::write(dir.path().join("README.md"), "# not a task").unwrap();
     fs::write(dir.path().join(TAGS_FILE), "- prod: red").unwrap();
-    let (tasks, warnings) = store.load().unwrap();
+    let (tasks, warnings) = store.load_entries().unwrap();
     assert!(tasks.is_empty());
     assert_eq!(warnings.len(), 1, "tags.md is not a task: {warnings:?}");
 }
@@ -200,8 +200,6 @@ fn a_write_that_fails_leaves_the_file_as_it_was_and_no_temporary() {
     let store = Store::at(dir.path()).unwrap();
     let mut task = Task::new(1, "Fix login".into(), now());
     store.save(&mut task).unwrap();
-    let path = dir.path().join("0001-fix-login.md");
-    let before = fs::read_to_string(&path).unwrap();
     // Its place taken by a folder, as a sync tool's conflict can leave it.
     let blocked = dir.path().join("0001-blocked.md");
     fs::create_dir(&blocked).unwrap();
@@ -217,6 +215,8 @@ fn a_write_that_fails_leaves_the_file_as_it_was_and_no_temporary() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
+        let path = dir.path().join("0001-fix-login.md");
+        let before = fs::read_to_string(&path).unwrap();
         // A folder that can't be written to, as a read-only mount or a permissions slip leaves it.
         fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o555)).unwrap();
         task.description = "lost?".into();
@@ -228,4 +228,121 @@ fn a_write_that_fails_leaves_the_file_as_it_was_and_no_temporary() {
         }
         assert_eq!(leftovers(dir.path()), 0);
     }
+}
+
+/// An operation that fails with `kind` its first `fails` calls, then succeeds; and how many calls it got.
+fn failing(kind: ErrorKind, fails: u32) -> (impl FnMut() -> std::io::Result<u32>, std::rc::Rc<std::cell::Cell<u32>>) {
+    let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+    let counted = calls.clone();
+    let op = move || {
+        counted.set(counted.get() + 1);
+        if counted.get() <= fails { Err(std::io::Error::from(kind)) } else { Ok(counted.get()) }
+    };
+    (op, calls)
+}
+
+#[test]
+fn a_busy_file_is_tried_again_until_it_is_let_go() {
+    let (op, calls) = failing(ErrorKind::PermissionDenied, 2);
+    assert_eq!(retry_while_busy(&[Duration::ZERO; 3], op).unwrap(), 3);
+    assert_eq!(calls.get(), 3);
+}
+
+#[test]
+fn a_file_busy_past_the_budget_gives_the_last_error() {
+    let (op, calls) = failing(ErrorKind::PermissionDenied, 10);
+    let error = retry_while_busy(&[Duration::ZERO; 3], op).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::PermissionDenied);
+    assert_eq!(calls.get(), 4, "the first try and one per delay");
+}
+
+#[test]
+fn only_a_busy_file_is_tried_again() {
+    let (op, calls) = failing(ErrorKind::NotFound, 1);
+    assert_eq!(retry_while_busy(&[Duration::ZERO; 3], op).unwrap_err().kind(), ErrorKind::NotFound);
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn only_windows_waits_for_a_busy_file() {
+    let waits = if cfg!(windows) { BUSY_DELAYS.len() } else { 0 };
+    assert_eq!(busy_delays().len(), waits, "elsewhere a denied permission is a real one");
+    let total: Duration = BUSY_DELAYS.iter().sum();
+    assert!(total < Duration::from_millis(1500), "a command waits well under two seconds: {total:?}");
+}
+
+#[test]
+fn a_sharing_violation_is_a_busy_file_on_windows_only() {
+    // ERROR_SHARING_VIOLATION, which std reports as uncategorized; elsewhere 32 is EPIPE.
+    let shared = std::io::Error::from_raw_os_error(32);
+    assert_eq!(busy(&shared), cfg!(windows));
+    assert!(busy(&std::io::Error::from(ErrorKind::PermissionDenied)));
+    assert!(!busy(&std::io::Error::from(ErrorKind::NotFound)));
+}
+
+#[cfg(windows)]
+#[test]
+fn a_file_another_program_holds_for_a_moment_is_replaced_and_deleted_once_it_lets_go() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let mut task = Task::new(1, "Fix".into(), now());
+    store.save(&mut task).unwrap();
+    let path = dir.path().join("0001-fix.md");
+    // Opened sharing nothing, as an antivirus scan can: nothing replaces or deletes it until it's closed.
+    let open_alone = |time: Duration| {
+        let file = fs::OpenOptions::new().read(true).share_mode(0).open(&path).unwrap();
+        std::thread::spawn(move || {
+            std::thread::sleep(time);
+            drop(file);
+        })
+    };
+
+    let closing = open_alone(Duration::from_millis(30));
+    task.description = "written".into();
+    store.save(&mut task).unwrap();
+    closing.join().unwrap();
+    assert!(fs::read_to_string(&path).unwrap().contains("written"));
+
+    let closing = open_alone(Duration::from_millis(30));
+    store.delete(&task).unwrap();
+    closing.join().unwrap();
+    assert!(!path.exists());
+
+    // Held past the budget: the write fails, leaving the file as it was and no temporary.
+    write_file(&path, "before").unwrap();
+    let closing = open_alone(BUSY_DELAYS.iter().sum::<Duration>() + Duration::from_secs(1));
+    let error = write_file(&path, "after").unwrap_err();
+    closing.join().unwrap();
+    let io = error.downcast_ref::<std::io::Error>().unwrap();
+    // ERROR_ACCESS_DENIED or ERROR_SHARING_VIOLATION, whichever Windows gives for it.
+    assert!(matches!(io.raw_os_error(), Some(5 | 32)), "{io:?}");
+    assert_eq!(fs::read_to_string(&path).unwrap(), "before");
+    let temporaries =
+        fs::read_dir(dir.path()).unwrap().filter(|e| e.as_ref().unwrap().path().extension() == Some("tmp".as_ref()));
+    assert_eq!(temporaries.count(), 0);
+}
+
+#[test]
+fn a_skipped_file_says_why_as_load_always_has() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    fs::write(dir.path().join("README.md"), "# not a task").unwrap();
+    fs::write(dir.path().join("0002-broken.md"), "# Broken\n\n- id: 2\n\n## Sessions\n\n- nonsense\n").unwrap();
+    let (tasks, mut skipped) = store.load_entries().unwrap();
+    assert!(tasks.is_empty());
+    skipped.sort_by(|a, b| a.file.cmp(&b.file));
+    assert_eq!(
+        skipped,
+        [
+            Skipped { file: "0002-broken.md".into(), why: SkipReason::Broken("bad session line: nonsense".into()) },
+            Skipped { file: "README.md".into(), why: SkipReason::NoId },
+        ]
+    );
+    // What `load` said, and the kanban app shows, word for word.
+    #[expect(deprecated, reason = "the strings it still gives are under test")]
+    let (_, mut said) = store.load().unwrap();
+    said.sort();
+    assert_eq!(said, ["0002-broken.md: bad session line: nonsense", "README.md: missing `- id:` line"]);
+    assert_eq!(skipped.iter().map(ToString::to_string).collect::<Vec<_>>(), said);
 }

@@ -82,13 +82,14 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | --- | --- |
 | search box | type to filter; `enter` or `esc` stop typing and keep the filter |
 | quick add | `enter` adds the task and keeps the field open for the next; `esc` closes it |
-| new / edit form | `tab` (`shift+tab` back) moves between project (new entries), title, tags, related and, for a new task, its column, selecting the field's text so typing replaces it; `enter` saves; `esc` cancels. In **Project**: type to search, `↑` `↓` move, `enter` picks it and goes on to the title. In **Tags**: the tags in use drop down, filtered by the one typed; typing a tag's start highlights it, `↓` `↑` move, `enter` puts the highlighted one in place of what's typed, a click the one clicked; with none highlighted, `enter` saves. In **Related**: type to search, `↑` `↓` move, `enter` checks or unchecks; the Save button saves. On **Column**: `←` `→` pick it. After a save stopped over a title `kb` changed too, `ctrl+t` (**Use it**) takes that title |
+| new / edit form | `tab` (`shift+tab` back) moves between project (new entries), title, tags, related and, for a new task, its column, selecting the field's text so typing replaces it; so do `↓` (`↑` back) where no list takes them: in the title, on the column, and in the tags with none to pick, when no tag in use and not added yet contains what's typed (`↑` also with none highlighted); `enter` saves; `esc` cancels. In **Project**: type to search, `↑` `↓` move, `enter` picks it and goes on to the title. In **Tags**: the tags in use drop down, filtered by the one typed; typing a tag's start highlights it, `↓` `↑` move, `enter` adds the highlighted one as a chip in place of what's typed, a click the one clicked, a comma or space the one typed; a chip's × takes it off; with none highlighted, `enter` saves, with the tag typed. In **Related**: type to search, `↑` `↓` move, `enter` checks or unchecks; the Save button saves. On **Column**: `←` `→` pick it. After a save stopped over a title `kb` changed too, `ctrl+t` (**Use it**) takes that title |
 | text editor (descriptions, comments, answers, a decision's reason, a project's description and notes) | `enter` new line; `esc` or `ctrl+enter` **save** (the button says what: **Answer**, **Add comment**, **Accept**, **Reject**, **Save**); **Discard changes** (`ctrl+d`) throws the edit away; with nothing typed, `esc` or **Close** closes it. A save over what `kb` changed meanwhile merges it line by line; lines you both changed show as conflicts: `m` yours, `t` theirs, `b` both, `tab` or `↑` `↓` move (`shift+tab` back), `enter` (**Use the result**) puts the merged text in the editor, `esc` (**Yours for the rest**) takes yours where nothing's picked, `ctrl+d` (**Discard changes**) keeps theirs |
 | tell the agent? (saving a task an agent is working on) | type an optional note; `enter` saves and tells the agent, as your comment; `ctrl+enter` just saves; `esc` goes back to the form or editor |
 | link picker | type to search; `↑` `↓` move; `enter` links or unlinks; `esc` closes |
 | comments (`C`) | `↑` `↓` move; `enter` edits the highlighted comment; `x` deletes it, after asking; `esc` closes |
 | "which project?" (quick add, or move) | type to filter; `↑` `↓` move; `enter` opens the quick-add field there, or moves the entry; `esc` closes it |
 | Manage project (`I`) | `↑` `↓` highlight a repository; `r` renames it, `M` moves it to another project, `x` removes it, `N` edits its role; `R` renames the project, `E` edits its description, `A` adds a repository, `X` removes the project; `esc`, `enter`, `I` or `q` close it |
+| add a project (`A`), once its folder is picked | type a new project's name, or to search the projects; `↑` `↓` move; `enter` adds the folder to the highlighted project (a new one: the name typed); `esc` cancels, back to Manage project if it was opened from there |
 | rename and move (from Manage project) | type the name, or to search projects; `↑` `↓` move; `enter` applies; `esc` goes back |
 | remove (from Manage project) | `y` or `enter` unlinks, keeping the tasks; `d` unlinks and deletes them; `n` or `esc` goes back |
 | confirmation (delete, update) | `y` or `enter` goes ahead; `n` or `esc` cancels |
@@ -101,7 +102,10 @@ how many more are below (`↓ 4 more · type to filter`) and above (`↑ 2 above
 
 In every field and the editor, `ctrl+a` selects all, `ctrl+c` / `ctrl+x` / `ctrl+v` copy, cut and paste with the
 system clipboard (`cmd` on macOS), and `shift` with the arrows, `home` or `end` selects text. Typing or pasting
-replaces the selection.
+replaces the selection. Text shown rather than typed into (the details, the dialogs' text, the conflicts' sides, the
+status bar's message) is selected with the mouse, and `ctrl+c` copies it as shown, without the markdown, a line break
+between paragraphs, list items and code lines; a field with text selected copies its own first. Cards and list rows
+aren't text to select: dragging them moves them, and their title and tags are selected in the details.
 
 ## Mouse
 
@@ -112,16 +116,21 @@ replaces the selection.
 | right-click a card or entry | its menu: details, the status moves, edit, description, comment or answer, the proposed decision, link, accept or reject (a decision, or a task waiting on one), move, open file, delete; each item names its key |
 | drag a card onto a column | move it there; the column lights up while the card is over it |
 | drag a row onto a section's header (list) | move it there; the header lights up while the row is over it |
+| mouse wheel over the board | scroll the column under the pointer up and down |
+| horizontal wheel, or `shift`+wheel, over the board | scroll the columns sideways, when the window is too narrow for them |
+| two fingers on a touchpad over the board | scroll each way the fingers go: the column up and down, the columns sideways |
+| drag a column's scrollbar, or the board's under the columns | scroll it; a press beside the thumb jumps there, and the wheel over a bar scrolls it too. Drawn only where there's more to see |
 | **Kanban** / **List** next to the tabs | lay the board out as columns or as a list |
 | `+` on a column, or on a list's section | the new task form, with that column picked |
 | click a day in the calendar's month | show that day |
 | **Project ▾**, then a project in the list | show only it (or All); type in its box to filter, click outside to close |
 | **Tags ▾**, then tags in the list | add or take out each as `#tag` in the search box; type in its box to filter, click outside to close |
 | click an interaction in the calendar | show its entry's details |
-| click the running task in the top bar | open it |
+| **Park & quit**, at the end of the projects row while a task of yours runs | park your running tasks and quit, as `Q` |
 | click an entry under "Related" | go to it |
 | click a link in a description or comment | open it in the browser |
 | click in text | place the cursor |
-| drag, `shift`+click | select text |
-| double-click / triple-click in text | select a word / the line; dragging on extends by words / lines |
-| middle-click in text (Linux) | paste the primary selection (the text last selected, in any app) |
+| drag, `shift`+click | select text; in text shown, across its paragraphs (all of a description, one comment), not into the next |
+| double-click / triple-click in text | select a word / the line (in text shown, the paragraph); dragging on extends by words / lines |
+| click outside the text shown selected | drop its selection |
+| middle-click in text (Linux) | paste the primary selection (the text last selected, in any app, text shown too) |

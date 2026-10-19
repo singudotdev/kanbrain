@@ -121,7 +121,7 @@ fn dragging_a_card_onto_a_column_moves_it(cx: &mut gpui::TestAppContext) {
     cx.simulate_mouse_move(done, MouseButton::Left, gpui::Modifiers::none());
     cx.simulate_mouse_up(done, MouseButton::Left, gpui::Modifiers::none());
     view.read_with(cx, |view, _| assert_eq!(view.board.selected, Some(crate::state::Key::new(0, 1))));
-    let (tasks, _) = Store::at(dir.path()).unwrap().load().unwrap();
+    let (tasks, _) = Store::at(dir.path()).unwrap().load_entries().unwrap();
     let moved = tasks.iter().find(|t| t.id == 1).unwrap();
     assert_eq!(moved.status, Status::Done, "the move is saved");
 }
@@ -137,7 +137,7 @@ fn the_list_layout_draws_rows_that_drag_onto_a_section(cx: &mut gpui::TestAppCon
     cx.simulate_mouse_move(row + gpui::point(px(10.), px(10.)), MouseButton::Left, gpui::Modifiers::none());
     cx.simulate_mouse_move(done, MouseButton::Left, gpui::Modifiers::none());
     cx.simulate_mouse_up(done, MouseButton::Left, gpui::Modifiers::none());
-    let (tasks, _) = Store::at(dir.path()).unwrap().load().unwrap();
+    let (tasks, _) = Store::at(dir.path()).unwrap().load_entries().unwrap();
     assert_eq!(tasks.iter().find(|t| t.id == 1).unwrap().status, Status::Done, "the move is saved");
     cx.simulate_keystrokes("v");
     assert!(cx.debug_bounds("card 0/1").is_some(), "v brings the columns back");
@@ -157,7 +157,7 @@ fn a_columns_plus_opens_the_form_with_that_column_picked(cx: &mut gpui::TestAppC
     let doing = cx.debug_bounds("form-status doing").expect("the column picker is drawn").center();
     cx.simulate_click(doing, gpui::Modifiers::none());
     cx.simulate_keystrokes("enter");
-    let (tasks, _) = Store::at(dir.path()).unwrap().load().unwrap();
+    let (tasks, _) = Store::at(dir.path()).unwrap().load_entries().unwrap();
     let new = tasks.iter().find(|t| t.title == "x").expect("created");
     assert_eq!(new.status, Status::Doing, "the column clicked in the picker");
 }
@@ -300,9 +300,20 @@ fn manage_project_draws_every_repository(cx: &mut gpui::TestAppContext) {
     let (view, cx) = cx.add_window_view(|window, cx| BrainView::new(board, window, cx));
     cx.run_until_parked();
     assert!(cx.debug_bounds("button edit-project").is_some(), "the bar shows the project's card");
+    let row = cx.debug_bounds("scope bar").expect("the projects row is drawn");
+    let today = cx.debug_bounds("today total").expect("today's total shows beside a project too");
+    assert!(in_row(today, row), "{today:?} in {row:?}");
     let info = cx.debug_bounds("manage-project-button").expect("the bar has the manage button").center();
     cx.simulate_click(info, gpui::Modifiers::none());
     view.read_with(cx, |view, _| assert!(matches!(view.board.mode, crate::state::Mode::ManageProject(1))));
+    let folder = view.read_with(cx, |view, _| {
+        let brain = view.board.brain(1).store.dir();
+        brain.parent().expect("a repository's .brain/ is in it").display().to_string()
+    });
+    for (text, says) in [("text repo 1 notes", "notes".to_string()), ("text repo 1 folder", folder)] {
+        triple_click(cx, text);
+        assert_eq!(copied(cx), Some(says), "{text}");
+    }
     cx.simulate_keystrokes("escape");
     view.read_with(cx, |view, _| assert!(matches!(view.board.mode, crate::state::Mode::Normal)));
 }
@@ -458,6 +469,16 @@ fn the_installer_gives_the_desktop_the_logo() {
     assert!(installer.contains(&format!("Icon={APP_ID}")) && installer.contains(&format!("apps/{APP_ID}.svg")));
 }
 
+#[gpui::test]
+fn windows_open_centered_with_the_apps_id_and_logo(cx: &mut gpui::TestAppContext) {
+    let options = cx.update(|cx| window_options(size(px(560.), px(280.)), cx));
+    let Some(WindowBounds::Windowed(bounds)) = options.window_bounds else { panic!("{:?}", options.window_bounds) };
+    assert_eq!(bounds.size, size(px(560.), px(280.)));
+    assert_eq!(options.app_id.as_deref(), Some(APP_ID));
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    assert!(options.icon.is_some(), "the logo for X11");
+}
+
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 #[test]
 fn the_window_carries_the_logo_for_x11() {
@@ -549,7 +570,7 @@ fn the_details_buttons_act_when_clicked(cx: &mut gpui::TestAppContext) {
 }
 
 #[gpui::test]
-fn the_top_bar_and_the_running_bar_act_when_clicked(cx: &mut gpui::TestAppContext) {
+fn the_top_bar_acts_when_clicked(cx: &mut gpui::TestAppContext) {
     let (view, cx, _dir) = window(cx, &["a", "b"]);
     click(cx, "segment tab-1");
     view.read_with(cx, |view, _| assert_eq!(view.board.tab, crate::state::Tab::Notes));
@@ -576,12 +597,77 @@ fn the_top_bar_and_the_running_bar_act_when_clicked(cx: &mut gpui::TestAppContex
     cx.run_until_parked();
     click(cx, "button waiting");
     view.read_with(cx, |view, _| assert_eq!(view.board.selected, Some(crate::state::Key::new(0, 2))));
+}
 
-    // #2, selected, started from the keyboard and parked from the running bar.
+/// Whether `inner` lies within `outer`'s height, as an element in a row does.
+fn in_row(inner: gpui::Bounds<gpui::Pixels>, outer: gpui::Bounds<gpui::Pixels>) -> bool {
+    inner.top() >= outer.top() && inner.bottom() <= outer.bottom()
+}
+
+#[gpui::test]
+fn todays_total_and_park_and_quit_sit_in_the_projects_row_with_no_bar_of_running_tasks(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a", "b"]);
+    let ends_at_projects_row = |cx: &mut gpui::VisualTestContext| {
+        let top = cx.debug_bounds("top bar").expect("the top bar is drawn");
+        let row = cx.debug_bounds("scope bar").expect("the projects row is drawn");
+        assert_eq!(top.bottom(), row.bottom(), "nothing under the projects row: the columns take the room");
+        row
+    };
+    let row = ends_at_projects_row(cx);
+    let today = cx.debug_bounds("today total").expect("today's total shows with nothing running");
+    assert!(in_row(today, row), "{today:?} in {row:?}");
+    assert!(cx.debug_bounds("button park-quit").is_none(), "nothing to park");
+
     cx.simulate_keystrokes("1 escape s");
-    view.read_with(cx, |view, _| assert_eq!(view.board.brain(0).task(2).unwrap().status, Status::Doing));
-    click(cx, "button park 0/2");
-    view.read_with(cx, |view, _| assert_eq!(view.board.brain(0).task(2).unwrap().status, Status::Parked));
+    view.read_with(cx, |view, _| assert_eq!(view.board.running().count(), 1, "a task runs"));
+    let row = ends_at_projects_row(cx);
+    let quit = cx.debug_bounds("button park-quit").expect("Park & quit shows while a task runs");
+    assert!(in_row(quit, row), "{quit:?} in {row:?}");
+    assert!(in_row(cx.debug_bounds("today total").unwrap(), row));
+    assert!(cx.debug_bounds("button park 0/2").is_none() && cx.debug_bounds("button park 0/1").is_none());
+}
+
+#[test]
+fn an_empty_doing_says_where_tasks_running_elsewhere_show() {
+    use crate::state::Scope;
+    let dir = tempfile::tempdir().unwrap();
+    Store::at(dir.path()).unwrap();
+    let mut board = Board::open(dir.path(), None).unwrap();
+    assert_eq!(
+        super::board::empty_hint(&board, Status::Doing),
+        "Nothing running. Drop a card here to start its clock."
+    );
+    for scope in [Scope::Central, Scope::Project("shop".into()), Scope::Repo(0)] {
+        board.set_scope(scope.clone());
+        let hint = super::board::empty_hint(&board, Status::Doing);
+        assert_eq!(
+            hint, "Nothing running here: All shows what runs elsewhere. Drop a card here to start its clock.",
+            "{scope:?}"
+        );
+    }
+}
+
+#[gpui::test]
+fn park_and_quit_shows_only_while_a_task_of_yours_runs(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let mut agents = Task::new(1, "agent's".to_string(), now());
+    agents.set_status(Status::Doing, now(), Author::Agent);
+    agents.start_session(now());
+    store.save(&mut agents).unwrap();
+    store.save(&mut Task::new(2, "mine".to_string(), now())).unwrap();
+    let board = Board::open(dir.path(), None).unwrap();
+    let (view, cx) = cx.add_window_view(|window, cx| BrainView::new(board, window, cx));
+    cx.run_until_parked();
+    view.read_with(cx, |view, _| assert!(view.board.any_running(), "the agent's task runs"));
+    assert!(cx.debug_bounds("button park-quit").is_none(), "it would park nothing: agents' tasks keep running");
+
+    view.update(cx, |view, cx| {
+        view.board.set_status(crate::state::Key::new(0, 2), Status::Doing);
+        cx.notify();
+    });
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("button park-quit").is_some(), "yours runs: it parks it");
 }
 
 #[gpui::test]
@@ -693,6 +779,19 @@ fn the_form_says_when_the_tag_typed_is_new(cx: &mut gpui::TestAppContext) {
 }
 
 #[gpui::test]
+fn the_form_says_a_tag_typed_again_is_held_not_new(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    view.update(cx, |view, cx| {
+        view.board.brain_mut(0).update(1, "a", vec!["auth".into()]).unwrap();
+        cx.notify();
+    });
+    cx.simulate_keystrokes("e tab a u t h");
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("new tag").is_none(), "the entry has #auth already");
+    assert!(cx.debug_bounds("held tag").is_some(), "which the form says");
+}
+
+#[gpui::test]
 fn the_form_lists_its_tags_while_typing_them_and_a_click_picks_one(cx: &mut gpui::TestAppContext) {
     let (view, cx, _dir) = window(cx, &["a"]);
     view.update(cx, |view, cx| {
@@ -708,7 +807,7 @@ fn the_form_lists_its_tags_while_typing_them_and_a_click_picks_one(cx: &mut gpui
     cx.simulate_click(bug, gpui::Modifiers::none());
     view.read_with(cx, |view, _| {
         let Mode::Form(form) = &view.board.mode else { panic!("the form stays open") };
-        assert_eq!(form.tags.text(), "bug, ");
+        assert_eq!(form.tags, ["bug"]);
     });
 }
 
@@ -724,13 +823,33 @@ fn a_click_on_the_tags_list_puts_the_tag_clicked_though_a_reload_moved_it(cx: &m
     let perf = cx.debug_bounds("tag option 0").expect("listed first").center();
     // Another program tags an entry with one sorting ahead, which the click's catching up reads.
     let store = Store::at(dir.path()).unwrap();
-    let mut other = store.load().unwrap().0.into_iter().find(|t| t.id == 2).unwrap();
+    let mut other = store.load_entries().unwrap().0.into_iter().find(|t| t.id == 2).unwrap();
     other.tags = vec!["ape".into()];
     store.save(&mut other).unwrap();
     cx.simulate_click(perf, gpui::Modifiers::none());
     view.read_with(cx, |view, _| {
         let Mode::Form(form) = &view.board.mode else { panic!("the form is open") };
-        assert_eq!(form.tags.text(), "perf, ", "the tag clicked, not the row's new one");
+        assert_eq!(form.tags, ["perf"], "the tag clicked, not the row's new one");
+    });
+}
+
+#[gpui::test]
+fn the_forms_tags_are_chips_in_their_colors_and_a_click_on_one_s_x_takes_it_off(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    view.update(cx, |view, cx| {
+        view.board.brain_mut(0).update(1, "a", vec!["auth".into(), "bug".into()]).unwrap();
+        cx.notify();
+    });
+    cx.simulate_keystrokes("e");
+    cx.run_until_parked();
+    let auth = cx.debug_bounds("form tag auth").expect("each tag a chip");
+    let field = cx.debug_bounds("tags").expect("the box to type one");
+    assert!(auth.bottom() <= field.top(), "above the box, as the related field's: {auth:?} over {field:?}");
+    let x = cx.debug_bounds("untag bug").expect("each with its ×").center();
+    cx.simulate_click(x, gpui::Modifiers::none());
+    view.read_with(cx, |view, _| {
+        let Mode::Form(form) = &view.board.mode else { panic!("the form stays open") };
+        assert_eq!(form.tags, ["auth"]);
     });
 }
 
@@ -1050,6 +1169,24 @@ fn conflicts_show_both_sides_and_are_picked_with_the_mouse(cx: &mut gpui::TestAp
     cx.simulate_keystrokes("escape");
     cx.run_until_parked();
     assert!(cx.debug_bounds("conflict 1").is_some(), "both conflicts drawn");
+    // Their lines are text to copy, and a drag over a side's doesn't pick it.
+    triple_click(cx, "text merge settled 1");
+    assert_eq!(copied(cx).as_deref(), Some("b\nc\nd"));
+    let mine = cx.debug_bounds("text merge-mine 0").expect("yours is drawn");
+    drag(cx, mine.origin + gpui::point(px(1.), px(5.)), mine.bottom_right() - gpui::point(px(1.), px(1.)));
+    assert_eq!(copied(cx).as_deref(), Some("A"));
+    view.read_with(cx, |view, _| {
+        let Mode::Edit(edit) = &view.board.mode else { panic!("the editor is open") };
+        assert!(edit.merge.as_ref().is_some_and(|m| m.conflicts().all(|c| c.pick.is_none())), "nothing picked");
+    });
+    // A double-click's first click picks the side, as any click does; its second selects the word under it.
+    double_click(cx, mine.origin + gpui::point(px(1.), px(5.)));
+    assert_eq!(copied(cx).as_deref(), Some("A"));
+    view.read_with(cx, |view, _| {
+        let Mode::Edit(edit) = &view.board.mode else { panic!("the editor is open") };
+        let picks: Vec<_> = edit.merge.as_ref().expect("still merging").conflicts().map(|c| c.pick).collect();
+        assert_eq!(picks, [Some(crate::text::merge::Pick::Mine), None], "yours picked by the first click");
+    });
     // A side, or a segment (conflict 1's third: both).
     click(cx, "merge-theirs-0");
     click(cx, "segment merge-pick-5");
@@ -1130,4 +1267,550 @@ fn the_conflict_being_picked_stands_out_and_is_scrolled_to(cx: &mut gpui::TestAp
     let last = cx.debug_bounds("conflict 1").unwrap();
     assert!(last.contains(&current(cx).center()), "the next is current");
     assert!(last.top() < window.bottom() && last.bottom() > window.top(), "and scrolled into view");
+}
+
+#[gpui::test]
+fn what_kb_changed_goes_beside_the_inputs_message_and_the_next_inputs_replaces_it(cx: &mut gpui::TestAppContext) {
+    let (view, cx, dir) = window(cx, &["a"]);
+    let kb = || kanbrain_core::brain::Brain::open(Store::at(dir.path()).unwrap()).unwrap();
+    let said = |view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext| {
+        view.read_with(cx, |view, _| view.board.message().map(str::to_string))
+    };
+    let card = cx.debug_bounds("card 0/1").expect("card 1 is drawn").center();
+    cx.simulate_click(card, gpui::Modifiers::none());
+    cx.simulate_keystrokes("e !");
+    kb().set_status(1, Status::Doing).unwrap();
+    cx.simulate_keystrokes("enter");
+    assert_eq!(said(&view, cx).as_deref(), Some("#1 saved · #1's status changed on disk"));
+    cx.simulate_keystrokes("e");
+    kb().set_status(1, Status::Todo).unwrap();
+    cx.executor().advance_clock(crate::watch::INTERVAL);
+    cx.run_until_parked();
+    assert_eq!(said(&view, cx).as_deref(), Some("#1's status changed on disk"));
+    // Shown for as long as the timer takes to read again: the next save's message replaces it.
+    cx.executor().advance_clock(crate::watch::INTERVAL);
+    cx.run_until_parked();
+    cx.simulate_keystrokes("? enter");
+    assert_eq!(said(&view, cx).as_deref(), Some("#1 saved"));
+}
+
+/// Opens the details of task 1, its description `description` and its comments `comments`, saved: the next input
+/// reads the files again.
+fn details(view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext, description: &str, comments: &[&str]) {
+    view.update(cx, |view, cx| {
+        let brain = view.board.brain_mut(0);
+        brain.set_description(1, description).unwrap();
+        for body in comments {
+            brain.add_comment(1, body).unwrap();
+        }
+        view.board.selected = Some(crate::state::Key::new(0, 1));
+        view.board.drawer = true;
+        cx.notify();
+    });
+    cx.run_until_parked();
+}
+
+/// What the clipboard holds after ctrl+c (cmd+c on macOS).
+fn copied(cx: &mut gpui::VisualTestContext) -> Option<String> {
+    let ctrl = if cfg!(target_os = "macos") { "cmd" } else { "ctrl" };
+    cx.simulate_keystrokes(&format!("{ctrl}-c"));
+    cx.read_from_clipboard().and_then(|item| item.text())
+}
+
+/// Presses at `from`, drags to `to` and lets go there.
+fn drag(cx: &mut gpui::VisualTestContext, from: gpui::Point<gpui::Pixels>, to: gpui::Point<gpui::Pixels>) {
+    cx.simulate_mouse_down(from, MouseButton::Left, gpui::Modifiers::none());
+    cx.simulate_mouse_move(to, MouseButton::Left, gpui::Modifiers::none());
+    cx.simulate_mouse_up(to, MouseButton::Left, gpui::Modifiers::none());
+}
+
+#[gpui::test]
+fn a_drag_over_a_description_copies_its_blocks_as_shown_on_lines_of_their_own(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    details(&view, cx, "First **paragraph**\n\nSecond one\n\n- an item\n\n```\nlet code;\n```", &[]);
+    let text = cx.debug_bounds("text 0/1 description").expect("the description is drawn");
+    drag(cx, text.origin + gpui::point(px(1.), px(5.)), text.bottom_right() - gpui::point(px(1.), px(1.)));
+    assert_eq!(copied(cx).as_deref(), Some("First paragraph\nSecond one\nan item\nlet code;"));
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    {
+        let primary = view.update(cx, |_, cx| cx.read_from_primary()).and_then(|item| item.text());
+        assert_eq!(primary.as_deref(), Some("First paragraph\nSecond one\nan item\nlet code;"), "and the primary");
+    }
+}
+
+#[gpui::test]
+fn a_double_click_in_a_description_selects_a_word(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    details(&view, cx, "First paragraph", &[]);
+    let text = cx.debug_bounds("text 0/1 description").expect("the description is drawn");
+    double_click(cx, text.origin + gpui::point(px(2.), px(5.)));
+    assert_eq!(copied(cx).as_deref(), Some("First"));
+}
+
+#[gpui::test]
+fn a_drag_stays_in_the_comment_it_started_in(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    details(&view, cx, "", &["one", "two"]);
+    let first = cx.debug_bounds("thread comment 0").expect("the first comment is drawn");
+    let second = cx.debug_bounds("thread comment 1").expect("the second comment is drawn");
+    drag(cx, first.origin + gpui::point(px(9.), px(9.)), second.center());
+    let copied = copied(cx).expect("the first comment, from its heading");
+    assert!(copied.ends_with("\none") && !copied.contains("two"), "{copied:?}");
+}
+
+#[gpui::test]
+fn a_click_on_a_link_in_shown_text_still_opens_it(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    details(&view, cx, "[docs](https://x.dev)", &[]);
+    let text = cx.debug_bounds("text 0/1 description").expect("the description is drawn");
+    cx.simulate_click(text.origin + gpui::point(px(2.), px(5.)), gpui::Modifiers::none());
+    assert_eq!(cx.opened_url().as_deref(), Some("https://x.dev"));
+}
+
+#[gpui::test]
+fn copying_with_nothing_selected_leaves_the_clipboard_and_a_click_elsewhere_or_closing_drops_it(
+    cx: &mut gpui::TestAppContext,
+) {
+    let (view, cx, dir) = window(cx, &["a", "b"]);
+    cx.write_to_clipboard(gpui::ClipboardItem::new_string("before".into()));
+    assert_eq!(copied(cx).as_deref(), Some("before"), "nothing selected, nothing copied");
+    details(&view, cx, "Some text", &[]);
+    let select = |cx: &mut gpui::VisualTestContext| {
+        let text = cx.debug_bounds("text 0/1 description").expect("the description is drawn");
+        double_click(cx, text.origin + gpui::point(px(2.), px(5.)));
+    };
+    select(cx);
+    // A card dragged meanwhile still moves: cards aren't text to select.
+    let card = cx.debug_bounds("card 0/2").expect("card 2 is drawn").center();
+    let done = cx.debug_bounds("column done").expect("the done column is drawn").center();
+    cx.simulate_mouse_down(card, MouseButton::Left, gpui::Modifiers::none());
+    cx.simulate_mouse_move(card + gpui::point(px(10.), px(10.)), MouseButton::Left, gpui::Modifiers::none());
+    cx.simulate_mouse_move(done, MouseButton::Left, gpui::Modifiers::none());
+    cx.simulate_mouse_up(done, MouseButton::Left, gpui::Modifiers::none());
+    let (tasks, _) = Store::at(dir.path()).unwrap().load_entries().unwrap();
+    assert_eq!(tasks.iter().find(|t| t.id == 2).unwrap().status, Status::Done, "the card moved");
+    view.read_with(cx, |view, _| assert_eq!(view.board.shown_text(), None, "the press on the card dropped it"));
+    // Shown no more, the selection goes with it, though no click said so.
+    details(&view, cx, "Some text", &[]);
+    select(cx);
+    assert_eq!(copied(cx).as_deref(), Some("Some"));
+    cx.write_to_clipboard(gpui::ClipboardItem::new_string("before".into()));
+    cx.simulate_keystrokes("escape");
+    next_frames(cx);
+    assert_eq!(copied(cx).as_deref(), Some("before"), "the details are closed");
+}
+
+/// Clicks three times near the start of the text `selector` names, as a triple-click: past a change line's padding.
+fn triple_click(cx: &mut gpui::VisualTestContext, selector: &'static str) {
+    let at = cx.debug_bounds(selector).unwrap_or_else(|| panic!("{selector} is drawn")).origin
+        + gpui::point(px(10.), px(5.));
+    for click_count in [1, 2, 3] {
+        let (button, modifiers, first_mouse) = (MouseButton::Left, gpui::Modifiers::none(), false);
+        cx.simulate_event(gpui::MouseDownEvent { position: at, button, modifiers, click_count, first_mouse });
+        cx.simulate_event(gpui::MouseUpEvent { position: at, button, modifiers, click_count });
+    }
+}
+
+#[test]
+fn a_selection_is_highlighted_across_spans_keeping_their_styles() {
+    use theme::{Span, Style};
+    let line = theme::Line::from(vec![Span::styled("ab", Style::new().bold()), Span::raw("cdé"), Span::raw("f")]);
+    let lit = text::highlighted(line, Some((1, 4)));
+    let spans: Vec<_> = lit.0.iter().filter(|s| !s.content.is_empty()).map(|s| (s.content.as_str(), s.style)).collect();
+    let selected = |style: Style| style.bg(theme::SELECTION);
+    assert_eq!(
+        spans,
+        [
+            ("a", Style::new().bold()),
+            ("b", selected(Style::new().bold())),
+            ("cd", selected(Style::new())),
+            ("é", Style::new()),
+            ("f", Style::new()),
+        ]
+    );
+    assert_eq!(text::highlighted(theme::Line::raw("ab"), None).0.len(), 1, "nothing selected, nothing split");
+}
+
+#[gpui::test]
+fn every_part_of_the_details_is_a_text_of_its_own_to_copy(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["Fix login"]);
+    view.update(cx, |view, cx| {
+        let brain = view.board.brain_mut(0);
+        brain.author = Author::Agent;
+        brain.update(1, "Fix login 500", vec!["auth".into()]).unwrap();
+        brain.ask(1, "Per IP or per account?").unwrap();
+        view.board.selected = Some(crate::state::Key::new(0, 1));
+        view.board.drawer = true;
+        cx.notify();
+    });
+    cx.run_until_parked();
+    let parts = [
+        ("text 0/1 title", "Fix login 500"),
+        ("text 0/1 tags", "auth"),
+        ("text 0/1 created", "created "),
+        ("text 0/1 question", "An agent asks, "),
+        ("text 0/1 status", "Parked for "),
+        ("text 0/1 time", "Tracked today "),
+        ("thread change 0", "An agent changed the title"),
+        ("text 0/1 history", ""),
+    ];
+    for (text, starts) in parts {
+        triple_click(cx, text);
+        let copied = copied(cx).unwrap_or_default();
+        assert!(!copied.is_empty() && copied.starts_with(starts), "{text}: {copied:?}");
+    }
+    // The question's comment, from its heading to its end.
+    let comment = cx.debug_bounds("thread comment 0").expect("the question is a comment too");
+    drag(cx, comment.origin + gpui::point(px(9.), px(9.)), comment.bottom_right() - gpui::point(px(1.), px(1.)));
+    assert!(copied(cx).is_some_and(|c| c.starts_with("Agent question") && c.ends_with("\nPer IP or per account?")));
+    // A delete's question, and the message saying what was done.
+    cx.simulate_keystrokes("x");
+    triple_click(cx, "text confirm");
+    assert!(copied(cx).is_some_and(|c| c.ends_with("Fix login 500")));
+    cx.simulate_keystrokes("escape s");
+    let said = view.read_with(cx, |view, _| view.board.message().map(str::to_string)).expect("s says what it did");
+    triple_click(cx, "text message");
+    assert_eq!(copied(cx), Some(said));
+}
+
+#[gpui::test]
+fn shift_click_extends_and_a_paragraphs_second_line_takes_clicks(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    details(&view, cx, "one\ntwo words", &[]);
+    let text = cx.debug_bounds("text 0/1 description").expect("the description is drawn");
+    cx.simulate_click(text.origin + gpui::point(px(1.), px(5.)), gpui::Modifiers::none());
+    cx.simulate_click(text.bottom_right() - gpui::point(px(1.), px(1.)), gpui::Modifiers::shift());
+    assert_eq!(copied(cx).as_deref(), Some("one\ntwo words"));
+    let at = gpui::point(text.left() + px(2.), text.bottom() - px(4.));
+    double_click(cx, at);
+    assert_eq!(copied(cx).as_deref(), Some("two"));
+    // A click without shift in the same text drops the selection, extending nothing.
+    cx.simulate_click(text.origin + gpui::point(px(1.), px(5.)), gpui::Modifiers::none());
+    view.read_with(cx, |view, _| assert_eq!(view.board.shown_text(), None));
+    // A paragraph after the first that wraps: its first row is under the first paragraph, not past its own end.
+    let row = text.size.height / 2.;
+    details(&view, cx, &format!("one\nalpha {}omega", "word ".repeat(40)), &[]);
+    let text = cx.debug_bounds("text 0/1 description").expect("the description is drawn");
+    double_click(cx, gpui::point(text.left() + px(2.), text.top() + row * 1.5));
+    assert_eq!(copied(cx).as_deref(), Some("alpha"), "{text:?}");
+}
+
+#[gpui::test]
+fn a_selection_under_a_dialog_isnt_copied_from_it(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    for keys in ["m", "e", "x"] {
+        details(&view, cx, "Some text", &[]);
+        let text = cx.debug_bounds("text 0/1 description").expect("the description is drawn");
+        double_click(cx, text.origin + gpui::point(px(2.), px(5.)));
+        assert_eq!(copied(cx).as_deref(), Some("Some"), "selected while nothing is over it");
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string("before".into()));
+        cx.simulate_keystrokes(keys);
+        next_frames(cx);
+        view.read_with(cx, |view, _| assert!(!matches!(view.board.mode, Mode::Normal), "`{keys}` opens a dialog"));
+        assert_eq!(copied(cx).as_deref(), Some("before"), "ctrl+c in the dialog opened by `{keys}`, nothing selected");
+        cx.simulate_keystrokes("escape");
+        next_frames(cx);
+    }
+}
+
+/// A window smaller than the board: 30 tasks to do, more than their column shows, and four columns wider than it.
+fn small_board(
+    cx: &mut gpui::TestAppContext,
+) -> (gpui::Entity<BrainView>, &mut gpui::VisualTestContext, tempfile::TempDir) {
+    let titles: Vec<String> = (1..=30).map(|n| format!("task {n}")).collect();
+    let (view, cx, dir) = window(cx, &titles.iter().map(String::as_str).collect::<Vec<_>>());
+    cx.simulate_resize(gpui::size(px(600.), px(400.)));
+    next_frames(cx);
+    (view, cx, dir)
+}
+
+/// How far the to-do column has scrolled down and the board to the right.
+fn scrolled(view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext) -> (f32, f32) {
+    view.read_with(cx, |view, _| (-view.scroll.columns[0].offset().y.as_f32(), -view.scroll.board.offset().x.as_f32()))
+}
+
+/// Turns a wheel or swipes a touchpad by `delta` over the to-do column, with shift held or not: how far that
+/// scrolled the column down and the board to the right.
+fn wheel(
+    view: &gpui::Entity<BrainView>,
+    cx: &mut gpui::VisualTestContext,
+    delta: gpui::ScrollDelta,
+    shift: bool,
+) -> (f32, f32) {
+    let column = cx.debug_bounds("column todo").expect("the to-do column is drawn");
+    wheel_at(view, cx, column.center(), delta, shift)
+}
+
+/// [`wheel`] at `position`.
+fn wheel_at(
+    view: &gpui::Entity<BrainView>,
+    cx: &mut gpui::VisualTestContext,
+    position: gpui::Point<gpui::Pixels>,
+    delta: gpui::ScrollDelta,
+    shift: bool,
+) -> (f32, f32) {
+    let before = scrolled(view, cx);
+    let modifiers = gpui::Modifiers { shift, ..gpui::Modifiers::none() };
+    let touch_phase = gpui::TouchPhase::Moved;
+    cx.simulate_event(gpui::ScrollWheelEvent { position, delta, modifiers, touch_phase });
+    next_frames(cx);
+    let after = scrolled(view, cx);
+    (after.0 - before.0, after.1 - before.1)
+}
+
+#[gpui::test]
+fn a_vertical_wheel_scrolls_a_column_and_not_the_board(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    let (down, right) = wheel(&view, cx, gpui::ScrollDelta::Lines(gpui::point(0., -3.)), false);
+    assert!(down > 0., "the column scrolls down: {down}");
+    assert_eq!(right, 0., "the board stays where it is");
+}
+
+#[gpui::test]
+fn a_sideways_wheel_or_shift_with_the_wheel_scrolls_the_board_and_not_a_column(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    let (down, right) = wheel(&view, cx, gpui::ScrollDelta::Lines(gpui::point(-3., 0.)), false);
+    assert!(right > 0., "a horizontal wheel scrolls the board: {right}");
+    assert_eq!(down, 0., "and not the column under the pointer");
+    // Every platform hands shift and the wheel over already turned sideways: it isn't turned again.
+    let (down, right) = wheel(&view, cx, gpui::ScrollDelta::Lines(gpui::point(-3., 0.)), true);
+    assert!(right > 0., "shift and the wheel scroll the board: {right}");
+    assert_eq!(down, 0., "and not the column");
+}
+
+#[gpui::test]
+fn a_touchpad_scrolls_each_way_its_fingers_go(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    let pixels = |x, y| gpui::ScrollDelta::Pixels(gpui::point(px(x), px(y)));
+    let (down, right) = wheel(&view, cx, pixels(0., -40.), false);
+    assert!(down > 0. && right == 0., "up and down scrolls the column only: {down}, {right}");
+    let (down, right) = wheel(&view, cx, pixels(-40., 0.), false);
+    assert!(down == 0. && right > 0., "sideways scrolls the board only: {down}, {right}");
+    let (down, right) = wheel(&view, cx, pixels(-30., -20.), false);
+    assert!(down > 0. && right > 0., "a slanting swipe scrolls both, not the way it mostly goes: {down}, {right}");
+}
+/// Presses the left button at `from`, drags to `to` by way of halfway, lets go and draws what that asked for.
+fn drag_on(cx: &mut gpui::VisualTestContext, from: gpui::Point<gpui::Pixels>, to: gpui::Point<gpui::Pixels>) {
+    let none = gpui::Modifiers::none();
+    cx.simulate_mouse_down(from, MouseButton::Left, none);
+    cx.simulate_mouse_move(gpui::point((from.x + to.x) / 2., (from.y + to.y) / 2.), MouseButton::Left, none);
+    cx.simulate_mouse_move(to, MouseButton::Left, none);
+    cx.simulate_mouse_up(to, MouseButton::Left, none);
+    next_frames(cx);
+}
+
+/// The to-do column's thumb, where it starts along its bar and how long it is, and how far the column scrolls for
+/// each pixel the thumb moves.
+fn todo_thumb(view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext) -> (gpui::Pixels, gpui::Pixels, f32) {
+    let bar = cx.debug_bounds("scrollbar column todo").expect("the long column has a scrollbar");
+    let (shown, max, offset) = view.read_with(cx, |view, _| {
+        let scroll = &view.scroll.columns[0];
+        (scroll.bounds().size.height, scroll.max_offset().y, scroll.offset().y)
+    });
+    let (start, len) = super::scrollbar::thumb(bar.size.height, shown, max, offset).expect("a thumb");
+    (start, len, max / (bar.size.height - len))
+}
+
+#[gpui::test]
+fn a_columns_scrollbar_drags_it_up_and_down(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    let bar = cx.debug_bounds("scrollbar column todo").expect("the long column has a scrollbar");
+    let column = cx.debug_bounds("column todo").unwrap();
+    assert!(bar.size.width < px(10.) && bar.right() <= column.right(), "a thin bar at its right: {bar:?} {column:?}");
+    // Scrolled a little first, so the thumb is grabbed away from the bar's top.
+    wheel(&view, cx, gpui::ScrollDelta::Lines(gpui::point(0., -3.)), false);
+    let (start, len, per_pixel) = todo_thumb(&view, cx);
+    assert!(start > px(0.) && per_pixel > 1., "{start:?} {per_pixel}");
+    let (down, _) = scrolled(&view, cx);
+    let selected = view.read_with(cx, |view, _| view.board.selected);
+    let grabbed = gpui::point(bar.center().x, bar.top() + start + px(3.));
+    drag_on(cx, grabbed, grabbed + gpui::point(px(0.), px(30.)));
+    let (moved, right) = scrolled(&view, cx);
+    assert!((moved - down - 30. * per_pixel).abs() < 0.5, "the thumb followed the pointer: {down} → {moved}");
+    assert_eq!(right, 0.);
+    view.read_with(cx, |view, _| assert_eq!(view.board.selected, selected, "the press reached no card"));
+    // Pressed below the thumb, it jumps there, centered on the pointer.
+    let at = px(30.) + len * 1.5 + start;
+    let below = gpui::point(bar.center().x, bar.top() + at);
+    cx.simulate_mouse_down(below, MouseButton::Left, gpui::Modifiers::none());
+    cx.simulate_mouse_up(below, MouseButton::Left, gpui::Modifiers::none());
+    next_frames(cx);
+    let (start, _, _) = todo_thumb(&view, cx);
+    assert!((start + len / 2. - at).abs() < px(0.5), "centered at {at:?}: {start:?}");
+    // A right press does nothing, and nor does dragging the card in the column's middle.
+    let before = scrolled(&view, cx);
+    cx.simulate_mouse_down(
+        gpui::point(bar.center().x, bar.bottom() - px(2.)),
+        MouseButton::Right,
+        gpui::Modifiers::none(),
+    );
+    cx.simulate_mouse_up(
+        gpui::point(bar.center().x, bar.bottom() - px(2.)),
+        MouseButton::Right,
+        gpui::Modifiers::none(),
+    );
+    let card = column.center();
+    drag_on(cx, card, card + gpui::point(px(0.), px(40.)));
+    assert_eq!(scrolled(&view, cx), before);
+    // Dragged past its end, the column stops at its last card; and back past its start, at its first.
+    let bottom = gpui::point(bar.center().x, bar.bottom() - px(2.));
+    drag_on(cx, bottom, bottom + gpui::point(px(0.), px(200.)));
+    let max = view.read_with(cx, |view, _| view.scroll.columns[0].max_offset().y.as_f32());
+    assert_eq!(scrolled(&view, cx).0, max, "at its end");
+    drag_on(cx, bottom, gpui::point(bar.center().x, bar.top() - px(100.)));
+    assert_eq!(scrolled(&view, cx).0, 0., "and back at its start");
+}
+
+#[gpui::test]
+fn the_boards_scrollbar_drags_it_sideways(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    let bar = cx.debug_bounds("scrollbar board").expect("the board too wide for the window has a scrollbar");
+    let board = cx.debug_bounds("column todo").unwrap();
+    assert!(bar.size.height < px(10.) && bar.top() >= board.bottom(), "a thin bar under the columns: {bar:?}");
+    let left = gpui::point(bar.left() + px(4.), bar.center().y);
+    drag_on(cx, left, left + gpui::point(px(50.), px(0.)));
+    let (down, right) = scrolled(&view, cx);
+    assert!(right > 50., "the board scrolled: {right}");
+    assert_eq!(down, 0.);
+    // Under the columns, outside what scrolls, the wheel over it still scrolls the board, as far as over the columns:
+    // its own way or the other.
+    let (_, over_columns) = wheel(&view, cx, gpui::ScrollDelta::Lines(gpui::point(-1., 0.)), false);
+    assert!(over_columns > 0.);
+    for delta in [gpui::point(-1., 0.), gpui::point(0., -1.)] {
+        let (down, right) = wheel_at(&view, cx, bar.center(), gpui::ScrollDelta::Lines(delta), false);
+        assert!((right - over_columns).abs() < 0.01 && down == 0., "{delta:?} over the bar: {down}, {right}");
+    }
+}
+
+#[gpui::test]
+fn the_wheel_over_a_columns_scrollbar_scrolls_the_column_once(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    let bar = cx.debug_bounds("scrollbar column todo").expect("the long column has a scrollbar");
+    let lines = gpui::ScrollDelta::Lines(gpui::point(0., -1.));
+    let (over_cards, _) = wheel(&view, cx, lines, false);
+    let (down, right) = wheel_at(&view, cx, bar.center(), lines, false);
+    assert!(down > 0. && right == 0., "{down}, {right}");
+    assert_eq!(down, over_cards, "as far as over its cards, not twice as far");
+}
+
+/// Drags the card at `card` onto `onto`, as the pointer would: past GPUI's drag threshold, then over the target.
+fn drag_card(cx: &mut gpui::VisualTestContext, card: gpui::Point<gpui::Pixels>, onto: gpui::Point<gpui::Pixels>) {
+    let none = gpui::Modifiers::none();
+    cx.simulate_mouse_down(card, MouseButton::Left, none);
+    cx.simulate_mouse_move(card + gpui::point(px(10.), px(10.)), MouseButton::Left, none);
+    cx.simulate_mouse_move(onto, MouseButton::Left, none);
+    cx.simulate_mouse_up(onto, MouseButton::Left, none);
+    next_frames(cx);
+}
+
+#[gpui::test]
+fn a_card_dropped_on_a_columns_scrollbar_lands_in_the_column(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    // The newest is selected; started, it's the one card in Doing.
+    let key = view.read_with(cx, |view, _| view.board.selected).expect("a card is selected");
+    cx.simulate_keystrokes("s");
+    next_frames(cx);
+    let card = cx.debug_bounds(format!("card 0/{}", key.id).leak()).expect("it's in Doing").center();
+    let bar = cx.debug_bounds("scrollbar column todo").expect("the long column has a scrollbar");
+    drag_card(cx, card, bar.center());
+    view.read_with(cx, |view, _| assert_eq!(view.board.brain(0).task(key.id).unwrap().status, Status::Todo));
+}
+
+#[gpui::test]
+fn a_scrollbar_with_nothing_to_scroll_leaves_its_strip_to_the_column(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    cx.simulate_resize(gpui::size(px(1400.), px(800.)));
+    next_frames(cx);
+    let card = cx.debug_bounds("card 0/1").expect("card 1 is drawn").center();
+    let bar = cx.debug_bounds("scrollbar column done").expect("its strip is kept");
+    drag_card(cx, card, bar.center());
+    view.read_with(cx, |view, _| assert_eq!(view.board.brain(0).task(1).unwrap().status, Status::Done));
+}
+
+#[gpui::test]
+fn a_scrollbar_lights_up_as_the_pointer_comes_and_goes(cx: &mut gpui::TestAppContext) {
+    let (_view, cx, _dir) = small_board(cx);
+    let bar = cx.debug_bounds("scrollbar column todo").expect("the long column has a scrollbar");
+    let frames = |cx: &mut gpui::VisualTestContext| cx.update(|_, cx| super::widgets::frames(cx));
+    let moved = |cx: &mut gpui::VisualTestContext, to| {
+        let before = frames(cx);
+        cx.simulate_mouse_move(to, None, gpui::Modifiers::none());
+        next_frames(cx);
+        frames(cx) > before
+    };
+    // In the gap between the columns: nothing there lights up of its own.
+    let outside = gpui::point(bar.right() + px(5.), bar.center().y);
+    moved(cx, outside);
+    assert!(moved(cx, bar.center()), "drawn again as the pointer comes onto it");
+    assert!(!moved(cx, bar.center() + gpui::point(px(0.), px(3.))), "not while it moves on it");
+    assert!(moved(cx, outside), "and again as it leaves");
+}
+
+#[gpui::test]
+fn a_drag_cut_short_by_the_bar_going_ends_with_it(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    let bar = cx.debug_bounds("scrollbar column todo").expect("the long column has a scrollbar");
+    let none = gpui::Modifiers::none();
+    let thumb = gpui::point(bar.center().x, bar.top() + px(4.));
+    cx.simulate_mouse_down(thumb, MouseButton::Left, none);
+    // Grown tall enough for every card, the bar goes, and the button comes up with it gone.
+    cx.simulate_resize(gpui::size(px(600.), px(4000.)));
+    next_frames(cx);
+    assert!(view.read_with(cx, |view, _| view.scroll.columns[0].max_offset().y) < px(1.), "it all fits");
+    cx.simulate_mouse_up(thumb, MouseButton::Left, none);
+    cx.simulate_resize(gpui::size(px(600.), px(400.)));
+    next_frames(cx);
+    // Back, a card dragged in the column moves the card, not the bar's old grab.
+    let column = cx.debug_bounds("column todo").unwrap().center();
+    drag_on(cx, column, column + gpui::point(px(0.), px(80.)));
+    assert_eq!(scrolled(&view, cx), (0., 0.));
+}
+
+#[test]
+fn a_thumb_is_as_long_as_what_shows_and_where_the_scroll_is() {
+    use super::scrollbar::thumb;
+    assert_eq!(thumb(px(100.), px(100.), px(0.), px(0.)), None, "nothing to scroll");
+    assert_eq!(thumb(px(100.), px(100.), px(100.), px(0.)), Some((px(0.), px(50.))), "half shows, at its start");
+    assert_eq!(thumb(px(100.), px(100.), px(100.), px(-100.)), Some((px(50.), px(50.))), "at its end");
+    assert_eq!(thumb(px(100.), px(100.), px(300.), px(-150.)), Some((px(37.5), px(25.))), "a quarter, halfway");
+    // However long the content, the thumb stays long enough to grab.
+    let (start, len) = thumb(px(100.), px(100.), px(100_000.), px(-100_000.)).unwrap();
+    assert_eq!((start, len), (px(100.) - super::scrollbar::MIN_THUMB, super::scrollbar::MIN_THUMB));
+    assert!(thumb(px(100.), px(100.), px(1.), px(0.)).is_some(), "a pixel's more to see is something to scroll to");
+    assert!(thumb(px(100.), px(100.), px(0.9), px(0.)).is_none(), "less is layout rounding");
+    assert_eq!(thumb(px(20.), px(20.), px(100.), px(-50.)), Some((px(0.), px(20.))), "a bar shorter than a thumb");
+    // Whose thumb has nowhere to go: a press on it scrolls nowhere, rather than to the top.
+    assert_eq!(super::scrollbar::offset_at(px(20.), px(20.), px(100.), px(5.)), None);
+    assert_eq!(super::scrollbar::offset_at(px(100.), px(20.), px(100.), px(40.)), Some(px(-50.)));
+}
+
+#[test]
+fn a_thumb_lights_up_while_held_or_pointed_at() {
+    use super::scrollbar::thumb_color;
+    use super::theme::{DIM, TEXT};
+    assert_eq!([thumb_color(false, false), thumb_color(true, false), thumb_color(false, true)], [DIM, TEXT, TEXT]);
+}
+
+#[test]
+fn a_bar_draws_its_track_and_thumb_inside_its_edges() {
+    use gpui::{Axis, Bounds, point, size};
+    let bounds = Bounds::new(point(px(10.), px(20.)), size(px(8.), px(100.)));
+    let (strip, thumb, radius) = super::scrollbar::painted(bounds, Axis::Vertical, px(30.), px(25.));
+    assert_eq!(radius, px(3.), "round ends");
+    assert_eq!(strip, Bounds::new(point(px(11.), px(20.)), size(px(6.), px(100.))));
+    assert_eq!(thumb, Bounds::new(point(px(11.), px(50.)), size(px(6.), px(25.))));
+    let bounds = Bounds::new(point(px(10.), px(20.)), size(px(100.), px(8.)));
+    let (strip, thumb, _) = super::scrollbar::painted(bounds, Axis::Horizontal, px(30.), px(25.));
+    assert_eq!(strip, Bounds::new(point(px(10.), px(21.)), size(px(100.), px(6.))));
+    assert_eq!(thumb, Bounds::new(point(px(40.), px(21.)), size(px(25.), px(6.))));
+}
+
+#[test]
+fn a_panic_says_its_message() {
+    let formatted: Box<dyn std::any::Any + Send> = Box::new(format!("{} failed", "X11Client::new"));
+    assert_eq!(panic_message(formatted.as_ref()), "X11Client::new failed");
+    let literal: Box<dyn std::any::Any + Send> = Box::new("NoCompositor");
+    assert_eq!(panic_message(literal.as_ref()), "NoCompositor");
+    let other: Box<dyn std::any::Any + Send> = Box::new(101);
+    assert_eq!(panic_message(other.as_ref()), "it panicked");
 }

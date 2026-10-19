@@ -7,7 +7,8 @@
 # - both apps install together (KANBRAIN_APP=both), the kanban app with its Start Menu shortcut, and uninstall
 #   together; `kb` stands in for the app, which takes the same commands, so GPUI needn't be built;
 # - purging deletes the central brain's files and kanbrain's locks and backups in the cache, keeping files it
-#   didn't create though named like its own, and refusing the user profile however it's written.
+#   didn't create though named like its own, and refusing the user profile however it's written and a relative
+#   KANBRAIN_DIR.
 #
 # CI runs it when a change touches it (the `installers` job), as an administrator: hence KANBRAIN_ALLOW_ADMIN. It
 # needs cargo and python.
@@ -149,6 +150,13 @@ try {
     try { & (Join-Path $repo 'install.ps1') *>&1 | Out-Null } catch { $refused = $true }
     $env:KANBRAIN_DIR = $data
     if (-not $refused) { Fail 'purge took the user profile as data' }
+    # A relative one, which names another folder from each folder kb runs in, is refused as kb refuses it.
+    $env:KANBRAIN_DIR = Split-Path -Leaf $data
+    $refused = $false
+    Push-Location (Split-Path -Parent $data)
+    try { & (Join-Path $repo 'install.ps1') *>&1 | Out-Null } catch { $refused = $true } finally { Pop-Location }
+    $env:KANBRAIN_DIR = $data
+    if (-not $refused) { Fail 'purge took a relative KANBRAIN_DIR' }
     if (-not (Test-Path (Join-Path $data '0007-mine.md'))) { Fail 'a refused purge deleted something' }
     & (Join-Path $repo 'install.ps1') *>&1 | Out-Null
     if (Test-Path $cache) { Fail "purge left kanbrain's cache" }

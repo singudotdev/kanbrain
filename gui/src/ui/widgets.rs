@@ -118,6 +118,12 @@ pub(super) fn next_frame(cx: &mut GpuiApp) {
     cx.default_global::<FieldScrolls>().frame += 1;
 }
 
+/// How many times the board's view has been drawn: for tests to tell whether something drew it again.
+#[cfg(test)]
+pub(super) fn frames(cx: &GpuiApp) -> u64 {
+    cx.try_global::<FieldScrolls>().map_or(0, |scrolls| scrolls.frame)
+}
+
 /// A one-line text field: the text with its cursor while `active`, else the text or `placeholder`.
 /// The mouse places the cursor and selects, and first makes it the field being typed into.
 pub fn text_field(
@@ -218,7 +224,7 @@ pub fn tag_chip(board: &Board, tag: &str) -> Div {
 }
 
 /// `tag`'s chip, in its color (see [`Board::tag_colors`]), reading `label` instead of the bare name, e.g. `#devops`.
-pub fn labeled_chip(board: &Board, tag: &str, label: String) -> Div {
+pub fn labeled_chip(board: &Board, tag: &str, label: impl IntoElement) -> Div {
     let (bg, fg) = board.tag_colors(tag).unwrap_or((theme::HOVER, TEXT));
     div()
         .flex_none()
@@ -252,13 +258,13 @@ pub fn section(title: impl Into<SharedString>, actions: impl IntoIterator<Item =
         .child(div().flex().gap_1().children(actions))
 }
 
-/// Secondary text.
-pub fn dim(text: impl Into<SharedString>) -> Div {
-    div().text_color(rgb(DIM)).child(text.into())
+/// Secondary text: a string, or text the mouse selects.
+pub fn dim(text: impl IntoElement) -> Div {
+    div().text_color(rgb(DIM)).child(text)
 }
 
 /// Secondary text in the small size: hints under fields, counts, dates.
-pub fn dim_small(text: impl Into<SharedString>) -> Div {
+pub fn dim_small(text: impl IntoElement) -> Div {
     dim(text).text_size(px(12.))
 }
 

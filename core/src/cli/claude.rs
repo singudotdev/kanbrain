@@ -16,6 +16,12 @@
 //! `kb context` brings a repository's hooks up to date once kanbrain's are there: a release that adds one reaches
 //! every project with its next session, without `kb init` run again in each.
 //!
+//! A hook is kanbrain's, to update or take out, as `init` writes it or with `kb` given by a plain path (see
+//! [`kanbrains`]). Anything else, however much it looks like one, is the user's: a shell line can't be read for sure
+//! without running it (PowerShell takes typographic quotes for quotes; a hook without `shell` runs in PowerShell on
+//! Windows without Git Bash), and `deinit` must never take out a hook of the user's. When one looks like kanbrain's,
+//! `init` adds none beside it, and `init` and `deinit` say so, for the user to replace or remove it.
+//!
 //! They go in `.claude/settings.local.json`, the repository's personal settings, since `init` runs on
 //! each machine anyway and a teammate without kanbrain installed shouldn't get failing hooks.
 
@@ -61,8 +67,21 @@ pub enum Change {
     Removed,
 }
 
-/// Adds the hooks to `root`'s settings, creating the file if needed and keeping everything else in it.
-pub fn add_hooks(root: &Path) -> Result<Change> {
+/// A hook that isn't kanbrain's but looks like one of them: kanbrain never updates or removes it, nor adds that one
+/// beside it, and says so for the user to sort out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Edited {
+    /// The Claude Code event it runs on.
+    pub event: &'static str,
+    /// What it runs: its command, then its exec form's arguments, as written.
+    pub command: String,
+    /// The hook it looks like, as `init` writes it.
+    pub hook: &'static str,
+}
+
+/// Adds the hooks to `root`'s settings, creating the file if needed and keeping everything else in it. A hook edited by
+/// hand gets none beside it; each is returned, for the user to replace.
+pub fn add_hooks(root: &Path) -> Result<(Change, Vec<Edited>)> {
     let path = root.join(SETTINGS);
     let mut settings = read(&path)?;
     let hooks = settings
@@ -71,6 +90,7 @@ pub fn add_hooks(root: &Path) -> Result<Change> {
         .as_object_mut()
         .with_context(|| format!("can't add the hooks to {}: its `hooks` isn't an object", path.display()))?;
     let mut changed = false;
+    let mut edited = Vec::new();
     for hook in &HOOKS {
         let groups =
             hooks.entry(hook.event).or_insert_with(|| json!([])).as_array_mut().with_context(|| {
@@ -79,14 +99,19 @@ pub fn add_hooks(root: &Path) -> Result<Change> {
         if groups.iter().any(|group| runs(group, hook.command)) {
             continue;
         }
+        let before = edited.len();
+        edited.extend(look_alikes(groups, hook));
+        if edited.len() > before {
+            continue;
+        }
         changed = true;
         groups.push(group(hook));
     }
     if !changed {
-        return Ok(Change::Unchanged);
+        return Ok((Change::Unchanged, edited));
     }
     write(&path, &settings)?;
-    Ok(Change::Written)
+    Ok((Change::Written, edited))
 }
 
 /// Adds what's missing of the hooks to `root`'s settings, if any of kanbrain's is there: never anew, so a
@@ -103,7 +128,8 @@ pub fn update_hooks(root: &Path) -> Result<Change> {
     if !installed {
         return Ok(Change::Unchanged);
     }
-    add_hooks(root)
+    // Unsaid: what `kb context` prints goes into the agent's context, and `init` says it to the user.
+    Ok(add_hooks(root)?.0)
 }
 
 /// The matcher group written for `hook`.
@@ -115,67 +141,163 @@ fn group(hook: &Hook) -> Value {
     }
 }
 
-/// Takes the hooks out of `root`'s settings, and the keys they leave
-/// empty; deletes the file if nothing else is in it.
-pub fn remove_hooks(root: &Path) -> Result<Change> {
+/// Takes the hooks out of `root`'s settings, and the matcher groups and keys they leave empty; deletes the file if
+/// nothing else is in it. A hook edited by hand stays, in its group with kanbrain's or not; each is returned, for the
+/// user to remove.
+pub fn remove_hooks(root: &Path) -> Result<(Change, Vec<Edited>)> {
     let path = root.join(SETTINGS);
     if !path.is_file() {
-        return Ok(Change::Unchanged);
+        return Ok((Change::Unchanged, Vec::new()));
     }
     let mut settings = read(&path)?;
-    let Some(hooks) = settings.get_mut("hooks").and_then(Value::as_object_mut) else { return Ok(Change::Unchanged) };
+    let Some(hooks) = settings.get_mut("hooks").and_then(Value::as_object_mut) else {
+        return Ok((Change::Unchanged, Vec::new()));
+    };
     let mut changed = false;
+    let mut edited = Vec::new();
     for hook in &HOOKS {
         let Some(groups) = hooks.get_mut(hook.event).and_then(Value::as_array_mut) else { continue };
-        let before = groups.len();
-        groups.retain(|group| !runs(group, hook.command));
-        changed |= groups.len() != before;
+        // Only kanbrain's handlers: a user's own in the same group stays, and the group with it.
+        groups.retain_mut(|group| {
+            let Some(handlers) = group.get_mut("hooks").and_then(Value::as_array_mut) else { return true };
+            let before = handlers.len();
+            handlers.retain(|handler| !kanbrains(handler, hook.command));
+            changed |= handlers.len() != before;
+            handlers.len() == before || !handlers.is_empty()
+        });
+        edited.extend(look_alikes(groups, hook));
         if groups.is_empty() {
             hooks.remove(hook.event);
         }
     }
     if !changed {
-        return Ok(Change::Unchanged);
+        return Ok((Change::Unchanged, edited));
     }
     if hooks.is_empty() {
         settings.remove("hooks");
     }
     if settings.is_empty() {
-        fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
+        crate::store::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
         // `.claude/` too, if the file was all it held, as when `init` created both.
         if let Some(dir) = path.parent()
             && fs::read_dir(dir).is_ok_and(|mut entries| entries.next().is_none())
         {
             fs::remove_dir(dir).with_context(|| format!("removing {}", dir.display()))?;
         }
-        return Ok(Change::Removed);
+        return Ok((Change::Removed, edited));
     }
     write(&path, &settings)?;
-    Ok(Change::Written)
+    Ok((Change::Written, edited))
 }
 
-/// Whether a matcher group runs `command`, as written, with `kb` given by its path (`/opt/bin/kb hook tool`) or with
-/// variables set before it (`KANBRAIN_DIR=… kb context`), as a user may have changed it: one to keep, update or
-/// remove, never to add again beside itself. A line that runs `kb` after another command (`cd x && kb …`) is the
-/// user's.
+/// Whether a matcher group runs `command` as kanbrain's, to update or remove (see [`kanbrains`]).
 fn runs(group: &Value, command: &str) -> bool {
-    let args = command.strip_prefix("kb");
-    let same = |written: &str| {
-        let mut rest = written;
-        while let Some((_, after)) = rest.split_once(' ').filter(|(word, _)| assigns(word)) {
-            rest = after;
-        }
-        let program = args.and_then(|args| rest.strip_suffix(args)).filter(|p| !p.contains(' '));
-        written == command || program.is_some_and(|p| Path::new(p).file_stem().is_some_and(|stem| stem == "kb"))
-    };
-    group["hooks"].as_array().is_some_and(|hooks| hooks.iter().any(|h| h["command"].as_str().is_some_and(same)))
+    group["hooks"].as_array().is_some_and(|hooks| hooks.iter().any(|handler| kanbrains(handler, command)))
 }
 
-/// Whether a shell word sets a variable for the command after it (`NAME=value`).
-fn assigns(word: &str) -> bool {
-    word.split_once('=').is_some_and(|(name, _)| {
-        name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
-            && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+/// Whether a hook handler runs `command` (`kb hook tool`) as kanbrain's: as `init` writes it, or with `kb` given by
+/// a plain path (`/opt/bin/kb hook tool`, `'C:\Users\John Doe\…\kb.exe' hook tool`, after `& ` in PowerShell), or in
+/// the exec form (`"command"` the path, `"args"` the arguments). Nothing else: a path is taken only from letters,
+/// digits and the characters below, the arguments only exactly, so that whichever shell runs it (bash, or PowerShell
+/// on Windows without Git Bash, even for a hook without `shell`) reads it as that one command, with no quoting,
+/// escape, variable, substitution or operator for either to read otherwise. Bash takes a `\` out of a bare path
+/// and, before some characters, out of `"…"`, so in bash only `'…'` holds one; it expands a bare path's leading `~/`,
+/// which PowerShell and the exec form don't. What this refuses is the user's, which `deinit` must never take out.
+fn kanbrains(handler: &Value, command: &str) -> bool {
+    if handler["type"] != "command" {
+        return false;
+    }
+    let Some(written) = handler["command"].as_str() else { return false };
+    if let Some(given) = handler.get("args") {
+        // No shell reads it: a path's spaces and `\`s are its own.
+        let args = command.split(' ').skip(1).map(Some);
+        return written.chars().all(|c| in_quotes(c) || c == '\\')
+            && is_kb(written)
+            && given.as_array().is_some_and(|given| given.iter().map(Value::as_str).eq(args));
+    }
+    let powershell = match handler.get("shell").map(Value::as_str) {
+        None | Some(Some("bash")) => false,
+        Some(Some("powershell")) => true,
+        _ => return false,
+    };
+    // PowerShell's call operator, which runs what follows.
+    let (call, line) = match written.strip_prefix("& ") {
+        Some(line) if powershell => (true, line),
+        _ => (false, written),
+    };
+    let (program, rest) = if let Some(quote @ ('"' | '\'')) = line.chars().next() {
+        // PowerShell takes a quoted path without `&` for a string, which runs nothing.
+        if powershell && !call {
+            return false;
+        }
+        let Some((path, rest)) = line[1..].split_once(quote) else { return false };
+        let backslash = powershell || quote == '\'';
+        if !path.chars().all(|c| in_quotes(c) || (backslash && c == '\\')) {
+            return false;
+        }
+        (path, rest)
+    } else {
+        let (path, rest) = line.split_at(line.find(' ').unwrap_or(line.len()));
+        let plain = if powershell { path } else { path.strip_prefix("~/").unwrap_or(path) };
+        if !plain.chars().all(|c| bare(c) || (powershell && c == '\\')) {
+            return false;
+        }
+        (path, rest)
+    };
+    is_kb(program) && rest.trim_end_matches([' ', '\t']) == &command["kb".len()..]
+}
+
+/// Whether `c` may be in a bare path: no shell reads any of these but as itself. Letters beyond ASCII too
+/// (`/home/josé/…`): PowerShell's own dashes, quotes and spaces aren't letters or digits.
+fn bare(c: char) -> bool {
+    c.is_alphanumeric() || matches!(c, '_' | '.' | '/' | ':' | '-')
+}
+
+/// Whether `c` may be in a quoted path: a space and parentheses too (`C:\Program Files (x86)\…`), which quotes
+/// keep from both shells.
+fn in_quotes(c: char) -> bool {
+    bare(c) || matches!(c, ' ' | '(' | ')')
+}
+
+/// Whether the path `program` names `kb`: `kb`, or `kb.exe` in any case, as Windows names it. A `\` separates
+/// folders only in a Windows path (`C:\…`, `\\server\…`, without a `/`); in any other, a `\` is bash's to take out
+/// (`/usr/bin\x/kb` runs `/usr/binx/kb`) or part of a file's name, so the path isn't `kb`'s.
+fn is_kb(program: &str) -> bool {
+    let drive = program.as_bytes().first().is_some_and(u8::is_ascii_alphabetic) && program.get(1..3) == Some(":\\");
+    let windows = (drive || program.starts_with("\\\\")) && !program.contains('/');
+    if !windows && program.contains('\\') {
+        return false;
+    }
+    let name = program.rsplit(if windows { '\\' } else { '/' }).next().unwrap_or_default();
+    name == "kb" || name.eq_ignore_ascii_case("kb.exe")
+}
+
+/// The command hooks in `groups` that look like `hook` but aren't kanbrain's (see [`kanbrains`]): among its words
+/// (split at whitespace, quotes and the like trimmed off each), one naming `kb` or `kb.exe` by its path or not,
+/// followed directly by `hook`'s arguments (`hook tool`), wherever it is: `kb` run another way (`env … kb`,
+/// `bash -c '…'`, in an `if`) is still kanbrain's hook, which must not be added again. `kb` in prose
+/// (`echo kb context`) matches too; that only costs kanbrain's hook not added for that event, which the line said
+/// tells how to add. A hook is never taken out for it.
+fn look_alikes<'a>(groups: &'a [Value], hook: &'a Hook) -> impl Iterator<Item = Edited> + 'a {
+    let args: Vec<&str> = hook.command.split(' ').skip(1).collect();
+    let handlers = groups.iter().filter_map(|group| group["hooks"].as_array()).flatten();
+    handlers.filter(|handler| handler["type"] == "command").filter_map(move |handler| {
+        let mut command = handler["command"].as_str()?.to_string();
+        for arg in handler["args"].as_array().into_iter().flatten() {
+            command.push(' ');
+            command.push_str(&arg.as_str().map_or_else(|| arg.to_string(), str::to_string));
+        }
+        let words: Vec<&str> = command
+            .split_whitespace()
+            .map(|word| {
+                word.trim_matches(|c: char| !(c.is_alphanumeric() || matches!(c, '.' | '_' | '-' | '/' | '\\' | ':')))
+            })
+            .collect();
+        let found = words.windows(args.len() + 1).any(|run| {
+            let name = run[0].rsplit(['/', '\\']).next().unwrap_or_default();
+            (name.eq_ignore_ascii_case("kb") || name.eq_ignore_ascii_case("kb.exe")) && run[1..] == args[..]
+        });
+        found.then_some(Edited { event: hook.event, command, hook: hook.command })
     })
 }
 

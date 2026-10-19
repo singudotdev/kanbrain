@@ -5,7 +5,8 @@ use super::{WIDE_WIDTH, dialog};
 use crate::state::{Board, COLUMNS, Target};
 use crate::text::event::KeyCode;
 use crate::ui::markdown;
-use crate::ui::theme;
+use crate::ui::shown::{self, Selectable};
+use crate::ui::theme::{self, Line};
 use crate::ui::widgets::{Kind, button, dim, dim_small, section, small, tooltip};
 use crate::ui::{BrainView, action};
 use gpui::{ClickEvent, Context, Div, ElementId, ScrollHandle, Stateful, div, prelude::*, px, rgb};
@@ -56,9 +57,11 @@ pub(super) fn draw(
             ],
         ))
         .child(described(
-            "description".into(),
+            board,
+            format!("project {src} description"),
             &project.description,
             "Not described yet: what the application is, its services and how they connect, conventions they share.",
+            cx,
         ))
         .child(dim_small(format!("{} tracked this week across its repositories", fmt_dur(week))))
         .child(section(
@@ -125,13 +128,15 @@ fn repo_block(
                 manage_button("edit-notes", repo, src, "Edit", 'N', notes, cx),
             ],
         ))
-        .child(dim_small(root))
+        .child(dim_small(shown::text(board, format!("repo {repo} folder"), Line::raw(root), cx)))
         .child(div().text_size(px(12.)).child(counts))
         .children(running)
         .child(described(
-            format!("notes {repo}"),
+            board,
+            format!("repo {repo} notes"),
             info.map_or("", |i| i.notes.as_str()),
             "No role described: what this repository owns, exposes and consumes.",
+            cx,
         ))
 }
 
@@ -153,9 +158,14 @@ fn manage_button(
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| act(b, at))))
 }
 
-/// `text` as markdown, or `empty` dimmed when there's none.
-fn described(id: String, text: &str, empty: &'static str) -> Div {
-    if text.is_empty() { dim(empty) } else { markdown::render(id, text) }
+/// `text` as markdown, the text `id` the mouse selects, or `empty` dimmed when there's none.
+fn described(board: &Board, id: String, text: &str, empty: &'static str, cx: &mut Context<BrainView>) -> Div {
+    if text.is_empty() {
+        return dim(empty);
+    }
+    let mut shown = Selectable::new(board, id.clone());
+    let drawn = markdown::render(id, text, &mut shown);
+    shown.finish(drawn, cx)
 }
 
 /// The dialog's keys, under its repositories: with `several`, the arrows choose which one they act on.

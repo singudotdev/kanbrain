@@ -1,6 +1,6 @@
 //! The data folder: one `NNNN-slug.md` file per task, `tags.md`, and exported reports in `reports/`.
 
-use crate::model::{Task, slugify};
+use crate::model::{ParseError, Task, slugify};
 use crate::projects;
 use crate::tags::TagColors;
 use anyhow::{Context, Result, bail};
@@ -32,6 +32,43 @@ pub struct Store {
     dir: PathBuf,
     /// While recording (see [`Store::record`]), each file written or deleted as it was before.
     journal: RefCell<Option<Vec<Change>>>,
+}
+
+/// A markdown file [`Store::load_entries`] didn't read as an entry, said as `{file}: {why}`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Skipped {
+    /// Its name in the brain's folder.
+    pub file: String,
+    /// Why it isn't an entry.
+    pub why: SkipReason,
+}
+
+/// Why a file isn't an entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SkipReason {
+    /// It has no `- id:` line: other markdown, which a central brain kept in a notes vault holds, rather than an entry.
+    NoId,
+    /// An entry with a line that doesn't read (a session or history line), saying which.
+    Broken(String),
+    /// The file couldn't be read, with the system's error.
+    Unreadable(String),
+}
+
+impl std::fmt::Display for Skipped {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.file, self.why)
+    }
+}
+
+impl std::fmt::Display for SkipReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SkipReason::NoId => f.write_str(crate::model::MISSING_ID),
+            SkipReason::Broken(why) | SkipReason::Unreadable(why) => f.write_str(why),
+        }
+    }
 }
 
 /// A file a change wrote or deleted: what it held before and after, `None` where it didn't exist.
@@ -78,7 +115,7 @@ pub fn undo(changes: &[Change]) -> Result<()> {
     for change in changes.iter().rev() {
         match &change.before {
             Some(text) => write_file(&change.path, text)?,
-            None => fs::remove_file(&change.path).with_context(|| format!("removing {}", change.path.display()))?,
+            None => remove_file(&change.path).with_context(|| format!("removing {}", change.path.display()))?,
         }
     }
     Ok(())
@@ -229,28 +266,40 @@ impl Store {
     }
 
     /// Returns the parsed tasks plus a warning for every file that could not be read.
+    #[deprecated(since = "0.6.3", note = "use `Store::load_entries`, which says why each file was skipped")]
     pub fn load(&self) -> Result<(Vec<Task>, Vec<String>)> {
+        let (tasks, skipped) = self.load_entries()?;
+        Ok((tasks, skipped.iter().map(ToString::to_string).collect()))
+    }
+
+    /// Returns the parsed tasks, and every markdown file that didn't read as one, with why.
+    pub fn load_entries(&self) -> Result<(Vec<Task>, Vec<Skipped>)> {
         // Every read goes through here: a brain a newer kanbrain wrote is refused before anything misreads it.
         crate::migrate::check(&self.dir)?;
         let mut tasks = Vec::new();
-        let mut warnings = Vec::new();
+        let mut skipped = Vec::new();
         let entries = fs::read_dir(&self.dir).with_context(|| format!("reading {}", self.dir.display()))?;
         for entry in entries {
             let path = entry?.path();
             if !is_task_file(&path) {
                 continue;
             }
-            let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
-            let parsed = read_text(&path).map_err(|e| e.to_string()).and_then(|text| Task::from_markdown(&text));
+            let file = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+            let parsed = read_text(&path).map_err(|e| SkipReason::Unreadable(e.to_string())).and_then(|text| {
+                Task::parse(&text).map_err(|e| match e {
+                    ParseError::MissingId => SkipReason::NoId,
+                    ParseError::Line(why) => SkipReason::Broken(why),
+                })
+            });
             match parsed {
                 Ok(mut task) => {
                     task.path = Some(path);
                     tasks.push(task);
                 }
-                Err(e) => warnings.push(format!("{name}: {e}")),
+                Err(why) => skipped.push(Skipped { file, why }),
             }
         }
-        Ok((tasks, warnings))
+        Ok((tasks, skipped))
     }
 
     /// Writes atomically and renames the file when the title (slug) changed.
@@ -277,7 +326,7 @@ impl Store {
             && Some(&old) != task.path.as_ref()
         {
             // The old name only matters if it still exists; a failure here leaves a stale copy, not lost data.
-            let _ = fs::remove_file(old);
+            let _ = remove_file(&old);
         }
         Ok(())
     }
@@ -289,7 +338,7 @@ impl Store {
             bail!("refusing to delete {}: not in {}", path.display(), self.dir.display());
         }
         self.remember(path);
-        fs::remove_file(path).with_context(|| format!("deleting {}", path.display()))
+        remove_file(path).with_context(|| format!("deleting {}", path.display()))
     }
 
     /// The highest id given so far, as `last-id` keeps it; 0 when it's missing (a folder from an older
@@ -478,11 +527,66 @@ pub(crate) fn write_file(path: &Path, text: &str) -> Result<()> {
         file.write_all(text.as_bytes())?;
         file.sync_all()
     });
-    if let Err(e) = written.and_then(|()| fs::rename(&tmp, path)) {
-        let _ = fs::remove_file(&tmp);
+    if let Err(e) = written.and_then(|()| rename(&tmp, path)) {
+        let _ = remove_file(&tmp);
         return Err(e).with_context(|| format!("writing {}", path.display()));
     }
     Ok(())
+}
+
+/// How long to wait before each new try at a file another program holds, 1.27 s in all. Tools that do the same wait
+/// longer (rustup up to about 28 s for antiviruses, rust-lang/rustup#1870; Go's `cmd/internal/robustio` 2 s), but
+/// the app writes on its UI thread, which a long wait would freeze.
+const BUSY_DELAYS: [Duration; 7] = [
+    Duration::from_millis(10),
+    Duration::from_millis(20),
+    Duration::from_millis(40),
+    Duration::from_millis(80),
+    Duration::from_millis(160),
+    Duration::from_millis(320),
+    Duration::from_millis(640),
+];
+
+/// The waits of [`retry_while_busy`] on this system. Only Windows has any: there a file another program has open
+/// (an antivirus, the search indexer, an editor) can't be replaced or deleted, and the rename
+/// or delete fails (see [`busy`]) until it lets go. Elsewhere it can, so a denied permission is a real one and fails
+/// at once.
+fn busy_delays() -> &'static [Duration] {
+    if cfg!(windows) { &BUSY_DELAYS } else { &[] }
+}
+
+/// Runs `op`, and runs it again after each of `delays` while it fails as a file another program holds makes it fail
+/// on Windows (see [`busy_delays`]). Any other error, or the last try's, is returned.
+fn retry_while_busy<T>(delays: &[Duration], mut op: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+    let mut delays = delays.iter();
+    loop {
+        match op() {
+            Err(e) if busy(&e) => match delays.next() {
+                Some(delay) => std::thread::sleep(*delay),
+                None => return Err(e),
+            },
+            result => return result,
+        }
+    }
+}
+
+/// Whether `error` may be a file another program holds: a denied permission (`ERROR_ACCESS_DENIED` on Windows), or on
+/// Windows `ERROR_SHARING_VIOLATION`, which std leaves uncategorized (32 is another error elsewhere).
+fn busy(error: &std::io::Error) -> bool {
+    const ERROR_SHARING_VIOLATION: i32 = 32;
+    error.kind() == ErrorKind::PermissionDenied
+        || (cfg!(windows) && matches!(error.raw_os_error(), Some(ERROR_SHARING_VIOLATION)))
+}
+
+/// Deletes the file at `path`, waiting a little for a program holding it to let go (see [`retry_while_busy`]).
+pub(crate) fn remove_file(path: &Path) -> std::io::Result<()> {
+    retry_while_busy(busy_delays(), || fs::remove_file(path))
+}
+
+/// Renames `from` to `to`, replacing it, waiting a little for a program holding either to let go (see
+/// [`retry_while_busy`]).
+pub(crate) fn rename(from: &Path, to: &Path) -> std::io::Result<()> {
+    retry_while_busy(busy_delays(), || fs::rename(from, to))
 }
 
 /// The name `task`'s file is saved under: `0005-fix-login.md`.

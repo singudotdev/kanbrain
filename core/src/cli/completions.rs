@@ -1,4 +1,4 @@
-//! Tab completion: `completions bash|zsh|fish` prints a script for the shell, which completes commands
+//! Tab completion: `completions bash|zsh|fish|powershell` prints a script for the shell, which completes commands
 //! and options from the lists here, and ids, projects and tags by asking `complete` for them as it goes.
 
 use crate::brain::{Brain, Group};
@@ -55,6 +55,8 @@ named_enum! {
         Zsh => "zsh",
         /// Fish, with each id's title shown beside it.
         Fish => "fish",
+        /// PowerShell (5.1 and 7), through `Register-ArgumentCompleter -Native`, each id's title as its tooltip.
+        Powershell => "powershell",
     }
 }
 
@@ -185,7 +187,87 @@ complete -c {program} -n '_{function}_using completions' -a '{shells}'
 "#,
             words = fish_words(&function),
         ),
+        Shell::Powershell => powershell(program, &commands, (&statuses, &units, &groups, &shells)),
     }
+}
+
+/// PowerShell's script, which goes as bash's does. Where it offers nothing (`search`'s words, a prefix nothing has),
+/// PowerShell offers file names instead, which is left as it is: no match can stand for none.
+fn powershell(program: &str, commands: &str, (statuses, units, groups, shells): (&str, &str, &str, &str)) -> String {
+    let (by_id, project) = (BY_ID.replace(' ', "', '"), PROJECT);
+    format!(
+        r#"Register-ArgumentCompleter -Native -CommandName {program}, {program}.exe -ScriptBlock {{
+    param($word, $ast, $cursor)
+    # `complete` failing (a --project naming nothing) means nothing to offer, not its error over the line.
+    $ErrorActionPreference = 'SilentlyContinue'
+    # The words before the one completed (all of it, the cursor anywhere in it), without the program: what bash's
+    # COMP_WORDS holds between them. A quoted word as the program gets it.
+    $words = @($ast.CommandElements | Where-Object {{ $_.Extent.EndOffset -lt $cursor }} | ForEach-Object {{
+        if ($_ -is [System.Management.Automation.Language.StringConstantExpressionAst]) {{ $_.Value }} else {{ $_.Extent.Text }}
+    }} | Select-Object -Skip 1)
+    $prev = if ($words.Count) {{ $words[-1] }} else {{ '' }}
+    $cmd = ''
+    for ($i = 0; $i -lt $words.Count; $i++) {{
+        if ($words[$i] -eq '--project') {{ $i++ }}
+        elseif ($words[$i] -notlike '-*') {{ $cmd = $words[$i]; break }}
+    }}
+    # The program writes UTF-8, which Windows' OEM code pages, PowerShell's reading of a program's output there, garble.
+    $encoding = [Console]::OutputEncoding
+    [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+    $reply = if ($prev -eq '--project') {{ & {program} complete projects 2>$null }}
+    elseif ($prev -eq '--tag') {{ & {program} complete tags @words 2>$null }}
+    elseif ($prev -eq '--group') {{ '{groups}' -split ' ' }}
+    elseif ($prev -eq '--link') {{ & {program} complete ids @words 2>$null }}
+    elseif ($cmd -eq '') {{ '{commands} --project' -split ' ' }}
+    elseif ($cmd -eq 'tag') {{
+        # The id first, then +TAG and -TAG; options don't count as either.
+        $given = 0
+        for ($j = $i + 1; $j -lt $words.Count; $j++) {{
+            if ($words[$j] -eq '--project') {{ $j++ }}
+            elseif ($words[$j] -notlike '--*') {{ $given++ }}
+        }}
+        if ($given -eq 0) {{ & {program} complete ids @words 2>$null }}
+        else {{ & {program} complete tags @words 2>$null | ForEach-Object {{ "+$_"; "-$_" }} }}
+    }}
+    elseif ($cmd -in '{by_id}') {{ & {program} complete ids @words 2>$null }}
+    elseif ($cmd -eq 'add') {{ '--note --decision --tag --link --body --start --json' -split ' ' }}
+    elseif ($cmd -eq 'list') {{ '{statuses} all notes decisions --tag --json' -split ' ' }}
+    elseif ($cmd -eq 'report') {{ '{units} --group --tag --save' -split ' ' }}
+    elseif ($cmd -eq 'project') {{ '{project}' -split ' ' }}
+    elseif ($cmd -eq 'init') {{ '--all --repo' -split ' ' }}
+    elseif ($cmd -eq 'deinit') {{ '--purge' }}
+    elseif ($cmd -eq 'completions') {{ '{shells}' -split ' ' }}
+    [Console]::OutputEncoding = $encoding
+    # PowerShell reads the curly quotes, U+2018 to U+201B, as `'` and U+201C to U+201E as `"`. By their codes, so that
+    # the script stays ASCII: Windows PowerShell reads this script, a program's output, through the console's code page.
+    $quotes = [string]::new([char[]](0x27, 0x2018, 0x2019, 0x201A, 0x201B))
+    $doubles = [string]::new([char[]](0x201C, 0x201D, 0x201E))
+    # And a word starting with a dash, U+2013 to U+2015, as a parameter, as with `-`.
+    $dashes = [string]::new([char[]](0x2013, 0x2014, 0x2015))
+    # The word completed as the program would get it, a quote begun closed (`'my` as `my`, `'it''` as `it'`), from
+    # the parser: PowerShell 7 hands `$word` with a begun quote's value between `'`, its quotes no longer doubled.
+    $current = $ast.CommandElements | Where-Object {{
+        $_.Extent.StartOffset -lt $cursor -and $_.Extent.EndOffset -ge $cursor
+    }}
+    $typed = if ($current -is [System.Management.Automation.Language.StringConstantExpressionAst]) {{
+        $current.Value
+    }} else {{ $word }}
+    foreach ($item in $reply) {{
+        # An id comes with its title after a tab: the tooltip.
+        $text, $tip = "$item" -split "`t", 2
+        if ($text.StartsWith($typed, [System.StringComparison]::Ordinal)) {{
+            $tip = if ($tip) {{ $tip }} else {{ $text }}
+            # Quoted where PowerShell would read it otherwise: `my app` as two words, `a$b` as `a`, `]x` as `]` and
+            # `x`; and `[wip]` as a wildcard, which pwsh off Windows expands to a file's name in a program's argument.
+            $insert = if ($text -match ('[\s"`$;,(){{}}@#&|<>*?\[\]' + $doubles + $quotes + ']|^[' + $dashes + ']')) {{
+                "'" + ($text -replace "[$quotes]", '$0$0') + "'"
+            }} else {{ $text }}
+            [System.Management.Automation.CompletionResult]::new($insert, $text, 'ParameterValue', $tip)
+        }}
+    }}
+}}
+"#
+    )
 }
 
 /// The functions fish's script asks which command the line is: `__fish_seen_subcommand_from` matches a word anywhere

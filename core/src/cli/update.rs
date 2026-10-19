@@ -3,9 +3,8 @@
 //! `init --all`, so none of that is repeated here. Never while an agent works on a task: `init --all` would rewrite
 //! its instructions and a migration its data mid-session.
 
-use crate::model::{Author, Status};
-use crate::projects;
-use crate::store::Store;
+use super::Program;
+use crate::model::Author;
 use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -76,18 +75,10 @@ pub fn install_of(exe: &Path) -> Result<Install> {
 /// `shop/api #3 title` (`#3 title` in the central brain), as `kb status` names them: an update waits for them. A
 /// brain that can't be read, such as one a newer kanbrain wrote, has none to wait for.
 pub fn agents_working(central: &Path) -> Result<Vec<String>> {
-    let repos = projects::load(central)?;
-    let brains = std::iter::once((String::new(), central.to_path_buf()))
-        .chain(repos.iter().map(|repo| (format!("{} ", repo.label(&repos)), repo.dir.clone())));
     let mut working = Vec::new();
-    // A deleted repository's folder isn't there to read, and opening its store would make it again.
-    for (label, dir) in brains.filter(|(_, dir)| dir.is_dir()) {
-        let Ok((tasks, _)) = Store::at(dir).and_then(|store| store.load()) else { continue };
+    for (label, tasks) in super::every_brain(central)? {
         working.extend(
-            tasks
-                .iter()
-                .filter(|t| t.is_task() && t.status == Status::Doing && t.started_by() == Author::Agent)
-                .map(|t| format!("{label}#{} {}", t.id, t.title)),
+            tasks.iter().filter(|t| t.doing_by(Author::Agent)).map(|t| format!("{label}#{} {}", t.id, t.title)),
         );
     }
     Ok(working)
@@ -121,11 +112,36 @@ pub fn newer_release() -> Result<Option<String>> {
     Ok(newer(&latest, env!("CARGO_PKG_VERSION")).then_some(latest))
 }
 
-/// What `update` says instead of reinstalling, when the latest release is this one (or older, a build ahead of
-/// it); `None` to install: a newer release, or none found (the installer then says why it can't download).
-fn up_to_date(newer: &Result<Option<String>>) -> Option<String> {
+/// What `program`'s `update` says instead of reinstalling, when the latest release is this one (or older, a build
+/// ahead of it); `None` to install: a newer release, or none found (the installer then says why it can't download).
+fn up_to_date(newer: &Result<Option<String>>, program: Program) -> Option<String> {
     matches!(newer, Ok(None))
-        .then(|| format!("kb {} is the latest release: nothing to update", env!("CARGO_PKG_VERSION")))
+        .then(|| format!("{} {} is the latest release: nothing to update", program.name, env!("CARGO_PKG_VERSION")))
+}
+
+/// What `program`'s `update` says when cargo installed it, which keeps its own record of what it installed: the
+/// command that updates it, [`cargo_update_command`], and then the projects.
+fn cargo_update(program: Program, release: Option<&str>) -> String {
+    format!(
+        "{} was installed with cargo: update it, and then every project's agent instructions, with\n\n  {} && {} init \
+         --all",
+        program.name,
+        cargo_update_command(program, release),
+        program.name
+    )
+}
+
+/// The `cargo install` that updates `program` to `release` (`X.Y.Z`), or to the latest when it isn't known. The
+/// crate `kanbrain` on crates.io is the command line, whose latest cargo installs; the kanban app's, `kanbrain-app`,
+/// isn't there (GPUI comes from git), so it comes from the repository, at the release's tag, else at `main`, which is
+/// the latest release. The app is told apart by its name, `kanbrain`: [`Program`] says nothing else about it, and a
+/// field it gained would break code building one.
+pub fn cargo_update_command(program: Program, release: Option<&str>) -> String {
+    if program.name != "kanbrain" {
+        return "cargo install kanbrain".to_string();
+    }
+    let tag = release.map(|version| format!(" --tag v{version}")).unwrap_or_default();
+    format!("cargo install --locked --git https://github.com/singudotdev/kanbrain{tag} kanbrain-app")
 }
 
 /// The version at the end of the address a response's headers redirect to, `…/tag/vX.Y.Z`.
@@ -165,6 +181,34 @@ pub(crate) const INSTALLER_CHOICES: [&str; 4] =
 pub fn clear_installer_choices_ps1() -> String {
     let vars: Vec<String> = INSTALLER_CHOICES.iter().map(|v| format!("Env:{v}")).collect();
     format!("Remove-Item {} -ErrorAction SilentlyContinue", vars.join(", "))
+}
+
+/// `text` as a PowerShell single-quoted string literal, which PowerShell reads back to exactly `text`, whatever its
+/// characters: for a folder or file in a command or script made for PowerShell. Nothing expands in single quotes,
+/// neither `$` nor a backtick; only a single quote is special, written twice, and PowerShell takes the typographic
+/// ones (`‘ ’ ‚ ‛`) for one too.
+pub fn powershell_string(text: &str) -> String {
+    let mut quoted = String::with_capacity(text.len() + 2);
+    quoted.push('\'');
+    for c in text.chars() {
+        if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') {
+            quoted.push(c);
+        }
+        quoted.push(c);
+    }
+    quoted.push('\'');
+    quoted
+}
+
+/// The PowerShell command that installs the latest release of `app` into `dir`, on Windows, where a running
+/// program's file can't be replaced, so `update` prints it, to run once the program and the app are closed.
+fn windows_update_command(dir: &Path, app: &str) -> String {
+    format!(
+        "{}; $env:KANBRAIN_APP = {}; $env:KANBRAIN_INSTALL_DIR = {}; irm {INSTALL_PS1} | iex",
+        clear_installer_choices_ps1(),
+        powershell_string(app),
+        powershell_string(&dir.display().to_string())
+    )
 }
 
 /// The shell that runs the installer script given on its stdin, for `app` into `dir`, without
@@ -209,30 +253,29 @@ pub fn run_installer(dir: &Path, app: &str, captured: bool) -> Result<()> {
     Ok(())
 }
 
-/// Runs the installer for the apps installed where this program is, into the same folder, unless an agent is
-/// working. On Windows it prints the PowerShell command instead, since a running program's file can't be replaced
-/// there. Installed with `cargo install`, it says to update the same way instead.
+/// [`update_program`] for `kb`, which this always names.
+#[deprecated(since = "0.6.3", note = "use `update_program`, which names the program running in what it says")]
 pub fn update(central: &Path) -> Result<()> {
+    update_program(central, Program { name: "kb" })
+}
+
+/// `program`'s `update`: runs the installer for the apps installed where this program is, into the same folder,
+/// unless an agent is working. On Windows it prints the PowerShell command instead, since a running program's file
+/// can't be replaced there. Installed with `cargo install`, it says how cargo updates it instead.
+pub fn update_program(central: &Path, program: Program) -> Result<()> {
     check_no_agent_working(central)?;
-    if let Some(said) = up_to_date(&newer_release()) {
+    let newer = newer_release();
+    if let Some(said) = up_to_date(&newer, program) {
         println!("{said}");
         return Ok(());
     }
     let exe = std::env::current_exe().context("finding this program's file")?;
     let Install::Installer { dir, app } = install_of(&exe)? else {
-        println!(
-            "kb was installed with cargo: update it, and then every project's agent instructions, with\n\n  \
-             cargo install kanbrain && kb init --all"
-        );
+        println!("{}", cargo_update(program, newer.ok().flatten().as_deref()));
         return Ok(());
     };
     if cfg!(windows) {
-        println!(
-            "Close kanbrain, then run in PowerShell:\n\n  {}; $env:KANBRAIN_APP = \"{app}\"; \
-             $env:KANBRAIN_INSTALL_DIR = \"{}\"; irm {INSTALL_PS1} | iex",
-            clear_installer_choices_ps1(),
-            dir.display()
-        );
+        println!("Close kanbrain, then run in PowerShell:\n\n  {}", windows_update_command(&dir, app));
         return Ok(());
     }
     run_installer(&dir, app, false)

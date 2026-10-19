@@ -37,6 +37,18 @@ pub struct Migration {
 /// Every step, in order: `MIGRATIONS[i]` brings a brain from format `i + 1` to `i + 2`.
 pub const MIGRATIONS: &[Migration] = &[];
 
+// One step for each format after the first, each to the format after its index's: `migrate` takes the steps up to
+// FORMAT by slicing, so a bumped FORMAT without its step (or a step without the bump) fails the build here rather
+// than panic on a user's brain.
+const _: () = {
+    assert!(MIGRATIONS.len() == (FORMAT - 1) as usize, "MIGRATIONS needs one step per format after the first");
+    let mut i = 0;
+    while i < MIGRATIONS.len() {
+        assert!(MIGRATIONS[i].to as usize == i + 2, "MIGRATIONS[i] brings a brain to format i + 2");
+        i += 1;
+    }
+};
+
 /// A brain in a format newer than [`FORMAT`]: written by a newer kanbrain, so this one leaves it alone.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TooNew {
@@ -82,6 +94,21 @@ pub fn check(dir: &Path) -> Result<()> {
         format if format > FORMAT => Err(TooNew { dir: dir.to_path_buf(), format }.into()),
         _ => Ok(()),
     }
+}
+
+/// Refuses, with [`TooNew`], a brain a newer kanbrain wrote, which nothing may be written for: not its entries, nor
+/// its card, the repository's agent files around it or its links to the project's other repositories. Only that: a
+/// brain whose format can't be read (a damaged `format` file) is left to what opens it to say.
+pub(crate) fn refuse_too_new(dir: &Path) -> Result<()> {
+    match check(dir) {
+        Err(e) if e.is::<TooNew>() => Err(e),
+        _ => Ok(()),
+    }
+}
+
+/// Whether [`refuse_too_new`] refuses the brain in `dir`.
+pub(crate) fn too_new(dir: &Path) -> bool {
+    refuse_too_new(dir).is_err()
 }
 
 /// Brings the brain in `store` to [`FORMAT`], and returns what it did, one line each; nothing for a brain already

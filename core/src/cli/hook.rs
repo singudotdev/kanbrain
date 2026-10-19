@@ -92,8 +92,8 @@ fn in_brain(file: &Path, central: &Path) -> bool {
 
 /// Whether `rel`, a path inside the central brain `central`, is kanbrain's: `tags.md`, `projects.md`, `last-id`,
 /// `format`, an entry, or anything in the project cards' or reports' folders. An entry is a file at the top named as
-/// one (`0007-title.md`), or one `Store::load` reads as an entry or reports broken: the vault's other notes, there
-/// too, aren't.
+/// one (`0007-title.md`), or one `Store::load_entries` reads as an entry or reports broken: the vault's other notes,
+/// there too, aren't.
 fn central_owned(central: &Path, rel: &Path) -> bool {
     let mut parts = rel.components();
     let Some(first) = parts.next().map(Component::as_os_str) else { return false };
@@ -112,8 +112,9 @@ fn central_owned(central: &Path, rel: &Path) -> bool {
         return true;
     }
     let path = central.join(rel);
-    // As `Store::load` reads it and `kb` reports it (`say_skipped`): an entry, or a broken one, unreadable included.
-    let entry = |text: String| Task::from_markdown(&text).err().is_none_or(|error| error != crate::model::MISSING_ID);
+    // As `Store::load_entries` reads it and `kb` reports it (`say_skipped`): an entry, or a broken one, unreadable
+    // included.
+    let entry = |text: String| !matches!(Task::parse(&text), Err(crate::model::ParseError::MissingId));
     // Only a file is read: a pipe, or a link to a device, would hold the hook.
     fs::metadata(&path).ok().filter(fs::Metadata::is_file).is_some_and(|_| store::read_text(&path).map_or(true, entry))
 }
@@ -172,7 +173,7 @@ fn remind(event: HookEvent, input: &Value, cwd: &Path, central: &Path) -> Option
         ));
     }
     // A brain that can't be read only loses the reminder, never the turn.
-    let tasks = Store::at(&dir).and_then(|s| s.load()).map(|(tasks, _)| tasks).unwrap_or_default();
+    let tasks = Store::at(&dir).and_then(|s| s.load_entries()).map(|(tasks, _)| tasks).unwrap_or_default();
     // Each one: with subagents, an agent may have several running.
     reminders.extend(tasks.iter().filter(|t| uncommented(t)).map(|task| {
         // Which session started it isn't known, so the agent of another, or one that crashed, is told
@@ -200,7 +201,7 @@ fn remind(event: HookEvent, input: &Value, cwd: &Path, central: &Path) -> Option
 fn tell_of_comments(cwd: &Path) -> Option<String> {
     let dir = store::find_project(cwd)?;
     // A brain that can't be read only loses the word, never the tool call.
-    let (tasks, _) = Store::at(&dir).and_then(|s| s.load()).ok()?;
+    let (tasks, _) = Store::at(&dir).and_then(|s| s.load_entries()).ok()?;
     let told: Vec<String> = tasks
         .iter()
         .filter(|task| unanswered(task))

@@ -2,21 +2,25 @@
 //! status bar. Buttons run the same keys as the keyboard ([`Board::on_key`]); other clicks select or
 //! open something.
 //!
-//! - [`topbar`]: tabs, search, the running tasks' clocks and the window's buttons.
+//! - [`topbar`]: tabs, search, the projects filter, today's total and the window's buttons.
 //! - [`board`]: the kanban columns and their cards.
 //! - [`list`]: the board as one list, a section per status.
 //! - [`entries`]: the notes and decisions lists.
 //! - [`drawer`]: the selected entry's details, beside the board or list.
 //! - [`report`]: tracked time by task or tag.
+//! - [`startup`]: the window saying why the app couldn't open the board.
+//! - `display`: whether Linux has a display to show the board on.
 //! - [`calendar`]: each day's interactions, for a day, week or month.
 //! - [`dialogs`]: the new / edit form, the text editor, confirmations, links, the command palette and the project
 //!   dialogs.
 //! - [`mod@menu`]: the right-click menu.
 //! - [`dropdown`]: the project and tag filters' dropdowns.
 //! - [`markdown`]: descriptions and comments drawn as formatted text.
+//! - [`shown`]: text shown, not typed into, selected with the mouse to copy.
 //! - [`widgets`]: buttons, fields, pills and chips.
 //! - [`caret`]: the blinking text cursor.
 //! - [`mod@pointer`]: the mouse in text fields and the text editor.
+//! - [`scrollbar`]: the board's scrollbars, to see and drag its scroll.
 //! - [`theme`]: colors, fonts and styled text.
 //! - [`keys`]: GPUI's keystrokes as the board's keys, and keys as people write them.
 //! - [`text`]: text cut to a width, dates, and a field's text with its selection.
@@ -25,6 +29,8 @@ mod board;
 mod calendar;
 mod caret;
 mod dialogs;
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+pub mod display;
 mod drawer;
 mod dropdown;
 mod entries;
@@ -34,12 +40,15 @@ mod markdown;
 mod menu;
 mod pointer;
 mod report;
+mod scrollbar;
+mod shown;
+pub mod startup;
 mod text;
 mod theme;
 mod topbar;
 mod widgets;
 
-use crate::state::{Board, COLUMNS, Layout, Mode, Request, Scope, Tab};
+use crate::state::{Board, COLUMNS, Clock, Layout, Mode, Request, Scope, Tab};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::update;
 use crate::watch::{self, Watcher};
@@ -92,28 +101,55 @@ const FONTS: [&[u8]; 8] = [
     include_bytes!("../../fonts/lilex/Lilex-BoldItalic.ttf"),
 ];
 
-/// Opens the window and runs until it's closed or the board quits.
+/// Loads the window's fonts: without them the text still shows, in whatever the system has.
+fn load_fonts(cx: &mut GpuiApp) {
+    if let Err(e) = cx.text_system().add_fonts(FONTS.iter().map(|&font| Cow::Borrowed(font)).collect()) {
+        startup::report(&e.context("couldn't load the window's fonts"));
+    }
+}
+
+/// A window of `size` in the middle of the screen, with the app's id and icon.
+fn window_options(size: gpui::Size<gpui::Pixels>, cx: &GpuiApp) -> WindowOptions {
+    WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size, cx))),
+        app_id: Some(APP_ID.to_string()),
+        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+        icon: window_icon(),
+        ..Default::default()
+    }
+}
+
+/// GPUI's app, connected to the window system. GPUI panics when that fails: a Wayland compositor or X server that
+/// refuses it, or one that's gone (on Linux `display` catches most of those first). That would end the app with 101 and
+/// Rust's panic message, so it exits with 1 saying why instead.
+fn application() -> gpui::Application {
+    let hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let app = std::panic::catch_unwind(gpui_platform::application);
+    std::panic::set_hook(hook);
+    app.unwrap_or_else(|panic| {
+        let error = anyhow::anyhow!("{}", panic_message(panic.as_ref()))
+            .context("couldn't connect to the window system: run kanbrain from the desktop session");
+        startup::report(&error);
+        std::process::exit(1)
+    })
+}
+
+/// What a panic said, from its payload: `panic!`'s message, formatted or not.
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> &str {
+    payload
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| payload.downcast_ref::<&str>().copied())
+        .unwrap_or("it panicked")
+}
+
+/// Opens the window and runs until it's closed or the board quits. If it can't open, says why as an error before the
+/// board opens does ([`startup`]) and exits with 1.
 pub fn run(board: Board) {
-    gpui_platform::application().run(move |cx: &mut GpuiApp| {
-        // Without them the text still shows, in whatever the system has.
-        if let Err(e) = cx.text_system().add_fonts(FONTS.iter().map(|&font| Cow::Borrowed(font)).collect()) {
-            eprintln!("kanbrain: couldn't load the window's fonts: {e:#}");
-        }
-        cx.on_window_closed(|cx, _window| {
-            if cx.windows().is_empty() {
-                cx.quit();
-            }
-        })
-        .detach();
-        let bounds = Bounds::centered(None, size(px(1400.), px(860.)), cx);
-        let options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
-            app_id: Some(APP_ID.to_string()),
-            #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-            icon: window_icon(),
-            ..Default::default()
-        };
-        let opened = cx.open_window(options, |window, cx| {
+    application().run(move |cx: &mut GpuiApp| {
+        load_fonts(cx);
+        let opened = cx.open_window(window_options(size(px(1400.), px(860.)), cx), |window, cx| {
             let title = match &board.scope {
                 Scope::Project(name) => format!("{name} · kanbrain"),
                 Scope::Repo(src) => format!("{} · kanbrain", board.sources[*src].label.as_deref().unwrap_or_default()),
@@ -122,9 +158,20 @@ pub fn run(board: Board) {
             window.set_window_title(&title);
             cx.new(|cx| BrainView::new(board, window, cx))
         });
-        if let Err(e) = opened {
-            eprintln!("kanbrain: could not open the window: {e:#}");
-            cx.quit();
+        match opened {
+            // Only once it's open: the startup error's window exits with 1 when closed, where this would quit with 0.
+            Ok(_) => cx
+                .on_window_closed(|cx, _window| {
+                    if cx.windows().is_empty() {
+                        cx.quit();
+                    }
+                })
+                .detach(),
+            Err(e) => {
+                let error = e.context("couldn't open the board's window");
+                startup::report(&error);
+                startup::show(startup::message(&error), cx);
+            }
         }
         cx.activate(true);
     });
@@ -218,7 +265,7 @@ impl BrainView {
                     // Redrawn when something shown changes with time: a clock's seconds, a message going, else the
                     // ages on cards, by the minute. Idle, drawing twice a second took several percent of a core.
                     let says = view.board.message().is_some();
-                    if says || said || !view.board.running().is_empty() || ticks.is_multiple_of(IDLE_TICKS) {
+                    if says || said || view.board.any_running() || ticks.is_multiple_of(IDLE_TICKS) {
                         cx.notify();
                     }
                     said = says;
@@ -237,6 +284,8 @@ impl BrainView {
             }
         });
         let mut board = board;
+        let executor = cx.background_executor().clone();
+        board.clock = Clock::new(move || executor.now());
         if let Some(failed) = update::take_failure() {
             board.notify(failed);
         }
@@ -286,8 +335,13 @@ impl BrainView {
             return;
         }
         cx.spawn(async move |this, cx| {
-            let Ok(central) = this.update(cx, |this, _| this.board.central.clone()) else { return };
-            let installed = cx.background_executor().spawn(async move { update::install(&central) }).await;
+            let Ok((central, release)) =
+                this.update(cx, |this, _| (this.board.central.clone(), this.board.available.clone()))
+            else {
+                return;
+            };
+            let installed =
+                cx.background_executor().spawn(async move { update::install(&central, release.as_deref()) }).await;
             this.update(cx, |this, cx| match installed {
                 Ok(()) => cx.quit(),
                 Err(e) => {
@@ -358,13 +412,15 @@ impl BrainView {
         self.catch_up();
         self.board.lock_found_brains(&mut locks, &mut tried);
         let result = input(self);
+        self.board.input_done();
         self.watcher.sync(self.board.watched_dirs());
         drop(locks);
         result
     }
 
     /// Ctrl+A / C / X / V (Cmd on macOS): select all, copy, cut and paste in the field or editor being
-    /// typed into, with the system clipboard. Returns whether `keystroke` was one of them.
+    /// typed into, with the system clipboard; copy takes the text selected in what's shown when the field has none
+    /// selected. Returns whether `keystroke` was one of them.
     fn clipboard(&mut self, keystroke: &Keystroke, cx: &mut Context<Self>) -> bool {
         let modifiers = &keystroke.modifiers;
         let shortcut = if cfg!(target_os = "macos") { modifiers.platform } else { modifiers.control };
@@ -374,7 +430,7 @@ impl BrainView {
         match keystroke.key.as_str() {
             "a" => self.board.select_all(),
             "c" => {
-                if let Some(text) = self.board.selected_text() {
+                if let Some(text) = self.board.copy_text() {
                     cx.write_to_clipboard(ClipboardItem::new_string(text));
                 }
             }
@@ -446,7 +502,7 @@ impl BrainView {
             // "Open file" asked for an external editor: run it, and re-read the files when it exits since
             // anything may have changed.
             Some(Request::Edit(path)) => {
-                let edit = cx.background_executor().spawn(async move { open_editor(&path) });
+                let edit = cx.background_executor().spawn(async move { run_editor_on(&path) });
                 cx.spawn(async move |this, cx| {
                     let edited = edit.await;
                     this.update(cx, |this, cx| {
@@ -500,7 +556,7 @@ impl BrainView {
     /// Puts selected text in the primary selection, as Linux desktops do, for a middle-click to paste elsewhere.
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     fn share_selection(&mut self, cx: &mut Context<Self>) {
-        let Some(text) = self.board.selected_text() else { return };
+        let Some(text) = self.board.copy_text() else { return };
         if self.shared.as_ref() != Some(&text) {
             cx.write_to_primary(ClipboardItem::new_string(text.clone()));
             self.shared = Some(text);
@@ -509,12 +565,14 @@ impl BrainView {
 
     /// Only Linux desktops have a primary selection.
     #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+    #[expect(clippy::unused_self, reason = "the same method as on Linux, where it keeps what it shared")]
     fn share_selection(&mut self, _: &mut Context<Self>) {}
 }
 
 impl Render for BrainView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         widgets::next_frame(cx);
+        cx.set_global(shown::Drawn(false));
         let follow = std::mem::take(&mut self.follow);
         // The details opening or closing changes the board's width after this frame is laid out, with the
         // scroll to the selection worked out on the old one: it runs again once the new width is known.
@@ -549,6 +607,19 @@ impl Render for BrainView {
             .p_3()
             .child(div().flex_1().min_w_0().min_h_0().flex().flex_col().child(content))
             .children(drawer.map(|d| d.w(px(DRAWER_WIDTH)).flex_none()));
+        let topbar = topbar::draw(board, &self.scroll, follow, cx);
+        let status = status_bar(board, self.updating, cx);
+        // Over a dialog only its own text counts: a selection left under it would be copied from a field in it with
+        // nothing selected.
+        let under = std::mem::replace(&mut cx.global_mut::<shown::Drawn>().0, false);
+        let dialog = dialogs::draw(board, &self.scroll, follow, cx);
+        if dialog.is_none() {
+            cx.global_mut::<shown::Drawn>().0 = under;
+        }
+        // The menu shows no text to select.
+        if !cx.global::<shown::Drawn>().0 {
+            self.board.clear_shown();
+        }
         div()
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key_down))
@@ -560,18 +631,18 @@ impl Render for BrainView {
             .text_color(rgb(theme::TEXT))
             .font_family(theme::UI_FONT)
             .text_size(px(14.))
-            .child(topbar::draw(board, &self.scroll, follow, cx))
+            .child(topbar)
             .child(body)
-            .child(status_bar(board, self.updating, cx))
-            .children(dialogs::draw(board, &self.scroll, follow, cx))
-            .children(menu::draw(board, self.menu_at, cx))
+            .child(status)
+            .children(dialog)
+            .children(menu::draw(&self.board, self.menu_at, cx))
     }
 }
 
 /// The bottom bar: the latest message, or a tip; and where the files are, after the button to a newer release.
 fn status_bar(board: &Board, updating: bool, cx: &mut Context<BrainView>) -> Div {
     let left = match board.message() {
-        Some(msg) => div().text_color(rgb(theme::YELLOW)).child(msg.to_string()),
+        Some(msg) => shown::text(board, "message", theme::Line::raw(msg), cx).text_color(rgb(theme::YELLOW)),
         None if matches!(board.mode, Mode::Normal) && board.tab == Tab::Board => widgets::dim(match board.layout {
             Layout::Kanban => {
                 "Drag cards between columns · double-click opens one · v for a list · ? for commands and keys"
@@ -648,7 +719,7 @@ fn action(
 
 /// Opens `path` in `$VISUAL` / `$EDITOR` (which may include arguments, e.g. `code -w`) and waits. One set but empty
 /// counts as unset, as shells treat it.
-fn open_editor(path: &Path) -> Result<()> {
+fn run_editor_on(path: &Path) -> Result<()> {
     let editor = editor_of(std::env::var("VISUAL").ok(), std::env::var("EDITOR").ok());
     let mut parts = editor.split_whitespace();
     let program = parts.next().context("no editor to run")?;

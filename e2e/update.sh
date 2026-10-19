@@ -17,6 +17,8 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
+# shellcheck source=e2e/lib.sh
+. "$(dirname "$0")/lib.sh"
 cargo build -q --manifest-path "$repo/Cargo.toml" --bin kb
 head_kb="$repo/target/debug/kb"
 releases="https://github.com/singudotdev/kanbrain/releases/download"
@@ -26,11 +28,6 @@ next=v999.0.0
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/kb-update.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT
-
-fail() {
-    echo "FAIL: $*" >&2
-    exit 1
-}
 
 # This build as a release would ship it, where the stand-in `curl` serves it from.
 mkdir -p "$work/dist" "$work/shim"
@@ -80,8 +77,7 @@ chmod +x "$work/shim/curl"
 person() {
     local bin=$1 home=$2
     shift 2
-    env -u CLAUDECODE -u AI_AGENT -u AGENT -u CODEX_SANDBOX -u CODEX_CI -u CODEX_THREAD_ID -u GEMINI_CLI \
-        -u KANBRAIN_AUTHOR -u KANBRAIN_VERSION -u KANBRAIN_BASE_URL -u KANBRAIN_INSTALL_DIR -u KANBRAIN_APP \
+    env "${without_agent[@]}" -u KANBRAIN_VERSION -u KANBRAIN_BASE_URL -u KANBRAIN_INSTALL_DIR -u KANBRAIN_APP \
         PATH="$work/shim:$PATH" HOME="$home" KANBRAIN_DIR="$home/central" XDG_CACHE_HOME="$home/.cache" \
         XDG_DATA_HOME="$home/.local/share" XDG_CONFIG_HOME="$home/.config" "$bin" "$@"
 }

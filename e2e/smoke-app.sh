@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Smoke check of the kanban app as built for release, on Linux and macOS: it starts on a few demo tasks, stays up,
 # keeps idle (nothing running, no message showing: it redraws once a minute), and a screenshot of the screen is saved
-# for a person to look at. Windows has the same check in e2e/smoke-app.ps1.
+# for a person to look at; on Linux, without a display it fails saying why. Windows has the same check in
+# e2e/smoke-app.ps1.
 #
 # Usage: e2e/smoke-app.sh [APP] [OUT]: APP is the app's binary (target/release/kanbrain), OUT the folder the
 # screenshot goes to (target/smoke). Linux needs a display: CI runs it under `xvfb-run`, with Mesa's software
@@ -9,6 +10,8 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
+# shellcheck source=e2e/lib.sh
+. "$(dirname "$0")/lib.sh"
 app=${1:-$repo/target/release/kanbrain}
 out=${2:-$repo/target/smoke}
 # Percent of one core the idle app may use, averaged over the measure.
@@ -21,24 +24,38 @@ cleanup() {
 }
 trap cleanup EXIT
 
-fail() {
-    echo "FAIL: $*" >&2
-    exit 1
-}
-
 export HOME="$work/home" KANBRAIN_DIR="$work/home/central"
-unset CLAUDECODE AI_AGENT AGENT CODEX_SANDBOX CODEX_CI CODEX_THREAD_ID GEMINI_CLI KANBRAIN_AUTHOR
+unset "${agent_variables[@]}"
 mkdir -p "$KANBRAIN_DIR" "$out"
 # The app takes `kb`'s commands with arguments: the demo tasks, none running.
 "$app" add --tag auth "Rate-limit the login endpoint" >/dev/null
 "$app" add --note --body "Retries are idempotent." "Webhooks arrive more than once" >/dev/null
 "$app" "done" "$("$app" add "Paginate GET /orders" | grep -o '#[0-9]*' | tr -d '#')" >/dev/null
 
+# Started with ENV (none: no display at all), the app fails within the timeout saying WHY, rather than running
+# headless, unseen, forever, or panicking.
+no_display() {
+    local why=$1 status=0
+    shift
+    env -u DISPLAY -u WAYLAND_DISPLAY -u WAYLAND_SOCKET "$@" timeout 30 "$app" >"$work/no-display.log" 2>&1 ||
+        status=$?
+    [ "$status" -eq 1 ] || fail "with '$*' the app exited with $status, not 1: $(cat "$work/no-display.log")"
+    grep -qF -- "$why" "$work/no-display.log" || fail "with '$*' the app didn't say why: $(cat "$work/no-display.log")"
+}
+if [ "$(uname -s)" = Linux ]; then
+    no_display 'run kanbrain from the desktop session'
+    no_display "no Wayland compositor at WAYLAND_DISPLAY=$work/no-wayland" WAYLAND_DISPLAY="$work/no-wayland"
+    # Not :99, the first display xvfb-run -a tries: CI's own X server may be there.
+    no_display 'no X server at DISPLAY=:9876' DISPLAY=:9876
+fi
+
 "$app" >"$work/app.log" 2>&1 &
 pid=$!
 # Its first frames, fonts loaded.
 sleep 15
 kill -0 "$pid" 2>/dev/null || fail "the app exited: $(cat "$work/app.log")"
+# Failing to open the board, it says why on stderr and in a window that stays up until closed.
+if grep -q '^Error:' "$work/app.log"; then fail "the app couldn't open the board: $(cat "$work/app.log")"; fi
 
 # CPU time the app's process used, in hundredths of a second.
 cpu() {

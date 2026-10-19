@@ -1,5 +1,9 @@
+use super::project::project_text;
+use super::wait::{Watch, minutes, settled};
 use super::*;
+use crate::api::ApiError;
 use crate::model::{Author, Changed};
+use crate::projects::ProjectInfo;
 
 fn parse(args: &[&str]) -> Result<EntryArgs> {
     let (name, rest) = args.split_first().unwrap();
@@ -312,12 +316,12 @@ fn wait_ends_on_a_persons_answer_or_verdict() {
     assert_eq!(settled_on(&brain, task).unwrap(), format!("{head}: answered\n\nPer account"));
     // Answered and moved on before `wait` looked again: the answer to the question it found is still said.
     let asked_at = brain.entry(task).unwrap().comments.iter().rev().find(|c| c.question).unwrap().created;
-    brain.change_status(task, Status::Todo).unwrap();
+    brain.set_status(task, Status::Todo).unwrap();
     assert_eq!(
         settled(brain.entry(task).unwrap(), Some(asked_at)).unwrap(),
         format!("{head}: answered, now todo\n\nPer account")
     );
-    brain.change_status(task, Status::Parked).unwrap();
+    brain.set_status(task, Status::Parked).unwrap();
 
     brain.author = crate::model::Author::Agent;
     let decision = brain.propose(task, new("Use Redis")).unwrap();
@@ -365,7 +369,7 @@ fn waiting_on_an_entry_missing_from_one_look_carries_on() {
     let mut brain = Brain::open(crate::store::Store::at(dir.path()).unwrap()).unwrap();
     let task = brain.add(NewEntry { title: "Rate-limit login".into(), ..NewEntry::default() }).unwrap();
     brain.ask(task, "Per IP or per account?").unwrap();
-    let asked = || Ok(brain.store.load().unwrap().0);
+    let asked = || Ok(brain.store.load_entries().unwrap().0);
     // Gone from one look, as a file renamed for a new title is gone between listing and reading it.
     let mut watch = Watch::default();
     assert!(watch.look(task, asked()).is_none());
@@ -380,7 +384,7 @@ fn waiting_on_an_entry_missing_from_one_look_carries_on() {
 
     brain.author = crate::model::Author::Human;
     brain.add_comment(task, "Per account").unwrap();
-    let answered = watch.look(task, Ok(brain.store.load().unwrap().0)).unwrap().unwrap();
+    let answered = watch.look(task, Ok(brain.store.load_entries().unwrap().0)).unwrap().unwrap();
     assert_eq!(answered, format!("#{task} Rate-limit login: answered\n\nPer account"));
 }
 
@@ -395,7 +399,7 @@ fn a_task_moved_on_unanswered_says_so_rather_than_quote_an_older_comment_or_its_
     brain.author = crate::model::Author::Agent;
     brain.ask(task, "Per IP or per account?").unwrap();
     let asked_at = brain.entry(task).unwrap().comments.iter().rev().find(|c| c.question).unwrap().created;
-    brain.change_status(task, Status::Todo).unwrap();
+    brain.set_status(task, Status::Todo).unwrap();
     assert_eq!(
         settled(brain.entry(task).unwrap(), Some(asked_at)).unwrap(),
         format!("#{task} Rate-limit login: not waiting for an answer (todo)")
@@ -439,4 +443,33 @@ fn a_wait_fails_at_once_on_a_folder_it_cant_read_but_looks_again_after_its_first
     let error = wait(&brain, task, Some(Duration::from_secs(60))).unwrap_err().to_string();
     assert!(!error.starts_with("no answer"), "{error}");
     assert!(started.elapsed() < Duration::from_secs(10), "not after the time limit");
+}
+
+#[test]
+fn the_agents_command_table_is_the_usage() {
+    // On Windows, git may check the docs out with CRLF line endings.
+    let docs = include_str!("../../../docs/agents.md").replace("\r\n", "\n");
+    let table = docs.split("\n## Commands for agents and scripts\n").nth(1).expect("the section");
+    let table = table.trim_start().split("\n\n").next();
+    let rows: Vec<&str> = table
+        .expect("its table")
+        .lines()
+        .skip(2)
+        .map(|row| row.strip_prefix("| `").and_then(|row| row.split_once("` |")).expect("a row naming a command").0)
+        .collect();
+    // A command starts at the margin (the first one's, after the string's escaped line break, without it); its
+    // synopsis ends where its description starts, on its line or the next.
+    let synopses: Vec<String> = USAGE
+        .lines()
+        .map(|line| line.strip_prefix("  ").unwrap_or(line))
+        .filter(|line| !line.starts_with(' '))
+        .map(|line| line.split("   ").next().unwrap_or(line).replace('|', "\\|"))
+        .collect();
+    for synopsis in &synopses {
+        assert!(rows.contains(&synopsis.as_str()), "docs/agents.md's command table has a row for `{synopsis}`");
+    }
+    // `list` is the main usage's; the table shows it for what an agent lists. Any other row is one that drifted.
+    for row in rows.iter().filter(|&&row| row != "list notes decisions") {
+        assert!(synopses.iter().any(|s| s == row), "`{row}`, in docs/agents.md's command table, isn't in the usage");
+    }
 }

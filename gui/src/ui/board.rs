@@ -4,11 +4,11 @@
 use super::pointer::TextBox;
 use super::theme::{self, BORDER, DIM, TEXT};
 use super::widgets::{self, Kind, card, dim, dim_small, small, state_pill, tag_chips};
-use super::{BrainView, menu, truncate_words};
-use crate::state::{Board, COLUMNS, Key, Mode};
+use super::{BrainView, menu, scrollbar, truncate_words};
+use crate::state::{Board, COLUMNS, Key, Mode, Scope};
 use gpui::{
-    ClickEvent, Context, Div, ElementId, FontWeight, ScrollHandle, SharedString, Stateful, Window, div, prelude::*, px,
-    rgb,
+    Axis, ClickEvent, Context, Div, ElementId, FontWeight, Pixels, ScrollHandle, SharedString, Stateful, Window, div,
+    prelude::*, px, rgb,
 };
 use kanbrain_core::model::{Asked, Status, Task, counted, fmt_age, fmt_clock, fmt_dur, now};
 use std::path::PathBuf;
@@ -21,6 +21,12 @@ const QUESTION_CHARS: usize = 110;
 
 /// Narrowest a column gets before the board scrolls sideways.
 const COLUMN_MIN_WIDTH: f32 = 220.;
+
+/// How thick a scrollbar's strip is: a column's padding (`p_2`, half a rem), which it's drawn in, at GPUI's default
+/// 16px rem, which the app keeps.
+const BAR: Pixels = px(8.);
+/// Space between the columns and the board's scrollbar under them.
+const BAR_GAP: Pixels = px(2.);
 
 /// A card being dragged: which task, and the title its preview shows under the pointer.
 pub struct DraggedCard {
@@ -71,8 +77,30 @@ pub fn draw(
     }
     let columns = COLUMNS.iter().zip(scrolls).map(|(&status, scroll)| column(board, status, scroll, follow, cx));
     let columns: Vec<_> = columns.collect();
-    let row = div().id("board").size_full().overflow_x_scroll().track_scroll(sideways).flex().gap_3().children(columns);
-    div().flex_1().min_h_0().min_w_0().flex().child(row)
+    let row = each_axis(div().id("board")).size_full().track_scroll(sideways).flex().gap_3().children(columns);
+    // Under the columns, in the padding between them and the status bar.
+    let bar = scrollbar::bar(sideways, Axis::Horizontal, "scrollbar board")
+        .debug_selector(|| "scrollbar board".to_string())
+        .absolute()
+        .left_0()
+        .right_0()
+        .bottom(-BAR_GAP - BAR)
+        .h(BAR);
+    div().relative().flex_1().min_h_0().min_w_0().flex().child(row).child(bar)
+}
+
+/// Makes `area` scroll each way by the wheel or touchpad's own movement that way, and only that way: the board
+/// sideways, its columns up and down.
+///
+/// An area GPUI scrolls one way only also takes movement the other way as its own, so a vertical wheel over a column
+/// scrolled the board sideways as well, and a horizontal one the column. Scrolling both ways stops that: the way an
+/// area doesn't overflow can't move. GPUI's `restrict_scroll_to_axis` stops it too, but locks a touchpad's swipe to
+/// the way it mostly goes, where a slanting one moves both the board and the column. Shift and the wheel need nothing
+/// here: each platform hands them over already turned sideways (GPUI on Linux and Windows, the system on macOS).
+fn each_axis(area: Stateful<Div>) -> Stateful<Div> {
+    let mut area = area.overflow_scroll();
+    area.style().allow_concurrent_scroll = Some(true);
+    area
 }
 
 /// A column's or a list section's header: the status, how many of its tasks are shown, and `+` to add one there.
@@ -126,7 +154,6 @@ fn column(board: &Board, status: Status, scroll: &ScrollHandle, follow: bool, cx
         .debug_selector(move || format!("column {}", status.as_str()))
         .flex_1()
         .min_h_0()
-        .overflow_y_scroll()
         .track_scroll(scroll)
         .flex()
         .flex_col()
@@ -136,6 +163,15 @@ fn column(board: &Board, status: Status, scroll: &ScrollHandle, follow: bool, cx
         .children(rows)
         .children(empty)
         .children((status == Status::Done).then(|| show_all_done(board, cx)).flatten());
+    // In the cards' right padding, beside them.
+    let bar = scrollbar::bar(scroll, Axis::Vertical, ("scrollbar column", status as usize))
+        .debug_selector(move || format!("scrollbar column {}", status.as_str()))
+        .absolute()
+        .top_0()
+        .bottom_0()
+        .right_0()
+        .w(BAR);
+    let body = div().relative().flex_1().min_h_0().flex().flex_col().child(each_axis(body)).child(bar);
     drop_target(card().flex_1().min_w(px(COLUMN_MIN_WIDTH)), status, cx).child(header).child(body)
 }
 
@@ -156,7 +192,8 @@ pub(super) fn draggable(element: Stateful<Div>, board: &Board, key: Key, task: &
     })
 }
 
-/// What an empty column is for; or, when the search hides every task it has, that it does.
+/// What an empty column is for; or, when the search hides every task it has, that it does. An empty Doing with one
+/// project or brain shown says where to look, since a task running in another shows nowhere else.
 pub(super) fn empty_hint(board: &Board, status: Status) -> String {
     let hidden = board.column_total(status);
     if hidden > 0 {
@@ -164,7 +201,8 @@ pub(super) fn empty_hint(board: &Board, status: Status) -> String {
     }
     match status {
         Status::Todo => "Nothing to do yet. Press + to add a task.",
-        Status::Doing => "Nothing running. Drop a card here to start its clock.",
+        Status::Doing if board.scope == Scope::All => "Nothing running. Drop a card here to start its clock.",
+        Status::Doing => "Nothing running here: All shows what runs elsewhere. Drop a card here to start its clock.",
         Status::Parked => "Started tasks set aside land here.",
         Status::Done => "Finished tasks land here.",
     }
@@ -207,7 +245,7 @@ fn draw_card(
         .bg(rgb(if selected { theme::SELECTED } else { theme::BG }))
         .when(!selected, |d| d.hover(|s| s.bg(rgb(theme::HOVER))))
         .when(running.is_some(), |d| d.border_l_4().border_color(rgb(theme::running_color(task))))
-        .when(matches!(task.asked(), Some(Asked::Waiting(_))), |d| d.border_l_4().border_color(rgb(theme::ACCENT)))
+        .when(task.waits_for_answer(), |d| d.border_l_4().border_color(rgb(theme::ACCENT)))
         .cursor_pointer()
         .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
             this.act(cx, |b| b.click_entry(key, event.click_count()));
@@ -245,7 +283,7 @@ fn draw_card(
         .child(footer)
 }
 
-/// A card's title color: dimmed once done, as what's no longer to do.
+/// A task's title color, on its card or its row: dimmed once done, as what's no longer to do.
 pub(super) fn title_color(status: Status) -> u32 {
     if status == Status::Done { DIM } else { TEXT }
 }
@@ -256,7 +294,7 @@ fn asked(task: &Task) -> Option<Div> {
     let comment = match task.asked()? {
         Asked::Waiting(comment) | Asked::Answered(comment) => comment,
     };
-    let first = comment.body.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or_default();
+    let first = comment.first_line();
     Some(
         div()
             .flex()

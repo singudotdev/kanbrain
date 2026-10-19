@@ -2,11 +2,7 @@
 
 ### Can several tasks be in "doing" at the same time?
 
-Yours, one per brain: the central brain and each project repository have their own Doing, so work in different
-projects can run side by side, each with its clock. Within one, starting another task while yours runs is refused:
-park or finish it first. Agents aren't limited, so one working with subagents can run several tasks next to yours;
-they show in green, yours in cyan. If files edited by hand or synced from another machine leave several of your
-tasks in one brain's doing, the most recently started stays and the others are parked when the files are read.
+Yours, one per brain; an agent's, several: see [Time tracking](time-tracking.md#how-it-works).
 
 ### Can I turn time tracking off?
 
@@ -94,6 +90,17 @@ opens no console window, so use `kb` from a terminal for the command line.
 ### Why does a card say `2d` when it's been almost 3 days?
 
 Ages round down: minutes, then hours, days and weeks. The exact time is in the details' history.
+
+### The kanban app shows "kanbrain couldn't open"
+
+It couldn't open the board, and the window says why: kanbrain running as root, a relative `KANBRAIN_DIR`, a brain
+it can't read, or one a newer kanbrain wrote (`kb update` then). Fix what it says and open the app again; **Copy**
+puts the message on the clipboard, for a bug report. Started from a terminal, the same error is on stderr, and the
+app exits with a failing code once the window is closed. On Linux and FreeBSD without a display (over ssh, or under
+`sudo -u other`) it's on stderr only, and the app exits with a failing code right away: run it from the desktop
+session (`kb` works anywhere). The same goes for a `WAYLAND_DISPLAY` or `DISPLAY` left from a session that's gone:
+the error names it (unset `WAYLAND_DISPLAY` to use X11). A display on another host that's slow to resolve, or one
+that accepts the app and then stalls, can't be told apart beforehand: the app waits on it as GPUI does.
 
 ### "kanbrain is a per-user app and doesn't run as root"
 

@@ -7,9 +7,9 @@ use super::{AddProject, Board, Form, Mode, Picker, ProjectOption, WhereFor};
 use crate::text::event::KeyEvent;
 use anyhow::Result;
 use kanbrain_core::brain::{Brain, Calendar, CalendarView, Report, ReportView};
-use kanbrain_core::cli;
+use kanbrain_core::cli::{self, StepKind};
 use kanbrain_core::migrate::TooNew;
-use kanbrain_core::model::{RepoLink, Task};
+use kanbrain_core::model::{Author, RepoLink, Task};
 use kanbrain_core::projects::{self, Repo};
 use kanbrain_core::store::{BrainLock, PROJECT_DIR, Store};
 use std::path::{Path, PathBuf};
@@ -29,6 +29,9 @@ impl Key {
         Self { src, id }
     }
 }
+
+/// How lists of brains and the scope filter name the central brain.
+const CENTRAL: &str = "Central";
 
 /// One brain the window shows.
 #[derive(Debug)]
@@ -128,6 +131,23 @@ impl Board {
         &mut self.sources[src].brain
     }
 
+    /// The brains at `a` and `b`, both to change at once, as a move or a link across repositories does: `a` and `b`
+    /// must differ.
+    pub(super) fn two_brains_mut(&mut self, a: usize, b: usize) -> (&mut Brain, &mut Brain) {
+        if a < b {
+            let (left, right) = self.sources.split_at_mut(b);
+            (&mut left[a].brain, &mut right[0].brain)
+        } else {
+            let (left, right) = self.sources.split_at_mut(a);
+            (&mut right[0].brain, &mut left[b].brain)
+        }
+    }
+
+    /// The name of the project the brain at `src` is a repository of; empty for the central brain.
+    pub(super) fn project_name(&self, src: usize) -> &str {
+        self.sources[src].project.as_deref().unwrap_or_default()
+    }
+
     /// The entry `key` names.
     pub fn task(&self, key: Key) -> Option<&Task> {
         self.sources.get(key.src)?.brain.task(key.id)
@@ -170,7 +190,7 @@ impl Board {
     /// The scopes there are, with their names, in the order the filter shows them: all, the central
     /// brain, then each project followed by its repositories if it has several.
     pub fn scopes(&self) -> Vec<(Scope, String)> {
-        let mut scopes = vec![(Scope::All, "All".to_string()), (Scope::Central, "Central".to_string())];
+        let mut scopes = vec![(Scope::All, "All".to_string()), (Scope::Central, CENTRAL.to_string())];
         let mut seen: Vec<&str> = Vec::new();
         for source in &self.sources {
             let Some(project) = source.project.as_deref() else { continue };
@@ -204,9 +224,8 @@ impl Board {
 
     /// Opens the project filter's dropdown, on the scope shown.
     pub fn open_scopes(&mut self) {
-        let picker = Picker::default();
-        let sel = self.scope_candidates(&picker).iter().position(|(s, _)| *s == self.scope).unwrap_or(0);
-        self.mode = Mode::Scopes(Picker { sel, ..picker });
+        let sel = self.scope_candidates(&Picker::default()).iter().position(|(s, _)| *s == self.scope).unwrap_or(0);
+        self.mode = Mode::Scopes(Picker::at(sel));
     }
 
     /// Shows the dropdown's candidate at `index` and closes it.
@@ -268,7 +287,7 @@ impl Board {
         let name = option.name().to_string();
         let dir = add.dir.clone();
         let from_manage = add.back.is_some();
-        let done = match cli::init(&dir, Some(&name), None, &self.central) {
+        let done = match cli::init_steps(&dir, Some(&name), None, &self.central) {
             Ok(done) => done,
             Err(e) => return self.notify_error(&e),
         };
@@ -278,11 +297,11 @@ impl Board {
         let repos = self.repos_of(&name).count();
         self.set_scope(Scope::Project(name.clone()));
         // A repository of another project moved here: said as a move, with the links it dropped.
-        let moved = done.first().is_some_and(|line| line.starts_with("moved "));
+        let moved = done.first().is_some_and(|step| step.kind == StepKind::Moved);
         self.notify(if moved {
             done.iter()
-                .filter(|l| l.starts_with("moved ") || l.starts_with("dropped "))
-                .cloned()
+                .filter(|step| matches!(step.kind, StepKind::Moved | StepKind::DroppedLinks))
+                .map(ToString::to_string)
                 .collect::<Vec<_>>()
                 .join("; ")
         } else if repos > 1 {
@@ -435,14 +454,8 @@ impl Board {
         if a.src == b.src {
             return self.brain_mut(a.src).toggle_link(a.id, b.id);
         }
-        // Two brains of `sources` at once, as a move does.
-        if a.src < b.src {
-            let (left, right) = self.sources.split_at_mut(b.src);
-            left[a.src].brain.toggle_repo_link(a.id, &mut right[0].brain, b.id)
-        } else {
-            let (left, right) = self.sources.split_at_mut(a.src);
-            right[0].brain.toggle_repo_link(a.id, &mut left[b.src].brain, b.id)
-        }
+        let (here, there) = self.two_brains_mut(a.src, b.src);
+        here.toggle_repo_link(a.id, there, b.id)
     }
 
     /// How an entry of another repository of its project names `key`'s entry in its links.
@@ -463,7 +476,7 @@ impl Board {
 
     /// How a brain is named in lists of them: its label, or `Central`.
     pub fn brain_name(&self, src: usize) -> &str {
-        self.sources[src].label.as_deref().unwrap_or("Central")
+        self.sources[src].label.as_deref().unwrap_or(CENTRAL)
     }
 
     /// A tag's chip colors, background and text, from the first brain whose `tags.md` has it (the central brain's,
@@ -481,17 +494,19 @@ impl Board {
         tags
     }
 
-    /// The tasks whose clocks run, in every brain whatever the scope shows, the longest running first: each keeps
-    /// its place in the top bar as others start and stop, whatever order the files were read in.
-    pub fn running(&self) -> Vec<(Key, &Task)> {
-        let mut running: Vec<(Key, &Task)> = self
-            .sources
-            .iter()
-            .enumerate()
-            .flat_map(|(src, s)| s.brain.running().map(move |t| (Key::new(src, t.id), t)))
-            .collect();
-        running.sort_by_key(|(key, task)| (task.sessions.last().map(|s| s.start), key.src, key.id));
-        running
+    /// The tasks whose clocks run, in every brain whatever the scope shows.
+    pub fn running(&self) -> impl Iterator<Item = (Key, &Task)> {
+        self.sources.iter().enumerate().flat_map(|(src, s)| s.brain.running().map(move |t| (Key::new(src, t.id), t)))
+    }
+
+    /// Whether a task's clock runs, yours or an agent's, in any brain whatever the scope shows.
+    pub fn any_running(&self) -> bool {
+        self.running().next().is_some()
+    }
+
+    /// Whether a task you started runs, in any brain: what Park & quit parks, as agents' tasks keep running.
+    pub fn any_mine_running(&self) -> bool {
+        self.running().any(|(_, task)| task.started_by() == Author::Human)
     }
 
     /// The report tab's view with the tab's search.

@@ -30,7 +30,9 @@ per project repository. You can read them, edit them, grep them and version them
 ## Projects
 
 The central brain's `projects.md` lists the repositories `init` registered: the project's name, then the path of
-the repository's `.brain/`. Several lines with the same name are one project's repositories.
+the repository's `.brain/`. Several lines with the same name are one project's repositories. On Windows the path is
+written without the `\\?\` prefix canonicalizing adds, unless the plain path would name another folder; one written
+with it (by an earlier kanbrain, or by hand) reads the same.
 
 ```markdown
 # Projects
@@ -215,7 +217,9 @@ brings older brains to it with a **migration**:
 A brain in a format **newer** than your kanbrain knows (a teammate's `.brain/` from git, written by a newer version)
 is refused entirely, neither read nor written, since an older version would misread what it doesn't know and
 rewriting it would lose it: commands on it fail and the kanban app leaves it out, both saying to update with
-`kb update`.
+`kb update`. Nor is anything written around it: `kb init` there is refused, and `kb init --all` (so `kb update`) says
+it and leaves its `.brain/project.md`, agent files and hooks as they are. Renaming, moving or removing a repository of
+its project, which rewrites the links on both sides, is refused too.
 
 The release notes say when a version changes the format.
 
@@ -239,3 +243,5 @@ New tags are added automatically. See [tag colors](tasks-and-tags.md#tag-colors)
 Task files are written to a temporary file (`.NNNN-slug.md.PID-N.tmp`), flushed to disk, and then renamed into
 place, so a crash or power loss never leaves a half-written task file. A temporary file a crash leaves behind is
 deleted once it's an hour old, the next time a `kb` command or the app writes to that brain.
+On Windows, a file another program has open for a moment (an antivirus, the search indexer, an editor) can't be
+replaced or deleted: the rename, or the delete, is tried again for up to about 1.3 seconds before it fails.

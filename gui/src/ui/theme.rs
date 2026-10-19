@@ -209,6 +209,11 @@ impl Line {
         Self(vec![Span::raw(content)])
     }
 
+    /// Its text, without the styles.
+    pub fn text(&self) -> String {
+        self.0.iter().map(|span| span.content.as_str()).collect()
+    }
+
     /// The text element. Empty lines keep their height.
     pub fn render(self) -> StyledText {
         let mut text = String::new();

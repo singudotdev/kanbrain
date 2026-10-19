@@ -95,8 +95,8 @@ case "$workflow" in
     need test touches "$core|$cli|$gui|$xtask"
     need msrv touches "$core|$cli"
     need installers touches "$core|$cli|$scripts|^gui/icons/"
-    need upgrade touches "$core|$cli|^e2e/upgrade\.sh$|^e2e/update\.sh$|^install\.sh$"
-    need app touches "$core|$gui|^e2e/smoke-app\."
+    need upgrade touches "$core|$cli|^e2e/(upgrade|update|lib)\.sh$|^install\.sh$"
+    need app touches "$core|$gui|^e2e/smoke-app\.|^e2e/lib\.sh$"
     ;;
   mutants)
     # Only the Rust lines changed are mutated: a release branch or a new dependency alone has none.

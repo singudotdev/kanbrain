@@ -125,6 +125,16 @@ fn report_options() {
 }
 
 #[test]
+fn list_and_report_refuse_several_tags_alike() {
+    // `report` kept the first without a word, counting only its tasks; `list` refused.
+    for command in ["list", "report"] {
+        let error = parse(&[command, "--tag", "ops,ui"]).unwrap_err().to_string();
+        assert_eq!(error, "--tag takes one tag, not `ops,ui`", "{command}");
+        assert!(parse(&[command, "--tag", "#ops"]).is_ok(), "{command}");
+    }
+}
+
+#[test]
 fn the_usage_names_init_all_for_the_installers() {
     // install.sh and install.ps1 run `init --all` only when `--help` names it: an older version would take
     // `--all` for a project's name. Rewording this line would silently stop upgrades refreshing projects.
@@ -152,6 +162,13 @@ fn the_status_line_names_running_tasks_and_skips_a_brain_it_cant_read() {
     let id = brain.add(NewEntry { title: "Fix login".into(), ..NewEntry::default() }).unwrap();
     brain.set_status(id, Status::Doing).unwrap();
     assert!(status_line(central.path(), now()).unwrap().starts_with("shop #1 Fix login 00:00:"));
+    // Questions waiting are counted across every brain.
+    let asked = brain.add(NewEntry { title: "Pick a region".into(), ..NewEntry::default() }).unwrap();
+    brain.ask(asked, "Which region?").unwrap();
+    let mut here = Brain::open(Store::at(central.path()).unwrap()).unwrap();
+    let asked = here.add(NewEntry { title: "Renew passport".into(), ..NewEntry::default() }).unwrap();
+    here.ask(asked, "Which office?").unwrap();
+    assert!(status_line(central.path(), now()).unwrap().ends_with(" · 2 waiting"));
     Store::at(&blog).unwrap();
     std::fs::write(blog.join(crate::migrate::FORMAT_FILE), "99\n").unwrap();
     assert!(status_line(central.path(), now()).unwrap().starts_with("shop #1 Fix login"), "blog is newer");
@@ -180,4 +197,19 @@ fn the_docs_name_every_variable_that_marks_an_agent() {
             assert!(text.contains(&format!("`{name}`")), "docs/{doc} names {name}");
         }
     }
+}
+
+#[test]
+fn the_reference_shows_the_usage_as_printed() {
+    // On Windows, git may check the docs out with CRLF line endings.
+    let docs = include_str!("../../docs/cli.md").replace("\r\n", "\n");
+    // The first fenced block, with a language tag or without.
+    let block = docs.lines().skip_while(|line| !line.starts_with("```")).skip(1);
+    let shown: String = block.take_while(|line| *line != "```").flat_map(|line| [line, "\n"]).collect();
+    assert!(!shown.is_empty(), "docs/cli.md starts with the usage, in a fenced block");
+    let usage = usage(Program { name: "kb" });
+    // What follows `usage:`, up to the license.
+    let printed = usage.split_once("usage:\n").and_then(|(_, rest)| rest.split_once("\n\nkanbrain by")).map(|(u, _)| u);
+    let printed = format!("{}\n", printed.expect("usage: and the license"));
+    assert!(shown == printed, "docs/cli.md's usage is\n{shown}\nbut `kb --help` prints\n{printed}");
 }

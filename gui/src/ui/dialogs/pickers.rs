@@ -79,7 +79,7 @@ pub(super) fn comments(
         .iter()
         .enumerate()
         .map(|(index, comment)| {
-            let first = comment.body.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or_default();
+            let first = comment.first_line();
             let by = if comment.author == Author::Agent { " · agent" } else { "" };
             row(("comment", index), format!("comment {index}"), index == picker.sel, true)
                 .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {

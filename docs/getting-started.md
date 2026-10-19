@@ -45,7 +45,7 @@ curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/inst
 A specific release:
 
 ```sh
-curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh -s -- --version v0.6.2
+curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh -s -- --version v0.6.3
 ```
 
 Another folder in your home (the default is `~/.local/bin`):
@@ -83,7 +83,7 @@ $env:KANBRAIN_APP = "both"; irm https://github.com/singudotdev/kanbrain/releases
 A specific release:
 
 ```powershell
-$env:KANBRAIN_VERSION = "v0.6.2"; irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
+$env:KANBRAIN_VERSION = "v0.6.3"; irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
 ```
 
 Another folder in your profile:
@@ -117,9 +117,17 @@ For tab completion of commands, ids and projects, see [`kb completions`](cli.md#
 ### Updating
 
 Run `kb update` (or `kanbrain update`), which runs the installer again for the apps you have, in the same
-folder; or run the installer yourself, with the same `--app`. It replaces the binaries; your data isn't touched.
-Then it brings the agent instructions of every project you ran `kb init` in up to the new version's
-([`kb init --all`](cli.md#kb-init---all)), so you don't have to run `init` in each one.
+folder; or run the installer yourself, with the same `--app`. On Windows, where a running program can't be replaced,
+`kb update` prints the PowerShell command to run instead, once the app is closed. The installer replaces the
+binaries, then brings every project you ran `kb init` in up to the new version
+([`kb init --all`](cli.md#kb-init---all)), so you don't have to run `init` in each one: its agent instructions, and
+its data, migrated to the new version's format when it changed, after a backup (see
+[Format versions and migrations](data-format.md#format-versions-and-migrations)). Installed with `cargo install`,
+`kb update` replaces nothing behind cargo's back: it prints `cargo install kanbrain && kb init --all` to run (and
+`kanbrain update`, for the app, which isn't on crates.io,
+`cargo install --locked --git https://github.com/singudotdev/kanbrain --tag vX.Y.Z kanbrain-app && kanbrain init --all`,
+the release it found; without GitHub reachable, the command has no `--tag` and installs from `main`, the latest
+release).
 
 The kanban app checks for a newer release when it opens and once a day, and offers it in the status bar:
 **Update to X.Y.Z** (`U`) does the same as `kb update`, then opens the new version. On Windows it closes first,
@@ -143,9 +151,9 @@ There are two levels:
 | **uninstall** | ✓ | |
 | **purge** (full uninstall) | ✓ | ✓ |
 
-**Linux / macOS**
-
 Both levels remove both programs; add `--app cli` or `--app gui` (`$env:KANBRAIN_APP` on Windows) to remove just one.
+
+**Linux / macOS**
 
 Uninstall, the program only:
 
@@ -287,7 +295,8 @@ kanbrain
    The card lands in **To do**; the form's **Column** picks another, and a column's `+` opens it with that column
    picked. To add several to To do in a row, press `a`: each `enter` adds one and keeps the field open.
 2. When you start working on it, drag the card to **Doing**, or press `s` (`shift+→` moves it one column right).
-   Its clock starts, and the top bar shows it. To switch to another, park this one first (`p`).
+   Its clock starts on the card. To switch to another, park this one first (`p`). A running task shows in Doing with
+   its project shown, or under **All**.
 3. Double-click the card (or `enter`) to open its details: write a description (`m`), add comments as you go (`c`).
 4. When it's finished, drag it to **Done** or press `d`.
 5. At the end of the day, **Park & quit** (`Q`) stops your clock and closes the window. Everything is already saved.
@@ -342,6 +351,8 @@ Only in the current PowerShell session:
 $env:KANBRAIN_DIR = "D:\notes\todo"
 ```
 
+The path must be absolute (on Windows with its drive, `D:\...`, or a share, `\\server\share\...`): `kb` refuses a
+relative one, which would name another folder from each folder it runs in. An empty `KANBRAIN_DIR` counts as unset.
 The folder is created if it doesn't exist. See [Data format](data-format.md) for what goes inside.
 
 ### Projects

@@ -25,7 +25,8 @@ kb init        # creates .brain/ and tells the project's agents about it
    every session, so from the first one they know to run `kb context` and how to record their work.
    With nothing else in the repository, it's enough for an agent to work this way from its first session.
    The section sits between `<!-- kanbrain:start -->` and `<!-- kanbrain:end -->`; the rest of the file
-   isn't touched. Running `init` again updates the section in place, and upgrading does it in every project: the
+   isn't touched, and the section is written with the file's line endings (CRLF, as git checks it out on Windows,
+   or LF). Running `init` again updates the section in place, and upgrading does it in every project: the
    installer and `kb update` run `kb init --all`.
 
    For Claude Code (when the section goes in `CLAUDE.md`), it also adds five hooks to
@@ -42,6 +43,22 @@ kb init        # creates .brain/ and tells the project's agents about it
    `kb context` brings the hooks up to date where kanbrain's are already there, so a release that adds one reaches
    every project with its next session; it never writes them where they aren't (`kb deinit` took them out, or the
    section went only in `AGENTS.md`).
+
+   Leave kanbrain's hooks as `init` writes them. One that runs `kb` by a plain path instead is still kanbrain's: a
+   path of letters (`é` too), digits and `_ . / : -`, or in `"…"` or `'…'` also spaces and `( )`, then exactly the
+   hook's arguments, as `/opt/bin/kb hook tool`, `~/.local/bin/kb hook tool` or `'/Users/John Doe/bin/kb' hook tool`;
+   or the exec form (`"command"` the path, `"args"` the arguments). On Windows, a `\` path goes in `'…'`, the only
+   quotes bash (Git Bash, which runs a hook without `shell`) leaves every `\` in:
+   `'C:\Users\John Doe\AppData\Local\Programs\kanbrain\kb.exe' hook tool`. PowerShell runs a quoted path only after
+   `& `: with `"shell": "powershell"`, write `& 'C:\Users\John Doe\AppData\Local\Programs\kanbrain\kb.exe' hook tool`.
+   Only bash expands a leading `~/`. Anything more (variables set before it, another command, a `$`, any other quote)
+   and it's yours, even if it runs `kb hook tool`: a shell line can't be read for sure without running it, and a hook
+   of yours is never taken out for looking like kanbrain's. When it does look like one (`kb`, by its path or not,
+   followed by the hook's words anywhere in it, `env kb context` and `echo kb context` alike), `init` adds none
+   beside it and says so, for you to replace it with the hook as written or, if it isn't kanbrain's, add kanbrain's
+   beside it; `deinit` leaves it and says so, for you to remove it. A hook of yours in the same matcher group as
+   kanbrain's (the same `hooks` list) stays there when `deinit` takes kanbrain's out. One that merely resembles a hook
+   (`kb.sh hook tool`, `cat ~/notes/kb/context`) is left as it is, with kanbrain's added beside it.
 
    Agents skipped describing the project when only the section and `context` asked them to; with these, Claude
    Code reminds them on their first turn. Once it's described and the tasks the agent started commented on,
@@ -212,23 +229,24 @@ hand.
 | command | does |
 | --- | --- |
 | `context` | markdown summary: the project's description, answered tasks (with the answer), tasks in doing (with their latest comment), parked (with the question they wait on) and todo; the latest done; decisions (proposed and rejected ones marked); notes; outside a project, also how to use the commands |
-| `add [--note\|--decision] [--tag T]… [--link ID]… [--body TEXT\|-] [--start] TITLE…` | creates an entry, prints `#id title (state)` |
+| `add [--note\|--decision] [--tag TAG]… [--link ID]… [--body TEXT\|-] [--start] TITLE…` | creates an entry, prints `#id title (state)` |
 | `show ID` | the entry as compact text: state, time tracked, description, comments with the latest changes to the title, tags, related entries and description among them, related entries, latest status changes, file path |
 | `list notes decisions` | every note and decision (add statuses such as `doing` to include tasks) |
 | `search WORDS…` | entries whose title, tags, description or comments contain every word, one line each, at most 20; `#tag` matches tags only |
-| `start` / `park` / `done` / `todo ID` | changes a task's status; `start` runs its clock. An agent can have several tasks running; a person, one per brain (another `start` is refused, naming it) |
+| `start\|park\|done\|todo ID` | changes a task's status; `start` runs its clock ([one per brain for a person, several for an agent](time-tracking.md#how-it-works)) |
 | `comment ID TEXT…\|-` | adds a timestamped comment |
 | `ask ID TEXT…\|-` | asks the user a question on a task and parks it until a person comments |
 | `wait ID [--timeout MINUTES]` | blocks until task `ID` no longer waits for an answer (or decision `ID` is accepted or rejected), reading the files every second; prints the answer, or that the task waits on nothing (never asked, or picked up since). Fails after 8 minutes without one (`--timeout`, or `KANBRAIN_WAIT_TIMEOUT`, in minutes; 0: never). No `--json` |
-| `propose ID [--tag T]… [--link ID]… [--body TEXT\|-] TITLE…` | creates a proposed decision linked to task `ID`, which asks about it and is parked; prints both |
-| `accept ID [TEXT…\|-]` / `reject ID TEXT…\|-` | accepts or rejects a decision, with why (needed to reject), and answers a question that names it (`#ID`) |
+| `propose ID [--tag TAG]… [--link ID]… [--body TEXT\|-] TITLE…` | creates a proposed decision linked to task `ID`, which asks about it and is parked; prints both |
+| `accept ID [TEXT…\|-]` | accepts a decision, with why if given, and answers a question that names it (`#ID`) |
+| `reject ID TEXT…\|-` | rejects a decision, with why (needed), and answers a question that names it (`#ID`) |
 | `describe ID TEXT…\|-` | replaces the description |
 | `rename ID TITLE…` | replaces the title, and renames the entry's file after it |
 | `tag ID +TAG\|-TAG…` | adds tags to an entry (`+TAG`) or removes them (`-TAG`), in order; a word may name several (`+ui,bug`) |
 | `tag OLD NEW` | renames a tag in every entry that has it, and lists them; a tag named as an entry's id is written `#5` |
 | `link ID OTHER…` | links an entry to others: an id here, or `REPO#ID` in another repository of the project |
 | `project [describe\|notes TEXT…\|-]` | shows the project's description (shared by its repositories) and this repository's role, or replaces one |
-| `project rename NAME…` / `repo NAME` / `move PROJECT…` / `remove [--purge]` | renames the project or this repository, moves this repository to another project, or takes the project out (see [Managing a project](cli.md#managing-a-project)); only when the user asks |
+| `project rename NAME… \| repo NAME \| move PROJECT… \| remove [--purge]` | renames the project or this repository, moves this repository to another project, or takes the project out (see [Managing a project](cli.md#managing-a-project)); only when the user asks |
 
 `-` reads the text from stdin, for multi-line markdown; nothing there is refused rather than saved as empty. Ids may be written `12` or `#12`.
 

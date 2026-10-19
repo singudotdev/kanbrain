@@ -4,7 +4,7 @@
 
 use super::text::{head, state_note};
 use crate::brain::Brain;
-use crate::model::{Asked, Comment, Kind, Status, Task, fmt_age, fmt_clock, now};
+use crate::model::{Asked, Comment, Kind, Status, Task, fmt_age, fmt_clock, infallible, now};
 use crate::projects::ProjectInfo;
 use std::fmt::Write;
 
@@ -20,7 +20,7 @@ impl Brain {
     /// `- #id title #tag`.
     pub fn context_markdown(&self) -> String {
         let mut out = String::new();
-        self.write_context(&mut out).expect("writing to a String cannot fail");
+        infallible(self.write_context(&mut out));
         out
     }
 
@@ -93,7 +93,7 @@ fn section(out: &mut String, title: &str, tasks: &[&Task], limit: usize) -> std:
 
 /// `  last comment (2h ago): first line…`, under a task, for `comment` and what it is.
 fn excerpt(out: &mut String, what: &str, comment: &Comment, now: chrono::DateTime<chrono::Local>) -> std::fmt::Result {
-    let first = comment.body.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or_default();
+    let first = comment.first_line();
     let mut excerpt: String = first.chars().take(EXCERPT_CHARS).collect();
     if excerpt.len() < first.len() || comment.body.trim() != first {
         excerpt.push('…');

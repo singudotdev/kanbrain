@@ -2,13 +2,14 @@
 //! shift+click and dragging select, a double-click selects a word and a triple-click the line (dragging on
 //! from there selects whole words or lines). On Linux a middle-click pastes the primary selection.
 //! Each field remembers where its text was drawn ([`Hit`]) to turn the mouse position into a character.
+//! Text shown rather than typed into selects the same way: see [`super::shown`].
 
 use super::BrainView;
 use crate::state::Field;
 use crate::text::editor::Pointer;
 use gpui::{
     Context, DispatchPhase, Div, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, Stateful,
-    StyledText, TextLayout, Window, canvas, point, prelude::*, px,
+    StyledText, TextLayout, canvas, point, prelude::*, px,
 };
 use std::rc::Rc;
 
@@ -45,6 +46,8 @@ pub enum TextBox {
     Editor,
     /// The note for the agent, when a save tells it.
     TellNote,
+    /// Text shown, not typed into: which one is the board's to say (see [`crate::state::Board::shown_in`]).
+    Shown,
 }
 
 impl TextBox {
@@ -66,6 +69,7 @@ impl TextBox {
             Self::TellNote => "tell-note",
             Self::ManageName => "manage-name",
             Self::Editor => "editor",
+            Self::Shown => "shown",
         }
     }
 }
@@ -84,26 +88,51 @@ impl Hit {
         Self { layout: text.layout().clone(), len }
     }
 
-    /// The character boundary closest to `position`. Above or below the line counts as its first or last row.
+    /// The character boundary closest to `position`. Above or below the text counts as its first or last row.
     fn column(&self, position: Point<Pixels>) -> usize {
         let bounds = self.layout.bounds();
         let line_height = self.layout.line_height();
-        // Each drawn line is one paragraph (no newlines), possibly wrapped into several rows.
-        let Some(line) = self.layout.line_layouts().into_iter().next() else { return 0 };
-        // GPUI answers "the start" for a point below the last row, so keep the point inside.
-        let bottom = (line.size(line_height).height - px(1.)).max(px(0.));
-        let y = (position.y - bounds.top()).clamp(px(0.), bottom);
-        let byte = line.closest_index_for_position(point(position.x - bounds.left(), y), line_height);
-        let byte = byte.unwrap_or_else(|end| end);
+        // Each paragraph of the text (a field's line has one; shown text, one per line break in it) is laid out on
+        // its own, possibly wrapped into several rows.
+        let paragraphs = self.layout.line_layouts();
+        let (mut top, mut start) = (bounds.top(), 0);
+        let mut byte = 0;
+        for (i, line) in paragraphs.iter().enumerate() {
+            let height = line.size(line_height).height;
+            if position.y < top + height || i + 1 == paragraphs.len() {
+                // GPUI answers "the start" for a point below the last row, so keep the point inside.
+                let y = (position.y - top).clamp(px(0.), (height - px(1.)).max(px(0.)));
+                let at = line.closest_index_for_position(point(position.x - bounds.left(), y), line_height);
+                byte = start + at.unwrap_or_else(|end| end);
+                break;
+            }
+            top += height;
+            start += line.len() + 1;
+        }
         let drawn = self.layout.text();
         drawn.char_indices().take_while(|&(i, _)| i < byte).count().min(self.len)
     }
 }
 
-/// The (line, character) under `position` in `lines`, drawn top to bottom; below the last line is the last.
-fn at(lines: &[Hit], position: Point<Pixels>) -> (usize, usize) {
-    let row = lines.iter().position(|line| position.y < line.layout.bounds().bottom()).unwrap_or(lines.len() - 1);
+/// The (line, character) under `position` in `lines`: the line it's over, else the first it's above (texts are
+/// drawn top to bottom, a table's cells side by side); below the last line is the last.
+pub(super) fn at(lines: &[Hit], position: Point<Pixels>) -> (usize, usize) {
+    let row = lines
+        .iter()
+        .position(|line| line.layout.bounds().contains(&position))
+        .or_else(|| lines.iter().position(|line| position.y < line.layout.bounds().bottom()))
+        .unwrap_or(lines.len() - 1);
     (row, lines[row].column(position))
+}
+
+/// What a press does: a double-click selects a word, a triple-click the line, shift+click extends the selection.
+pub(super) fn pointer_of(event: &MouseDownEvent) -> Pointer {
+    match event.click_count {
+        2 => Pointer::Word,
+        n if n >= 3 => Pointer::Line,
+        _ if event.modifiers.shift => Pointer::Extend,
+        _ => Pointer::Place,
+    }
 }
 
 /// Makes `element`, which shows `lines` of `which`, respond to the mouse like a text field.
@@ -121,25 +150,44 @@ pub fn pointable(
     let middle_clicked = Rc::clone(&lines);
     let press = cx.listener(move |this, event: &MouseDownEvent, _window, cx| {
         focus(this, which);
-        let how = match event.click_count {
-            2 => Pointer::Word,
-            n if n >= 3 => Pointer::Line,
-            _ if event.modifiers.shift => Pointer::Extend,
-            _ => Pointer::Place,
-        };
         let (row, col) = at(&pressed, event.position);
-        this.board.point(row, col, how);
+        this.board.point(row, col, pointer_of(event));
         this.drag = Some(which);
         cx.stop_propagation();
         this.after_input(cx);
     });
-    // Window-wide listeners, so the selection follows the mouse outside the field too.
-    // They're registered again every frame, with that frame's layout.
+    let drag = follow_drag(
+        which,
+        lines,
+        |this, (row, col), cx| {
+            this.board.point(row, col, Pointer::Extend);
+            // Keeps the editor's cursor line in view while dragging past its edge.
+            this.follow = true;
+            this.share_selection(cx);
+            this.restart_blink(cx);
+        },
+        cx,
+    );
+    let element = element.cursor_text().on_mouse_down(MouseButton::Left, press).child(drag);
+    paste_on_middle_click(element, which, middle_clicked, cx)
+}
+
+/// Window-wide listeners, so a drag that started in `which` follows the mouse outside it too: `extend` takes each
+/// (line, character) of `lines` the mouse moves over while the button is down. They're registered again every frame,
+/// with that frame's layout.
+pub(super) fn follow_drag<F>(
+    which: TextBox,
+    lines: Rc<[Hit]>,
+    extend: F,
+    cx: &mut Context<BrainView>,
+) -> impl IntoElement + use<F>
+where
+    F: Fn(&mut BrainView, (usize, usize), &mut Context<BrainView>) + 'static,
+{
     let view = cx.entity().downgrade();
-    let drag = canvas(
+    canvas(
         |_, _, _| {},
         move |_, (), window, _| {
-            let moved = Rc::clone(&lines);
             let view_ = view.clone();
             window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
                 if phase != DispatchPhase::Bubble {
@@ -154,12 +202,7 @@ pub fn pointable(
                         this.drag = None;
                         return;
                     }
-                    let (row, col) = at(&moved, event.position);
-                    this.board.point(row, col, Pointer::Extend);
-                    // Keeps the editor's cursor line in view while dragging past its edge.
-                    this.follow = true;
-                    this.share_selection(cx);
-                    this.restart_blink(cx);
+                    extend(this, at(&lines, event.position), cx);
                     cx.notify();
                 });
             });
@@ -175,9 +218,7 @@ pub fn pointable(
         },
     )
     .absolute()
-    .size_0();
-    let element = element.cursor_text().on_mouse_down(MouseButton::Left, press).child(drag);
-    paste_on_middle_click(element, which, middle_clicked, cx)
+    .size_0()
 }
 
 /// Makes it the field being typed into, if it isn't always.
@@ -197,7 +238,8 @@ fn focus(this: &mut BrainView, which: TextBox) {
         | TextBox::ProjectName
         | TextBox::ManageName
         | TextBox::TellNote
-        | TextBox::Editor => {}
+        | TextBox::Editor
+        | TextBox::Shown => {}
     }
 }
 
@@ -211,7 +253,7 @@ fn paste_on_middle_click(
 ) -> Stateful<Div> {
     element.on_mouse_down(
         MouseButton::Middle,
-        cx.listener(move |this, event: &MouseDownEvent, _: &mut Window, cx| {
+        cx.listener(move |this, event: &MouseDownEvent, _: &mut gpui::Window, cx| {
             focus(this, which);
             let (row, col) = at(&lines, event.position);
             this.board.point(row, col, Pointer::Place);

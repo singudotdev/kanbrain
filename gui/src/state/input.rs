@@ -4,8 +4,7 @@
 
 use super::nav::Step;
 use super::{
-    Board, COLUMNS, CommentPicker, Edit, Field, Form, Manage, Mode, Picker, PickerKey, Tab, Target, Telling,
-    WherePicker,
+    Board, COLUMNS, CommentPicker, Edit, Field, Form, Mode, Picker, PickerKey, Tab, Target, Telling, WherePicker,
 };
 use crate::text::editor::{LineInput, Outcome, Pointer, TextEditor};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -58,8 +57,8 @@ impl Board {
             Mode::Edit(mut edit) => {
                 let (ctrl, back) = (key.modifiers.contains(KeyModifiers::CONTROL), edit.back);
                 if ctrl && key.code == KeyCode::Char('d') {
-                    // Discard changes; the mode is already taken.
-                    self.notify("changes discarded");
+                    self.mode = Mode::Edit(edit);
+                    return self.discard_edit();
                 } else if edit.merge.is_some() {
                     return self.key_merge(edit, key);
                 } else if edit.editor.on_key(key) == Outcome::Save || (ctrl && key.code == KeyCode::Enter) {
@@ -220,10 +219,8 @@ impl Board {
             if text == merge.theirs { "merged: it's theirs as it is, esc closes" } else { "merged: esc saves it" };
         // What a save merges with from now on is what the conflicts were picked over.
         if let Some(merge) = edit.merge.take() {
-            edit.base = merge.theirs;
+            edit.settle(merge.theirs, &text);
         }
-        edit.editor = TextEditor::new(&text);
-        edit.editor.modified = true;
         self.notify(said);
     }
 
@@ -296,10 +293,10 @@ impl Board {
 
     /// Opens the tag dropdown, on the first tag the search filters by.
     pub fn open_tags(&mut self) {
-        let picker = Picker::default();
         let chosen = self.search_tags();
-        let sel = self.tag_candidates(&picker).iter().position(|t| t.as_ref().is_some_and(|t| chosen.contains(t)));
-        self.mode = Mode::Tags(Picker { sel: sel.unwrap_or(0), ..picker });
+        let sel =
+            self.tag_candidates(&Picker::default()).iter().position(|t| t.as_ref().is_some_and(|t| chosen.contains(t)));
+        self.mode = Mode::Tags(Picker::at(sel.unwrap_or(0)));
     }
 
     /// Runs the dropdown's candidate at `index` on the search box, which holds every filter: a tag
@@ -390,6 +387,7 @@ impl Board {
                 let changed = form.active_mut().is_some_and(|input| input.on_key(key));
                 // Not as the cursor merely moves.
                 if changed && form.field == Field::Tags {
+                    form.split_tags();
                     form.tag_sel = self.tag_highlight(&form);
                 }
                 self.mode = Mode::Form(form);
@@ -403,17 +401,19 @@ impl Board {
     fn tag_highlight(&self, form: &Form) -> Option<String> {
         let typed = form.typed_tag();
         let tags = self.form_tags(form).1;
-        let partial = !typed.is_empty() && !tags.iter().any(|(tag, _)| *tag == typed);
+        let partial = !typed.is_empty() && !form.typed_tag_held() && !tags.iter().any(|(tag, _)| *tag == typed);
         partial.then(|| tags.into_iter().map(|(tag, _)| tag).find(|tag| tag.starts_with(typed.as_str()))).flatten()
     }
 
-    /// After the tags field's text changed other than by a key (pasted, cut): its list's highlight follows, as
-    /// typing it would.
+    /// After the tags field's text changed other than by a key (pasted, cut): the tags before a separator become
+    /// chips and its list's highlight follows, as typing it would.
     fn retag(&mut self) {
-        let Mode::Form(form) = &self.mode else { return };
+        let Mode::Form(form) = &mut self.mode else { return };
         if form.field != Field::Tags {
             return;
         }
+        form.split_tags();
+        let Mode::Form(form) = &self.mode else { return };
         let sel = self.tag_highlight(form);
         if let Mode::Form(form) = &mut self.mode {
             form.tag_sel = sel;
@@ -525,26 +525,10 @@ impl Board {
     }
 
     /// The text selected in the field being typed into, to copy.
-    pub fn selected_text(&self) -> Option<String> {
-        match &self.mode {
-            Mode::Search => self.search.selected_text().map(str::to_string),
-            Mode::Form(form) => form.active().and_then(LineInput::selected_text).map(str::to_string),
-            Mode::QuickAdd(add) => add.title.selected_text().map(str::to_string),
-            Mode::Links(picker) => picker.rows.search.selected_text().map(str::to_string),
-            Mode::Scopes(picker) | Mode::Tags(picker) | Mode::Where(WherePicker { picker, .. }) => {
-                picker.search.selected_text().map(str::to_string)
-            }
-            Mode::Palette(picker) => picker.search.selected_text().map(str::to_string),
-            Mode::AddProject(add) => add.picker.search.selected_text().map(str::to_string),
-            Mode::Tell(tell) => tell.note.selected_text().map(str::to_string),
-            Mode::Manage(manage) => match manage {
-                Manage::RenameProject { name: picker, .. }
-                | Manage::RenameRepo { name: picker, .. }
-                | Manage::MoveRepo { picker, .. } => picker.search.selected_text().map(str::to_string),
-                Manage::Remove { .. } => None,
-            },
-            Mode::Edit(edit) => edit.merge.is_none().then(|| edit.editor.selected_text()).flatten(),
-            Mode::Normal | Mode::Confirm(_) | Mode::ManageProject(_) | Mode::Menu(_) | Mode::Comments(_) => None,
+    pub fn selected_text(&mut self) -> Option<String> {
+        match self.typing()? {
+            Typing::Line(input) => input.selected_text().map(str::to_string),
+            Typing::Text(editor) => editor.selected_text(),
         }
     }
 

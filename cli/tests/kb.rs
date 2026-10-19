@@ -5,12 +5,28 @@ use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
 
+/// `kb`, to run in `dir` with the central brain in `central`, and the platform data folder `kb` falls back to without
+/// one inside `central` too ([`fallback_inside`]).
+fn kb_command(dir: &Path, central: &Path) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kb"));
+    command.current_dir(dir).env("KANBRAIN_DIR", central);
+    fallback_inside(&mut command, central);
+    command
+}
+
+/// Points the platform data folder that `command`'s `kb` falls back to without `KANBRAIN_DIR` (`XDG_DATA_HOME` on Linux,
+/// under `HOME` on macOS) inside `folder`: a change that loses the variable, as a mutant of how it's read does, would
+/// otherwise write into the real central brain of whoever runs the tests. Windows takes that folder from the system,
+/// not the environment; there the tests run on throwaway CI machines.
+fn fallback_inside<'a>(command: &'a mut Command, folder: &Path) -> &'a mut Command {
+    let fallback = folder.join(".fallback");
+    command.env("XDG_DATA_HOME", &fallback).env("HOME", &fallback)
+}
+
 /// Runs `kb ARGS` in `dir`, with the central brain in `central` and `stdin` as its input.
 fn kb(dir: &Path, central: &Path, args: &[&str], stdin: &str) -> Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_kb"))
+    let mut child = kb_command(dir, central)
         .args(args)
-        .current_dir(dir)
-        .env("KANBRAIN_DIR", central)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -102,6 +118,18 @@ fn list_gives_a_sync_conflict_copy_an_id_of_its_own() {
         .find(|e| e.file_name().to_string_lossy().starts_with("0001-"));
     std::fs::copy(first.unwrap().path(), central.path().join("0001-first (conflicted copy).md")).unwrap();
     assert_eq!(ok(&kb(dir.path(), central.path(), &["list"], "")), "## todo\n\n- #2 First\n- #1 First\n");
+}
+
+#[test]
+fn update_waits_for_an_agents_task_in_doing() {
+    // Refused before it asks GitHub for a release, so nothing goes out: `update` reaches its check from the command line.
+    let central = tempdir();
+    let mut start = kb_command(central.path(), central.path());
+    ok(&start.args(["add", "--start", "Rate-limit the login"]).env("KANBRAIN_AUTHOR", "agent").output().unwrap());
+    let out = kb(central.path(), central.path(), &["update"], "");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success(), "{stderr}");
+    assert!(stderr.contains("agents are working on #1 Rate-limit the login"), "{stderr}");
 }
 
 #[test]
@@ -237,6 +265,8 @@ fn bash_completes(dir: &Path, central: &Path, line: &[&str]) -> String {
         .current_dir(dir)
         .env("KANBRAIN_DIR", central)
         .env("PATH", path)
+        // Linux's fallback only, as `fallback_inside` sets it: the shell keeps its own `HOME`.
+        .env("XDG_DATA_HOME", central.join(".fallback"))
         .output()
         .unwrap();
     ok(&output).trim_end().to_string()
@@ -254,6 +284,122 @@ fn bash_completes_tag_with_the_id_then_signed_tags() {
     assert_eq!(completes(&["kb", "tag", "1", "+ui", "-b"]), "-bug");
     assert_eq!(completes(&["kb", "show", ""]), "1");
     assert_eq!(completes(&["kb", "rename", ""]), "1");
+}
+
+/// What PowerShell's completion of `kb` offers for `line`, completed where its `|` is (its end without one), in `dir`:
+/// each match's text, then its tooltip after a tab, one per line. `shell` is `pwsh` (7) or Windows' `powershell`
+/// (5.1). The console's output encoding is set to Latin-1 meanwhile, as Windows' OEM code pages read UTF-8 wrong.
+/// `None` without the shell, which GitHub's runners have on every OS: CI never skips.
+fn powershell_completes(shell: &str, dir: &Path, central: &Path, line: &str) -> Option<String> {
+    let bin = Path::new(env!("CARGO_BIN_EXE_kb")).parent().unwrap();
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let paths = std::iter::once(bin.to_path_buf()).chain(std::env::split_paths(&path));
+    // PowerShell's cursor counts UTF-16 units, not bytes.
+    let at = line[..line.find('|').unwrap_or(line.len())].encode_utf16().count();
+    let script = r#"$ErrorActionPreference = 'Stop'
+kb completions powershell | Out-String | Invoke-Expression
+[Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding('iso-8859-1')
+$found = (TabExpansion2 -inputScript $env:KB_LINE -cursorColumn ([int]$env:KB_AT)).CompletionMatches
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$found | ForEach-Object { "$($_.CompletionText)`t$($_.ToolTip)" }"#;
+    let output = match Command::new(shell)
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .current_dir(dir)
+        .env("KANBRAIN_DIR", central)
+        .env("PATH", std::env::join_paths(paths).unwrap())
+        // Linux's fallback only, as `fallback_inside` sets it: PowerShell keeps its own `HOME`.
+        .env("XDG_DATA_HOME", central.join(".fallback"))
+        .env("KB_LINE", line.replacen('|', "", 1))
+        .env("KB_AT", at.to_string())
+        .output()
+    {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound && std::env::var_os("CI").is_none() => return None,
+        output => output.unwrap(),
+    };
+    let stdout = ok(&output);
+    assert!(output.stderr.is_empty(), "nothing over the line: {}", String::from_utf8_lossy(&output.stderr));
+    Some(stdout.replace("\r\n", "\n").trim_end().to_string())
+}
+
+#[test]
+fn powershell_completes_commands_ids_and_tag_with_the_id_then_signed_tags() {
+    let (central, dir, other) = (tempdir(), tempdir(), tempdir());
+    ok(&kb(other.path(), central.path(), &["init", "my app"], ""));
+    let tags = ["ui", "bug", "café", "o'k", "it’s", "–ops", "]x", "[wip]", "a*"].map(|tag| ["--tag", tag]);
+    ok(&kb(dir.path(), central.path(), &[&["add"][..], tags.as_flattened(), &["Fix", "café", "login"]].concat(), ""));
+    // Windows PowerShell, 5.1, is on every Windows; pwsh, 7, is where it's installed.
+    let shells: &[&str] = if cfg!(windows) { &["pwsh", "powershell"] } else { &["pwsh"] };
+    for &shell in shells {
+        let completes = |line: &str| powershell_completes(shell, dir.path(), central.path(), line);
+        let Some(shown) = completes("kb sh") else {
+            eprintln!("no {shell} here: its completion isn't checked");
+            continue;
+        };
+        assert_eq!(shown, "show\tshow", "{shell}");
+        let texts = |line: &str| {
+            let lines = completes(line).unwrap();
+            lines.lines().map(|l| l.split('\t').next().unwrap().to_string()).collect::<Vec<_>>().join(" ")
+        };
+        // Windows PowerShell 5.1 doesn't ask a program's completer for a word starting with a single `-`, which it
+        // takes for a parameter: no tag to take off. `--` options it does, as PowerShell 7 does both.
+        let dashed = |expected: &'static str| if shell == "powershell" { "" } else { expected };
+        let cases = [
+            ("kb show ", "1", "the id"),
+            ("kb tag ", "1", "the id first"),
+            ("kb tag --project central ", "1", "options aren't the id"),
+            (
+                "kb tag 1 ",
+                "'+[wip]' '-[wip]' '+]x' '-]x' '+a*' '-a*' +bug -bug +café -café '+it’’s' '-it’’s' '+o''k' '-o''k' +ui -ui \
+                 +–ops -–ops",
+                "quoted as needed",
+            ),
+            ("kb tag 1 +ui -b", dashed("-bug"), "a tag to take off"),
+            ("kb tag 1 +|u", "+ui", "in the middle of a word, by all of it"),
+            ("kb --project ce|ntral show", "central", "in the middle of a word, after an option"),
+            ("kb rename ", "1", "the id"),
+            ("kb add --tag ", "'[wip]' ']x' 'a*' bug café 'it’’s' 'o''k' ui '–ops'", "the tags in use"),
+            // PowerShell takes a word starting with – — ― for a parameter, as it does with `-`.
+            ("kb add --tag '–", "'–ops'", "a dash begun"),
+            // PowerShell reads ’ and its kin as `'`: doubled inside the quotes, as `'` is.
+            ("kb add --tag 'it’’", "'it’’s'", "a quote begun, a curly one inside"),
+            ("kb add --tag ‘it", "'it’’s'", "a curly quote begun"),
+            ("kb add --tag 'o''", "'o''k'", "a quote begun, a doubled one inside"),
+            // Not split at `]`, nor taken for a wildcard.
+            ("kb add --tag ]", "']x'", "a bracket"),
+            ("kb add --tag [", "'[wip]'", "a wildcard"),
+            ("kb add --tag a", "'a*'", "a wildcard"),
+            ("kb add --t", "--tag", "options"),
+            ("kb --project ", "central 'my app'", "the projects"),
+            ("kb --project 'my", "'my app'", "a quote begun"),
+            ("kb report --group ", "task tag", "the groups"),
+            ("kb completions ", "bash zsh fish powershell", "the shells"),
+            ("kb.exe sh", "show", "as Windows names it too"),
+            ("kb --project nowhere show ", "", "kb's error isn't shown, nothing is offered"),
+        ];
+        // Every case, before failing: a shell CI alone runs shows all it does differently at once.
+        let wrong: Vec<_> = cases
+            .iter()
+            .map(|&(line, expected, why)| (line, texts(line), expected, why))
+            .filter(|(_, got, expected, _)| got != expected)
+            .collect();
+        assert!(wrong.is_empty(), "{shell}: (line, offered, expected, why) {wrong:#?}");
+        // pwsh off Windows expands a program's unquoted argument as a wildcard when a file matches: `[wip]` would
+        // reach kb as `w`. The insertion reaches it as the tag.
+        std::fs::write(dir.path().join("w"), "").unwrap();
+        let kb_exe = env!("CARGO_BIN_EXE_kb");
+        for line in ["kb add --tag [w", "kb add --tag a"] {
+            let insert = texts(line);
+            let listed = Command::new(shell)
+                .args(["-NoProfile", "-NonInteractive", "-Command", &format!("& '{kb_exe}' list --tag {insert}")])
+                .current_dir(dir.path())
+                .env("KANBRAIN_DIR", central.path())
+                .output()
+                .unwrap();
+            assert!(ok(&listed).contains("#1 Fix café login"), "{shell}: {insert}");
+        }
+        std::fs::remove_file(dir.path().join("w")).unwrap();
+        assert_eq!(completes("kb show ").unwrap(), "1\tFix café login", "{shell}: the id, its title beside it");
+    }
 }
 
 #[test]
@@ -291,7 +437,10 @@ fn files_that_dont_read_as_entries_are_named_on_stderr() {
     std::fs::write(repo.path().join(".brain/2024-01-15.md"), "# Daily\n").unwrap();
     for args in [&["list"][..], &["show", "7"]] {
         let stderr = String::from_utf8(run(args).stderr).unwrap();
-        assert!(stderr.contains("kb: skipped 0007-broken.md"), "{args:?}: {stderr}");
+        assert!(
+            stderr.contains("kb: skipped 0007-broken.md: missing `- id:` line; fix the file or remove it\n"),
+            "{args:?}: {stderr}"
+        );
         assert!(!stderr.contains("2024-01-15"), "{args:?}: {stderr}");
     }
 }
@@ -369,6 +518,7 @@ fn the_edit_hook_reads_a_tilde_as_the_home_folder() {
         .args(["hook", "edit"])
         .env("KANBRAIN_DIR", &central)
         .env("HOME", home.path())
+        .env("XDG_DATA_HOME", home.path().join(".fallback"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -378,15 +528,58 @@ fn the_edit_hook_reads_a_tilde_as_the_home_folder() {
     assert!(refused.contains("\"permissionDecision\":\"deny\""), "{refused}");
 }
 
+// Unix only, as `fallback_inside` says.
+#[cfg(unix)]
+#[test]
+fn a_kb_that_loses_its_central_brain_falls_back_inside_the_tests_folders() {
+    // What a mutant of how `KANBRAIN_DIR` is read does: wrote a test's entries into the real central brain once.
+    let (central, here) = (tempdir(), tempdir());
+    let run = kb_command(here.path(), central.path()).env_remove("KANBRAIN_DIR").args(["path"]).output().unwrap();
+    let fallback = std::path::PathBuf::from(ok(&run).trim_end());
+    assert!(fallback.starts_with(central.path().join(".fallback")), "{}", fallback.display());
+}
+
+// Unix only: on Windows the platform data folder is the real user's, whatever the environment says.
+#[cfg(unix)]
+#[test]
+fn an_empty_kanbrain_dir_is_unset_rather_than_the_current_folder() {
+    let (here, home) = (tempdir(), tempdir());
+    let run = Command::new(env!("CARGO_BIN_EXE_kb"))
+        .args(["path"])
+        .current_dir(here.path())
+        .env("KANBRAIN_DIR", "")
+        .env("HOME", home.path())
+        .env("XDG_DATA_HOME", home.path().join("data"))
+        .output()
+        .unwrap();
+    let central = std::path::PathBuf::from(ok(&run).trim_end());
+    assert!(central.starts_with(home.path()) && central.ends_with("kanbrain"), "{}", central.display());
+    assert!(central.join("format").is_file(), "the platform data folder became the central brain");
+    assert_eq!(std::fs::read_dir(here.path()).unwrap().count(), 0, "nothing written in the current folder");
+}
+
+#[test]
+fn a_relative_kanbrain_dir_is_refused() {
+    let here = tempdir();
+    let run = fallback_inside(&mut Command::new(env!("CARGO_BIN_EXE_kb")), here.path())
+        .args(["add", "Lost"])
+        .current_dir(here.path())
+        .env("KANBRAIN_DIR", "todo")
+        .output()
+        .unwrap();
+    assert!(!run.status.success());
+    let said = String::from_utf8_lossy(&run.stderr);
+    assert!(said.contains("KANBRAIN_DIR must be an absolute path, not `todo`"), "{said}");
+    assert_eq!(std::fs::read_dir(here.path()).unwrap().count(), 0, "nothing written in the current folder");
+}
+
 #[test]
 fn a_command_waiting_for_its_stdin_holds_up_no_other() {
     let (central, repo) = (tempdir(), tempdir());
     ok(&kb(repo.path(), central.path(), &["init", "demo"], ""));
     ok(&kb(repo.path(), central.path(), &["add", "Shared"], ""));
-    let mut typing = Command::new(env!("CARGO_BIN_EXE_kb"))
+    let mut typing = kb_command(repo.path(), central.path())
         .args(["comment", "1", "-"])
-        .current_dir(repo.path())
-        .env("KANBRAIN_DIR", central.path())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -410,10 +603,8 @@ fn repositories_registered_at_once_are_all_kept() {
         .map(|n| {
             let repo = code.path().join(format!("repo{n}"));
             std::fs::create_dir(&repo).unwrap();
-            Command::new(env!("CARGO_BIN_EXE_kb"))
+            kb_command(&repo, central.path())
                 .args(["init", &format!("project{n}")])
-                .current_dir(repo)
-                .env("KANBRAIN_DIR", central.path())
                 .stdin(Stdio::null())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -435,10 +626,8 @@ fn a_project_change_waits_for_the_central_brain_before_locking_its_own() {
     ok(&kb(repo.path(), central.path(), &["init", "demo"], ""));
     // As the app does: the central brain first, then the repositories.
     let central_lock = Store::at(central.path()).unwrap().lock().unwrap();
-    let rename = Command::new(env!("CARGO_BIN_EXE_kb"))
+    let rename = kb_command(repo.path(), central.path())
         .args(["project", "rename", "renamed"])
-        .current_dir(repo.path())
-        .env("KANBRAIN_DIR", central.path())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -462,10 +651,8 @@ fn commands_run_in_parallel_lose_nothing() {
     ok(&kb(repo.path(), central.path(), &["add", "Shared"], ""));
     // As an agent's subagents would: all at once, each adding a task and commenting on the same one.
     let spawn = |args: Vec<String>| {
-        Command::new(env!("CARGO_BIN_EXE_kb"))
+        kb_command(repo.path(), central.path())
             .args(args)
-            .current_dir(repo.path())
-            .env("KANBRAIN_DIR", central.path())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -503,8 +690,8 @@ fn the_crates_readme_lists_the_same_commands_as_the_repositorys() {
 fn init_says_so_when_kb_isnt_on_the_path() {
     let (central, repo) = (tempdir(), tempdir());
     let init = |path: &std::ffi::OsStr| {
-        let mut init = Command::new(env!("CARGO_BIN_EXE_kb"));
-        init.args(["init", "demo"]).current_dir(repo.path()).env("KANBRAIN_DIR", central.path()).env("PATH", path);
+        let mut init = kb_command(repo.path(), central.path());
+        init.args(["init", "demo"]).env("PATH", path);
         ok(&init.output().unwrap())
     };
     let said = "`kb` isn't on your PATH";

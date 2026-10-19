@@ -10,13 +10,15 @@ minimum_test_timeout = 300
 exclude_re = [
     # Starts the installer and the app's processes: run by the installers' end-to-end checks, not by tests.
     'gui/src/update\.rs:.*replace (install|install_after_exit|install_now) -> Result',
+    # Starts that install in the background, and closes the app once it's done: no test runs the installer.
+    'gui/src/ui/mod\.rs:.*replace BrainView::install_update with \(\)',
     # The hover style of a list row: the window tests have no pointer to hover with.
     'gui/src/ui/list\.rs:.*delete ! in row',
     # The highlight of the form's tags list (by its line, so the row the list follows stays tested): a color, and the
     # window tests read bounds, not colors (the state tests check which tag it is, `Form::tag_sel`).
     'gui/src/ui/dialogs/form\.rs:168:.*replace == with != in tags_field',
     # Runs the user's editor and waits for it: the choice of editor (`editor_of`) is what tests check.
-    'gui/src/ui/mod\.rs:.*(replace open_editor -> Result| in open_editor$)',
+    'gui/src/ui/mod\.rs:.*(replace run_editor_on -> Result| in run_editor_on$)',
     # A leftover exactly CUT_WRITE_AGE old, to the nanosecond, is the only one `>=` would delete too.
     'core/src/store\.rs:.*replace > with >= in forget_cut_writes',
     # Where a one-line field scrolls for its cursor: the cursor exactly on an edge, or exactly SLACK past it, to the
@@ -25,18 +27,45 @@ exclude_re = [
     # Which row of the editor draws the cursor (`index == row`, by its line, so the selection's rows stay tested):
     # painted, and the window tests read bounds, not what's painted.
     'gui/src/ui/dialogs/editor\.rs:56:.*replace == with != in draw',
-    # A message exactly one second after what a read found, to the nanosecond, is the only one `<=` would join.
-    'gui/src/state/mod\.rs:.*replace < with <= in Board::say$',
-    # A message read exactly MESSAGE_TTL after it was set, to the nanosecond, is the only one `<=` would still show.
-    'gui/src/state/mod\.rs:.*replace < with <= in Board::message$',
+    # Which paragraph of a text a point is over: only a point exactly on the line between two paragraphs, to the
+    # sub-pixel, is taken otherwise by `<=` (as the first's last row rather than the next one's first).
+    'gui/src/ui/pointer\.rs:102:.*replace < with <= in Hit::column$',
+    # Which line a point between lines is taken as: only a point exactly on a line's bottom edge, to the sub-pixel, is
+    # taken otherwise by `<=` (as that line's rather than the next one's).
+    'gui/src/ui/pointer\.rs:123:.*replace < with <= in at$',
     # Which field a mouse press makes the one typed into: the state tests drive keys, and the window tests read bounds
     # without a pointer to press with.
     'gui/src/ui/pointer\.rs:.*replace focus with \(\)',
     # Downloads the installer from GitHub and runs it: the installer is checked by e2e/install.sh, not by tests.
     'core/src/cli/update\.rs:.*(replace run_installer -> Result| in run_installer$)',
+    # Two brains are never the same one (callers move or link across two), so `a <= b` splits where `a < b` does.
+    'gui/src/state/sources\.rs:.*replace < with <= in Board::two_brains_mut$',
     # The conflict just picked is never among those left to pick, so `>=` finds the same one after it as `>`.
     'gui/src/text/merge\.rs:.*replace > with >= in Merge::pick_at$',
     # The highlight of a conflict's pick: a color and a weight, and the window tests read bounds, not colors (the
     # state tests check what's picked, `Conflict::pick`).
     'gui/src/ui/dialogs/merge\.rs:.*replace == with != in conflict_box$',
+    # No waits for a busy file is what `busy_delays` gives off Windows, where the mutants run.
+    'core/src/store\.rs:.*replace busy_delays -> &.static\[Duration\] with Vec::leak\(Vec::new\(\)\)',
+    # Writing into a String never fails, so a body that doesn't check what it returned does what this one does.
+    'core/src/model/text\.rs:.*replace infallible with \(\)',
+    # The build-time check of MIGRATIONS (a `const`, in no function): a mutant of it either fails the build or, with
+    # no step whose format to check, checks nothing either way.
+    'core/src/migrate\.rs:[0-9]+:[0-9]+: replace [^ ]+ with [^ ]+$',
+    # The app's entry, and opening its real window (on the user's own board, from a test on a desktop): what goes to the
+    # window is tested by `start`, the startup error's view by `StartupError` in a test window, the checks `open` makes
+    # first by themselves (`ensure_display_on`, the core's root check), and the smoke checks start the app.
+    'gui/src/main\.rs:.*replace (main|open) -> ',
+    'gui/src/ui/mod\.rs:.*replace run with \(\)',
+    # Reads the process's environment, which tests can't set (`set_var` is unsafe, and unsafe code is forbidden):
+    # `ensure_display_on`, what it makes of it, is what's tested; the Linux smoke check runs the app with dead displays.
+    'gui/src/ui/display\.rs:.*replace ensure_display -> ',
+    # The fonts the text is drawn in: how it looks, and the window tests read bounds, not glyphs.
+    'gui/src/ui/mod\.rs:.*replace load_fonts with \(\)',
+    # Writes to the process's stderr, which a test in the process can't read: the release smoke checks read it (the
+    # startup error's window, and the error alone without a display, are tested by themselves).
+    'gui/src/ui/startup\.rs:.*replace report with \(\)',
+    # Which phase of a window-wide mouse event a scrollbar acts in: it acts once either way, and only another listener
+    # stopping the event between the two phases could tell. Acting in neither (`with false`) is caught.
+    'gui/src/ui/scrollbar\.rs:.*(replace bubbling -> bool with true|replace == with != in bubbling)$',
 ]
