@@ -56,7 +56,8 @@ kb init        # creates .brain/ and tells the project's agents about it
    of yours is never taken out for looking like kanbrain's. When it does look like one (`kb`, by its path or not,
    followed by the hook's words anywhere in it, `env kb context` and `echo kb context` alike), `init` adds none
    beside it and says so, for you to replace it with the hook as written or, if it isn't kanbrain's, add kanbrain's
-   beside it; `deinit` leaves it and says so, for you to remove it. One that merely resembles a hook
+   beside it; `deinit` leaves it and says so, for you to remove it. A hook of yours in the same matcher group as
+   kanbrain's (the same `hooks` list) stays there when `deinit` takes kanbrain's out. One that merely resembles a hook
    (`kb.sh hook tool`, `cat ~/notes/kb/context`) is left as it is, with kanbrain's added beside it.
 
    Agents skipped describing the project when only the section and `context` asked them to; with these, Claude

@@ -116,6 +116,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   (`init`, `deinit`, a move or rename). `kb init` refuses a folder whose path isn't valid Unicode, which
   `projects.md`, a UTF-8 file, can't hold, also when reached through a link: it used to register a garbled path,
   naming another folder.
+- `kb deinit` (and `--purge`) takes only kanbrain's hooks out of a matcher group in `.claude/settings.local.json`,
+  keeping a hook of the user's in the same `hooks` list, and the group unless kanbrain's were all it held. It took
+  the whole group out, the user's hooks with it, and never told of a look-alike there, which it now says to remove.
 
 ## [0.6.2] - 2026-10-16
 

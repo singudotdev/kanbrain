@@ -505,3 +505,58 @@ fn a_hook_edited_by_hand_beside_kanbrains_is_unsaid_until_kanbrains_goes() {
     assert_eq!(commands(&path, "SessionStart"), ["/Users/John Doe/bin/kb"]);
     assert_eq!(commands(&path, "PreToolUse"), Vec::<String>::new());
 }
+
+#[test]
+fn only_kanbrains_handler_leaves_a_group_it_shares_with_the_users() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join(SETTINGS);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let date = json!({ "type": "command", "command": "date" });
+    let mixed = json!({ "hooks": { "Stop": [{ "hooks": [{ "type": "command", "command": "kb hook stop" }, date] }] } });
+    fs::write(&path, mixed.to_string()).unwrap();
+    assert_eq!(add_hooks(root.path()).unwrap().0, Change::Written, "kanbrain's Stop is there, not added again");
+    assert_eq!(commands(&path, "Stop"), ["kb hook stop"]);
+    assert_eq!(remove_hooks(root.path()).unwrap(), (Change::Written, vec![]));
+    let back: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(back, json!({ "hooks": { "Stop": [{ "hooks": [date] }] } }), "the user's handler stays");
+}
+
+#[test]
+fn a_look_alike_sharing_kanbrains_group_is_told_of_and_stays() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join(SETTINGS);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let theirs = json!({ "type": "command", "command": "cd /x && kb hook stop" });
+    let mixed =
+        json!({ "hooks": { "Stop": [{ "hooks": [{ "type": "command", "command": "kb hook stop" }, theirs] }] } });
+    fs::write(&path, mixed.to_string()).unwrap();
+    let stop = Edited { event: "Stop", command: "cd /x && kb hook stop".into(), hook: "kb hook stop" };
+    assert_eq!(remove_hooks(root.path()).unwrap(), (Change::Written, vec![stop]));
+    let back: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(back, json!({ "hooks": { "Stop": [{ "hooks": [theirs] }] } }));
+}
+
+#[test]
+fn older_settings_kanbrain_wrote_still_go_cleanly() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join(SETTINGS);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    // An older release's, and kanbrain's two PreToolUse hooks put in one group by hand.
+    let older = r#"{"hooks":{"SessionStart":[{"matcher":"startup|resume|clear|compact","hooks":[{"type":"command","command":"kb context"}]}],"PreToolUse":[{"hooks":[{"type":"command","command":"kb hook edit"},{"type":"command","command":"kb hook tool"}]}]}}"#;
+    fs::write(&path, older).unwrap();
+    assert_eq!(remove_hooks(root.path()).unwrap(), (Change::Removed, vec![]));
+    assert!(!root.path().join(".claude").exists());
+}
+
+#[test]
+fn a_group_the_user_left_empty_isnt_taken_out() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join(SETTINGS);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let theirs = json!({ "hooks": { "Stop": [{ "matcher": "x", "hooks": [] }] } });
+    fs::write(&path, theirs.to_string()).unwrap();
+    add_hooks(root.path()).unwrap();
+    assert_eq!(remove_hooks(root.path()).unwrap(), (Change::Written, vec![]));
+    let back: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(back, theirs);
+}

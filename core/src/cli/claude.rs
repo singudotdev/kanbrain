@@ -141,8 +141,9 @@ fn group(hook: &Hook) -> Value {
     }
 }
 
-/// Takes the hooks out of `root`'s settings, and the keys they leave empty; deletes the file if nothing else is in it.
-/// A hook edited by hand stays; each is returned, for the user to remove.
+/// Takes the hooks out of `root`'s settings, and the matcher groups and keys they leave empty; deletes the file if
+/// nothing else is in it. A hook edited by hand stays, in its group with kanbrain's or not; each is returned, for the
+/// user to remove.
 pub fn remove_hooks(root: &Path) -> Result<(Change, Vec<Edited>)> {
     let path = root.join(SETTINGS);
     if !path.is_file() {
@@ -156,9 +157,14 @@ pub fn remove_hooks(root: &Path) -> Result<(Change, Vec<Edited>)> {
     let mut edited = Vec::new();
     for hook in &HOOKS {
         let Some(groups) = hooks.get_mut(hook.event).and_then(Value::as_array_mut) else { continue };
-        let before = groups.len();
-        groups.retain(|group| !runs(group, hook.command));
-        changed |= groups.len() != before;
+        // Only kanbrain's handlers: a user's own in the same group stays, and the group with it.
+        groups.retain_mut(|group| {
+            let Some(handlers) = group.get_mut("hooks").and_then(Value::as_array_mut) else { return true };
+            let before = handlers.len();
+            handlers.retain(|handler| !kanbrains(handler, hook.command));
+            changed |= handlers.len() != before;
+            handlers.len() == before || !handlers.is_empty()
+        });
         edited.extend(look_alikes(groups, hook));
         if groups.is_empty() {
             hooks.remove(hook.event);
