@@ -20,8 +20,6 @@ pub struct TextEditor {
     anchor: Option<(usize, usize)>,
     /// The word or line a double- or triple-click selected, while a drag or shift+click can still grow it.
     grab: Option<Grab<(usize, usize)>>,
-    /// Whether the text changed since the editor opened.
-    pub modified: bool,
 }
 
 /// What a mouse press or drag does at a position in the text.
@@ -56,7 +54,7 @@ impl TextEditor {
         // Start at the end, ready to append.
         let row = lines.len() - 1;
         let col = lines[row].chars().count();
-        Self { lines, row, col, anchor: None, grab: None, modified: false }
+        Self { lines, row, col, anchor: None, grab: None }
     }
 
     /// An editor over `lines` as given, the cursor at the start: for text the window shows rather than edits,
@@ -66,7 +64,7 @@ impl TextEditor {
         if lines.is_empty() {
             lines.push(String::new());
         }
-        Self { lines, row: 0, col: 0, anchor: None, grab: None, modified: false }
+        Self { lines, row: 0, col: 0, anchor: None, grab: None }
     }
 
     /// The text, without trailing whitespace.
@@ -102,26 +100,22 @@ impl TextEditor {
                     let (a, b) = (self.byte(self.row, self.col - 1), self.byte(self.row, self.col));
                     self.lines[self.row].drain(a..b);
                     self.col -= 1;
-                    self.modified = true;
                 } else if self.row > 0 {
                     // At the start of a line: join it onto the end of the previous one.
                     let line = self.lines.remove(self.row);
                     self.row -= 1;
                     self.col = self.line_len(self.row);
                     self.lines[self.row].push_str(&line);
-                    self.modified = true;
                 }
             }
             KeyCode::Delete => {
                 if self.col < self.line_len(self.row) {
                     let (a, b) = (self.byte(self.row, self.col), self.byte(self.row, self.col + 1));
                     self.lines[self.row].drain(a..b);
-                    self.modified = true;
                 } else if self.row + 1 < self.lines.len() {
                     // At the end of a line: pull the next line up onto this one.
                     let next = self.lines.remove(self.row + 1);
                     self.lines[self.row].push_str(&next);
-                    self.modified = true;
                 }
             }
             code => self.move_cursor(code, key.modifiers.contains(KeyModifiers::SHIFT)),
@@ -191,7 +185,6 @@ impl TextEditor {
             }
         }
         self.lines[self.row].push_str(&rest);
-        self.modified = true;
     }
 
     /// Selects the whole text, the cursor at its end.
@@ -271,7 +264,6 @@ impl TextEditor {
         self.lines.drain(r1 + 1..=r2);
         (self.row, self.col) = (r1, c1);
         self.anchor = None;
-        self.modified = true;
         true
     }
 

@@ -1,7 +1,8 @@
 //! The new / edit form and the quick-add field: what typing in them and saving them changes.
 
 use super::{
-    Board, Field, Form, FormTarget, Key, Mode, Pending, QuickAdd, Tab, Telling, WhereFor, changed_on_disk, listed,
+    Board, Changed, Field, Form, FormTarget, Key, Mode, Pending, QuickAdd, Tab, Telling, WhereFor, changed_on_disk,
+    listed,
 };
 use crate::text::editor::LineInput;
 use anyhow::Result;
@@ -46,23 +47,23 @@ impl Board {
     /// What `kb` changed, since the edit form opened, of its entry's title, tags, related entries and status, said for
     /// the status bar; `None` if nothing, or on a new entry's form.
     pub(super) fn form_changed_on_disk(&self, form: &Form) -> Option<String> {
-        self.form_changed_but(form, "")
+        self.form_changed_but(form, None)
     }
 
     /// What [`form_changed_on_disk`](Self::form_changed_on_disk) says but for `field`, which a save that stops over
     /// it is about to say.
-    fn form_changed_but(&self, form: &Form, field: &str) -> Option<String> {
+    fn form_changed_but(&self, form: &Form, but: Option<Changed>) -> Option<String> {
         let (FormTarget::Edit(key), Some(opened)) = (form.target, &form.opened) else { return None };
         let now = self.task(key)?;
         let related = self.related_keys(key);
         let relinked = related.len() != opened.links.len() || related.iter().any(|k| !opened.links.contains(k));
         let fields = [
-            (now.title != opened.title, "title"),
-            (now.tags != opened.tags, "tags"),
-            (relinked, "related entries"),
-            (now.status != opened.status, "status"),
+            (now.title != opened.title, Changed::Title),
+            (now.tags != opened.tags, Changed::Tags),
+            (relinked, Changed::Related),
+            (now.status != opened.status, Changed::Status),
         ];
-        changed_on_disk(&self.entry_name(key), &fields.map(|(changed, name)| (changed && name != field, name)))
+        changed_on_disk(&self.entry_name(key), &fields.map(|(changed, field)| (changed && Some(field) != but, field)))
     }
 
     /// Opens the form for changing the selected entry's title and tags.
@@ -105,7 +106,10 @@ impl Board {
                 };
                 if let Some(now) = renamed {
                     let name = self.entry_name(key);
-                    self.unsay_found(self.form_changed_on_disk(&form), self.form_changed_but(&form, "title"));
+                    self.unsay_found(
+                        self.form_changed_on_disk(&form),
+                        self.form_changed_but(&form, Some(Changed::Title)),
+                    );
                     self.notify(format!(
                         "{name}'s title changed meanwhile, to “{now}”: save again to keep yours, ctrl+t to take it"
                     ));
@@ -145,7 +149,8 @@ impl Board {
                 // As every other edit says it was saved.
                 if saved && related {
                     let said = format!("{} saved", self.entry_name(key));
-                    let fields = [(!same_title, "title"), (!same_tags, "tags"), (!same_links, "related entries")];
+                    let fields =
+                        [(!same_title, Changed::Title), (!same_tags, Changed::Tags), (!same_links, Changed::Related)];
                     match (telling, listed(&fields)) {
                         (Telling::Tell(note), Some(changed)) => {
                             self.tell_agent(key, &format!("the {changed}"), &note, &said);

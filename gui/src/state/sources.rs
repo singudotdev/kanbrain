@@ -30,6 +30,9 @@ impl Key {
     }
 }
 
+/// How lists of brains and the scope filter name the central brain.
+const CENTRAL: &str = "Central";
+
 /// One brain the window shows.
 #[derive(Debug)]
 pub struct Source {
@@ -128,6 +131,23 @@ impl Board {
         &mut self.sources[src].brain
     }
 
+    /// The brains at `a` and `b`, both to change at once, as a move or a link across repositories does: `a` and `b`
+    /// must differ.
+    pub(super) fn two_brains_mut(&mut self, a: usize, b: usize) -> (&mut Brain, &mut Brain) {
+        if a < b {
+            let (left, right) = self.sources.split_at_mut(b);
+            (&mut left[a].brain, &mut right[0].brain)
+        } else {
+            let (left, right) = self.sources.split_at_mut(a);
+            (&mut right[0].brain, &mut left[b].brain)
+        }
+    }
+
+    /// The name of the project the brain at `src` is a repository of; empty for the central brain.
+    pub(super) fn project_name(&self, src: usize) -> &str {
+        self.sources[src].project.as_deref().unwrap_or_default()
+    }
+
     /// The entry `key` names.
     pub fn task(&self, key: Key) -> Option<&Task> {
         self.sources.get(key.src)?.brain.task(key.id)
@@ -170,7 +190,7 @@ impl Board {
     /// The scopes there are, with their names, in the order the filter shows them: all, the central
     /// brain, then each project followed by its repositories if it has several.
     pub fn scopes(&self) -> Vec<(Scope, String)> {
-        let mut scopes = vec![(Scope::All, "All".to_string()), (Scope::Central, "Central".to_string())];
+        let mut scopes = vec![(Scope::All, "All".to_string()), (Scope::Central, CENTRAL.to_string())];
         let mut seen: Vec<&str> = Vec::new();
         for source in &self.sources {
             let Some(project) = source.project.as_deref() else { continue };
@@ -204,9 +224,8 @@ impl Board {
 
     /// Opens the project filter's dropdown, on the scope shown.
     pub fn open_scopes(&mut self) {
-        let picker = Picker::default();
-        let sel = self.scope_candidates(&picker).iter().position(|(s, _)| *s == self.scope).unwrap_or(0);
-        self.mode = Mode::Scopes(Picker { sel, ..picker });
+        let sel = self.scope_candidates(&Picker::default()).iter().position(|(s, _)| *s == self.scope).unwrap_or(0);
+        self.mode = Mode::Scopes(Picker::at(sel));
     }
 
     /// Shows the dropdown's candidate at `index` and closes it.
@@ -435,14 +454,8 @@ impl Board {
         if a.src == b.src {
             return self.brain_mut(a.src).toggle_link(a.id, b.id);
         }
-        // Two brains of `sources` at once, as a move does.
-        if a.src < b.src {
-            let (left, right) = self.sources.split_at_mut(b.src);
-            left[a.src].brain.toggle_repo_link(a.id, &mut right[0].brain, b.id)
-        } else {
-            let (left, right) = self.sources.split_at_mut(a.src);
-            right[0].brain.toggle_repo_link(a.id, &mut left[b.src].brain, b.id)
-        }
+        let (here, there) = self.two_brains_mut(a.src, b.src);
+        here.toggle_repo_link(a.id, there, b.id)
     }
 
     /// How an entry of another repository of its project names `key`'s entry in its links.
@@ -463,7 +476,7 @@ impl Board {
 
     /// How a brain is named in lists of them: its label, or `Central`.
     pub fn brain_name(&self, src: usize) -> &str {
-        self.sources[src].label.as_deref().unwrap_or("Central")
+        self.sources[src].label.as_deref().unwrap_or(CENTRAL)
     }
 
     /// A tag's chip colors, background and text, from the first brain whose `tags.md` has it (the central brain's,

@@ -162,6 +162,13 @@ fn the_status_line_names_running_tasks_and_skips_a_brain_it_cant_read() {
     let id = brain.add(NewEntry { title: "Fix login".into(), ..NewEntry::default() }).unwrap();
     brain.set_status(id, Status::Doing).unwrap();
     assert!(status_line(central.path(), now()).unwrap().starts_with("shop #1 Fix login 00:00:"));
+    // Questions waiting are counted across every brain.
+    let asked = brain.add(NewEntry { title: "Pick a region".into(), ..NewEntry::default() }).unwrap();
+    brain.ask(asked, "Which region?").unwrap();
+    let mut here = Brain::open(Store::at(central.path()).unwrap()).unwrap();
+    let asked = here.add(NewEntry { title: "Renew passport".into(), ..NewEntry::default() }).unwrap();
+    here.ask(asked, "Which office?").unwrap();
+    assert!(status_line(central.path(), now()).unwrap().ends_with(" · 2 waiting"));
     Store::at(&blog).unwrap();
     std::fs::write(blog.join(crate::migrate::FORMAT_FILE), "99\n").unwrap();
     assert!(status_line(central.path(), now()).unwrap().starts_with("shop #1 Fix login"), "blog is newer");

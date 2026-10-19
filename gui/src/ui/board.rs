@@ -243,7 +243,7 @@ fn draw_card(
         .bg(rgb(if selected { theme::SELECTED } else { theme::BG }))
         .when(!selected, |d| d.hover(|s| s.bg(rgb(theme::HOVER))))
         .when(running.is_some(), |d| d.border_l_4().border_color(rgb(theme::running_color(task))))
-        .when(matches!(task.asked(), Some(Asked::Waiting(_))), |d| d.border_l_4().border_color(rgb(theme::ACCENT)))
+        .when(task.waits_for_answer(), |d| d.border_l_4().border_color(rgb(theme::ACCENT)))
         .cursor_pointer()
         .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
             this.act(cx, |b| b.click_entry(key, event.click_count()));
@@ -281,7 +281,7 @@ fn draw_card(
         .child(footer)
 }
 
-/// A card's title color: dimmed once done, as what's no longer to do.
+/// A task's title color, on its card or its row: dimmed once done, as what's no longer to do.
 pub(super) fn title_color(status: Status) -> u32 {
     if status == Status::Done { DIM } else { TEXT }
 }

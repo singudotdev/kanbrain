@@ -15,11 +15,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   PowerShell 5.1 completes no word starting with a single `-` (a tag to take off), which it takes for a parameter.
 - CI's lints (`cargo clippy` and `cargo doc`, warnings failing) run on macOS and Windows too, where code behind
   `cfg(windows)` or `cfg(not(unix))` is compiled.
-- `kanbrain-core`, for code built on it: `model::Comment::first_line` and `model::Task::doing_by(Author)`;
-  `store::Store::load_entries`, with each file skipped as a `store::Skipped` and why (`store::SkipReason`);
-  `cli::Step` and `cli::StepKind`, what `cli::init_steps`, `cli::rename_project_steps`, `cli::rename_repo_steps`,
-  `cli::move_repo_steps`, `cli::remove_repo_steps` and `cli::remove_project_steps` return; `cli::update::update_program`
-  and `cli::update::cargo_update_command`.
+- `kanbrain-core`, for code built on it: `model::Comment::first_line`, `model::Task::doing_by(Author)` and
+  `model::Task::waits_for_answer`; `store::Store::load_entries`, with each file skipped as a `store::Skipped` and why
+  (`store::SkipReason`); `cli::Step` and `cli::StepKind`, what `cli::init_steps`, `cli::rename_project_steps`,
+  `cli::rename_repo_steps`, `cli::move_repo_steps`, `cli::remove_repo_steps` and `cli::remove_project_steps` return;
+  `cli::update::update_program` and `cli::update::cargo_update_command`.
 - The kanban app selects the text it shows with the mouse, to copy with `ctrl+c` (`cmd+c` on macOS) and, on Linux,
   the primary selection: the details (title, tags, the question, description, comments, the thread's changes, history,
   times), Manage project's descriptions and folders, a delete's confirmation, a merge's lines and the status bar's

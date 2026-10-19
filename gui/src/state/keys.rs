@@ -6,7 +6,7 @@ use super::nav::Step;
 use super::{Board, Confirm, Key, Mode, Picker, Request, Tab, Target};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
 use kanbrain_core::brain::Group;
-use kanbrain_core::model::{Asked, DecisionState, Status};
+use kanbrain_core::model::{DecisionState, Status, Task};
 use kanbrain_core::period::{Period, Unit};
 
 /// One thing a key does.
@@ -117,12 +117,11 @@ impl When {
                 key.and_then(|k| board.decision_for(k)).and_then(|d| board.task(d)).is_some_and(|d| d.decision != state)
             }
             Self::OtherBrain => entry.is_some() && board.sources.len() > 1,
-            Self::NotWaiting => entry.is_some_and(|t| !matches!(t.asked(), Some(Asked::Waiting(_)))),
+            Self::NotWaiting => entry.is_some_and(|t| !t.waits_for_answer()),
             Self::Commented(some) => entry.is_some_and(|t| t.comments.is_empty() != some),
             // A task waiting on a proposed decision is answered by deciding (`y`, `Y`, `j`).
             Self::Asks => {
-                entry.is_some_and(|t| matches!(t.asked(), Some(Asked::Waiting(_))))
-                    && key.is_some_and(|k| board.proposed_for(k).is_empty())
+                entry.is_some_and(Task::waits_for_answer) && key.is_some_and(|k| board.proposed_for(k).is_empty())
             }
             Self::Proposed => key.is_some_and(|k| !board.proposed_for(k).is_empty()),
             Self::Waiting => !board.waiting().is_empty(),

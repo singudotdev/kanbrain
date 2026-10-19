@@ -554,6 +554,12 @@ impl Task {
         }
     }
 
+    /// Whether this parked task waits for a person's answer to its question: [`Task::asked`] is
+    /// [`Asked::Waiting`].
+    pub fn waits_for_answer(&self) -> bool {
+        matches!(self.asked(), Some(Asked::Waiting(_)))
+    }
+
     /// The comments and the activity together, oldest first, each in its own order. A change and a comment in the
     /// same second go change first: the app's **Save and tell** writes the comment that tells of a change after it.
     pub fn thread(&self) -> Vec<ThreadItem<'_>> {

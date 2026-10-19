@@ -228,7 +228,9 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
 ├── watch.rs         polls the data folders (names, sizes, times) every second, naming those other programs changed
 ├── state/           what's on screen and every action, without GPUI (tested without a window)
 │   ├── mod.rs       Board: the brains, the scope, the tab and the board's layout (Layout: kanban or list), the selected entry (by Key), the details, search, report view, status message, what the window must do (Request: $EDITOR, the folder dialog, the update), a newer release found; columns and lists
-│   ├── mode.rs      the dialogs and fields that take the keys (Mode): search, form, quick add, editor, confirm, links, an entry's comments (Comments), project and tag dropdowns, which project a quick-added task goes in or an entry moves to, the right-click menu (Menu), Manage project, command palette, adding a project (AddProject, ProjectOption), renaming, moving or removing a project or repository (Manage), whether a save tells the agent working on the task (Tell)
+│   ├── mode/        the dialogs and fields that take the keys (Mode): search, form, quick add, editor, confirm, links, an entry's comments (Comments), project and tag dropdowns, which project a quick-added task goes in or an entry moves to, the right-click menu (Menu), Manage project, command palette, adding a project (AddProject, ProjectOption), renaming, moving or removing a project or repository (Manage), whether a save tells the agent working on the task (Tell)
+│   │   ├── form.rs  the new / edit form's fields (Form, FormTarget, Field) and what typing in them holds
+│   │   └── edit.rs  the text editor's dialog (Edit) and what it edits (Target)
 │   ├── actions.rs   status changes and drops, asking which brain a new entry goes in when the scope shows several, moving an entry to another brain, the editor's save, deletes, links, undo (recording what each change writes), reload, park & quit, export
 │   ├── decisions.rs the questions and decisions waiting on you: which, the next one, answering, accepting or rejecting
 │   ├── form.rs      the new / edit form (its tags to pick, related entries, column and project) and quick add
@@ -381,8 +383,9 @@ the module includes its test file with a hook at its end, and the file starts wi
 mod tests;
 ```
 
-The path is relative to the module's folder. `autotests = false` in each crate stops Cargo from also building these
-files as integration tests. Keep them inside the crate: rust-analyzer doesn't follow `#[path]` out of it.
+The path is relative to the module's folder. A test file grown too long becomes a folder, as a module does:
+`gui/tests/state/mod.rs` holds the fixtures, and a file beside it each area of the board's tests. `autotests = false`
+in each crate stops Cargo from also building these files as integration tests. Keep them inside the crate: rust-analyzer doesn't follow `#[path]` out of it.
 
 | module | covers |
 | --- | --- |
