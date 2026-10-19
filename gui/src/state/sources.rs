@@ -9,7 +9,7 @@ use anyhow::Result;
 use kanbrain_core::brain::{Brain, Calendar, CalendarView, Report, ReportView};
 use kanbrain_core::cli::{self, StepKind};
 use kanbrain_core::migrate::TooNew;
-use kanbrain_core::model::{RepoLink, Task};
+use kanbrain_core::model::{Author, RepoLink, Task};
 use kanbrain_core::projects::{self, Repo};
 use kanbrain_core::store::{BrainLock, PROJECT_DIR, Store};
 use std::path::{Path, PathBuf};
@@ -502,6 +502,11 @@ impl Board {
     /// Whether a task's clock runs, yours or an agent's, in any brain whatever the scope shows.
     pub fn any_running(&self) -> bool {
         self.running().next().is_some()
+    }
+
+    /// Whether a task you started runs, in any brain: what Park & quit parks, as agents' tasks keep running.
+    pub fn any_mine_running(&self) -> bool {
+        self.running().any(|(_, task)| task.started_by() == Author::Human)
     }
 
     /// The report tab's view with the tab's search.

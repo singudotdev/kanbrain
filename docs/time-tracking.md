@@ -22,8 +22,8 @@ week or month. There's nothing to turn on, and nothing extra to do: moving cards
 The same rules apply everywhere: on the board, with `kb start ID` from a terminal or an agent.
 
 The running tasks show in **Doing**. The projects row, under the toolbar, ends with today's total for every task
-(**Today 2h 10m**) and, while a task runs, **Park & quit** (`Q`). Cards show their tracked total, the running one its
-clock (▶), and the details show today, this week and the total, with the number of sessions.
+(**Today 2h 10m**) and, while a task of yours runs, **Park & quit** (`Q`). Cards show their tracked total, the
+running one its clock (▶), and the details show today, this week and the total, with the number of sessions.
 
 Sessions are saved in the task file under `## Sessions` (see [Data format](data-format.md)), next to the status history.
 

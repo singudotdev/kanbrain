@@ -628,6 +628,29 @@ fn todays_total_and_park_and_quit_sit_in_the_projects_row_with_no_bar_of_running
 }
 
 #[gpui::test]
+fn park_and_quit_shows_only_while_a_task_of_yours_runs(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let mut agents = Task::new(1, "agent's".to_string(), now());
+    agents.set_status(Status::Doing, now(), Author::Agent);
+    agents.start_session(now());
+    store.save(&mut agents).unwrap();
+    store.save(&mut Task::new(2, "mine".to_string(), now())).unwrap();
+    let board = Board::open(dir.path(), None).unwrap();
+    let (view, cx) = cx.add_window_view(|window, cx| BrainView::new(board, window, cx));
+    cx.run_until_parked();
+    view.read_with(cx, |view, _| assert!(view.board.any_running(), "the agent's task runs"));
+    assert!(cx.debug_bounds("button park-quit").is_none(), "it would park nothing: agents' tasks keep running");
+
+    view.update(cx, |view, cx| {
+        view.board.set_status(crate::state::Key::new(0, 2), Status::Doing);
+        cx.notify();
+    });
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("button park-quit").is_some(), "yours runs: it parks it");
+}
+
+#[gpui::test]
 fn manage_projects_buttons_open_their_dialogs_and_come_back(cx: &mut gpui::TestAppContext) {
     let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     for repo in ["api", "web"] {
