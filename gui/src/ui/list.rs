@@ -2,9 +2,11 @@
 //! To do · Doing · Parked · Done. A row is one line, so long titles fit and more tasks show at once.
 //! Rows are dragged onto a section to change their status, as cards are onto a column.
 
-use super::board::{clock, draggable, drop_target, empty_hint, meta, quick_add, show_all_done, status_header};
+use super::board::{
+    clock, draggable, drop_target, empty_hint, meta, quick_add, show_all_done, status_header, title_color,
+};
 use super::entries::LABEL_WIDTH;
-use super::theme::{self, DIM, TEXT};
+use super::theme;
 use super::widgets::{self, card, dim, dim_small, tag_chips};
 use super::{BrainView, menu};
 use crate::state::{Board, COLUMNS, Key};
@@ -108,13 +110,7 @@ fn row(
                 .child(l.to_string())
         }))
         .child(dim_small(format!("#{id}")).w(px(40.)).flex_none())
-        .child(
-            div()
-                .min_w_0()
-                .truncate()
-                .text_color(rgb(if task.status == Status::Done { DIM } else { TEXT }))
-                .child(task.title.clone()),
-        )
+        .child(div().min_w_0().truncate().text_color(rgb(title_color(task.status))).child(task.title.clone()))
         .children(widgets::state_pill(task))
         .child(tag_chips(board, &task.tags).flex_nowrap().flex_none())
         .child(div().flex_1())

@@ -281,7 +281,7 @@ fn draw_card(
         .child(footer)
 }
 
-/// A card's title color: dimmed once done, as what's no longer to do.
+/// A task's title color, on its card or its row: dimmed once done, as what's no longer to do.
 pub(super) fn title_color(status: Status) -> u32 {
     if status == Status::Done { DIM } else { TEXT }
 }
