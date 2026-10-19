@@ -32,7 +32,7 @@ pub use manage::{move_repo, remove_project, remove_repo, rename_project, rename_
 
 use crate::api::json::Summary;
 use crate::brain::{Brain, Group, ReportView};
-use crate::model::{Asked, Author, Kind, Status, Task, fmt_clock, infallible, now, parse_tags};
+use crate::model::{Author, Kind, Status, Task, fmt_clock, infallible, now, parse_tags};
 use crate::period::{Period, Unit};
 use crate::store::{self, SkipReason, Skipped, Store};
 use crate::{export, platform, projects};
@@ -575,7 +575,7 @@ fn status_line(central: &Path, now: DateTime<Local>) -> Result<String> {
         for (task, clock) in tasks.iter().filter_map(|t| Some((t, t.running_for(now)?))) {
             running.push(format!("{project}#{} {} {}", task.id, task.title, fmt_clock(clock)));
         }
-        waiting += tasks.iter().filter(|t| matches!(t.asked(), Some(Asked::Waiting(_)))).count();
+        waiting += tasks.iter().filter(|t| t.waits_for_answer()).count();
     }
     if running.is_empty() {
         running.push("idle".to_string());

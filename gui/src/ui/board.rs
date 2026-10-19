@@ -243,7 +243,7 @@ fn draw_card(
         .bg(rgb(if selected { theme::SELECTED } else { theme::BG }))
         .when(!selected, |d| d.hover(|s| s.bg(rgb(theme::HOVER))))
         .when(running.is_some(), |d| d.border_l_4().border_color(rgb(theme::running_color(task))))
-        .when(matches!(task.asked(), Some(Asked::Waiting(_))), |d| d.border_l_4().border_color(rgb(theme::ACCENT)))
+        .when(task.waits_for_answer(), |d| d.border_l_4().border_color(rgb(theme::ACCENT)))
         .cursor_pointer()
         .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
             this.act(cx, |b| b.click_entry(key, event.click_count()));

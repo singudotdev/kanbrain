@@ -1,13 +1,13 @@
 //! Questions and decisions agents leave for you: which entries wait on you, and answering, accepting or rejecting.
 
 use super::{Board, Key, Target};
-use kanbrain_core::model::{Asked, DecisionState, Kind};
+use kanbrain_core::model::{DecisionState, Kind, Task};
 
 impl Board {
     /// Whether saving `target` answers a question the task waits on.
     pub fn answers(&self, target: Target) -> bool {
         let Target::NewComment(key) = target else { return false };
-        self.task(key).is_some_and(|t| matches!(t.asked(), Some(Asked::Waiting(_))))
+        self.task(key).is_some_and(Task::waits_for_answer)
     }
 
     /// The decision `y`, `Y` and `j` act on for the entry `key`: itself if it's a decision, else the first one an
@@ -65,11 +65,7 @@ impl Board {
         let mut waiting: Vec<Key> = self
             .scoped()
             .flat_map(|(src, brain)| {
-                brain
-                    .tasks
-                    .iter()
-                    .filter(|t| matches!(t.asked(), Some(Asked::Waiting(_))))
-                    .map(move |t| Key::new(src, t.id))
+                brain.tasks.iter().filter(|t| t.waits_for_answer()).map(move |t| Key::new(src, t.id))
             })
             .collect();
         waiting.sort_by_key(|k| (k.src, k.id));
