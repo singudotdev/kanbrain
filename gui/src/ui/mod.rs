@@ -468,7 +468,7 @@ impl BrainView {
             // "Open file" asked for an external editor: run it, and re-read the files when it exits since
             // anything may have changed.
             Some(Request::Edit(path)) => {
-                let edit = cx.background_executor().spawn(async move { open_editor(&path) });
+                let edit = cx.background_executor().spawn(async move { run_editor_on(&path) });
                 cx.spawn(async move |this, cx| {
                     let edited = edit.await;
                     this.update(cx, |this, cx| {
@@ -685,7 +685,7 @@ fn action(
 
 /// Opens `path` in `$VISUAL` / `$EDITOR` (which may include arguments, e.g. `code -w`) and waits. One set but empty
 /// counts as unset, as shells treat it.
-fn open_editor(path: &Path) -> Result<()> {
+fn run_editor_on(path: &Path) -> Result<()> {
     let editor = editor_of(std::env::var("VISUAL").ok(), std::env::var("EDITOR").ok());
     let mut parts = editor.split_whitespace();
     let program = parts.next().context("no editor to run")?;
