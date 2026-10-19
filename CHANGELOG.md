@@ -13,8 +13,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   character PowerShell reads otherwise (`$`, quotes, the typographic ones `‘ ’ ‚ ‛ “ ” „` too, brackets, wildcards
   `* ?`, a leading dash `– — ―` it reads as `-`…), comes in single quotes, each single quote doubled. Windows
   PowerShell 5.1 completes no word starting with a single `-` (a tag to take off), which it takes for a parameter.
-- CI's lints (`cargo clippy` and `cargo doc`, warnings failing) run on macOS and Windows too, where code behind
-  `cfg(windows)` or `cfg(not(unix))` is compiled.
 - `kanbrain-core`, for code built on it: `model::Comment::first_line`, `model::Task::doing_by(Author)` and
   `model::Task::waits_for_answer`; `store::Store::load_entries`, with each file skipped as a `store::Skipped` and why
   (`store::SkipReason`); `cli::Step` and `cli::StepKind`, what `cli::init_steps`, `cli::rename_project_steps`,
@@ -33,8 +31,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - The kanban app has no bar of running tasks above the columns, which take its row: the running tasks show in Doing,
-  each card with its clock (`p` or a drag parks it), and "■ Idle" said what an empty Doing does. Today's total and,
-  while a task runs, **Park & quit** (`Q`) end the projects row, after **+ Add project**.
+  each card with its clock (`p` or a drag parks it), and "■ Idle" said what an empty Doing does; with one project
+  shown, an empty Doing says that **All** shows what runs elsewhere. Today's total and, while a task of yours runs,
+  **Park & quit** (`Q`) end the projects row, after **+ Add project**.
 - The kanban app's new / edit form shows the tags as chips in their colors, each with × to take it off, instead of
   text: a comma or space after a tag typed, or picking one from the list, adds it as a chip.
 - A Claude Code hook is kanbrain's, for `kb init`, `kb context` and `kb deinit` to update or take out, only as `init`
@@ -44,8 +43,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   under `"shell": "powershell"`; or the exec form (`"command"` the path, `"args"` the arguments). Anything else is
   the user's. One that looks like kanbrain's (`kb` followed by the hook's words anywhere in it: variables set before
   it, another command, a `$`, other quotes) gets none of kanbrain's beside it: `init` says so, to replace it or add
-  kanbrain's by hand, and `deinit` leaves it and says to remove it. Variables set before `kb`
-  (`KANBRAIN_DIR=… kb context`) made it kanbrain's before, and `deinit` took it out.
+  kanbrain's by hand, and `deinit` leaves it and says to remove it.
 
 ### Deprecated
 
@@ -78,21 +76,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The kanban app started from the Start Menu, Finder or a desktop's launcher, without a console (on Windows it never
   has one), says an error before the board opens in a small window titled "kanbrain couldn't open", with Copy (the
   message, for a bug report) and Close (or Enter, Esc), and exits with a failing code: running as root, a relative
-  `KANBRAIN_DIR`, or a brain it can't read or a newer kanbrain wrote only went to stderr, so the app just didn't open.
-  The error still goes to stderr too, and alone on Linux without a display (over ssh, or under `sudo`); `kanbrain`
-  with arguments, the command line, is unchanged. The release smoke checks fail on that window or that error.
-- The kanban app on Linux without a display (over ssh, under `sudo`, no `WAYLAND_DISPLAY` or `DISPLAY`) exits with
-  a failing code and says on stderr to run it from the desktop session: GPUI ran headless, the board's window unseen,
-  and the app never ended. A display named but dead fails the same way, saying so: a `WAYLAND_DISPLAY` nothing
-  answers at (or with no `XDG_RUNTIME_DIR` for it) says to unset it to use X11, a `DISPLAY` with no X server there
-  says `no X server at DISPLAY=…`; GPUI panicked (exit 101), on X11 only after a TCP timeout of minutes. A display
-  that refuses the app later (X authorization) exits with a failing code and GPUI's reason instead of a panic. A
-  board's window that can't open says why in the "kanbrain couldn't open" window and exits with a failing code: it
-  said it on stderr only and exited with 0. The Linux smoke check runs the app with none, a dead `WAYLAND_DISPLAY`
-  and a dead `DISPLAY`.
+  `KANBRAIN_DIR`, or a brain it can't read or a newer kanbrain wrote only went to stderr, so the app just didn't open;
+  a board's window that can't open said it on stderr only and exited with 0. The error still goes to stderr too;
+  `kanbrain` with arguments, the command line, is unchanged. The release smoke checks fail on that window or that
+  error.
+- The kanban app on Linux and FreeBSD without a display (over ssh, under `sudo -u other`, no `WAYLAND_DISPLAY` or
+  `DISPLAY`) exits with a failing code and says on stderr only to run it from the desktop session: GPUI ran
+  headless, the board's window unseen, and the app never ended. A display named but dead fails the same way, saying
+  so: a `WAYLAND_DISPLAY` nothing answers at (or with no `XDG_RUNTIME_DIR` for it) says to unset it to use X11, a
+  `DISPLAY` with no X server there says `no X server at DISPLAY=…`; GPUI panicked (exit 101), on X11 only after a
+  TCP timeout of minutes. A display that refuses the app later (X authorization) exits with a failing code and
+  GPUI's reason instead of a panic. The Linux smoke check runs the app with none, a dead `WAYLAND_DISPLAY` and a
+  dead `DISPLAY`.
 - `kb init` and `kb context` no longer add a second copy of a hook that runs `kb` at a quoted path with spaces
-  (`'/Users/John Doe/bin/kb' context`) beside it, and `kb deinit` takes it out with the rest. `kb deinit` no longer
-  takes out a hook of the user's that only looks like kanbrain's (`true&&/usr/bin/kb hook tool`, `kb.sh hook tool`).
+  beside it, and `kb deinit` takes it out with the rest. `kb deinit` (and `--purge`) takes only kanbrain's hooks out
+  of a matcher group in `.claude/settings.local.json`, keeping a hook of the user's in the same `hooks` list, and the
+  group unless kanbrain's were all it held: it took the whole group out, the user's hooks with it, and a hook of the
+  user's that only looks like kanbrain's (`true&&/usr/bin/kb hook tool`, `kb.sh hook tool`,
+  `KANBRAIN_DIR=… kb context`) too.
 - In a window smaller than the kanban app's board, the mouse wheel scrolled the column under the pointer and the
   board sideways at once. The vertical wheel now scrolls only the column, a horizontal wheel or `shift`+wheel only
   the board; a touchpad scrolls each way its fingers go, a slanting swipe both.
@@ -128,9 +129,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   (`init`, `deinit`, a move or rename). `kb init` refuses a folder whose path isn't valid Unicode, which
   `projects.md`, a UTF-8 file, can't hold, also when reached through a link: it used to register a garbled path,
   naming another folder.
-- `kb deinit` (and `--purge`) takes only kanbrain's hooks out of a matcher group in `.claude/settings.local.json`,
-  keeping a hook of the user's in the same `hooks` list, and the group unless kanbrain's were all it held. It took
-  the whole group out, the user's hooks with it, and never told of a look-alike there, which it now says to remove.
 
 ## [0.6.2] - 2026-10-16
 

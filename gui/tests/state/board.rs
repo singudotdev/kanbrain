@@ -158,7 +158,7 @@ fn starting_a_second_task_of_yours_is_refused_but_an_agents_isnt() {
     f.board.brain_mut(0).author = kanbrain_core::model::Author::Agent;
     f.board.brain_mut(0).set_status(3, Status::Doing).unwrap();
     f.board.brain_mut(0).author = kanbrain_core::model::Author::Human;
-    assert_eq!(f.board.running().len(), 2, "yours and the agent's both run");
+    assert_eq!(f.board.running().count(), 2, "yours and the agent's both run");
 }
 
 #[test]
@@ -211,24 +211,6 @@ fn quick_add_creates_tasks_in_the_column_and_keeps_typing() {
     assert!(matches!(f.board.mode, Mode::Normal));
     let titles: Vec<_> = f.board.column(Status::Parked).iter().map(|(_, t)| t.title.clone()).collect();
     assert_eq!(titles, ["much later", "later"]);
-}
-
-#[test]
-fn running_tasks_keep_their_order_the_longest_running_first() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = Store::at(dir.path()).unwrap();
-    let t0 = now() - chrono::Duration::hours(1);
-    // Saved newest first, so the files' order isn't the one asked for.
-    for (id, minutes) in [(1, 30), (2, 10), (3, 20)] {
-        let mut task = Task::new(id, format!("task {id}"), t0);
-        let at = t0 + chrono::Duration::minutes(minutes);
-        task.set_status(Status::Doing, at, Author::Agent);
-        task.start_session(at);
-        store.save(&mut task).unwrap();
-    }
-    let board = Board::open(dir.path(), None).unwrap();
-    let ids: Vec<u32> = board.running().iter().map(|(key, _)| key.id).collect();
-    assert_eq!(ids, [2, 3, 1]);
 }
 
 #[test]

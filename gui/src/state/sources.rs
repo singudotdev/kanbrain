@@ -9,7 +9,7 @@ use anyhow::Result;
 use kanbrain_core::brain::{Brain, Calendar, CalendarView, Report, ReportView};
 use kanbrain_core::cli::{self, StepKind};
 use kanbrain_core::migrate::TooNew;
-use kanbrain_core::model::{RepoLink, Task};
+use kanbrain_core::model::{Author, RepoLink, Task};
 use kanbrain_core::projects::{self, Repo};
 use kanbrain_core::store::{BrainLock, PROJECT_DIR, Store};
 use std::path::{Path, PathBuf};
@@ -494,17 +494,19 @@ impl Board {
         tags
     }
 
-    /// The tasks whose clocks run, in every brain whatever the scope shows, the longest running first: each keeps
-    /// its place in the top bar as others start and stop, whatever order the files were read in.
-    pub fn running(&self) -> Vec<(Key, &Task)> {
-        let mut running: Vec<(Key, &Task)> = self
-            .sources
-            .iter()
-            .enumerate()
-            .flat_map(|(src, s)| s.brain.running().map(move |t| (Key::new(src, t.id), t)))
-            .collect();
-        running.sort_by_key(|(key, task)| (task.sessions.last().map(|s| s.start), key.src, key.id));
-        running
+    /// The tasks whose clocks run, in every brain whatever the scope shows.
+    pub fn running(&self) -> impl Iterator<Item = (Key, &Task)> {
+        self.sources.iter().enumerate().flat_map(|(src, s)| s.brain.running().map(move |t| (Key::new(src, t.id), t)))
+    }
+
+    /// Whether a task's clock runs, yours or an agent's, in any brain whatever the scope shows.
+    pub fn any_running(&self) -> bool {
+        self.running().next().is_some()
+    }
+
+    /// Whether a task you started runs, in any brain: what Park & quit parks, as agents' tasks keep running.
+    pub fn any_mine_running(&self) -> bool {
+        self.running().any(|(_, task)| task.started_by() == Author::Human)
     }
 
     /// The report tab's view with the tab's search.

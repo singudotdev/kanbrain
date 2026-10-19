@@ -19,9 +19,14 @@ const MESSAGE_HEIGHT: f32 = 320.;
 /// Under the error, what to do: each error says what's wrong, and the ones that can, how to fix it.
 const WHAT_TO_DO: &str = "Fix what it says, then open kanbrain again.";
 
+/// Says `error` on stderr as `main` returning it would (`Error: `, then its causes): the app's every error alike.
+pub(super) fn report(error: &anyhow::Error) {
+    eprintln!("Error: {error:?}");
+}
+
 /// Says `error` on stderr, as `main` returning it would, then in a window, and exits with 1 once it's closed.
 pub fn fail(error: &anyhow::Error) -> ! {
-    eprintln!("Error: {error:?}");
+    report(error);
     // With no display (over ssh, or under sudo, which drops DISPLAY and WAYLAND_DISPLAY: the root check's own case)
     // GPUI runs headless, where the window opens unseen and its loop never ends; with a dead one it panics, or hangs
     // in libxcb's fallback to TCP: either way the window wouldn't show, so the error is said on stderr only.
@@ -47,7 +52,7 @@ pub(super) fn show(message: String, cx: &mut App) {
         cx.new(|cx| StartupError::new(message, window, cx))
     });
     if let Err(e) = opened {
-        eprintln!("kanbrain: could not open the window: {e:#}");
+        report(&e.context("couldn't open the window"));
         std::process::exit(1);
     }
     cx.activate(true);

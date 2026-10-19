@@ -27,9 +27,8 @@ remember when they moved, and track the time spent on them.
   the board follows their changes by itself.
 - **The board for people, the CLI for agents.** You see and move cards; agents run commands that print text or JSON.
   Neither has to know the other is there.
-- **One thing at a time, for you.** Doing holds one task of yours per brain (each project repository, and the
-  central one), and its clock runs while it's there; to switch, you park it, so the board always shows what you
-  were doing before. Agents can run several, one per subagent.
+- **One thing at a time, for you.** One task of yours in Doing per brain, its clock running; agents run several
+  ([Time tracking](time-tracking.md#how-it-works)).
 - **Mouse or keyboard.** Every action has a button, and every button has a key, named in its tooltip; `?` opens a command palette that lists what can be done now, searchable, and runs one.
 - **Zero config.** The only settings are optional environment variables.
 
@@ -41,7 +40,7 @@ remember when they moved, and track the time spent on them.
 | **note** | something to remember: a finding, how something works. Like a task without a status |
 | **decision** | something decided, with its context and consequences (an ADR). Starts from a template |
 | **link** | relates two entries (`r`, or the form's Related field); both show the other under "Related", and clicking it goes there |
-| **status** | the task's column: `todo` (not started), `doing` (being worked on, with its clock running: one of yours at a time per brain, several of an agent's), `parked` (started, set aside for now), `done` |
+| **status** | the task's column: `todo` (not started), `doing` (being worked on, its clock running: [one of yours per brain](time-tracking.md#how-it-works)), `parked` (started, set aside for now), `done` |
 | **history** | when the task's status changed, e.g. `todo → doing` on Mon 28 Sep 10:12 |
 | **tag** | a label such as `prod` or `support`, shown as a colored chip |
 | **brain** | a folder of entries: the central brain, for everything outside a project, or a project repository's `.brain/` |

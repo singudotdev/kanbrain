@@ -33,7 +33,7 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Compare
         run: |
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
@@ -62,9 +62,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: taiki-e/install-action@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
         with:
           tool: cargo-about@0.9.2
       - name: Generate
@@ -72,7 +72,7 @@ jobs:
           mkdir -p notices/kb notices/kanbrain
           cargo xtask notices kb > notices/kb/THIRD-PARTY-LICENSES.txt
           cargo xtask notices kanbrain > notices/kanbrain/THIRD-PARTY-LICENSES.txt
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: notices
           path: notices
@@ -105,12 +105,12 @@ jobs:
       PACKAGE: ${{ matrix.package }}
       TARGET: ${{ matrix.target }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: notices
           path: notices
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           # macOS builds both CPUs and joins them; the others build their own target.
           targets: ${{ runner.os == 'macOS' && 'x86_64-apple-darwin, aarch64-apple-darwin' || matrix.target }}
@@ -169,7 +169,7 @@ jobs:
           # Same format as sha256sum: "<hash>  <file>".
           $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
           Set-Content -NoNewline -Path "$asset.sha256" -Value "$hash  $asset`n"
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ${{ matrix.app }}-${{ matrix.target }}
           path: |
@@ -186,16 +186,16 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # The archives and their checksums: every build's artifact, not the notices.
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           path: dist
           pattern: k*-*
           merge-multiple: true
       # Lets anyone check a download came from this repo and this workflow: `gh attestation verify <file> -R
       # singudotdev/kanbrain`.
-      - uses: actions/attest-build-provenance@v4
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: |
             dist/*.tar.gz

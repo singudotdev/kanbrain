@@ -254,13 +254,13 @@ fn layout_switch(board: &Board, cx: &mut Context<BrainView>) -> Div {
     segmented(segments).when(!shown, Styled::invisible)
 }
 
-/// Today's tracked total and, while a task of yours or an agent's runs, Park & quit: the running tasks themselves
-/// show in Doing.
+/// Today's tracked total and, while a task of yours runs, Park & quit, which leaves agents' tasks running: the running
+/// tasks themselves show in Doing.
 fn today(board: &Board, cx: &mut Context<BrainView>) -> Div {
     let (from, to) = Period::current(Unit::Day).bounds();
     // By the clock: tasks that ran at once (yours beside an agent's) count that time once.
     let today = worked(board.sources.iter().flat_map(|s| &s.brain.tasks), from, to, now());
-    let running = !board.running().is_empty();
+    let mine = board.any_mine_running();
     // As tall as the row's buttons, so it lines up with them in a row aligned to its top.
     div()
         .flex()
@@ -272,7 +272,7 @@ fn today(board: &Board, cx: &mut Context<BrainView>) -> Div {
         .border_l_1()
         .border_color(rgb(BORDER))
         .child(dim(format!("Today {}", fmt_dur(today))).debug_selector(|| "today total".into()))
-        .children(running.then(|| small(action("park-quit", "Park & quit", Kind::Ghost, KeyCode::Char('Q'), cx))))
+        .children(mine.then(|| small(action("park-quit", "Park & quit", Kind::Ghost, KeyCode::Char('Q'), cx))))
 }
 
 /// Width of the tag filters' dropdown.

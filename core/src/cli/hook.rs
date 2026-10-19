@@ -92,8 +92,8 @@ fn in_brain(file: &Path, central: &Path) -> bool {
 
 /// Whether `rel`, a path inside the central brain `central`, is kanbrain's: `tags.md`, `projects.md`, `last-id`,
 /// `format`, an entry, or anything in the project cards' or reports' folders. An entry is a file at the top named as
-/// one (`0007-title.md`), or one `Store::load` reads as an entry or reports broken: the vault's other notes, there
-/// too, aren't.
+/// one (`0007-title.md`), or one `Store::load_entries` reads as an entry or reports broken: the vault's other notes,
+/// there too, aren't.
 fn central_owned(central: &Path, rel: &Path) -> bool {
     let mut parts = rel.components();
     let Some(first) = parts.next().map(Component::as_os_str) else { return false };
@@ -112,7 +112,8 @@ fn central_owned(central: &Path, rel: &Path) -> bool {
         return true;
     }
     let path = central.join(rel);
-    // As `Store::load` reads it and `kb` reports it (`say_skipped`): an entry, or a broken one, unreadable included.
+    // As `Store::load_entries` reads it and `kb` reports it (`say_skipped`): an entry, or a broken one, unreadable
+    // included.
     let entry = |text: String| !matches!(Task::parse(&text), Err(crate::model::ParseError::MissingId));
     // Only a file is read: a pipe, or a link to a device, would hold the hook.
     fs::metadata(&path).ok().filter(fs::Metadata::is_file).is_some_and(|_| store::read_text(&path).map_or(true, entry))

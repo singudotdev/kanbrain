@@ -307,15 +307,16 @@ Handy for scripts: `cd "$(kb path)"` (in PowerShell, `cd (kb path)`).
 
 Refused while an agent has a task in doing, in any project: updating rewrites the agents' instructions, and may
 migrate their data, under them. Already on the latest release, it says so and installs nothing. Once they're done
-or parked (park a stale one yourself), it runs the installer for the latest release, into the folder `kb` is in. It checks the download's checksum and replaces `kb`, and
-`kanbrain` too when it's installed beside it, then updates every project (`kb init --all`): its agent
-instructions, and its data, migrated to the new version's format when it changed, after a backup (see
-[Format versions and migrations](data-format.md#format-versions-and-migrations)). On Windows, where a running
-program can't be replaced, it prints the PowerShell command to run once the app is closed. Installed with
-`cargo install`, it doesn't replace anything behind cargo's back: it prints `cargo install kanbrain && kb init --all`;
-`kanbrain update`, the app's, prints
+or parked (park a stale one yourself), it runs the installer for the latest release, into the folder `kb` is in. It
+checks the download's checksum and replaces `kb`, and `kanbrain` too when it's installed beside it, then updates
+every project (`kb init --all`): its agent instructions, and its data, migrated to the new version's format when it
+changed, after a backup (see [Format versions and migrations](data-format.md#format-versions-and-migrations)). On
+Windows, where a running program can't be replaced, it prints the PowerShell command to run once the app is closed.
+Installed with `cargo install`, it doesn't replace anything behind cargo's back: it prints
+`cargo install kanbrain && kb init --all`; `kanbrain update`, the app's, prints
 `cargo install --locked --git https://github.com/singudotdev/kanbrain --tag vX.Y.Z kanbrain-app && kanbrain init --all`
-(the release it found), as the app isn't on crates.io.
+(the release it found), as the app isn't on crates.io. When GitHub can't be reached to find the release, the command
+has no `--tag` and installs from `main`, which is the latest release.
 The installer only writes inside your home folder, so a `kb` elsewhere (`/usr/local/bin`, a build's `target/`) is
 refused with "install folder must be inside your home folder": reinstall it there instead.
 

@@ -126,7 +126,7 @@ aren't text to select: dragging them moves them, and their title and tags are se
 | **Project ▾**, then a project in the list | show only it (or All); type in its box to filter, click outside to close |
 | **Tags ▾**, then tags in the list | add or take out each as `#tag` in the search box; type in its box to filter, click outside to close |
 | click an interaction in the calendar | show its entry's details |
-| **Park & quit**, at the end of the projects row while a task runs | park your running tasks and quit, as `Q` |
+| **Park & quit**, at the end of the projects row while a task of yours runs | park your running tasks and quit, as `Q` |
 | click an entry under "Related" | go to it |
 | click a link in a description or comment | open it in the browser |
 | click in text | place the cursor |

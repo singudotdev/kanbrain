@@ -619,12 +619,55 @@ fn todays_total_and_park_and_quit_sit_in_the_projects_row_with_no_bar_of_running
     assert!(cx.debug_bounds("button park-quit").is_none(), "nothing to park");
 
     cx.simulate_keystrokes("1 escape s");
-    view.read_with(cx, |view, _| assert_eq!(view.board.running().len(), 1, "a task runs"));
+    view.read_with(cx, |view, _| assert_eq!(view.board.running().count(), 1, "a task runs"));
     let row = ends_at_projects_row(cx);
     let quit = cx.debug_bounds("button park-quit").expect("Park & quit shows while a task runs");
     assert!(in_row(quit, row), "{quit:?} in {row:?}");
     assert!(in_row(cx.debug_bounds("today total").unwrap(), row));
     assert!(cx.debug_bounds("button park 0/2").is_none() && cx.debug_bounds("button park 0/1").is_none());
+}
+
+#[test]
+fn an_empty_doing_says_where_tasks_running_elsewhere_show() {
+    use crate::state::Scope;
+    let dir = tempfile::tempdir().unwrap();
+    Store::at(dir.path()).unwrap();
+    let mut board = Board::open(dir.path(), None).unwrap();
+    assert_eq!(
+        super::board::empty_hint(&board, Status::Doing),
+        "Nothing running. Drop a card here to start its clock."
+    );
+    for scope in [Scope::Central, Scope::Project("shop".into()), Scope::Repo(0)] {
+        board.set_scope(scope.clone());
+        let hint = super::board::empty_hint(&board, Status::Doing);
+        assert_eq!(
+            hint, "Nothing running here: All shows what runs elsewhere. Drop a card here to start its clock.",
+            "{scope:?}"
+        );
+    }
+}
+
+#[gpui::test]
+fn park_and_quit_shows_only_while_a_task_of_yours_runs(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let mut agents = Task::new(1, "agent's".to_string(), now());
+    agents.set_status(Status::Doing, now(), Author::Agent);
+    agents.start_session(now());
+    store.save(&mut agents).unwrap();
+    store.save(&mut Task::new(2, "mine".to_string(), now())).unwrap();
+    let board = Board::open(dir.path(), None).unwrap();
+    let (view, cx) = cx.add_window_view(|window, cx| BrainView::new(board, window, cx));
+    cx.run_until_parked();
+    view.read_with(cx, |view, _| assert!(view.board.any_running(), "the agent's task runs"));
+    assert!(cx.debug_bounds("button park-quit").is_none(), "it would park nothing: agents' tasks keep running");
+
+    view.update(cx, |view, cx| {
+        view.board.set_status(crate::state::Key::new(0, 2), Status::Doing);
+        cx.notify();
+    });
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("button park-quit").is_some(), "yours runs: it parks it");
 }
 
 #[gpui::test]
