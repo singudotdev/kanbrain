@@ -78,15 +78,18 @@ pub fn draw(
     let columns = COLUMNS.iter().zip(scrolls).map(|(&status, scroll)| column(board, status, scroll, follow, cx));
     let columns: Vec<_> = columns.collect();
     let row = each_axis(div().id("board")).size_full().track_scroll(sideways).flex().gap_3().children(columns);
+    // The columns and the bar under them.
+    let over = scrollbar::Over::default();
+    let region = div().absolute().top_0().left_0().right_0().bottom(-BAR_GAP - BAR).child(over.mark());
     // Under the columns, in the padding between them and the status bar.
-    let bar = scrollbar::bar(sideways, Axis::Horizontal, "scrollbar board")
+    let bar = scrollbar::bar(sideways, Axis::Horizontal, "scrollbar board", &over)
         .debug_selector(|| "scrollbar board".to_string())
         .absolute()
         .left_0()
         .right_0()
         .bottom(-BAR_GAP - BAR)
         .h(BAR);
-    div().relative().flex_1().min_h_0().min_w_0().flex().child(row).child(bar)
+    div().relative().flex_1().min_h_0().min_w_0().flex().child(region).child(row).child(bar)
 }
 
 /// Makes `area` scroll each way by the wheel or touchpad's own movement that way, and only that way: the board
@@ -163,8 +166,10 @@ fn column(board: &Board, status: Status, scroll: &ScrollHandle, follow: bool, cx
         .children(rows)
         .children(empty)
         .children((status == Status::Done).then(|| show_all_done(board, cx)).flatten());
+    // The whole column, its header too.
+    let over = scrollbar::Over::default();
     // In the cards' right padding, beside them.
-    let bar = scrollbar::bar(scroll, Axis::Vertical, ("scrollbar column", status as usize))
+    let bar = scrollbar::bar(scroll, Axis::Vertical, ("scrollbar column", status as usize), &over)
         .debug_selector(move || format!("scrollbar column {}", status.as_str()))
         .absolute()
         .top_0()
@@ -172,7 +177,10 @@ fn column(board: &Board, status: Status, scroll: &ScrollHandle, follow: bool, cx
         .right_0()
         .w(BAR);
     let body = div().relative().flex_1().min_h_0().flex().flex_col().child(each_axis(body)).child(bar);
-    drop_target(card().flex_1().min_w(px(COLUMN_MIN_WIDTH)), status, cx).child(header).child(body)
+    drop_target(card().relative().flex_1().min_w(px(COLUMN_MIN_WIDTH)), status, cx)
+        .child(over.mark())
+        .child(header)
+        .child(body)
 }
 
 /// Makes `target` take dropped cards, moving them to `status`, and light up while one is over it.
