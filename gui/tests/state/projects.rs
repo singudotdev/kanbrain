@@ -275,6 +275,8 @@ fn an_entry_moves_to_another_project_and_is_renumbered_there() {
     let mut board = Board::open(central.path(), None).unwrap();
     board.set_scope(Scope::Project("shop".into()));
     board.selected = Some(Key::new(1, 1));
+    let offered = board.menu_items(Key::new(1, 1)).iter().any(|a| a.label == "Move to project");
+    assert!(offered, "the menu offers it with other brains to move to");
     press(&mut board, KeyCode::Char('M'));
     let Mode::Where(asked) = &board.mode else { panic!("M asks where: {:?}", board.mode) };
     let names: Vec<String> = board.where_candidates(&asked.picker, asked.then).into_iter().map(|(_, n)| n).collect();

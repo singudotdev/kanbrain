@@ -27,6 +27,20 @@ fn edit_lines() {
 }
 
 #[test]
+fn deleting_moves_the_cursor_back_and_stops_at_the_texts_ends() {
+    let mut ed = TextEditor::new("abcd");
+    ed.on_key(key(KeyCode::Left));
+    ed.on_key(key(KeyCode::Backspace));
+    typing(&mut ed, "x");
+    assert_eq!(ed.text(), "abxd", "typed where the deleted character was");
+    ed.on_key(key(KeyCode::Home));
+    ed.on_key(key(KeyCode::Backspace));
+    ed.on_key(key(KeyCode::End));
+    ed.on_key(key(KeyCode::Delete));
+    assert_eq!(ed.text(), "abxd", "nothing before the start or after the end to delete");
+}
+
+#[test]
 fn unicode() {
     let mut ed = TextEditor::new("");
     typing(&mut ed, "añadir");
