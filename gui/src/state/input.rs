@@ -57,8 +57,8 @@ impl Board {
             Mode::Edit(mut edit) => {
                 let (ctrl, back) = (key.modifiers.contains(KeyModifiers::CONTROL), edit.back);
                 if ctrl && key.code == KeyCode::Char('d') {
-                    // Discard changes; the mode is already taken.
-                    self.notify("changes discarded");
+                    self.mode = Mode::Edit(edit);
+                    return self.discard_edit();
                 } else if edit.merge.is_some() {
                     return self.key_merge(edit, key);
                 } else if edit.editor.on_key(key) == Outcome::Save || (ctrl && key.code == KeyCode::Enter) {
