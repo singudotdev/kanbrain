@@ -147,7 +147,9 @@ hand the choice to you and leave it visible on the board:
 
 - `kb ask ID TEXT` adds the question to the task as a comment marked as one, and parks the task. Until a person
   comments on it, the board shows it as **Waiting for you** with the question, `kb status` counts it
-  (`· 1 waiting`), and `context` marks it `· waiting for an answer`, so another session doesn't pick it up.
+  (`· 1 waiting`), and `context` marks it `· waiting for an answer`, so another session doesn't pick it up. Work
+  the agent couldn't check comes to you the same way: no task is done without its evidence (tests run, a CI run, the
+  output), so it asks you to check what's left, and how.
 - `kb propose ID --body - TITLE` creates a **proposed** decision linked to the task, with Context / Options /
   Recommendation, and asks about it on the task. You **accept** it, or **reject** it saying why, from its details
   in the app (`y` / `j`) or with `kb accept ID` / `kb reject ID TEXT`; the tasks waiting on it get the verdict as

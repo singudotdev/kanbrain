@@ -108,7 +108,8 @@ kb start 4                         # 3. clock starts (an agent can run several a
 kb comment 4 "token refresh race; fix next"   # 4. a step done, a cause found: one or two lines
 echo "Context…/Decision…/Consequences…" | \
   kb add --decision --link 4 --body - "Retry refresh once"   # 5. record why an approach was chosen
-kb done 4                          # 6. finish
+kb comment 4 "cargo test: 48 passed; PR #12 merged"   # 6. the evidence: no task done without it
+kb done 4                          #    finish (what it couldn't check, it `kb ask`s you to)
 ```
 
 When the agent needs you, it doesn't guess: `kb ask 7 "Which region?"` parks the task with the question, and
