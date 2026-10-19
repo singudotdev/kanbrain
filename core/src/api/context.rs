@@ -131,7 +131,11 @@ fn write_project(out: &mut String, project: &ProjectInfo) -> std::fmt::Result {
     // Only a project of several repositories has roles to tell apart, and work that crosses between them:
     // said here rather than in the section every repository's agents read.
     if project.notes.is_empty() {
-        writeln!(out, "\nIts role isn't described yet: `kb project notes -` (what it owns, exposes and consumes).")?;
+        writeln!(
+            out,
+            "\nIts role isn't described yet. Before other work, describe it from the README and manifests: \
+             `kb project notes -` (what it owns, exposes and consumes)."
+        )?;
     } else {
         writeln!(out, "\n{}", project.notes)?;
     }

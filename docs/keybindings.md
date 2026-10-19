@@ -119,7 +119,7 @@ aren't text to select: dragging them moves them, and their title and tags are se
 | mouse wheel over the board | scroll the column under the pointer up and down |
 | horizontal wheel, or `shift`+wheel, over the board | scroll the columns sideways, when the window is too narrow for them |
 | two fingers on a touchpad over the board | scroll each way the fingers go: the column up and down, the columns sideways |
-| drag a column's scrollbar, or the board's under the columns | scroll it; a press beside the thumb jumps there, and the wheel over a bar scrolls it too. Drawn only where there's more to see |
+| drag a column's scrollbar, or the board's under the columns | scroll it; a press beside the thumb jumps there, and the wheel over a bar scrolls it too. Drawn only where there's more to see, and only while the pointer is over that column (or the board, for the board's), or the bar is held |
 | **Kanban** / **List** next to the tabs | lay the board out as columns or as a list |
 | `+` on a column, or on a list's section | the new task form, with that column picked |
 | click a day in the calendar's month | show that day |

@@ -1589,9 +1589,11 @@ fn a_touchpad_scrolls_each_way_its_fingers_go(cx: &mut gpui::TestAppContext) {
     let (down, right) = wheel(&view, cx, pixels(-30., -20.), false);
     assert!(down > 0. && right > 0., "a slanting swipe scrolls both, not the way it mostly goes: {down}, {right}");
 }
-/// Presses the left button at `from`, drags to `to` by way of halfway, lets go and draws what that asked for.
+/// Comes to `from`, presses the left button there, drags to `to` by way of halfway, lets go and draws what that
+/// asked for.
 fn drag_on(cx: &mut gpui::VisualTestContext, from: gpui::Point<gpui::Pixels>, to: gpui::Point<gpui::Pixels>) {
     let none = gpui::Modifiers::none();
+    point_at(cx, from);
     cx.simulate_mouse_down(from, MouseButton::Left, none);
     cx.simulate_mouse_move(gpui::point((from.x + to.x) / 2., (from.y + to.y) / 2.), MouseButton::Left, none);
     cx.simulate_mouse_move(to, MouseButton::Left, none);
@@ -1746,12 +1748,84 @@ fn a_scrollbar_lights_up_as_the_pointer_comes_and_goes(cx: &mut gpui::TestAppCon
     assert!(moved(cx, outside), "and again as it leaves");
 }
 
+/// Which of the to-do column's bar and the board's drew their thumb in the last frame.
+fn bars_shown(cx: &mut gpui::VisualTestContext) -> (bool, bool) {
+    let todo: gpui::ElementId = ("scrollbar column", Status::Todo as usize).into();
+    cx.update(|_, cx| (super::scrollbar::drawn(&todo, cx), super::scrollbar::drawn(&"scrollbar board".into(), cx)))
+}
+
+/// Moves the pointer to `to`, no button held, and draws what that asked for.
+fn point_at(cx: &mut gpui::VisualTestContext, to: gpui::Point<gpui::Pixels>) {
+    cx.simulate_mouse_move(to, None, gpui::Modifiers::none());
+    next_frames(cx);
+}
+
+#[gpui::test]
+fn a_scrollbar_shows_only_while_the_pointer_is_over_what_it_scrolls(cx: &mut gpui::TestAppContext) {
+    let (_view, cx, _dir) = small_board(cx);
+    let todo = cx.debug_bounds("column todo").unwrap();
+    let doing = cx.debug_bounds("column doing").unwrap();
+    let board = cx.debug_bounds("scrollbar board").expect("the board too wide for the window has a scrollbar");
+    point_at(cx, gpui::point(todo.left(), px(2.)));
+    assert_eq!(bars_shown(cx), (false, false), "the pointer above the board shows neither");
+    point_at(cx, todo.center());
+    assert_eq!(bars_shown(cx), (true, true), "over the column, its bar and the board's");
+    point_at(cx, gpui::point(doing.center().x, doing.top() - px(10.)));
+    assert_eq!(bars_shown(cx), (false, true), "over the column's header too: {doing:?}");
+    point_at(cx, doing.center());
+    assert_eq!(bars_shown(cx), (false, true), "over another column, only the board's");
+    point_at(cx, board.center());
+    assert_eq!(bars_shown(cx), (false, true), "on the board's own bar, under the columns");
+    point_at(cx, gpui::point(todo.left(), px(2.)));
+    assert_eq!(bars_shown(cx), (false, false), "and gone with the pointer");
+}
+
+#[gpui::test]
+fn a_scrollbar_stays_while_keys_scroll_its_column_and_goes_with_the_pointer_out_of_the_window(
+    cx: &mut gpui::TestAppContext,
+) {
+    let (view, cx, _dir) = small_board(cx);
+    let todo = cx.debug_bounds("column todo").unwrap();
+    point_at(cx, todo.center());
+    (0..10).for_each(|_| cx.simulate_keystrokes("down"));
+    next_frames(cx);
+    assert!(scrolled(&view, cx).0 > 0., "the keys scrolled the column to the card they picked");
+    assert_eq!(bars_shown(cx), (true, true), "the pointer still over it, typing hides no bar");
+    // Left fast enough for no move to land outside: the window hears only that the pointer went.
+    let none = gpui::Modifiers::none();
+    cx.simulate_event(gpui::MouseExitEvent { position: todo.center(), pressed_button: None, modifiers: none });
+    next_frames(cx);
+    assert_eq!(bars_shown(cx), (false, false), "gone with the pointer");
+    point_at(cx, todo.center());
+    assert_eq!(bars_shown(cx), (true, true), "and back with it");
+}
+
+#[gpui::test]
+fn a_scrollbar_held_stays_while_the_pointer_leaves(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    let bar = cx.debug_bounds("scrollbar column todo").expect("the long column has a scrollbar");
+    let none = gpui::Modifiers::none();
+    let thumb = gpui::point(bar.center().x, bar.top() + px(4.));
+    point_at(cx, thumb);
+    cx.simulate_mouse_down(thumb, MouseButton::Left, none);
+    let away = gpui::point(bar.center().x, px(2.));
+    cx.simulate_mouse_move(away + gpui::point(px(0.), px(60.)), MouseButton::Left, none);
+    cx.simulate_mouse_move(away, MouseButton::Left, none);
+    next_frames(cx);
+    assert!(bars_shown(cx).0, "dragged above the column, it still shows");
+    cx.simulate_mouse_up(away, MouseButton::Left, none);
+    next_frames(cx);
+    assert!(!bars_shown(cx).0, "let go there, it goes");
+    assert_eq!(scrolled(&view, cx), (0., 0.), "dragged back to its start");
+}
+
 #[gpui::test]
 fn a_drag_cut_short_by_the_bar_going_ends_with_it(cx: &mut gpui::TestAppContext) {
     let (view, cx, _dir) = small_board(cx);
     let bar = cx.debug_bounds("scrollbar column todo").expect("the long column has a scrollbar");
     let none = gpui::Modifiers::none();
     let thumb = gpui::point(bar.center().x, bar.top() + px(4.));
+    point_at(cx, thumb);
     cx.simulate_mouse_down(thumb, MouseButton::Left, none);
     // Grown tall enough for every card, the bar goes, and the button comes up with it gone.
     cx.simulate_resize(gpui::size(px(600.), px(4000.)));

@@ -5,6 +5,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-10-19
+
+### Changed
+
+- The kanban app shows a column's scrollbar only while the pointer is over that column (its header too), and the
+  board's only while it's over the board; a thumb being dragged stays until it's let go.
+- The "Project memory" section `kb init` writes into `CLAUDE.md` and `AGENTS.md` asks agents to close every turn
+  that changed the repository on the board: the change on a task they started (created then if they skipped it), the
+  turn's work commented there, and a finished task done; a task whose work goes through a pull request stays in Doing
+  until every check has passed and it's merged; and no task done without its evidence commented first (the tests or
+  checks run and their result, or what shows it works); one that couldn't be checked is asked of the user (`kb ask`,
+  which parks it waiting for the answer), saying what's left to check and how. `kb init --all`, which the installers and `kb update` run, rewrites it
+  in every registered repository.
+- `kb context` asks for a repository's role before other work, from the README and manifests, as it does for the
+  project's description.
+
 ## [0.6.3] - 2026-10-19
 
 ### Added
@@ -634,7 +650,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/singudotdev/kanbrain/compare/v0.6.3...v0.6.4
+[0.6.3]: https://github.com/singudotdev/kanbrain/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/singudotdev/kanbrain/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/singudotdev/kanbrain/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/singudotdev/kanbrain/compare/v0.5.2...v0.6.0
