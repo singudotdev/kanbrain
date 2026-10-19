@@ -18,7 +18,7 @@ exclude_re = [
     # window tests read bounds, not colors (the state tests check which tag it is, `Form::tag_sel`).
     'gui/src/ui/dialogs/form\.rs:168:.*replace == with != in tags_field',
     # Runs the user's editor and waits for it: the choice of editor (`editor_of`) is what tests check.
-    'gui/src/ui/mod\.rs:.*(replace open_editor -> Result| in open_editor$)',
+    'gui/src/ui/mod\.rs:.*(replace run_editor_on -> Result| in run_editor_on$)',
     # A leftover exactly CUT_WRITE_AGE old, to the nanosecond, is the only one `>=` would delete too.
     'core/src/store\.rs:.*replace > with >= in forget_cut_writes',
     # Where a one-line field scrolls for its cursor: the cursor exactly on an edge, or exactly SLACK past it, to the
@@ -38,6 +38,8 @@ exclude_re = [
     'gui/src/ui/pointer\.rs:.*replace focus with \(\)',
     # Downloads the installer from GitHub and runs it: the installer is checked by e2e/install.sh, not by tests.
     'core/src/cli/update\.rs:.*(replace run_installer -> Result| in run_installer$)',
+    # Two brains are never the same one (callers move or link across two), so `a <= b` splits where `a < b` does.
+    'gui/src/state/sources\.rs:.*replace < with <= in Board::two_brains_mut$',
     # The conflict just picked is never among those left to pick, so `>=` finds the same one after it as `>`.
     'gui/src/text/merge\.rs:.*replace > with >= in Merge::pick_at$',
     # The highlight of a conflict's pick: a color and a weight, and the window tests read bounds, not colors (the
