@@ -104,7 +104,7 @@ const FONTS: [&[u8]; 8] = [
 /// Loads the window's fonts: without them the text still shows, in whatever the system has.
 fn load_fonts(cx: &mut GpuiApp) {
     if let Err(e) = cx.text_system().add_fonts(FONTS.iter().map(|&font| Cow::Borrowed(font)).collect()) {
-        eprintln!("kanbrain: couldn't load the window's fonts: {e:#}");
+        startup::report(&e.context("couldn't load the window's fonts"));
     }
 }
 
@@ -130,7 +130,7 @@ fn application() -> gpui::Application {
     app.unwrap_or_else(|panic| {
         let error = anyhow::anyhow!("{}", panic_message(panic.as_ref()))
             .context("couldn't connect to the window system: run kanbrain from the desktop session");
-        eprintln!("Error: {error:?}");
+        startup::report(&error);
         std::process::exit(1)
     })
 }
@@ -169,7 +169,7 @@ pub fn run(board: Board) {
                 .detach(),
             Err(e) => {
                 let error = e.context("couldn't open the board's window");
-                eprintln!("Error: {error:?}");
+                startup::report(&error);
                 startup::show(startup::message(&error), cx);
             }
         }

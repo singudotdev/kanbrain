@@ -62,6 +62,9 @@ exclude_re = [
     'gui/src/ui/display\.rs:.*replace ensure_display -> ',
     # The fonts the text is drawn in: how it looks, and the window tests read bounds, not glyphs.
     'gui/src/ui/mod\.rs:.*replace load_fonts with \(\)',
+    # Writes to the process's stderr, which a test in the process can't read: the release smoke checks read it (the
+    # startup error's window, and the error alone without a display, are tested by themselves).
+    'gui/src/ui/startup\.rs:.*replace report with \(\)',
     # Which phase of a window-wide mouse event a scrollbar acts in: it acts once either way, and only another listener
     # stopping the event between the two phases could tell. Acting in neither (`with false`) is caught.
     'gui/src/ui/scrollbar\.rs:.*(replace bubbling -> bool with true|replace == with != in bubbling)$',
