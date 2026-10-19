@@ -507,16 +507,12 @@ impl Board {
         // Another comment at its index isn't merged with, which would put that comment in the editor: the text typed
         // comes back, for the save to stop over (`same_comment`).
         if edit.merge.is_some()
-            && let Target::Comment(key, _) = edit.target
-            && !self.same_comment(edit)
+            && let Some(stop) = self.comment_moved(edit)
         {
-            let name = self.entry_name(key);
             if let Mode::Edit(edit) = &mut self.mode {
                 edit.merge = None;
             }
-            return self.notify_found(format!(
-                "{name}'s comments changed around this one meanwhile: copy your text, then ctrl+d"
-            ));
+            return self.notify_found(stop);
         }
         let (Some(merge), Some(now)) = (&edit.merge, self.text_of(edit.target)) else { return };
         if now == merge.theirs {

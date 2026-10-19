@@ -260,6 +260,15 @@ impl Board {
             && others(&edit.comments, index).eq(others(&task.comments, index).take(edit.comments.len() - 1))
     }
 
+    /// Why the comment editor's text can't go where it opened, if another comment is now at its index
+    /// ([`same_comment`](Self::same_comment)): what to do with it, for the status bar.
+    pub(super) fn comment_moved(&self, edit: &Edit) -> Option<String> {
+        let Target::Comment(key, _) = edit.target else { return None };
+        let name = self.entry_name(key);
+        (!self.same_comment(edit))
+            .then(|| format!("{name}'s comments changed around this one meanwhile: copy your text, then ctrl+d"))
+    }
+
     /// What `kb` changed, since the editor opened, of what it edits: its text (or which comment is at its index), the
     /// entry's status and a decision's verdict being given, said for the status bar; `None` if nothing.
     pub(super) fn edit_changed_on_disk(&self, edit: &Edit) -> Option<String> {
@@ -351,12 +360,9 @@ impl Board {
             edit.note.clone_from(note);
         }
         // Another comment put at this one's place isn't saved over: the save stops for good.
-        if let Target::Comment(key, _) = edit.target
-            && !self.same_comment(&edit)
-        {
-            let name = self.entry_name(key);
+        if let Some(stop) = self.comment_moved(&edit) {
             self.unsay_found(self.edit_changed_on_disk(&edit), self.edit_changed_but(&edit, text_word(edit.target)));
-            self.notify(format!("{name}'s comments changed around this one meanwhile: copy your text, then ctrl+d"));
+            self.notify(stop);
             self.mode = Mode::Edit(edit);
             return;
         }
