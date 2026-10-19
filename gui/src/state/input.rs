@@ -223,7 +223,6 @@ impl Board {
             edit.base = merge.theirs;
         }
         edit.editor = TextEditor::new(&text);
-        edit.editor.modified = true;
         self.notify(said);
     }
 

@@ -532,7 +532,6 @@ impl Board {
                 edit.base = now;
                 edit.merge = None;
                 edit.editor = TextEditor::new(&text);
-                edit.editor.modified = !theirs;
                 if theirs {
                     format!("{name} changed again: it's theirs as it is now, esc closes")
                 } else {

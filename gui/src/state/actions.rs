@@ -306,7 +306,7 @@ impl Board {
     /// mark in its title, even once `kb` changed the target meanwhile.
     pub fn changed(&self, edit: &Edit) -> bool {
         let text = edit.editor.text();
-        edit.editor.modified && text != edit.base && self.text_of(edit.target) != Some(text.as_str())
+        text != edit.base && self.text_of(edit.target) != Some(text.as_str())
     }
 
     /// What `target` holds now: the text the editor starts from, and saving the same is no change.

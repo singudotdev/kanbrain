@@ -24,7 +24,6 @@ fn edit_lines() {
     ed.on_key(key(KeyCode::End));
     ed.on_key(key(KeyCode::Delete));
     assert_eq!(ed.text(), "first linesecondthird");
-    assert!(ed.modified);
 }
 
 #[test]
