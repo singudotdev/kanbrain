@@ -627,6 +627,26 @@ fn todays_total_and_park_and_quit_sit_in_the_projects_row_with_no_bar_of_running
     assert!(cx.debug_bounds("button park 0/2").is_none() && cx.debug_bounds("button park 0/1").is_none());
 }
 
+#[test]
+fn an_empty_doing_says_where_tasks_running_elsewhere_show() {
+    use crate::state::Scope;
+    let dir = tempfile::tempdir().unwrap();
+    Store::at(dir.path()).unwrap();
+    let mut board = Board::open(dir.path(), None).unwrap();
+    assert_eq!(
+        super::board::empty_hint(&board, Status::Doing),
+        "Nothing running. Drop a card here to start its clock."
+    );
+    for scope in [Scope::Central, Scope::Project("shop".into()), Scope::Repo(0)] {
+        board.set_scope(scope.clone());
+        let hint = super::board::empty_hint(&board, Status::Doing);
+        assert_eq!(
+            hint, "Nothing running here: All shows what runs elsewhere. Drop a card here to start its clock.",
+            "{scope:?}"
+        );
+    }
+}
+
 #[gpui::test]
 fn park_and_quit_shows_only_while_a_task_of_yours_runs(cx: &mut gpui::TestAppContext) {
     let dir = tempfile::tempdir().unwrap();

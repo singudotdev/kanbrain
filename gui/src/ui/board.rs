@@ -5,7 +5,7 @@ use super::pointer::TextBox;
 use super::theme::{self, BORDER, DIM, TEXT};
 use super::widgets::{self, Kind, card, dim, dim_small, small, state_pill, tag_chips};
 use super::{BrainView, menu, scrollbar, truncate_words};
-use crate::state::{Board, COLUMNS, Key, Mode};
+use crate::state::{Board, COLUMNS, Key, Mode, Scope};
 use gpui::{
     Axis, ClickEvent, Context, Div, ElementId, FontWeight, Pixels, ScrollHandle, SharedString, Stateful, Window, div,
     prelude::*, px, rgb,
@@ -192,7 +192,8 @@ pub(super) fn draggable(element: Stateful<Div>, board: &Board, key: Key, task: &
     })
 }
 
-/// What an empty column is for; or, when the search hides every task it has, that it does.
+/// What an empty column is for; or, when the search hides every task it has, that it does. An empty Doing with one
+/// project or brain shown says where to look, since a task running in another shows nowhere else.
 pub(super) fn empty_hint(board: &Board, status: Status) -> String {
     let hidden = board.column_total(status);
     if hidden > 0 {
@@ -200,7 +201,8 @@ pub(super) fn empty_hint(board: &Board, status: Status) -> String {
     }
     match status {
         Status::Todo => "Nothing to do yet. Press + to add a task.",
-        Status::Doing => "Nothing running. Drop a card here to start its clock.",
+        Status::Doing if board.scope == Scope::All => "Nothing running. Drop a card here to start its clock.",
+        Status::Doing => "Nothing running here: All shows what runs elsewhere. Drop a card here to start its clock.",
         Status::Parked => "Started tasks set aside land here.",
         Status::Done => "Finished tasks land here.",
     }

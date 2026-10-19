@@ -33,8 +33,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - The kanban app has no bar of running tasks above the columns, which take its row: the running tasks show in Doing,
-  each card with its clock (`p` or a drag parks it), and "■ Idle" said what an empty Doing does. Today's total and,
-  while a task of yours runs, **Park & quit** (`Q`) end the projects row, after **+ Add project**.
+  each card with its clock (`p` or a drag parks it), and "■ Idle" said what an empty Doing does; with one project
+  shown, an empty Doing says that **All** shows what runs elsewhere. Today's total and, while a task of yours runs,
+  **Park & quit** (`Q`) end the projects row, after **+ Add project**.
 - The kanban app's new / edit form shows the tags as chips in their colors, each with × to take it off, instead of
   text: a comma or space after a tag typed, or picking one from the list, adds it as a chip.
 - A Claude Code hook is kanbrain's, for `kb init`, `kb context` and `kb deinit` to update or take out, only as `init`
