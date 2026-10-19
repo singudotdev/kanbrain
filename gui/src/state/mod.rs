@@ -28,7 +28,7 @@ mod palette;
 mod shown;
 mod sources;
 #[cfg(test)]
-#[path = "../../tests/state.rs"]
+#[path = "../../tests/state/mod.rs"]
 mod tests;
 
 pub use keys::{Action, When};

@@ -382,8 +382,9 @@ the module includes its test file with a hook at its end, and the file starts wi
 mod tests;
 ```
 
-The path is relative to the module's folder. `autotests = false` in each crate stops Cargo from also building these
-files as integration tests. Keep them inside the crate: rust-analyzer doesn't follow `#[path]` out of it.
+The path is relative to the module's folder. A test file grown too long becomes a folder, as a module does:
+`gui/tests/state/mod.rs` holds the fixtures, and a file beside it each area of the board's tests. `autotests = false`
+in each crate stops Cargo from also building these files as integration tests. Keep them inside the crate: rust-analyzer doesn't follow `#[path]` out of it.
 
 | module | covers |
 | --- | --- |
