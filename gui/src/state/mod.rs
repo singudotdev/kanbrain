@@ -191,6 +191,35 @@ enum Said {
     FoundBefore,
 }
 
+/// A status bar message: what each said, the newest first, and them together as the bar shows them.
+#[derive(Debug)]
+struct Message {
+    /// What each said: an action's, and what a read found that it goes beside.
+    parts: Vec<String>,
+    /// The parts as shown, one after the other.
+    shown: String,
+    /// When it was said: it expires after `MESSAGE_TTL`.
+    at: Instant,
+    /// Who said it.
+    by: Said,
+}
+
+impl Message {
+    /// `parts`, said at `at` by `by`.
+    fn new(parts: Vec<String>, at: Instant, by: Said) -> Self {
+        Self { shown: parts.join(" · "), parts, at, by }
+    }
+
+    /// Whether it's what a read found that what's said at `now` goes beside: see [`Said`].
+    fn found_at(&self, now: Instant) -> bool {
+        match self.by {
+            Said::Found => true,
+            Said::FoundBefore => now.saturating_duration_since(self.at) < watch::INTERVAL,
+            Said::Action => false,
+        }
+    }
+}
+
 /// Everything the window shows and remembers.
 #[derive(Debug)]
 pub struct Board {
@@ -233,8 +262,8 @@ pub struct Board {
     pub request: Option<Request>,
     /// A newer release's version, once the window found one out.
     pub available: Option<String>,
-    /// Status bar message, when it was set (it expires after `MESSAGE_TTL`), and who said it.
-    message: Option<(String, Instant, Said)>,
+    /// Status bar message.
+    message: Option<Message>,
     /// The time messages are said and read at.
     pub clock: Clock,
     /// The files the last change wrote, as they were before and after, for `u` to put back.
@@ -307,30 +336,20 @@ impl Board {
     /// Shows `msg`, after what a read found just before, if that's what's shown.
     fn say(&mut self, msg: &str, by: Said) {
         // Plain text: the command line's messages, which these often are, quote names in markdown's backticks.
-        let mut msg = msg.replace('`', "");
+        let msg = msg.replace('`', "");
         let now = self.clock.now();
-        if let Some(said) = self.found_at(now)
-            && *said != msg
-        {
-            msg = format!("{msg} · {said}");
-        }
-        self.message = Some((msg, now, by));
-    }
-
-    /// What a read found that what's said at `now` goes beside: see [`Said`].
-    fn found_at(&self, now: Instant) -> Option<&String> {
-        match &self.message {
-            Some((said, _, Said::Found)) => Some(said),
-            Some((said, at, Said::FoundBefore)) if now.saturating_duration_since(*at) < watch::INTERVAL => Some(said),
-            _ => None,
-        }
+        let found = self.message.take().filter(|said| said.found_at(now) && said.shown != msg).map(|said| said.parts);
+        let parts = std::iter::once(msg).chain(found.into_iter().flatten()).collect();
+        self.message = Some(Message::new(parts, now, by));
     }
 
     /// Ends the input the window ran, from the read before it to its action: what that read found, its action had
     /// its turn to go beside, and what's said next replaces it.
     pub fn input_done(&mut self) {
-        if let Some((_, _, by @ Said::Found)) = &mut self.message {
-            *by = Said::FoundBefore;
+        if let Some(said) = &mut self.message
+            && said.by == Said::Found
+        {
+            said.by = Said::FoundBefore;
         }
     }
 
@@ -338,18 +357,17 @@ impl Board {
     /// of it is about to say that part, with what to do, beside the rest. One that what follows doesn't go beside is
     /// replaced by it anyway.
     fn unsay_found(&mut self, found: Option<String>, rest: Option<String>) {
-        let (Some(found), Some((said, _, Said::Found | Said::FoundBefore))) = (found, &mut self.message) else {
+        let (Some(found), Some(said)) = (found, &mut self.message) else { return };
+        if said.by == Said::Action {
             return;
-        };
+        }
         // As `say` keeps it.
         let (found, rest) = (found.replace('`', ""), rest.map(|rest| rest.replace('`', "")));
-        let parts: Vec<&str> =
-            said.split(" · ").filter_map(|part| if part == found { rest.as_deref() } else { Some(part) }).collect();
-        if parts.is_empty() {
-            self.message = None;
-        } else {
-            *said = parts.join(" · ");
-        }
+        let parts: Vec<String> = std::mem::take(&mut said.parts)
+            .into_iter()
+            .filter_map(|part| if part == found { rest.clone() } else { Some(part) })
+            .collect();
+        self.message = (!parts.is_empty()).then(|| Message::new(parts, said.at, said.by));
     }
 
     /// Shows what went wrong in the status bar, with its causes.
@@ -366,8 +384,8 @@ impl Board {
     pub fn message_at(&self, now: Instant) -> Option<&str> {
         self.message
             .as_ref()
-            .filter(|(_, at, _)| now.saturating_duration_since(*at) < MESSAGE_TTL)
-            .map(|(msg, ..)| msg.as_str())
+            .filter(|said| now.saturating_duration_since(said.at) < MESSAGE_TTL)
+            .map(|said| said.shown.as_str())
     }
 
     /// Re-reads every brain, and the list of projects, which may have gained or lost one. The
@@ -720,14 +738,48 @@ impl Board {
     }
 }
 
+/// What of an entry, a project or a repository `kb` may change while a dialog edits it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Changed {
+    /// An entry's title.
+    Title,
+    /// An entry's tags.
+    Tags,
+    /// The entries related to an entry.
+    Related,
+    /// A task's status.
+    Status,
+    /// An entry's description.
+    Description,
+    /// What else the editor edits: a comment, a verdict's, a project's description or a repository's role.
+    Comment,
+    /// A decision's verdict being given.
+    Verdict,
+}
+
+impl Changed {
+    /// How the status bar names it.
+    fn word(self) -> &'static str {
+        match self {
+            Self::Title => "title",
+            Self::Tags => "tags",
+            Self::Related => "related entries",
+            Self::Status => "status",
+            Self::Description => "description",
+            Self::Comment => "comment",
+            Self::Verdict => "verdict",
+        }
+    }
+}
+
 /// "#1's title and status changed on disk", naming the fields of `name`'s entry that changed; `None` if none did.
-fn changed_on_disk(name: &str, fields: &[(bool, &str)]) -> Option<String> {
+fn changed_on_disk(name: &str, fields: &[(bool, Changed)]) -> Option<String> {
     listed(fields).map(|fields| format!("{name}'s {fields} changed on disk"))
 }
 
 /// The fields marked changed, as a sentence lists them ("title, tags and status"); `None` if none is.
-fn listed(fields: &[(bool, &str)]) -> Option<String> {
-    let changed: Vec<&str> = fields.iter().filter(|(changed, _)| *changed).map(|(_, field)| *field).collect();
+fn listed(fields: &[(bool, Changed)]) -> Option<String> {
+    let changed: Vec<&str> = fields.iter().filter(|(changed, _)| *changed).map(|(_, field)| field.word()).collect();
     let (last, rest) = changed.split_last()?;
     Some(if rest.is_empty() { (*last).to_string() } else { format!("{} and {last}", rest.join(", ")) })
 }

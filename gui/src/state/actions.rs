@@ -1,8 +1,8 @@
 //! Changes to entries, through the brain: each one says in the status bar what it did, or why not.
 
 use super::{
-    Board, CommentPicker, Confirm, Edit, Form, Key, LinkPicker, Mode, NextUndo, Pending, Picker, QuickAdd, Request,
-    Tab, Target, Tell, Telling, WhereFor, WherePicker, changed_on_disk,
+    Board, Changed, CommentPicker, Confirm, Edit, Form, Key, LinkPicker, Mode, NextUndo, Pending, Picker, QuickAdd,
+    Request, Tab, Target, Tell, Telling, WhereFor, WherePicker, changed_on_disk,
 };
 use crate::text::editor::{LineInput, TextEditor};
 use crate::text::merge::{Merged, merge};
@@ -272,12 +272,12 @@ impl Board {
     /// What `kb` changed, since the editor opened, of what it edits: its text (or which comment is at its index), the
     /// entry's status and a decision's verdict being given, said for the status bar; `None` if nothing.
     pub(super) fn edit_changed_on_disk(&self, edit: &Edit) -> Option<String> {
-        self.edit_changed_but(edit, "")
+        self.edit_changed_but(edit, None)
     }
 
-    /// What [`edit_changed_on_disk`](Self::edit_changed_on_disk) says but for `field`, which a save that stops over
+    /// What [`edit_changed_on_disk`](Self::edit_changed_on_disk) says but for `but`, which a save that stops over
     /// it is about to say.
-    fn edit_changed_but(&self, edit: &Edit, field: &str) -> Option<String> {
+    fn edit_changed_but(&self, edit: &Edit, but: Option<Changed>) -> Option<String> {
         // Another comment edited isn't what it edits, unlike for a save (`same_comment`): one put at its index is.
         let moved = match edit.target {
             Target::Comment(key, index) => {
@@ -287,15 +287,16 @@ impl Board {
             _ => false,
         };
         let word = text_word(edit.target);
-        let text = word != field && (moved || self.text_of(edit.target) != Some(edit.base.as_str()));
+        let text = Some(word) != but && (moved || self.text_of(edit.target) != Some(edit.base.as_str()));
         let Some(key) = edit.target.key() else {
             return text.then(|| format!("{} changed on disk", self.text_name(edit.target)));
         };
-        let status = field != "status" && self.task(key).map(|t| t.status) != edit.status;
+        let status = but != Some(Changed::Status) && self.task(key).map(|t| t.status) != edit.status;
         // Only a verdict's editor has one, which its save gives.
-        let verdict =
-            field != "verdict" && edit.decision.is_some() && self.task(key).map(|t| t.decision) != edit.decision;
-        changed_on_disk(&self.entry_name(key), &[(text, word), (status, "status"), (verdict, "verdict")])
+        let verdict = but != Some(Changed::Verdict)
+            && edit.decision.is_some()
+            && self.task(key).map(|t| t.decision) != edit.decision;
+        changed_on_disk(&self.entry_name(key), &[(text, word), (status, Changed::Status), (verdict, Changed::Verdict)])
     }
 
     /// What the editor's text is, to say what changed meanwhile.
@@ -361,7 +362,10 @@ impl Board {
         }
         // Another comment put at this one's place isn't saved over: the save stops for good.
         if let Some(stop) = self.comment_moved(&edit) {
-            self.unsay_found(self.edit_changed_on_disk(&edit), self.edit_changed_but(&edit, text_word(edit.target)));
+            self.unsay_found(
+                self.edit_changed_on_disk(&edit),
+                self.edit_changed_but(&edit, Some(text_word(edit.target))),
+            );
             self.notify(stop);
             self.mode = Mode::Edit(edit);
             return;
@@ -374,7 +378,7 @@ impl Board {
             return;
         };
         // Said before the verdict it stops over is taken in.
-        let found = (self.edit_changed_on_disk(&edit), self.edit_changed_but(&edit, "verdict"));
+        let found = (self.edit_changed_on_disk(&edit), self.edit_changed_but(&edit, Some(Changed::Verdict)));
         if let Some(stop) = self.verdict_meanwhile(&mut edit) {
             self.unsay_found(found.0, found.1);
             self.notify(stop);
@@ -444,7 +448,7 @@ impl Board {
             return Some((text, false));
         };
         // What the read found of the text is what this says now, merged or stopped over.
-        let found = self.edit_changed_but(edit, text_word(edit.target));
+        let found = self.edit_changed_but(edit, Some(text_word(edit.target)));
         self.unsay_found(self.edit_changed_on_disk(edit), found);
         match merge(&edit.base, &text, &now) {
             Merged::Clean(both) if both == now => {
@@ -703,6 +707,6 @@ impl Board {
 }
 
 /// The text `target` edits, as what changed on disk names it.
-fn text_word(target: Target) -> &'static str {
-    if matches!(target, Target::Description(_)) { "description" } else { "comment" }
+fn text_word(target: Target) -> Changed {
+    if matches!(target, Target::Description(_)) { Changed::Description } else { Changed::Comment }
 }
