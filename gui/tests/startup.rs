@@ -48,11 +48,17 @@ fn its_copy_button_puts_the_message_on_the_clipboard(cx: &mut gpui::TestAppConte
     assert_eq!(cx.windows().len(), 1, "it stays open");
 }
 
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
-#[test]
-fn without_a_display_it_shows_no_window() {
-    assert!(!shows_window("Headless"), "GPUI would run headless, its loop never ending");
-    assert!(shows_window("Wayland") && shows_window("X11"));
+#[gpui::test]
+fn a_running_app_shows_the_error_in_its_window(cx: &mut gpui::TestAppContext) {
+    // As the board's window that couldn't open does: the app is already running.
+    let error = anyhow!("Permission denied").context("opening the board's window");
+    cx.update(|cx| show(message(&error), cx));
+    cx.run_until_parked();
+    let windows = cx.windows();
+    assert_eq!(windows.len(), 1, "its window opened");
+    let view = windows[0].downcast::<StartupError>().expect("the startup error's window");
+    let shown = view.read_with(cx, |view, _| view.message.clone()).unwrap();
+    assert_eq!(shown, "opening the board's window: Permission denied");
 }
 
 #[test]

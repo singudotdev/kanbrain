@@ -78,6 +78,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `KANBRAIN_DIR`, or a brain it can't read or a newer kanbrain wrote only went to stderr, so the app just didn't open.
   The error still goes to stderr too, and alone on Linux without a display (over ssh, or under `sudo`); `kanbrain`
   with arguments, the command line, is unchanged. The release smoke checks fail on that window or that error.
+- The kanban app on Linux without a display (over ssh, under `sudo`, no `WAYLAND_DISPLAY` or `DISPLAY`) exits with
+  a failing code and says on stderr to run it from the desktop session: GPUI ran headless, the board's window unseen,
+  and the app never ended. A display named but dead fails the same way, saying so: a `WAYLAND_DISPLAY` nothing
+  answers at (or with no `XDG_RUNTIME_DIR` for it) says to unset it to use X11, a `DISPLAY` with no X server there
+  says `no X server at DISPLAY=…`; GPUI panicked (exit 101), on X11 only after a TCP timeout of minutes. A display
+  that refuses the app later (X authorization) exits with a failing code and GPUI's reason instead of a panic. A
+  board's window that can't open says why in the "kanbrain couldn't open" window and exits with a failing code: it
+  said it on stderr only and exited with 0. The Linux smoke check runs the app with none, a dead `WAYLAND_DISPLAY`
+  and a dead `DISPLAY`.
 - `kb init` and `kb context` no longer add a second copy of a hook that runs `kb` at a quoted path with spaces
   (`'/Users/John Doe/bin/kb' context`) beside it, and `kb deinit` takes it out with the rest. `kb deinit` no longer
   takes out a hook of the user's that only looks like kanbrain's (`true&&/usr/bin/kb hook tool`, `kb.sh hook tool`).

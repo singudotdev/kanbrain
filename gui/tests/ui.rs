@@ -1736,3 +1736,13 @@ fn a_bar_draws_its_track_and_thumb_inside_its_edges() {
     assert_eq!(strip, Bounds::new(point(px(10.), px(21.)), size(px(100.), px(6.))));
     assert_eq!(thumb, Bounds::new(point(px(40.), px(21.)), size(px(25.), px(6.))));
 }
+
+#[test]
+fn a_panic_says_its_message() {
+    let formatted: Box<dyn std::any::Any + Send> = Box::new(format!("{} failed", "X11Client::new"));
+    assert_eq!(panic_message(formatted.as_ref()), "X11Client::new failed");
+    let literal: Box<dyn std::any::Any + Send> = Box::new("NoCompositor");
+    assert_eq!(panic_message(literal.as_ref()), "NoCompositor");
+    let other: Box<dyn std::any::Any + Send> = Box::new(101);
+    assert_eq!(panic_message(other.as_ref()), "it panicked");
+}

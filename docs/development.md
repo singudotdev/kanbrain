@@ -223,7 +223,7 @@ gui/build.rs         embeds the icon into kanbrain.exe when building for Windows
 gui/icons/           the app's icons, made from docs/images/logo.svg by make.sh: .ico (Windows), .icns (macOS), 128 px PNG (X11)
 gui/fonts/           IBM Plex Sans and Lilex (from Zed's repository, with their licenses), embedded: the window's text and code
 gui/src/             kanbrain: the kanban app, and `cli::Program` when given arguments
-├── main.rs          entry point: the command line given arguments, else the root check and opening the window (an error before the board opens shown in a window, ui/startup.rs)
+├── main.rs          entry point: the command line given arguments, else the root and display checks and opening the window (an error before the board opens shown in a window, ui/startup.rs)
 ├── update.rs        the app's update: a newer release asked for daily, installed in place of the app (on Windows by PowerShell once it closes), which then starts again
 ├── watch.rs         polls the data folders (names, sizes, times) every second, naming those other programs changed
 ├── state/           what's on screen and every action, without GPUI (tested without a window)
@@ -246,7 +246,7 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
 │   ├── merge.rs     the three-way line merge of what the editor and `kb` changed meanwhile (Merge, its conflicts and picks)
 │   └── event.rs     KeyCode / KeyEvent / KeyModifiers: what GPUI keystrokes become
 └── ui/              the window: draws the Board with GPUI and turns clicks, drags and keys into its calls
-    ├── mod.rs       BrainView (the root view), the window and its app id, ticking, watching, the status bar, `action` buttons, clipboard, the system's folder dialog, $EDITOR
+    ├── mod.rs       BrainView (the root view), the window and its app id, ticking, watching, the status bar, `action` buttons, clipboard, the system's folder dialog, $EDITOR, GPUI's app (a panic connecting to the window system an exit with 1)
     ├── keys.rs      GPUI keystrokes → the board's keys, and keys as people write them (`Ctrl+C`)
     ├── text.rs      text cut to a width, dates, a field's text with its selection highlighted
     ├── topbar.rs    the logo, tabs, the project filter and + Add project, the shown project's description, search and the tag filter, New / Reload / Commands; the running tasks with Park and Park & quit
@@ -255,7 +255,8 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
     ├── drawer.rs    the details beside the board or list
     ├── entries.rs   the notes and decisions lists
     ├── report.rs    the report tab
-    ├── startup.rs   the small window saying why the app couldn't open the board (no console to print it to when started from a menu), with Copy, closed by Enter, Esc or Close; none without a display on Linux
+    ├── display.rs   Linux and FreeBSD only: whether there's a display to show the board on, and the one named answers (Wayland's socket, the X server's socket or TCP port), before GPUI would run headless or panic
+    ├── startup.rs   the small window saying why the app couldn't open the board or its window (no console to print it to when started from a menu), with Copy, closed by Enter, Esc or Close; none without a display on Linux (`display.rs`)
     ├── calendar.rs  the calendar tab: day, week and month
     ├── dialogs/     dialogs over the window; a delete's confirmation in mod.rs
     │   ├── form.rs     the new / edit form: project, title, tags, related entries, column
@@ -404,11 +405,12 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | `merge` (gui) | a three-way merge of the editor's text and `kb`'s: lines only one side changed merged (the last line too, with or without a line break after it), the same change on both no conflict, changes that only touch merged (a line edited and one added after it) but lines added at one place or within the other's not, lines both changed a conflict between settled lines, picks making the text and moving to the next conflict, the rest taking one side without undoing the picks made, and moving between conflicts stopping at the ends |
 | `markdown` (gui) | inline styles and link ranges, kept line breaks, heading levels, numbered and task lists, nesting, code, quotes, tables, rules |
 | `main` (gui) | the command line's errors going to stderr only, the app's failure to open the board shown too |
-| `startup` (gui) | the startup error window drawing the error, Copy putting it on the clipboard, closed by Enter, Esc or Close and not by other keys; none on a headless Linux; the Windows smoke check knowing its title |
+| `display` (gui, Linux) | no display saying to run it from the desktop session; a Wayland socket found as libwayland does (absolute, in `XDG_RUNTIME_DIR`, none without it, `WAYLAND_SOCKET` already connected) and one nothing answers at saying to unset it; X display names to their sockets (local and abstract, a host's TCP port, names it doesn't read left to GPUI) and one with no server saying so; real Unix, abstract and TCP listeners answering |
+| `startup` (gui) | the startup error window drawing the error, Copy putting it on the clipboard, closed by Enter, Esc or Close and not by other keys; opened in a running app, as when the board's window can't open; the Windows smoke check knowing its title |
 | `update` (gui) | a program replaced on disk since it started restarting from the new file |
 | `watch` (gui) | new, changed, renamed and deleted files are noticed once, naming the folder; temporary files aren't; own writes are taken as seen |
 | `xtask` | the notices list each license with the crates under it and leave this workspace's out; each program carries Rust's standard library and what else it embeds (musl, the app's fonts in `gui/fonts/`) |
-| `ui` (gui) | in a real (test) window: windows opening centered with the app id and logo, GPUI keystrokes to keys, shortcut names, clicks and double-clicks on cards (in every brain), a right click's menu acting on its card, dragging a card onto a column, the wheel, shift with it and a touchpad scrolling only their own way in a window smaller than the board, the column's and the board's scrollbars dragged, wheeled over, lit as the pointer comes and goes, and taking dropped cards, a drag ended with its bar, and their thumb's size, place and color, closing the details (no + under ✕ once they close; a click or a double-click on ✕ opening nothing), reloading after another program's change, acting right after one without undoing it, what that change marked said beside the key's message and replaced by a later one, opening an entry from the calendar, buttons pressed while typing, dropdowns that scroll to the highlighted row and how many rows each shows, the form's tag list and a click picking one, the list following its highlight, clipboard shortcuts, + Add project through the folder dialog, a one-line field scrolling sideways to keep its cursor in view, one shown again starting at its start, conflicts drawn with both sides and picked with a click, the form's line with the title `kb` gave, taken with its button, and text shown selected with the mouse: a drag over a description's blocks copying them as shown (to the primary selection too), a double-click's word, a drag stopping at its comment's end, a link still opening on a click, nothing copied with nothing selected, after a click elsewhere (a card's drag, which still moves it), once the details close or from under a dialog, and a merge side not picked by a drag that selected, while a double-click picks it and then selects the word |
+| `ui` (gui) | a panic's message, as GPUI failing to connect to the window system says it; in a real (test) window: windows opening centered with the app id and logo, GPUI keystrokes to keys, shortcut names, clicks and double-clicks on cards (in every brain), a right click's menu acting on its card, dragging a card onto a column, the wheel, shift with it and a touchpad scrolling only their own way in a window smaller than the board, the column's and the board's scrollbars dragged, wheeled over, lit as the pointer comes and goes, and taking dropped cards, a drag ended with its bar, and their thumb's size, place and color, closing the details (no + under ✕ once they close; a click or a double-click on ✕ opening nothing), reloading after another program's change, acting right after one without undoing it, what that change marked said beside the key's message and replaced by a later one, opening an entry from the calendar, buttons pressed while typing, dropdowns that scroll to the highlighted row and how many rows each shows, the form's tag list and a click picking one, the list following its highlight, clipboard shortcuts, + Add project through the folder dialog, a one-line field scrolling sideways to keep its cursor in view, one shown again starting at its start, conflicts drawn with both sides and picked with a click, the form's line with the title `kb` gave, taken with its button, and text shown selected with the mouse: a drag over a description's blocks copying them as shown (to the primary selection too), a double-click's word, a drag stopping at its comment's end, a link still opening on a click, nothing copied with nothing selected, after a click elsewhere (a card's drag, which still moves it), once the details close or from under a dialog, and a merge side not picked by a drag that selected, while a double-click picks it and then selects the word |
 
 ### The command line, from outside
 
@@ -459,9 +461,11 @@ same job, also when `install.sh` changes.
 ### The app, started
 
 `e2e/smoke-app.sh` (Linux, macOS) and `e2e/smoke-app.ps1` (Windows) start the release build of the kanban app on a
-few demo tasks, check that it stays up, with the board rather than the window saying why it couldn't open it, and idles (at most 3% of a core: with nothing running it redraws once a
-minute), and save a screenshot for a person to look at. CI runs them on all three systems, Linux under Xvfb with
-Mesa's software Vulkan, and keeps the screenshots as the run's artifacts.
+few demo tasks, check that it stays up, with the board rather than the window saying why it couldn't open it (on
+Linux, that with no display, a dead `WAYLAND_DISPLAY` or a dead `DISPLAY` it fails saying why), and idles (at most
+3% of a core: with nothing running it redraws once a minute), and save a screenshot for a person to look at. CI
+runs them on all three systems, Linux under Xvfb with Mesa's software Vulkan, and keeps the screenshots as the
+run's artifacts.
 
 ### Mutation testing
 

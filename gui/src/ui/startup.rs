@@ -6,7 +6,8 @@ use super::widgets::{self, Kind};
 use super::{theme, window_options};
 use crate::text::event::KeyCode;
 use gpui::{
-    ClickEvent, ClipboardItem, Context, FocusHandle, FontWeight, KeyDownEvent, Window, div, prelude::*, px, rgb, size,
+    App, ClickEvent, ClipboardItem, Context, FocusHandle, FontWeight, KeyDownEvent, Window, div, prelude::*, px, rgb,
+    size,
 };
 
 /// The window's title and heading: its own, so a smoke check tells it from the board's window, titled `kanbrain`.
@@ -22,37 +23,38 @@ const WHAT_TO_DO: &str = "Fix what it says, then open kanbrain again.";
 pub fn fail(error: &anyhow::Error) -> ! {
     eprintln!("Error: {error:?}");
     // With no display (over ssh, or under sudo, which drops DISPLAY and WAYLAND_DISPLAY: the root check's own case)
-    // GPUI runs headless, where the window opens unseen and its loop never ends: the app would hang, not fail.
+    // GPUI runs headless, where the window opens unseen and its loop never ends; with a dead one it panics, or hangs
+    // in libxcb's fallback to TCP: either way the window wouldn't show, so the error is said on stderr only.
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    if !shows_window(gpui::guess_compositor()) {
+    if super::display::ensure_display().is_err() {
         std::process::exit(1);
     }
     let message = message(error);
-    gpui_platform::application().run(move |cx| {
+    super::application().run(move |cx| {
         super::load_fonts(cx);
-        // Exits here rather than by GPUI's quit, which on macOS ends the process with 0, as if it had worked.
-        cx.on_window_closed(|_, _| std::process::exit(1)).detach();
-        let opened = cx.open_window(window_options(size(px(560.), px(280.)), cx), |window, cx| {
-            window.set_window_title(TITLE);
-            cx.new(|cx| StartupError::new(message, window, cx))
-        });
-        if let Err(e) = opened {
-            eprintln!("kanbrain: could not open the window: {e:#}");
-            std::process::exit(1);
-        }
-        cx.activate(true);
+        show(message, cx);
     });
     std::process::exit(1)
 }
 
-/// Whether GPUI shows a window with `compositor`, which is what it runs on, from [`gpui::guess_compositor`].
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
-fn shows_window(compositor: &str) -> bool {
-    compositor != "Headless"
+/// Says `message`, from [`message`], in its window, in an app already running, and exits with 1 once it's closed, or
+/// right away if the window can't open either (on stderr then). The caller has said the error on stderr.
+pub(super) fn show(message: String, cx: &mut App) {
+    // Exits here rather than by GPUI's quit, which on macOS ends the process with 0, as if it had worked.
+    cx.on_window_closed(|_, _| std::process::exit(1)).detach();
+    let opened = cx.open_window(window_options(size(px(560.), px(280.)), cx), |window, cx| {
+        window.set_window_title(TITLE);
+        cx.new(|cx| StartupError::new(message, window, cx))
+    });
+    if let Err(e) = opened {
+        eprintln!("kanbrain: could not open the window: {e:#}");
+        std::process::exit(1);
+    }
+    cx.activate(true);
 }
 
 /// The error and its causes on a line, as the status bar says an error.
-fn message(error: &anyhow::Error) -> String {
+pub(super) fn message(error: &anyhow::Error) -> String {
     format!("{error:#}")
 }
 

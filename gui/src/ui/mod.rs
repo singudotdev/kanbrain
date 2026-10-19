@@ -9,6 +9,7 @@
 //! - [`drawer`]: the selected entry's details, beside the board or list.
 //! - [`report`]: tracked time by task or tag.
 //! - [`startup`]: the window saying why the app couldn't open the board.
+//! - `display`: whether Linux has a display to show the board on.
 //! - [`calendar`]: each day's interactions, for a day, week or month.
 //! - [`dialogs`]: the new / edit form, the text editor, confirmations, links, the command palette and the project
 //!   dialogs.
@@ -28,6 +29,8 @@ mod board;
 mod calendar;
 mod caret;
 mod dialogs;
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+pub mod display;
 mod drawer;
 mod dropdown;
 mod entries;
@@ -116,16 +119,36 @@ fn window_options(size: gpui::Size<gpui::Pixels>, cx: &GpuiApp) -> WindowOptions
     }
 }
 
-/// Opens the window and runs until it's closed or the board quits.
+/// GPUI's app, connected to the window system. GPUI panics when that fails: a Wayland compositor or X server that
+/// refuses it, or one that's gone (on Linux `display` catches most of those first). That would end the app with 101 and
+/// Rust's panic message, so it exits with 1 saying why instead.
+fn application() -> gpui::Application {
+    let hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let app = std::panic::catch_unwind(gpui_platform::application);
+    std::panic::set_hook(hook);
+    app.unwrap_or_else(|panic| {
+        let error = anyhow::anyhow!("{}", panic_message(panic.as_ref()))
+            .context("couldn't connect to the window system: run kanbrain from the desktop session");
+        eprintln!("Error: {error:?}");
+        std::process::exit(1)
+    })
+}
+
+/// What a panic said, from its payload: `panic!`'s message, formatted or not.
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> &str {
+    payload
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| payload.downcast_ref::<&str>().copied())
+        .unwrap_or("it panicked")
+}
+
+/// Opens the window and runs until it's closed or the board quits. If it can't open, says why as an error before the
+/// board opens does ([`startup`]) and exits with 1.
 pub fn run(board: Board) {
-    gpui_platform::application().run(move |cx: &mut GpuiApp| {
+    application().run(move |cx: &mut GpuiApp| {
         load_fonts(cx);
-        cx.on_window_closed(|cx, _window| {
-            if cx.windows().is_empty() {
-                cx.quit();
-            }
-        })
-        .detach();
         let opened = cx.open_window(window_options(size(px(1400.), px(860.)), cx), |window, cx| {
             let title = match &board.scope {
                 Scope::Project(name) => format!("{name} · kanbrain"),
@@ -135,9 +158,20 @@ pub fn run(board: Board) {
             window.set_window_title(&title);
             cx.new(|cx| BrainView::new(board, window, cx))
         });
-        if let Err(e) = opened {
-            eprintln!("kanbrain: could not open the window: {e:#}");
-            cx.quit();
+        match opened {
+            // Only once it's open: the startup error's window exits with 1 when closed, where this would quit with 0.
+            Ok(_) => cx
+                .on_window_closed(|cx, _window| {
+                    if cx.windows().is_empty() {
+                        cx.quit();
+                    }
+                })
+                .detach(),
+            Err(e) => {
+                let error = e.context("couldn't open the board's window");
+                eprintln!("Error: {error:?}");
+                startup::show(startup::message(&error), cx);
+            }
         }
         cx.activate(true);
     });
