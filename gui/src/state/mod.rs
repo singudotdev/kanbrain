@@ -480,6 +480,7 @@ impl Board {
     /// Marks the open edit form or editor once `kb` changed what it edits, and says what, once: the save that follows
     /// is the user's call, made knowing it. One waiting for [`Tell`]'s answer too: the agent may finish the task then.
     fn mark_changed_on_disk(&mut self) {
+        self.refresh_theirs_title();
         self.merge_again();
         let said = match &self.mode {
             Mode::Edit(edit) => self.edit_mark(edit),
@@ -504,23 +505,25 @@ impl Board {
         self.notify_found(said);
     }
 
-    /// Merges again the open conflicts of a text `kb` changed again while they were picked, which show its old text
-    /// otherwise; and shows in the form the title `kb` gives now, in place of the one a save stopped over, as the one
-    /// saving again keeps yours over. Picks made are lost, as the conflicts may not be the same.
-    fn merge_again(&mut self) {
-        if let Mode::Form(form) = &self.mode
-            && form.theirs_title.is_some()
-            && let Some(task) = form.target.key().and_then(|key| self.task(key))
-        {
-            let title = task.title.clone();
-            if let Mode::Form(form) = &mut self.mode {
-                if let Some(opened) = &mut form.opened {
-                    opened.title.clone_from(&title);
-                }
-                form.theirs_title = Some(title);
-            }
+    /// Shows in the form the title `kb` gives now, in place of the one a save stopped over, as the one saving again
+    /// keeps yours over.
+    fn refresh_theirs_title(&mut self) {
+        let Mode::Form(form) = &self.mode else { return };
+        let Some(task) = form.theirs_title.as_ref().and(form.target.key()).and_then(|key| self.task(key)) else {
             return;
+        };
+        let title = task.title.clone();
+        if let Mode::Form(form) = &mut self.mode {
+            if let Some(opened) = &mut form.opened {
+                opened.title.clone_from(&title);
+            }
+            form.theirs_title = Some(title);
         }
+    }
+
+    /// Merges again the open conflicts of a text `kb` changed again while they were picked, which show its old text
+    /// otherwise. Picks made are lost, as the conflicts may not be the same.
+    fn merge_again(&mut self) {
         let Mode::Edit(edit) = &self.mode else { return };
         // Another comment at its index isn't merged with, which would put that comment in the editor: the text typed
         // comes back, for the save to stop over (`same_comment`).
