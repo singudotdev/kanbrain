@@ -301,7 +301,7 @@ fn each_project_runs_its_own_task() {
     let mut board = Board::open(central.path(), None).unwrap();
     board.set_status(Key::new(1, 1), Status::Doing);
     board.set_status(Key::new(3, 1), Status::Doing);
-    let running: Vec<Key> = board.running().into_iter().map(|(key, _)| key).collect();
+    let running: Vec<Key> = board.running().map(|(key, _)| key).collect();
     assert_eq!(running, [Key::new(1, 1), Key::new(3, 1)], "shop/api and blog both run");
     // Within one brain, you run one task at a time.
     let id =
@@ -310,7 +310,7 @@ fn each_project_runs_its_own_task() {
     assert_eq!(board.task(Key::new(1, id)).unwrap().status, Status::Todo);
     assert!(board.message().unwrap().contains("#1 is in doing"), "{:?}", board.message());
     board.park_and_quit();
-    assert!(board.running().is_empty(), "Park & quit parks yours, in every brain");
+    assert!(!board.any_running(), "Park & quit parks yours, in every brain");
 }
 
 #[test]

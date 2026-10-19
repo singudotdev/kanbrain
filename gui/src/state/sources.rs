@@ -494,17 +494,14 @@ impl Board {
         tags
     }
 
-    /// The tasks whose clocks run, in every brain whatever the scope shows, the longest running first: each keeps
-    /// its place in the top bar as others start and stop, whatever order the files were read in.
-    pub fn running(&self) -> Vec<(Key, &Task)> {
-        let mut running: Vec<(Key, &Task)> = self
-            .sources
-            .iter()
-            .enumerate()
-            .flat_map(|(src, s)| s.brain.running().map(move |t| (Key::new(src, t.id), t)))
-            .collect();
-        running.sort_by_key(|(key, task)| (task.sessions.last().map(|s| s.start), key.src, key.id));
-        running
+    /// The tasks whose clocks run, in every brain whatever the scope shows.
+    pub fn running(&self) -> impl Iterator<Item = (Key, &Task)> {
+        self.sources.iter().enumerate().flat_map(|(src, s)| s.brain.running().map(move |t| (Key::new(src, t.id), t)))
+    }
+
+    /// Whether a task's clock runs, yours or an agent's, in any brain whatever the scope shows.
+    pub fn any_running(&self) -> bool {
+        self.running().next().is_some()
     }
 
     /// The report tab's view with the tab's search.

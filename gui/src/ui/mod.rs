@@ -265,7 +265,7 @@ impl BrainView {
                     // Redrawn when something shown changes with time: a clock's seconds, a message going, else the
                     // ages on cards, by the minute. Idle, drawing twice a second took several percent of a core.
                     let says = view.board.message().is_some();
-                    if says || said || !view.board.running().is_empty() || ticks.is_multiple_of(IDLE_TICKS) {
+                    if says || said || view.board.any_running() || ticks.is_multiple_of(IDLE_TICKS) {
                         cx.notify();
                     }
                     said = says;

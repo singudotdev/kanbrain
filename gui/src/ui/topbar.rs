@@ -260,7 +260,7 @@ fn today(board: &Board, cx: &mut Context<BrainView>) -> Div {
     let (from, to) = Period::current(Unit::Day).bounds();
     // By the clock: tasks that ran at once (yours beside an agent's) count that time once.
     let today = worked(board.sources.iter().flat_map(|s| &s.brain.tasks), from, to, now());
-    let running = !board.running().is_empty();
+    let running = board.any_running();
     // As tall as the row's buttons, so it lines up with them in a row aligned to its top.
     div()
         .flex()

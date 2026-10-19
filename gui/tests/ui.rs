@@ -619,7 +619,7 @@ fn todays_total_and_park_and_quit_sit_in_the_projects_row_with_no_bar_of_running
     assert!(cx.debug_bounds("button park-quit").is_none(), "nothing to park");
 
     cx.simulate_keystrokes("1 escape s");
-    view.read_with(cx, |view, _| assert_eq!(view.board.running().len(), 1, "a task runs"));
+    view.read_with(cx, |view, _| assert_eq!(view.board.running().count(), 1, "a task runs"));
     let row = ends_at_projects_row(cx);
     let quit = cx.debug_bounds("button park-quit").expect("Park & quit shows while a task runs");
     assert!(in_row(quit, row), "{quit:?} in {row:?}");
