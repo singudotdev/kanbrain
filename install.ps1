@@ -6,7 +6,7 @@
 #   $env:KANBRAIN_APP         = "gui"         # cli (default): the command line `kb`; gui: the kanban app
 #                                           # `kanbrain`; both. Both use the same tasks.
 #                                           # With UNINSTALL/PURGE the default is both.
-#   $env:KANBRAIN_VERSION     = "v0.6.2"      # default: latest
+#   $env:KANBRAIN_VERSION     = "v0.6.3"      # default: latest
 #   $env:KANBRAIN_INSTALL_DIR = "D:\tools"    # default: %LOCALAPPDATA%\Programs\kanbrain
 #   $env:KANBRAIN_UNINSTALL   = "1"           # remove the app(s) (your tasks are kept)
 #   $env:KANBRAIN_PURGE       = "1"           # remove the app(s) AND your central brain's data: entries, tags.md,
