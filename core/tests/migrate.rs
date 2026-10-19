@@ -20,7 +20,7 @@ const STEPS: &[Migration] =
     &[Migration { to: 2, what: "titles shouted", run: shout }, Migration { to: 3, what: "marked", run: mark }];
 
 /// The title in the brain's one entry file, read directly: a brain in test format 3 is newer than [`FORMAT`], which
-/// `Store::load` refuses, as it should.
+/// `Store::load_entries` refuses, as it should.
 fn title_in(store: &Store) -> String {
     let file = fs::read_dir(store.dir())
         .unwrap()

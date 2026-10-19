@@ -16,7 +16,8 @@ use std::time::Duration;
 const TCP_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// What to do when there's none, after what's wrong.
-const RUN_FROM_DESKTOP: &str = "run kanbrain from the desktop session, not over ssh or under sudo; `kb` works anywhere";
+const RUN_FROM_DESKTOP: &str =
+    "run kanbrain from the desktop session, not over ssh or under `sudo -u other`; `kb` works anywhere";
 
 /// Where GPUI would connect to show its window.
 #[derive(Debug, PartialEq)]
@@ -31,8 +32,8 @@ enum Socket {
 }
 
 /// Fails, saying why and to run it from the desktop session, when there's no display to show the board on, or when
-/// the one named doesn't answer: over ssh, or under sudo, which drops `DISPLAY` and `WAYLAND_DISPLAY`, or with one
-/// left from a session that's gone.
+/// the one named doesn't answer: over ssh, or under `sudo -u other`, which drops `DISPLAY` and `WAYLAND_DISPLAY`
+/// (plain `sudo` is refused first, as root), or with one left from a session that's gone.
 pub fn ensure_display() -> Result<()> {
     ensure_display_on(gpui::guess_compositor(), |name| std::env::var_os(name), answers)
 }

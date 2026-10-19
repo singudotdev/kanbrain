@@ -8,7 +8,9 @@ week or month. There's nothing to turn on, and nothing extra to do: moving cards
 - **Moving a task to Doing starts its clock**: a **session** opens. Every task in Doing has its own clock running.
 - **You run one task at a time, per brain.** Starting another while one of yours is in Doing is refused, saying
   which: park or finish it first. Nothing is parked for you. The central brain and each project repository have
-  their own Doing, so tasks in different projects can run at once.
+  their own Doing, so tasks in different projects can run at once. If files edited by hand or synced from another
+  machine leave several of yours in one brain's Doing, the most recently started stays and the others are parked
+  when the files are read.
 - **Agents aren't limited.** An agent that splits its work between subagents runs one task per subagent, beside
   yours. Running tasks are marked in **cyan** when you started them and in **green** when an agent did (the card's
   border, its clock). Each task tracks its own time; totals count by the clock (see [Reports](#reports)).

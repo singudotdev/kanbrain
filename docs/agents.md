@@ -233,7 +233,7 @@ hand.
 | `show ID` | the entry as compact text: state, time tracked, description, comments with the latest changes to the title, tags, related entries and description among them, related entries, latest status changes, file path |
 | `list notes decisions` | every note and decision (add statuses such as `doing` to include tasks) |
 | `search WORDS…` | entries whose title, tags, description or comments contain every word, one line each, at most 20; `#tag` matches tags only |
-| `start\|park\|done\|todo ID` | changes a task's status; `start` runs its clock. An agent can have several tasks running; a person, one per brain (another `start` is refused, naming it) |
+| `start\|park\|done\|todo ID` | changes a task's status; `start` runs its clock ([one per brain for a person, several for an agent](time-tracking.md#how-it-works)) |
 | `comment ID TEXT…\|-` | adds a timestamped comment |
 | `ask ID TEXT…\|-` | asks the user a question on a task and parks it until a person comments |
 | `wait ID [--timeout MINUTES]` | blocks until task `ID` no longer waits for an answer (or decision `ID` is accepted or rejected), reading the files every second; prints the answer, or that the task waits on nothing (never asked, or picked up since). Fails after 8 minutes without one (`--timeout`, or `KANBRAIN_WAIT_TIMEOUT`, in minutes; 0: never). No `--json` |

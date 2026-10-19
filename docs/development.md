@@ -251,7 +251,7 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
     ├── mod.rs       BrainView (the root view), the window and its app id, ticking, watching, the status bar, `action` buttons, clipboard, the system's folder dialog, $EDITOR, GPUI's app (a panic connecting to the window system an exit with 1)
     ├── keys.rs      GPUI keystrokes → the board's keys, and keys as people write them (`Ctrl+C`)
     ├── text.rs      text cut to a width, dates, a field's text with its selection highlighted
-    ├── topbar.rs    the logo, tabs, the project filter and + Add project, the shown project's description, search and the tag filter, New / Reload / Commands; today's total and Park & quit
+    ├── topbar.rs    the logo, tabs, Kanban / List, search and the tag filter, "N waiting for you", New / Reload / Commands; under them the project filter, the shown project's description, Manage project and + Add project, today's total and Park & quit
     ├── board.rs     the columns, cards (dragged as DraggedCard), quick add, "Show N older"; each scrolled only by the wheel's own way (`each_axis`)
     ├── list.rs      the board's list layout: a section per status, a row per task, dragged like cards
     ├── drawer.rs    the details beside the board or list

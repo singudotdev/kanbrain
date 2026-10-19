@@ -241,7 +241,8 @@ fn the_central_brain_kept_in_a_notes_vault_leaves_the_vaults_own_files_to_the_ag
     std::fs::write(vault.join("plan.md"), "# Plan\n\n- id: 3\n- type: task\n").unwrap();
     assert!(edit(&root, &vault.join("plan.md"), vault).is_some(), "but an entry renamed by hand is kanbrain's");
     std::fs::write(vault.join("hand.md"), "# Hand\n\n- id : 12\n").unwrap();
-    assert!(edit(&root, &vault.join("hand.md"), vault).is_some(), "as `Store::load` reads one, spaced as it may be");
+    let spaced = edit(&root, &vault.join("hand.md"), vault);
+    assert!(spaced.is_some(), "as `Store::load_entries` reads one, spaced as it may be");
     std::fs::write(vault.join("users.md"), "# Users\n\n## Notes\n- id: user-123 migrated\n").unwrap();
     assert_eq!(edit(&root, &vault.join("users.md"), vault), None, "an `- id:` that isn't an entry's");
     std::fs::write(vault.join("latin1.md"), b"# Caf\xe9\n").unwrap();

@@ -126,7 +126,8 @@ its data, migrated to the new version's format when it changed, after a backup (
 `kb update` replaces nothing behind cargo's back: it prints `cargo install kanbrain && kb init --all` to run (and
 `kanbrain update`, for the app, which isn't on crates.io,
 `cargo install --locked --git https://github.com/singudotdev/kanbrain --tag vX.Y.Z kanbrain-app && kanbrain init --all`,
-the release it found).
+the release it found; without GitHub reachable, the command has no `--tag` and installs from `main`, the latest
+release).
 
 The kanban app checks for a newer release when it opens and once a day, and offers it in the status bar:
 **Update to X.Y.Z** (`U`) does the same as `kb update`, then opens the new version. On Windows it closes first,
@@ -150,9 +151,9 @@ There are two levels:
 | **uninstall** | ✓ | |
 | **purge** (full uninstall) | ✓ | ✓ |
 
-**Linux / macOS**
-
 Both levels remove both programs; add `--app cli` or `--app gui` (`$env:KANBRAIN_APP` on Windows) to remove just one.
+
+**Linux / macOS**
 
 Uninstall, the program only:
 
