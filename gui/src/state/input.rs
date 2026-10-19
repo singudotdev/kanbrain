@@ -220,9 +220,8 @@ impl Board {
             if text == merge.theirs { "merged: it's theirs as it is, esc closes" } else { "merged: esc saves it" };
         // What a save merges with from now on is what the conflicts were picked over.
         if let Some(merge) = edit.merge.take() {
-            edit.base = merge.theirs;
+            edit.settle(merge.theirs, &text);
         }
-        edit.editor = TextEditor::new(&text);
         self.notify(said);
     }
 

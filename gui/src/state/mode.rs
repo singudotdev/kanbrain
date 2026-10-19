@@ -569,6 +569,16 @@ pub struct Edit {
     pub note: String,
 }
 
+impl Edit {
+    /// Ends the merge, its conflicts picked or merged again cleanly: `text` goes in the editor, to look over and save,
+    /// and `base` is what a save merges with from now on, the text the merge was made over.
+    pub fn settle(&mut self, base: String, text: &str) {
+        self.base = base;
+        self.merge = None;
+        self.editor = TextEditor::new(text);
+    }
+}
+
 /// What the text editor edits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {

@@ -40,7 +40,7 @@ pub use mode::{
 pub use shown::Shown;
 pub use sources::{Key, Scope, Source};
 
-use crate::text::editor::{LineInput, TextEditor};
+use crate::text::editor::LineInput;
 use crate::text::merge::{self, Merged};
 use crate::watch;
 use anyhow::Result;
@@ -529,9 +529,7 @@ impl Board {
             Merged::Clean(text) => {
                 // All of theirs is the text as it is: nothing to save.
                 let theirs = text == now;
-                edit.base = now;
-                edit.merge = None;
-                edit.editor = TextEditor::new(&text);
+                edit.settle(now, &text);
                 if theirs {
                     format!("{name} changed again: it's theirs as it is now, esc closes")
                 } else {
