@@ -101,7 +101,10 @@ It couldn't open the board, and the window says why: kanbrain running as root, a
 it can't read, or one a newer kanbrain wrote (`kb update` then). Fix what it says and open the app again; **Copy**
 puts the message on the clipboard, for a bug report. Started from a terminal, the same error is on stderr, and the
 app exits with a failing code once the window is closed. On Linux without a display (over ssh, or under `sudo`) it's
-on stderr only.
+on stderr only, and the app exits with a failing code right away: run it from the desktop session (`kb` works
+anywhere). The same goes for a `WAYLAND_DISPLAY` or `DISPLAY` left from a session that's gone: the error names it
+(unset `WAYLAND_DISPLAY` to use X11). A display on another host that's slow to resolve, or one that accepts the app
+and then stalls, can't be told apart beforehand: the app waits on it as GPUI does.
 
 ### "kanbrain is a per-user app and doesn't run as root"
 

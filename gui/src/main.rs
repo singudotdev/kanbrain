@@ -39,6 +39,8 @@ fn start(
 /// Opens the board in the window, and runs until it's closed.
 fn open() -> anyhow::Result<()> {
     platform::ensure_not_root()?;
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    ui::display::ensure_display()?;
     // Opened in a project's repository, it starts on that project; it shows them all anyway.
     let here = std::env::current_dir()?;
     // Canonical, as `init` registers it.
