@@ -11,7 +11,7 @@ release into `main`), which holds the tree the pull request passed with. A re-si
 
 GitHub's own filter, a workflow's `paths:`, decides only by the files a push changed, can't see that a tree passed
 before, and a workflow it skips leaves its checks pending, which a required check then blocks
-([GitHub: handling skipped but required checks](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/troubleshooting-required-status-checks#handling-skipped-but-required-checks)).
+([GitHub: handling skipped but required checks](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks#handling-skipped-but-required-checks)).
 A job skipped by its `if:` reports success.
 
 ## Decision
