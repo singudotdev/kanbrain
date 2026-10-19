@@ -294,7 +294,7 @@ kanbrain
    The card lands in **To do**; the form's **Column** picks another, and a column's `+` opens it with that column
    picked. To add several to To do in a row, press `a`: each `enter` adds one and keeps the field open.
 2. When you start working on it, drag the card to **Doing**, or press `s` (`shift+→` moves it one column right).
-   Its clock starts, and the top bar shows it. To switch to another, park this one first (`p`).
+   Its clock starts on the card. To switch to another, park this one first (`p`).
 3. Double-click the card (or `enter`) to open its details: write a description (`m`), add comments as you go (`c`).
 4. When it's finished, drag it to **Done** or press `d`.
 5. At the end of the day, **Park & quit** (`Q`) stops your clock and closes the window. Everything is already saved.

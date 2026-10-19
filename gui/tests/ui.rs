@@ -300,6 +300,9 @@ fn manage_project_draws_every_repository(cx: &mut gpui::TestAppContext) {
     let (view, cx) = cx.add_window_view(|window, cx| BrainView::new(board, window, cx));
     cx.run_until_parked();
     assert!(cx.debug_bounds("button edit-project").is_some(), "the bar shows the project's card");
+    let row = cx.debug_bounds("scope bar").expect("the projects row is drawn");
+    let today = cx.debug_bounds("today total").expect("today's total shows beside a project too");
+    assert!(in_row(today, row), "{today:?} in {row:?}");
     let info = cx.debug_bounds("manage-project-button").expect("the bar has the manage button").center();
     cx.simulate_click(info, gpui::Modifiers::none());
     view.read_with(cx, |view, _| assert!(matches!(view.board.mode, crate::state::Mode::ManageProject(1))));
@@ -567,7 +570,7 @@ fn the_details_buttons_act_when_clicked(cx: &mut gpui::TestAppContext) {
 }
 
 #[gpui::test]
-fn the_top_bar_and_the_running_bar_act_when_clicked(cx: &mut gpui::TestAppContext) {
+fn the_top_bar_acts_when_clicked(cx: &mut gpui::TestAppContext) {
     let (view, cx, _dir) = window(cx, &["a", "b"]);
     click(cx, "segment tab-1");
     view.read_with(cx, |view, _| assert_eq!(view.board.tab, crate::state::Tab::Notes));
@@ -594,12 +597,34 @@ fn the_top_bar_and_the_running_bar_act_when_clicked(cx: &mut gpui::TestAppContex
     cx.run_until_parked();
     click(cx, "button waiting");
     view.read_with(cx, |view, _| assert_eq!(view.board.selected, Some(crate::state::Key::new(0, 2))));
+}
 
-    // #2, selected, started from the keyboard and parked from the running bar.
+/// Whether `inner` lies within `outer`'s height, as an element in a row does.
+fn in_row(inner: gpui::Bounds<gpui::Pixels>, outer: gpui::Bounds<gpui::Pixels>) -> bool {
+    inner.top() >= outer.top() && inner.bottom() <= outer.bottom()
+}
+
+#[gpui::test]
+fn todays_total_and_park_and_quit_sit_in_the_projects_row_with_no_bar_of_running_tasks(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a", "b"]);
+    let ends_at_projects_row = |cx: &mut gpui::VisualTestContext| {
+        let top = cx.debug_bounds("top bar").expect("the top bar is drawn");
+        let row = cx.debug_bounds("scope bar").expect("the projects row is drawn");
+        assert_eq!(top.bottom(), row.bottom(), "nothing under the projects row: the columns take the room");
+        row
+    };
+    let row = ends_at_projects_row(cx);
+    let today = cx.debug_bounds("today total").expect("today's total shows with nothing running");
+    assert!(in_row(today, row), "{today:?} in {row:?}");
+    assert!(cx.debug_bounds("button park-quit").is_none(), "nothing to park");
+
     cx.simulate_keystrokes("1 escape s");
-    view.read_with(cx, |view, _| assert_eq!(view.board.brain(0).task(2).unwrap().status, Status::Doing));
-    click(cx, "button park 0/2");
-    view.read_with(cx, |view, _| assert_eq!(view.board.brain(0).task(2).unwrap().status, Status::Parked));
+    view.read_with(cx, |view, _| assert_eq!(view.board.running().len(), 1, "a task runs"));
+    let row = ends_at_projects_row(cx);
+    let quit = cx.debug_bounds("button park-quit").expect("Park & quit shows while a task runs");
+    assert!(in_row(quit, row), "{quit:?} in {row:?}");
+    assert!(in_row(cx.debug_bounds("today total").unwrap(), row));
+    assert!(cx.debug_bounds("button park 0/2").is_none() && cx.debug_bounds("button park 0/1").is_none());
 }
 
 #[gpui::test]
