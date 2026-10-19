@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-10-19
+
 ### Added
 
 - `kb completions powershell`: tab completion in PowerShell (5.1 and 7, on Windows, Linux and macOS), as bash, zsh
