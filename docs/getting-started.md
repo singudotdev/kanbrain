@@ -45,7 +45,7 @@ curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/inst
 A specific release:
 
 ```sh
-curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh -s -- --version v0.6.3
+curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh -s -- --version v0.6.4
 ```
 
 Another folder in your home (the default is `~/.local/bin`):
@@ -83,7 +83,7 @@ $env:KANBRAIN_APP = "both"; irm https://github.com/singudotdev/kanbrain/releases
 A specific release:
 
 ```powershell
-$env:KANBRAIN_VERSION = "v0.6.3"; irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
+$env:KANBRAIN_VERSION = "v0.6.4"; irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
 ```
 
 Another folder in your profile:
