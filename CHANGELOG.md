@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The kanban app shows a column's scrollbar only while the pointer is over that column (its header too), and the
+  board's only while it's over the board; a thumb being dragged stays until it's let go.
+
 ## [0.6.3] - 2026-10-19
 
 ### Added
