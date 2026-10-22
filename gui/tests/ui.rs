@@ -1986,6 +1986,7 @@ fn a_repositorys_reference_names_the_entry_of_that_repository_of_its_own_project
     assert_eq!(named(src("blog", "api"), "web"), None, "blog has no web");
     assert_eq!(named(shop_api, "shop/web"), Some(shop_web), "named with its project, as the app names it");
     assert_eq!(named(src("blog", "api"), "shop/web"), None, "not from another project");
+    assert_eq!(named(src("blog", "api"), "shop/api"), None, "nor its own repository of that name");
     let project = crate::ui::markdown::written_for_project(&board, shop_api);
     assert_eq!(project(Some("web"), 1).map(|k| k.src), Some(shop_web), "a project's description names them so");
 }
