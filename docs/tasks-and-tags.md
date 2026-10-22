@@ -178,6 +178,12 @@ They show, top to bottom:
   one at a time), so relating and unrelating at once leaves no line;
 - **History**: every status change, `· agent` on those an agent made.
 
+In a description, a comment, a question or Manage project's texts, `#12` names entry 12, a task, note or decision,
+and `api#3` entry 3 of the project's repository `api`: drawn as a link, a click opens it. A project's description,
+which is no one repository's, names entries only as `api#3`. Markdown comes first, so in code (`` `#12` ``), inside a
+link or in a URL it stays what that is; after `PR`, `issue` or `MR` it's a pull request's or an issue's number and
+stays text, and so does one naming an entry that isn't there.
+
 Their text is selected with the mouse, to copy with `ctrl+c` (`cmd+c` on macOS): drag over it, double-click a word,
 triple-click a paragraph, `shift`+click to extend. A drag selects across one text's paragraphs, list items and code
 lines, all of a description say, but stops at its end: from one comment it doesn't run into the next. It copies
