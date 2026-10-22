@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The "Project memory" section `kb init` writes into `CLAUDE.md` and `AGENTS.md` asks agents to work from official
+  documentation, at the version the repository pins, and to link the page a decision, note or comment rests on.
+
 ## [0.6.4] - 2026-10-19
 
 ### Changed

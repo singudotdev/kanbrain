@@ -70,6 +70,9 @@ The user follows them live on a kanban board: keep it showing what you're doing 
   then `add --decision --link ID --body - TITLE` with Context / Decision / Consequences on stdin. Non-obvious
   findings: `add --note --link ID --body - TITLE`; a problem someone has to fix is a task instead, in the
   repository that has to change.
+- Work from official documentation: that of the language, library, tool or API, at the version this repository pins
+  (its manifest or lockfile), over memory or posts elsewhere. A decision, note or comment that rests on it links the
+  page, `[serde: field attributes](URL)`, so the user can check it.
 - `## Project` in `context` is the application's shared context. If it isn't described, or you're asked to set up
   or load the brain, describe it first, from the README and manifests: `project describe -` (what the app is, its
   services and how they connect, conventions they share: the big picture, in at most five lines, without tables,
