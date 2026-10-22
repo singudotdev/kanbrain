@@ -8,15 +8,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 
 - The kanban app draws references to entries in descriptions, comments, questions and Manage project's texts, `#12`
-  and `api#3` (an entry of the project's repository `api`), as links that open that task, note or decision; a
-  project's description, no one repository's, names them only as `api#3`. Only in prose and only to an entry that's
-  there: in code, inside a link, in a URL, or after `PR`, `issue` or `MR` they stay text.
+  and `api#3` (an entry of the project's repository `api`; `api #3` and `shop/api #3` too, as the app names
+  entries), as links that open that task, note or decision; a project's description, no one repository's, names them
+  only as `api#3`. Only in prose and only to an entry that's there: in code, inside a link, in a URL, or after `PR`,
+  `issue`, `MR` or pull/merge request they stay text.
 
 ### Changed
 
 - The "Project memory" section `kb init` writes into `CLAUDE.md` and `AGENTS.md` asks agents to work from official
-  documentation, at the version the repository pins, and to link the page a decision, note or comment rests on; and
-  to name entries as `#12`, or `REPO#12` in another repository of the project, so the board opens them.
+  documentation, at the version the repository pins, always basing what they do and write on it, to link the page a
+  description, decision, note or comment rests on, and to say so where there's no official documentation; and to
+  name entries plainly as `#12`, or `REPO#12` in another repository of the project, which the board makes links.
+  `kb init --all`, which the installers and `kb update` run, rewrites it in every registered repository.
 
 ## [0.6.4] - 2026-10-19
 
