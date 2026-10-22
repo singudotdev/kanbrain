@@ -146,7 +146,8 @@ fn asked_block(board: &Board, key: Key, task: &Task, cx: &mut Context<BrainView>
             let buttons = div().flex().flex_wrap().gap_2().children(decide.into_iter().map(small)).children(open);
             let mut text = Selectable::new(board, region(key, "question"));
             let asks = text.line(Line::raw(format!("{} asks, {}", who(question.author), when(question.created))));
-            let body = markdown::render("question", &question.body, &mut text);
+            let body =
+                markdown::render("question", &question.body, markdown::written_in(board, key.src), &mut text, cx);
             let asked = div().flex().flex_col().gap_2().child(dim_small(asks));
             Some(
                 callout
@@ -219,7 +220,8 @@ fn description_block(board: &Board, key: Key, task: &Task, cx: &mut Context<Brai
         dim("No description yet.")
     } else {
         let mut text = Selectable::new(board, region(key, "description"));
-        let body = markdown::render("description", &task.description, &mut text);
+        let body =
+            markdown::render("description", &task.description, markdown::written_in(board, key.src), &mut text, cx);
         text.finish(body, cx)
     };
     div().flex().flex_col().gap_2().child(section("Description", [edit])).child(body)
@@ -300,7 +302,13 @@ fn comment_card(board: &Board, key: Key, index: usize, comment: &Comment, cx: &m
         }));
     let mut text = Selectable::new(board, region(key, &format!("comment {index}")));
     let label = text.line(Line::raw(comment_label(comment)));
-    let body = markdown::render(format!("comment {index}"), &comment.body, &mut text);
+    let body = markdown::render(
+        format!("comment {index}"),
+        &comment.body,
+        markdown::written_in(board, key.src),
+        &mut text,
+        cx,
+    );
     let card = div()
         .flex()
         .flex_col()

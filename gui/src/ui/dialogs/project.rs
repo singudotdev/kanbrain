@@ -2,7 +2,7 @@
 //! buttons to rename the project or a repository, move or remove a repository, add one, and remove the project.
 
 use super::{WIDE_WIDTH, dialog};
-use crate::state::{Board, COLUMNS, Target};
+use crate::state::{Board, COLUMNS, Key, Target};
 use crate::text::event::KeyCode;
 use crate::ui::markdown;
 use crate::ui::shown::{self, Selectable};
@@ -58,6 +58,7 @@ pub(super) fn draw(
         ))
         .child(described(
             board,
+            markdown::written_for_project(board, src),
             format!("project {src} description"),
             &project.description,
             "Not described yet: what the application is, its services and how they connect, conventions they share.",
@@ -133,6 +134,7 @@ fn repo_block(
         .children(running)
         .child(described(
             board,
+            markdown::written_in(board, repo),
             format!("repo {repo} notes"),
             info.map_or("", |i| i.notes.as_str()),
             "No role described: what this repository owns, exposes and consumes.",
@@ -158,13 +160,21 @@ fn manage_button(
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| act(b, at))))
 }
 
-/// `text` as markdown, the text `id` the mouse selects, or `empty` dimmed when there's none.
-fn described(board: &Board, id: String, text: &str, empty: &'static str, cx: &mut Context<BrainView>) -> Div {
+/// `text` as markdown, the entries its references name found by `resolve`, the text `id` the mouse selects, or `empty`
+/// dimmed when there's none.
+fn described(
+    board: &Board,
+    resolve: impl Fn(Option<&str>, u32) -> Option<Key>,
+    id: String,
+    text: &str,
+    empty: &'static str,
+    cx: &mut Context<BrainView>,
+) -> Div {
     if text.is_empty() {
         return dim(empty);
     }
     let mut shown = Selectable::new(board, id.clone());
-    let drawn = markdown::render(id, text, &mut shown);
+    let drawn = markdown::render(id, text, resolve, &mut shown, cx);
     shown.finish(drawn, cx)
 }
 

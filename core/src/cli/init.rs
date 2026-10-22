@@ -47,7 +47,8 @@ The user follows them live on a kanban board: keep it showing what you're doing 
   lines: what changed, what's next); `done ID` as soon as one is finished. Stopping before it is: `comment`, then
   `park ID`. Doing isn't limited for you: several of your tasks can run at once. Never park, finish or move a task
   you didn't start (the user's, or another session's). A pull request, issue, CI run, commit or page named in a
-  comment or body goes with its link, `[PR #39](URL)`, not just `PR #39`: the user opens it from the board.
+  comment or body goes with its link, `[PR #39](URL)`, not just `PR #39`: the user opens it from the board. So does
+  an entry, written `#12`, or `REPO#12` in another repository of the project: the board opens it from there.
 - Before ending a turn in which you changed the repository: that change is on a task you started (create it now if
   you skipped it), the turn's work is commented there, and a finished task is `done`. Work that goes through a pull
   request is finished once every check has passed and it's merged; until then its task stays in Doing. Nothing is
