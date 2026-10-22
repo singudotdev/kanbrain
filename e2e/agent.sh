@@ -286,7 +286,9 @@ if wanted answered; then
     agent "$dir" "Go on with the project."
     check answered "$dir" '
 task = next(t for t in tasks if t["id"] == 1)
-assert task["status"] in ("doing", "done"), "the answered task was picked up: " + task["status"]
+# Picked up, then done, still in doing, or parked again asking the user to check what it could not run.
+asks_again = task["status"] == "parked" and task.get("asked") == "waiting for an answer"
+assert task["status"] in ("doing", "done") or asks_again, "the answered task was picked up: " + task["status"]
 assert "280" in open("app.py").read(), "with the answer"
 '
 fi
