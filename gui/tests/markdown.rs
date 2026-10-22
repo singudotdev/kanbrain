@@ -102,6 +102,8 @@ fn references_to_entries_are_links_to_them() {
             ("#2".into(), entry(0, 2))
         ]
     );
+    // A path's piece before it isn't a repository's name: `/api #3` and `shop/ #4` name this brain's.
+    assert_eq!(links_of("/api #3 and shop/ #4"), [("#3".into(), entry(0, 3)), ("#4".into(), entry(0, 4))]);
     // In headings, list items and table cells as in paragraphs.
     let found = |blocks: &[Block]| format!("{blocks:?}").matches("Entry(").count();
     assert_eq!(found(&blocks(some, "# Plan for #3")), 1);
