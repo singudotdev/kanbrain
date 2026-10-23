@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-10-23
+
 ### Changed
 
 - The section `kb init` writes asks agents to link what they cite (official documentation, a pull request, a CI
@@ -681,7 +683,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.5...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.6...HEAD
+[0.6.6]: https://github.com/singudotdev/kanbrain/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/singudotdev/kanbrain/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/singudotdev/kanbrain/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/singudotdev/kanbrain/compare/v0.6.2...v0.6.3
