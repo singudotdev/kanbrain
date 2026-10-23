@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The section `kb init` writes asks agents to link what they cite (official documentation, a pull request, a CI
+  run) as a markdown link, `[title](URL)`, never a bare URL.
+
+### Fixed
+
+- The kanban app draws a bare URL in a description, comment or question, `https://docs.python.org/3/`, as a link that
+  opens it, as GitHub's markdown does: an agent cited its documentation that way and it couldn't be opened.
+
 ## [0.6.5] - 2026-10-23
 
 ### Added

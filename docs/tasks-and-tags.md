@@ -185,6 +185,10 @@ names entries only as `api#3`. Markdown comes first, so in code (`` `#12` ``), i
 what that is; after `PR`, `issue`, `MR` or pull/merge request it's a pull request's or an issue's number and stays
 text, and so does one naming an entry that isn't there.
 
+A URL written bare, `https://docs.python.org/3/library/sqlite3.html`, is a link too, which opens in the browser, as
+GitHub draws it ([GFM: autolinks (extension)](https://github.github.com/gfm/#autolinks-extension-)): from `http://` or
+`https://` and a domain with a period up to a space, less the punctuation that ends a sentence around it.
+
 Their text is selected with the mouse, to copy with `ctrl+c` (`cmd+c` on macOS): drag over it, double-click a word,
 triple-click a paragraph, `shift`+click to extend. A drag selects across one text's paragraphs, list items and code
 lines, all of a description say, but stops at its end: from one comment it doesn't run into the next. It copies

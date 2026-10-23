@@ -4,7 +4,7 @@
 //! [`blocks`] parses the text into [`Block`]s, plain data that tests can check; [`render`] draws them, as one text
 //! the mouse selects ([`Selectable`]): each paragraph, heading, code line and cell a piece of it, a list's markers
 //! and the rules left out. Covered: paragraphs, headings, bold, italic, strikethrough, inline code, links (a click
-//! opens them), lists and task lists, quotes, code blocks, tables and rules. A single line break is kept as one,
+//! opens them, and a bare URL is one, as GFM has it), lists and task lists, quotes, code blocks, tables and rules. A single line break is kept as one,
 //! as comments and notes are written line by line, not wrapped like prose.
 //!
 //! References to entries, `#12` and `api#3` as kb and agents write them (and `api #3` or `shop/api #3`, as the app
@@ -144,12 +144,13 @@ impl Builder<'_> {
         self.spans.push(Span::styled(text, style));
     }
 
-    /// Adds prose to the paragraph or heading being read, its references to entries as links. Inside a link, it's
-    /// that link's text.
+    /// Adds prose to the paragraph or heading being read, its URLs and references to entries as links. Inside a
+    /// link, it's that link's text.
     fn prose(&mut self, text: &str) {
         let style = self.style();
         let mut from = 0;
         if self.link.is_none() {
+            let mut found: Vec<_> = urls(text).map(|at| (at.clone(), LinkTarget::Url(text[at].to_string()))).collect();
             for (mut at, repo, id) in references(text) {
                 let before = &text[..at.start];
                 // `api #3` or `shop/api #3`: the entry of the repository before it, if that's one of the project.
@@ -163,13 +164,19 @@ impl Builder<'_> {
                     Some((_, name, None)) if name.contains('/') => None,
                     _ => (!after_a_number_word(&self.spans, before)).then(|| (self.resolve)(repo, id)).flatten(),
                 };
-                let Some(key) = key.filter(|_| at.start >= from) else { continue };
+                found.extend(key.map(|key| (at, LinkTarget::Entry(key))));
+            }
+            found.sort_by_key(|(at, _)| at.start);
+            for (at, target) in found {
+                if at.start < from {
+                    continue;
+                }
                 if at.start > from {
                     self.text(&text[from..at.start], style);
                 }
                 let start = self.len;
                 self.text(&text[at.clone()], style.fg(ACCENT));
-                self.links.push((start..self.len, LinkTarget::Entry(key)));
+                self.links.push((start..self.len, target));
                 from = at.end;
             }
         }
@@ -358,6 +365,40 @@ fn references(text: &str) -> impl Iterator<Item = (Range<usize>, Option<&str>, u
         let fits = !in_url && !repo.starts_with(['-', '.']) && !matches!(before, Some('/' | '@' | '#' | '&'));
         let id = text[hash + 1..digits].parse().ok().filter(|_| ends && fits)?;
         Some((start..digits, Some(repo).filter(|r| !r.is_empty()), id))
+    })
+}
+
+/// Where `text` has a URL markdown left as text, which GFM's extended autolinks make links
+/// ([GFM: autolinks (extension)](https://github.github.com/gfm/#autolinks-extension-)): `http://` or `https://` at a
+/// word's start (or after `*`, `_`, `~` or `(`), a domain of at least two parts, `_` in neither of its last two, up
+/// to a space or `<`, less the punctuation, unmatched `)` and entity (`&hl;`) that end it.
+fn urls(text: &str) -> impl Iterator<Item = Range<usize>> {
+    text.match_indices("http").filter_map(move |(start, _)| {
+        let rest = &text[start..];
+        let host = rest.strip_prefix("https://").or_else(|| rest.strip_prefix("http://"))?;
+        let starts = text[..start].chars().next_back().is_none_or(|c| c.is_whitespace() || "*_~(".contains(c));
+        let domain = &host[..host.find(|c: char| !c.is_alphanumeric() && !"-_.".contains(c)).unwrap_or(host.len())];
+        let parts: Vec<_> = domain.trim_end_matches('.').split('.').collect();
+        let valid =
+            parts.len() > 1 && parts.iter().all(|p| !p.is_empty()) && !parts[parts.len() - 2..].concat().contains('_');
+        let mut url = &rest[..rest.find(|c: char| c.is_whitespace() || c == '<').unwrap_or(rest.len())];
+        loop {
+            let entity = url
+                .strip_suffix(';')
+                .and_then(|u| u.rsplit_once('&'))
+                .filter(|(_, name)| !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric()));
+            url = match url.strip_suffix(['?', '!', '.', ',', ':', '*', '_', '~']) {
+                Some(shorter) => shorter,
+                None if url.ends_with(')') && url.matches(')').count() > url.matches('(').count() => {
+                    &url[..url.len() - 1]
+                }
+                None => match entity {
+                    Some((shorter, _)) => shorter,
+                    None => break,
+                },
+            };
+        }
+        (starts && valid).then(|| start..start + url.len())
     })
 }
 

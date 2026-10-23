@@ -146,3 +146,41 @@ fn a_preview_line_drops_the_markdown() {
         "Context Sessions live in PostgreSQL, see docs."
     );
 }
+
+#[test]
+fn a_bare_url_is_a_link_without_the_punctuation_around_it() {
+    let url = |u: &str| LinkTarget::Url(u.to_string());
+    let page = "https://docs.python.org/3/library/http.server.html";
+    assert_eq!(links_of(&format!("Uses http.server ({page}).")), [(page.into(), url(page))]);
+    assert_eq!(
+        links_of("See http://x.dev/a_(b), https://en.wikipedia.org/wiki/Rust_(language)! and https://x.dev/?q=1&hl;"),
+        [
+            ("http://x.dev/a_(b)".into(), url("http://x.dev/a_(b)")),
+            (
+                "https://en.wikipedia.org/wiki/Rust_(language)".into(),
+                url("https://en.wikipedia.org/wiki/Rust_(language)")
+            ),
+            ("https://x.dev/?q=1".into(), url("https://x.dev/?q=1")),
+        ]
+    );
+    // Up to a space or `<`, and with its `#`, which isn't a reference there.
+    assert_eq!(
+        links_of("*https://x.dev/a#3*<b> then #4"),
+        [("https://x.dev/a#3".into(), url("https://x.dev/a#3")), ("#4".into(), LinkTarget::Entry(Key::new(0, 4)))]
+    );
+}
+
+#[test]
+fn only_a_url_markdown_did_not_already_draw_is_linked() {
+    let url = |u: &str| LinkTarget::Url(u.to_string());
+    // A link's text, an autolink and code stay what markdown draws.
+    assert_eq!(links_of("[https://a.dev](https://b.dev)"), [("https://a.dev".into(), url("https://b.dev"))]);
+    assert_eq!(links_of("<https://a.dev>"), [("https://a.dev".into(), url("https://a.dev"))]);
+    assert_eq!(links_of("`https://a.dev` x"), []);
+    // A domain needs a period and no `_` in its last two parts, and the URL starts a word, as GFM has it.
+    assert_eq!(links_of("http://localhost:8000 https://a_b.dev xhttps://a.dev https://"), []);
+    assert_eq!(links_of("https://a_b.c.dev/"), [("https://a_b.c.dev/".into(), url("https://a_b.c.dev/"))]);
+    assert_eq!(links_of("https://v.w.a_b.c.dev"), [("https://v.w.a_b.c.dev".into(), url("https://v.w.a_b.c.dev"))]);
+    // Only an entity's name, letters and digits, ends it with its `;`.
+    assert_eq!(links_of("https://x.dev/?a&b-c;"), [("https://x.dev/?a&b-c;".into(), url("https://x.dev/?a&b-c;"))]);
+}
