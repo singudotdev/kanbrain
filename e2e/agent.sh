@@ -255,7 +255,9 @@ if wanted full; then
 mine = next(t for t in tasks if t["title"] == "Write the release notes")
 assert mine["status"] == "doing", "the user'"'"'s task stays in doing: " + mine["status"]
 assert "/health" in open("app.py").read(), "the work is done all the same"
-assert by_status("done"), "the agent'"'"'s own task, done"
+# Done, or parked asking the user to check what it could not (the rule since 0.6.4).
+asking = [t for t in by_status("parked") if t.get("asked") == "waiting for an answer"]
+assert by_status("done") or asking, "the agent'"'"'s own task, done or asking: " + str([(t["title"], t.get("status")) for t in tasks])
 '
 fi
 
