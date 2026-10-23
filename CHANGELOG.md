@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-10-23
+
 ### Added
 
 - The kanban app draws references to entries in descriptions, comments, questions and Manage project's texts, `#12`
@@ -666,7 +668,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.4...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.5...HEAD
+[0.6.5]: https://github.com/singudotdev/kanbrain/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/singudotdev/kanbrain/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/singudotdev/kanbrain/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/singudotdev/kanbrain/compare/v0.6.1...v0.6.2
