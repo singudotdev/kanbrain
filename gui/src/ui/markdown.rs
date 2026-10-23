@@ -4,8 +4,8 @@
 //! [`blocks`] parses the text into [`Block`]s, plain data that tests can check; [`render`] draws them, as one text
 //! the mouse selects ([`Selectable`]): each paragraph, heading, code line and cell a piece of it, a list's markers
 //! and the rules left out. Covered: paragraphs, headings, bold, italic, strikethrough, inline code, links (a click
-//! opens them, and a bare URL is one, as GFM has it), lists and task lists, quotes, code blocks, tables and rules. A single line break is kept as one,
-//! as comments and notes are written line by line, not wrapped like prose.
+//! opens them, and a bare URL is one, as GFM has it), lists and task lists, quotes, code blocks, tables and rules. A
+//! single line break is kept as one, as comments and notes are written line by line, not wrapped like prose.
 //!
 //! References to entries, `#12` and `api#3` as kb and agents write them (and `api #3` or `shop/api #3`, as the app
 //! and kb's reports name them), are links too, which open the entry. Only in prose: markdown comes first, so one in
@@ -151,8 +151,14 @@ impl Builder<'_> {
         let mut from = 0;
         if self.link.is_none() {
             let mut found: Vec<_> = urls(text).map(|at| (at.clone(), LinkTarget::Url(text[at].to_string()))).collect();
+            // Where the list of references the one read is in starts: `references` lets one after `/` through only
+            // right after another (`#38/#39`).
+            let mut list = 0;
             for (mut at, repo, id) in references(text) {
                 let before = &text[..at.start];
+                if !before.ends_with('/') {
+                    list = at.start;
+                }
                 // `api #3` or `shop/api #3`: the entry of the repository before it, if that's one of the project.
                 let named = repo.is_none().then(|| repo_before(before)).flatten();
                 let key = match named.map(|(start, name)| (start, name, (self.resolve)(Some(name), id))) {
@@ -162,7 +168,8 @@ impl Builder<'_> {
                     }
                     // Another project's repository's.
                     Some((_, name, None)) if name.contains('/') => None,
-                    _ => (!after_a_number_word(&self.spans, before)).then(|| (self.resolve)(repo, id)).flatten(),
+                    // Listed, it follows the words its list does: `PR #38/#39` names two pull requests.
+                    _ => (!after_a_number_word(&self.spans, &text[..list])).then(|| (self.resolve)(repo, id)).flatten(),
                 };
                 found.extend(key.map(|key| (at, LinkTarget::Entry(key))));
             }
