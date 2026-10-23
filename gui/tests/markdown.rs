@@ -198,6 +198,8 @@ fn references_listed_with_slashes_are_each_a_link() {
             ("#5".into(), entry(0, 5)),
         ]
     );
+    // Listed after a pull request's or an issue's number, they're numbers too.
+    assert_eq!(links_of("PR #3/#4 and issues #1/api#2/#5"), []);
     // After a path's `/` it's still that path's: `owner/api#3`, `docs/#2`, `v1/#3`.
     assert_eq!(links_of("owner/api#3 docs/#2 v1/#3 owner/api#3/#4"), []);
 }

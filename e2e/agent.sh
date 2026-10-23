@@ -135,7 +135,11 @@ assert done, "the change has a task, done"
 assert any(t.get("comments") for t in done), "commented on as it went"
 import re
 texts = [t.get("description", "") for t in tasks] + [c["body"] for t in tasks for c in t.get("comments", [])]
-bare = [u for x in texts for u in re.findall(r"(?<!\]\()(?<!<)https?://[^\s)]+", x)]
+# A page cited outside a link: outside code, and with a domain (one with a period, not an address, which a command
+# run as evidence names, curl http://127.0.0.1:8000/health). Backticks as \x60 inside these quotes.
+prose = [re.sub(r"\x60\x60\x60.*?\x60\x60\x60|\x60[^\x60\n]*\x60", "", x, flags=re.S) for x in texts]
+page = r"(?<!\]\()(?<![<\[])(?<!\]: )https?://(?![\d.]+[:/\s]|[\d.]+$)[\w-]+(?:\.[\w-]+)+[^\s)\]]*"
+bare = [u for x in prose for u in re.findall(page, x)]
 assert not bare, "what it cites, as markdown links: " + str(bare)
 assert not by_status("doing"), "nothing left running"
 assert "health" in open("app.py").read(), "and the endpoint is there"

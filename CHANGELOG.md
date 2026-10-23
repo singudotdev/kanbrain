@@ -15,7 +15,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - The kanban app draws a bare URL in a description, comment or question, `https://docs.python.org/3/`, as a link that
   opens it, as GitHub's markdown does: an agent cited its documentation that way and it couldn't be opened.
-- References listed with slashes, `#1/#2/api#3`, are each a link: only the first was, the rest read as a path's.
+- References listed with slashes, `#1/#2/api#3`, are each a link: only the first was, the rest read as a path's. After
+  `PR` or `issue` the whole list stays numbers (`PR #38/#39`).
 
 ## [0.6.5] - 2026-10-23
 
