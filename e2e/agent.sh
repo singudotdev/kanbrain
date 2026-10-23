@@ -133,6 +133,14 @@ assert len(description.splitlines()) <= 6, "a short description: " + description
 done = by_status("done")
 assert done, "the change has a task, done"
 assert any(t.get("comments") for t in done), "commented on as it went"
+import re
+texts = [t.get("description", "") for t in tasks] + [c["body"] for t in tasks for c in t.get("comments", [])]
+# A page cited outside a link: outside code, and with a domain (one with a period, not an address, which a command
+# run as evidence names, curl http://127.0.0.1:8000/health). Backticks as \x60 inside these quotes.
+prose = [re.sub(r"\x60\x60\x60.*?\x60\x60\x60|\x60[^\x60\n]*\x60", "", x, flags=re.S) for x in texts]
+page = r"(?<!\]\()(?<![<\[])(?<!\]: )https?://(?![\d.]+[:/\s]|[\d.]+$)[\w-]+(?:\.[\w-]+)+[^\s)\]]*"
+bare = [u for x in prose for u in re.findall(page, x)]
+assert not bare, "what it cites, as markdown links: " + str(bare)
 assert not by_status("doing"), "nothing left running"
 assert "health" in open("app.py").read(), "and the endpoint is there"
 '
@@ -247,7 +255,9 @@ if wanted full; then
 mine = next(t for t in tasks if t["title"] == "Write the release notes")
 assert mine["status"] == "doing", "the user'"'"'s task stays in doing: " + mine["status"]
 assert "/health" in open("app.py").read(), "the work is done all the same"
-assert by_status("done"), "the agent'"'"'s own task, done"
+# Done, or parked asking the user to check what it could not (the rule since 0.6.4).
+asking = [t for t in by_status("parked") if t.get("asked") == "waiting for an answer"]
+assert by_status("done") or asking, "the agent'"'"'s own task, done or asking: " + str([(t["title"], t.get("status")) for t in tasks])
 '
 fi
 
@@ -308,7 +318,7 @@ import re
 texts = [t.get("description", "") for t in tasks] + [c["body"] for t in tasks for c in t.get("comments", [])]
 named = [x for x in texts if re.search(r"#12\b|pull/12\b|\b(PR|pull request) 12\b", x, re.I)]
 assert named, "the pull request is named on the board: " + str(texts)
-assert all(url in x for x in named), "each time with its link: " + str(named)
+assert all("](" + url + ")" in x for x in named), "each time with its markdown link: " + str(named)
 '
 fi
 

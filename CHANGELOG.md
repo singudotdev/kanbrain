@@ -5,6 +5,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-10-23
+
+### Changed
+
+- The section `kb init` writes asks agents to link what they cite (official documentation, a pull request, a CI
+  run) as a markdown link, `[title](URL)`, never a bare URL.
+- It asks them to name several entries apart, `#1, #2 and web#3`, never joined by `/`.
+
+### Fixed
+
+- The kanban app draws a bare URL in a description, comment or question, `https://docs.python.org/3/`, as a link that
+  opens it, as GitHub's markdown does: an agent cited its documentation that way and it couldn't be opened.
+- References listed with slashes, `#1/#2/api#3`, are each a link: only the first was, the rest read as a path's. After
+  `PR` or `issue` the whole list stays numbers (`PR #38/#39`).
+
 ## [0.6.5] - 2026-10-23
 
 ### Added
@@ -668,7 +683,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.5...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.6...HEAD
+[0.6.6]: https://github.com/singudotdev/kanbrain/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/singudotdev/kanbrain/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/singudotdev/kanbrain/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/singudotdev/kanbrain/compare/v0.6.2...v0.6.3
