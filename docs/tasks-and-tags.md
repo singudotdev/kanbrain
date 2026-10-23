@@ -180,10 +180,14 @@ They show, top to bottom:
 
 In a description, a comment, a question or Manage project's texts, `#12` names entry 12, a task, note or decision,
 and `api#3` entry 3 of the project's repository `api` (also written `api #3` or `shop/api #3`, as the app and the
-reports name entries): drawn as a link, a click opens it. A project's description, which is no one repository's,
+reports name entries): drawn as a link, a click opens it, each of several listed with `/` too (`#1/#2/api#3`). A project's description, which is no one repository's,
 names entries only as `api#3`. Markdown comes first, so in code (`` `#12` ``), inside a link or in a URL it stays
 what that is; after `PR`, `issue`, `MR` or pull/merge request it's a pull request's or an issue's number and stays
 text, and so does one naming an entry that isn't there.
+
+A URL written bare, `https://docs.python.org/3/library/sqlite3.html`, is a link too, which opens in the browser, as
+GitHub draws it ([GFM: autolinks (extension)](https://github.github.com/gfm/#autolinks-extension-)): from `http://` or
+`https://` and a domain with a period up to a space, less the punctuation that ends a sentence around it.
 
 Their text is selected with the mouse, to copy with `ctrl+c` (`cmd+c` on macOS): drag over it, double-click a word,
 triple-click a paragraph, `shift`+click to extend. A drag selects across one text's paragraphs, list items and code

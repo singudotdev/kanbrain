@@ -133,6 +133,10 @@ assert len(description.splitlines()) <= 6, "a short description: " + description
 done = by_status("done")
 assert done, "the change has a task, done"
 assert any(t.get("comments") for t in done), "commented on as it went"
+import re
+texts = [t.get("description", "") for t in tasks] + [c["body"] for t in tasks for c in t.get("comments", [])]
+bare = [u for x in texts for u in re.findall(r"(?<!\]\()(?<!<)https?://[^\s)]+", x)]
+assert not bare, "what it cites, as markdown links: " + str(bare)
 assert not by_status("doing"), "nothing left running"
 assert "health" in open("app.py").read(), "and the endpoint is there"
 '
@@ -308,7 +312,7 @@ import re
 texts = [t.get("description", "") for t in tasks] + [c["body"] for t in tasks for c in t.get("comments", [])]
 named = [x for x in texts if re.search(r"#12\b|pull/12\b|\b(PR|pull request) 12\b", x, re.I)]
 assert named, "the pull request is named on the board: " + str(texts)
-assert all(url in x for x in named), "each time with its link: " + str(named)
+assert all("](" + url + ")" in x for x in named), "each time with its markdown link: " + str(named)
 '
 fi
 
