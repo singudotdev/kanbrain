@@ -387,16 +387,12 @@ fn urls(text: &str) -> impl Iterator<Item = Range<usize>> {
                 .strip_suffix(';')
                 .and_then(|u| u.rsplit_once('&'))
                 .filter(|(_, name)| !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric()));
-            url = match url.strip_suffix(['?', '!', '.', ',', ':', '*', '_', '~']) {
-                Some(shorter) => shorter,
-                None if url.ends_with(')') && url.matches(')').count() > url.matches('(').count() => {
-                    &url[..url.len() - 1]
-                }
-                None => match entity {
-                    Some((shorter, _)) => shorter,
-                    None => break,
-                },
-            };
+            let unmatched = url.matches(')').count() > url.matches('(').count();
+            let shorter = url.strip_suffix(['?', '!', '.', ',', ':', '*', '_', '~']);
+            match shorter.or_else(|| url.strip_suffix(')').filter(|_| unmatched)).or(entity.map(|(u, _)| u)) {
+                Some(shorter) => url = shorter,
+                None => break,
+            }
         }
         (starts && valid).then(|| start..start + url.len())
     })
