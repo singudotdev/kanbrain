@@ -14,7 +14,7 @@ fn inline_styles_and_links() {
     assert_eq!(text, "Use bold, it, old and code; see docs.");
     assert!(styles[1].bold && styles[3].italic && styles[5].strike && styles[7].bg.is_some(), "{styles:?}");
     let Block::Text { links, .. } = block else { unreachable!() };
-    assert_eq!(links, &[(32..36, Target::Url("https://x.dev".to_string()))]);
+    assert_eq!(links, &[(32..36, LinkTarget::Url("https://x.dev".to_string()))]);
     assert_eq!(&text[32..36], "docs");
 }
 
@@ -51,18 +51,19 @@ fn none(_: Option<&str>, _: u32) -> Option<Key> {
     None
 }
 
-/// Resolves `#1` to `#5` here and `api#1` to `api#5`, the repository `api` at brain 1.
+/// Resolves `#1` to `#5` here and `api#1` to `api#5` (`shop/api` too), the repository `api` of project `shop` at
+/// brain 1.
 fn some(repo: Option<&str>, id: u32) -> Option<Key> {
     let src = match repo {
         None => 0,
-        Some("api") => 1,
+        Some("api" | "shop/api") => 1,
         Some(_) => return None,
     };
     (1..=5).contains(&id).then_some(Key::new(src, id))
 }
 
 /// The text of every link of the only block, and where it points.
-fn links_of(text: &str) -> Vec<(String, Target)> {
+fn links_of(text: &str) -> Vec<(String, LinkTarget)> {
     let blocks = blocks(some, text);
     let [block @ Block::Text { links, .. }] = &blocks[..] else { panic!("{blocks:?}") };
     let (shown, _) = line(block);
@@ -71,7 +72,7 @@ fn links_of(text: &str) -> Vec<(String, Target)> {
 
 #[test]
 fn references_to_entries_are_links_to_them() {
-    let entry = |src, id| Target::Entry(Key::new(src, id));
+    let entry = |src, id| LinkTarget::Entry(Key::new(src, id));
     assert_eq!(
         links_of("Blocked by #3 and api#4, (#5), #2."),
         [
@@ -89,6 +90,25 @@ fn references_to_entries_are_links_to_them() {
         assert_eq!(line.0.iter().filter(|s| !s.content.is_empty()).count(), pieces, "{line:?}");
         assert_eq!(line.0.len(), pieces, "no empty piece: {line:?}");
     }
+    // After any space, a non-breaking one too; and named as the app and kb's reports name them, `api #4` and
+    // `shop/api #4`, where only a repository of the project is taken for one.
+    assert_eq!(
+        links_of("a\u{a0}#3, x\u{3000}api#4, api #4, shop/api #5 and the task #2"),
+        [
+            ("#3".into(), entry(0, 3)),
+            ("api#4".into(), entry(1, 4)),
+            ("api #4".into(), entry(1, 4)),
+            ("shop/api #5".into(), entry(1, 5)),
+            ("#2".into(), entry(0, 2))
+        ]
+    );
+    // A path's piece before it isn't a repository's name: `/api #3` and `shop/ #4` name this brain's.
+    assert_eq!(links_of("/api #3 and shop/ #4"), [("#3".into(), entry(0, 3)), ("#4".into(), entry(0, 4))]);
+    // In headings, list items and table cells as in paragraphs.
+    let found = |blocks: &[Block]| format!("{blocks:?}").matches("Entry(").count();
+    assert_eq!(found(&blocks(some, "# Plan for #3")), 1);
+    assert_eq!(found(&blocks(some, "- check api#4\n- and #2")), 2);
+    assert_eq!(found(&blocks(some, "| a | b |\n|---|---|\n| #1 | api#2 |")), 2);
     let blocks = blocks(some, "Blocked by **#3** now");
     let (text, styles) = line(&blocks[0]);
     assert_eq!(text, "Blocked by #3 now");
@@ -105,10 +125,12 @@ fn markdown_and_other_hashes_stay_as_they_are() {
         "owner/api#3, x.dev/page#3, a@api#3, #3b and #3_",
         "&#35;",
         "https://x.dev/?#3 and https://x.dev/?q=api#4, x://h#5",
+        "PR\n#3, **PR** (#3), **PR**\u{a0}#4 and [PR](#) #5",
+        "web/api #3 is another project's",
     ] {
         let blocks = blocks(some, text);
         let entries = |b: &Block| match b {
-            Block::Text { links, .. } => links.iter().filter(|(_, t)| matches!(t, Target::Entry(_))).count(),
+            Block::Text { links, .. } => links.iter().filter(|(_, t)| matches!(t, LinkTarget::Entry(_))).count(),
             _ => 0,
         };
         assert_eq!(blocks.iter().map(entries).sum::<usize>(), 0, "{text}: {blocks:?}");

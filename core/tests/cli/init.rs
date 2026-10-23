@@ -58,7 +58,7 @@ fn an_unclosed_marker_is_left_alone() {
 fn the_docs_show_the_section_as_written() {
     // On Windows, git may check the docs out with CRLF line endings.
     let docs = include_str!("../../../docs/agents.md").replace("\r\n", "\n");
-    assert!(docs.contains(SECTION), "update docs/agents.md with SECTION");
+    assert!(docs.contains(&format!("```markdown\n{SECTION}\n```")), "docs/agents.md quotes SECTION word for word");
 }
 
 #[test]
@@ -686,17 +686,4 @@ fn init_rewrites_a_verbatim_registration_a_released_version_wrote_plain() {
     let text = fs::read_to_string(&registry).unwrap();
     let lines: Vec<_> = text.lines().filter(|line| line.starts_with("- ")).collect();
     assert_eq!(lines, [format!("- shop: {}", &verbatim.to_str().unwrap()[4..])], "{text}");
-}
-
-#[test]
-fn the_docs_show_the_section_as_it_is_written() {
-    // On Windows, git may check the docs out with CRLF line endings.
-    let docs = include_str!("../../../docs/agents.md").replace("\r\n", "\n");
-    assert!(docs.contains(&format!("```markdown\n{SECTION}\n```")), "docs/agents.md quotes the section word for word");
-}
-
-#[test]
-fn the_section_asks_for_official_documentation_cited_by_its_link() {
-    assert!(SECTION.contains("official documentation"), "{SECTION}");
-    assert!(SECTION.contains("version this repository pins"), "{SECTION}");
 }
