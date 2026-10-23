@@ -9,11 +9,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - The section `kb init` writes asks agents to link what they cite (official documentation, a pull request, a CI
   run) as a markdown link, `[title](URL)`, never a bare URL.
+- It asks them to name several entries apart, `#1, #2 and web#3`, never joined by `/`.
 
 ### Fixed
 
 - The kanban app draws a bare URL in a description, comment or question, `https://docs.python.org/3/`, as a link that
   opens it, as GitHub's markdown does: an agent cited its documentation that way and it couldn't be opened.
+- References listed with slashes, `#1/#2/api#3`, are each a link: only the first was, the rest read as a path's.
 
 ## [0.6.5] - 2026-10-23
 
