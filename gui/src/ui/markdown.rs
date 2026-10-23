@@ -151,14 +151,14 @@ impl Builder<'_> {
         let mut from = 0;
         if self.link.is_none() {
             let mut found: Vec<_> = urls(text).map(|at| (at.clone(), LinkTarget::Url(text[at].to_string()))).collect();
-            // Where the references listed with `/` (`#38/#39`) start, and where the last ends.
-            let mut chain = (0, 0);
+            // Where the list of references the one read is in starts: `references` lets one after `/` through only
+            // right after another (`#38/#39`).
+            let mut list = 0;
             for (mut at, repo, id) in references(text) {
                 let before = &text[..at.start];
-                if !(before.ends_with('/') && chain.1 + 1 == at.start) {
-                    chain.0 = at.start;
+                if !before.ends_with('/') {
+                    list = at.start;
                 }
-                chain.1 = at.end;
                 // `api #3` or `shop/api #3`: the entry of the repository before it, if that's one of the project.
                 let named = repo.is_none().then(|| repo_before(before)).flatten();
                 let key = match named.map(|(start, name)| (start, name, (self.resolve)(Some(name), id))) {
@@ -169,9 +169,7 @@ impl Builder<'_> {
                     // Another project's repository's.
                     Some((_, name, None)) if name.contains('/') => None,
                     // Listed, it follows the words its list does: `PR #38/#39` names two pull requests.
-                    _ => (!after_a_number_word(&self.spans, &text[..chain.0]))
-                        .then(|| (self.resolve)(repo, id))
-                        .flatten(),
+                    _ => (!after_a_number_word(&self.spans, &text[..list])).then(|| (self.resolve)(repo, id)).flatten(),
                 };
                 found.extend(key.map(|key| (at, LinkTarget::Entry(key))));
             }
