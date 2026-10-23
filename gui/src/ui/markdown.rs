@@ -6,12 +6,35 @@
 //! and the rules left out. Covered: paragraphs, headings, bold, italic, strikethrough, inline code, links (a click
 //! opens them), lists and task lists, quotes, code blocks, tables and rules. A single line break is kept as one,
 //! as comments and notes are written line by line, not wrapped like prose.
+//!
+//! References to entries, `#12` and `api#3` as kb and agents write them (and `api #3` or `shop/api #3`, as the app
+//! and kb's reports name them), are links too, which open the entry. Only in prose: markdown comes first, so one in
+//! code or inside a link stays what that draws, and only to an entry that's there. After `PR`, `issue`, `MR` or a
+//! pull or merge `request` it's left alone, since there it's a pull request's or an issue's number.
 
+use super::BrainView;
 use super::shown::Selectable;
 use super::theme::{ACCENT, BORDER, DIM, EDITOR_FONT, INPUT, Line, SURFACE, Span, Style, TEXT};
-use gpui::{AnyElement, Div, ElementId, FontWeight, InteractiveText, SharedString, div, prelude::*, px, rgb};
-use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
+use crate::state::{Board, Key};
+use gpui::{
+    AnyElement, Context, Div, ElementId, FontWeight, InteractiveText, SharedString, WeakEntity, div, prelude::*, px,
+    rgb,
+};
+use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd, TextMergeStream};
 use std::ops::Range;
+
+/// Where a link points.
+#[derive(Debug)]
+#[cfg_attr(test, derive(Clone, PartialEq, Eq))]
+pub enum LinkTarget {
+    /// A page, which a click opens in the browser.
+    Url(String),
+    /// An entry a reference names, which a click opens in the drawer.
+    Entry(Key),
+}
+
+/// The entry a reference names (`None` for `#3`, the repository for `api#3`, then the id), if it's there.
+type Resolve<'r> = &'r dyn Fn(Option<&str>, u32) -> Option<Key>;
 
 /// A block of markdown, ready to draw.
 #[derive(Debug)]
@@ -21,7 +44,7 @@ pub enum Block {
         /// Its text, in styled spans.
         line: Line,
         /// Byte ranges of `line`'s text that are links, each with where it points.
-        links: Vec<(Range<usize>, String)>,
+        links: Vec<(Range<usize>, LinkTarget)>,
         /// 1 to 6 for a heading, 0 for a paragraph.
         heading: u8,
     },
@@ -61,7 +84,9 @@ enum Frame {
 }
 
 /// What [`blocks`] keeps while it reads the events.
-struct Builder {
+struct Builder<'r> {
+    /// Finds the entries references name.
+    resolve: Resolve<'r>,
     /// The containers open, outermost first, each with its blocks so far.
     open: Vec<(Frame, Vec<Block>)>,
     /// The paragraph or heading being read.
@@ -69,7 +94,7 @@ struct Builder {
     /// Its text's length so far, where the next span starts.
     len: usize,
     /// The links in it so far.
-    links: Vec<(Range<usize>, String)>,
+    links: Vec<(Range<usize>, LinkTarget)>,
     /// Where the open link starts in the text, and where it points.
     link: Option<(usize, String)>,
     /// Styles of the open emphasis, links and headings; the last applies.
@@ -80,10 +105,11 @@ struct Builder {
     code: Option<String>,
 }
 
-/// The blocks of `text`.
-pub fn blocks(text: &str) -> Vec<Block> {
+/// The blocks of `text`, its references to entries those `resolve` finds.
+pub fn blocks(resolve: impl Fn(Option<&str>, u32) -> Option<Key>, text: &str) -> Vec<Block> {
     let options = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
     let mut b = Builder {
+        resolve: &resolve,
         open: vec![(Frame::Root, Vec::new())],
         spans: Vec::new(),
         len: 0,
@@ -93,14 +119,15 @@ pub fn blocks(text: &str) -> Vec<Block> {
         heading: 0,
         code: None,
     };
-    for event in Parser::new_ext(text, options) {
+    // Merged, so a reference reads as one text: the parser splits `#3_` at the `_` an emphasis might start with.
+    for event in TextMergeStream::new(Parser::new_ext(text, options)) {
         b.event(event);
     }
     b.flush();
     b.open.into_iter().next().map(|(_, blocks)| blocks).unwrap_or_default()
 }
 
-impl Builder {
+impl Builder<'_> {
     /// The style text gets now: the innermost open one's.
     fn style(&self) -> Style {
         self.styles.last().copied().unwrap_or_default()
@@ -115,6 +142,40 @@ impl Builder {
     fn text(&mut self, text: &str, style: Style) {
         self.len += text.len();
         self.spans.push(Span::styled(text, style));
+    }
+
+    /// Adds prose to the paragraph or heading being read, its references to entries as links. Inside a link, it's
+    /// that link's text.
+    fn prose(&mut self, text: &str) {
+        let style = self.style();
+        let mut from = 0;
+        if self.link.is_none() {
+            for (mut at, repo, id) in references(text) {
+                let before = &text[..at.start];
+                // `api #3` or `shop/api #3`: the entry of the repository before it, if that's one of the project.
+                let named = repo.is_none().then(|| repo_before(before)).flatten();
+                let key = match named.map(|(start, name)| (start, name, (self.resolve)(Some(name), id))) {
+                    Some((start, _, Some(key))) => {
+                        at.start = start;
+                        Some(key)
+                    }
+                    // Another project's repository's.
+                    Some((_, name, None)) if name.contains('/') => None,
+                    _ => (!after_a_number_word(&self.spans, before)).then(|| (self.resolve)(repo, id)).flatten(),
+                };
+                let Some(key) = key.filter(|_| at.start >= from) else { continue };
+                if at.start > from {
+                    self.text(&text[from..at.start], style);
+                }
+                let start = self.len;
+                self.text(&text[at.clone()], style.fg(ACCENT));
+                self.links.push((start..self.len, LinkTarget::Entry(key)));
+                from = at.end;
+            }
+        }
+        if from < text.len() {
+            self.text(&text[from..], style);
+        }
     }
 
     /// Adds a finished block to the innermost open container.
@@ -148,7 +209,7 @@ impl Builder {
             Event::End(tag) => self.end(tag),
             Event::Text(text) => match &mut self.code {
                 Some(code) => code.push_str(&text),
-                None => self.text(&text, self.style()),
+                None => self.prose(&text),
             },
             Event::Code(code) => self.text(&code, self.style().bg(INPUT)),
             Event::Html(html) | Event::InlineHtml(html) => self.text(&html, self.style()),
@@ -267,7 +328,7 @@ impl Builder {
             TagEnd::Link | TagEnd::Image => {
                 self.styles.pop();
                 if let Some((start, url)) = self.link.take() {
-                    self.links.push((start..self.len, url));
+                    self.links.push((start..self.len, LinkTarget::Url(url)));
                 }
             }
             _ => {}
@@ -275,11 +336,81 @@ impl Builder {
     }
 }
 
+/// Where `text` says `#12` or `api#3`, references to entries: the byte range, the repository if it names one, and
+/// the id. A repository's name is letters, digits, `-`, `_` and `.`, all a link word's can hold that prose doesn't
+/// put around it, as `(#3)` and `#3,` are, and starts with neither `-` nor `.`; one after `/` or `@` is a path's or an
+/// address's (`owner/api#3`), after `#` or `&` an anchor's or an entity's, and none is in a URL.
+fn references(text: &str) -> impl Iterator<Item = (Range<usize>, Option<&str>, u32)> {
+    let name = |c: char| c.is_alphanumeric() || matches!(c, '-' | '_' | '.');
+    text.match_indices('#').filter_map(move |(hash, _)| {
+        let digits = text[hash + 1..].find(|c: char| !c.is_ascii_digit()).map_or(text.len(), |n| hash + 1 + n);
+        let ends = text[digits..].chars().next().is_none_or(|c| !c.is_alphanumeric() && c != '_');
+        let start =
+            text[..hash].rfind(|c| !name(c)).map_or(0, |at| at + text[at..].chars().next().map_or(1, char::len_utf8));
+        let before = text[..start].chars().next_back();
+        let repo = &text[start..hash];
+        // A URL markdown didn't make a link (`https://x.dev/?q=api#4`) is one word with `://`.
+        // `://` holds no `#`, so it's wholly on one side of it.
+        let in_url = [text[..hash].rsplit(char::is_whitespace).next(), text[hash..].split(char::is_whitespace).next()]
+            .into_iter()
+            .flatten()
+            .any(|w| w.contains("://"));
+        let fits = !in_url && !repo.starts_with(['-', '.']) && !matches!(before, Some('/' | '@' | '#' | '&'));
+        let id = text[hash + 1..digits].parse().ok().filter(|_| ends && fits)?;
+        Some((start..digits, Some(repo).filter(|r| !r.is_empty()), id))
+    })
+}
+
+/// The repository a `#3` right after `before` belongs to when `before` ends with its name and a space, as the app and
+/// kb's reports name entries (`api #3`, `shop/api #3`): where that name starts, and the name.
+fn repo_before(before: &str) -> Option<(usize, &str)> {
+    let name = before.strip_suffix(' ')?;
+    let start = name
+        .rfind(|c: char| !(c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | '/')))
+        .map_or(0, |at| at + name[at..].chars().next().map_or(1, char::len_utf8));
+    let name = &name[start..];
+    (!name.is_empty() && !name.starts_with(['/', '-', '.']) && !name.ends_with('/')).then_some((start, name))
+}
+
+/// Whether what's said before a reference, the paragraph's `spans` then `before`, ends with a word a pull request's
+/// or an issue's number follows: `PR`, `issue`, `MR` or `request` (a pull or merge request), plurals too, after which
+/// a space, a line break or an opening bracket may come (`**PR** (#3)`).
+fn after_a_number_word(spans: &[Span], before: &str) -> bool {
+    let said = before.chars().rev().chain(spans.iter().rev().flat_map(|s| s.content.chars().rev()));
+    // Read backwards, and only as far as one letter past the longest of them.
+    let word: String = said
+        .skip_while(|&c| c.is_whitespace() || matches!(c, '(' | '['))
+        .take_while(|c| c.is_alphanumeric())
+        .take(9)
+        .flat_map(char::to_lowercase)
+        .collect();
+    matches!(word.as_str(), "rp" | "srp" | "eussi" | "seussi" | "rm" | "srm" | "tseuqer" | "stseuqer")
+}
+
 /// `text` drawn as markdown, its pieces those of `shown`, which the caller finishes. `id` names its links' elements,
-/// so it must differ between the texts one view shows (`description`, `comment 3`).
-pub fn render(id: impl Into<SharedString>, text: &str, shown: &mut Selectable) -> Div {
-    let mut links = Links { id: id.into(), count: 0, shown };
-    draw(blocks(text), &mut links).text_size(px(13.)).text_color(rgb(TEXT))
+/// so it must differ between the texts one view shows (`description`, `comment 3`). `resolve` finds the entries its
+/// references name (see [`references`]).
+pub fn render(
+    id: impl Into<SharedString>,
+    text: &str,
+    resolve: impl Fn(Option<&str>, u32) -> Option<Key>,
+    shown: &mut Selectable,
+    cx: &mut Context<BrainView>,
+) -> Div {
+    let mut links = Links { id: id.into(), count: 0, shown, view: cx.entity().downgrade() };
+    draw(blocks(resolve, text), &mut links).text_size(px(13.)).text_color(rgb(TEXT))
+}
+
+/// The entries the references in a text written in the brain at `src` name: `#3` there, `api#3` in its project's
+/// repository `api`.
+pub fn written_in(board: &Board, src: usize) -> impl Fn(Option<&str>, u32) -> Option<Key> {
+    move |repo, id| board.resolve(src, repo, id)
+}
+
+/// The entries the references in a text of the project of the brain at `src` name, its description: only `api#3`,
+/// since a bare `#3` is no more one repository's than another's.
+pub fn written_for_project(board: &Board, src: usize) -> impl Fn(Option<&str>, u32) -> Option<Key> {
+    move |repo, id| board.resolve(src, Some(repo?), id)
 }
 
 /// Numbers the texts with links, each an element of its own, and takes every piece drawn into the text selected.
@@ -290,6 +421,8 @@ struct Links<'s, 'a> {
     count: usize,
     /// The text the mouse selects, of every piece drawn.
     shown: &'s mut Selectable<'a>,
+    /// The view, which opens the entries references name.
+    view: WeakEntity<BrainView>,
 }
 
 /// The blocks, one under the other.
@@ -302,19 +435,26 @@ fn draw_block(block: Block, links: &mut Links) -> AnyElement {
     match block {
         Block::Text { line, links: urls, heading } => {
             let text = links.shown.line(line);
-            let text = if urls.is_empty() {
-                text.into_any_element()
-            } else {
-                links.count += 1;
-                let (ranges, urls): (Vec<_>, Vec<_>) = urls.into_iter().unzip();
-                InteractiveText::new(ElementId::named_usize(links.id.clone(), links.count), text)
-                    .on_click(ranges, move |i, _, cx| {
-                        if let Some(url) = urls.get(i) {
-                            cx.open_url(url);
-                        }
-                    })
-                    .into_any_element()
-            };
+            let text =
+                if urls.is_empty() {
+                    text.into_any_element()
+                } else {
+                    links.count += 1;
+                    let (ranges, targets): (Vec<_>, Vec<_>) = urls.into_iter().unzip();
+                    let view = links.view.clone();
+                    // `links ID N` for the window tests, which click a text's links; nothing outside them.
+                    let (named, count) = (links.id.clone(), links.count);
+                    let text = InteractiveText::new(ElementId::named_usize(links.id.clone(), links.count), text)
+                        .on_click(ranges, move |i, _, cx| match targets.get(i) {
+                            Some(LinkTarget::Url(url)) => cx.open_url(url),
+                            Some(&LinkTarget::Entry(key)) => {
+                                // Gone only with the window, which the click came from.
+                                view.update(cx, |view, cx| view.act(cx, |b| b.follow(key))).ok();
+                            }
+                            None => {}
+                        });
+                    div().debug_selector(move || format!("links {named} {count}")).child(text).into_any_element()
+                };
             let size = match heading {
                 1 => 18.,
                 2 => 16.,

@@ -1,7 +1,7 @@
 use super::*;
 use crate::state::{Board, Mode};
 use gpui::MouseButton;
-use kanbrain_core::model::{Author, Status, Task, now};
+use kanbrain_core::model::{Author, Kind, Status, Task, now};
 use kanbrain_core::store::Store;
 
 /// A window over a fresh folder holding tasks with these titles (ids from 1).
@@ -1887,4 +1887,106 @@ fn a_panic_says_its_message() {
     assert_eq!(panic_message(literal.as_ref()), "NoCompositor");
     let other: Box<dyn std::any::Any + Send> = Box::new(101);
     assert_eq!(panic_message(other.as_ref()), "it panicked");
+}
+
+#[gpui::test]
+fn a_reference_in_a_text_opens_the_entry_it_names_whatever_its_kind(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    for (id, title, kind) in
+        [(1, "Pool the connections", Kind::Task), (2, "Use Postgres", Kind::Decision), (3, "Pool size", Kind::Note)]
+    {
+        let mut entry = Task::new(id, title.to_string(), now());
+        entry.kind = kind;
+        store.save(&mut entry).unwrap();
+    }
+    let board = Board::open(dir.path(), None).unwrap();
+    let (view, cx) = cx.add_window_view(|window, cx| BrainView::new(board, window, cx));
+    view.update(cx, |view, cx| {
+        view.board.brain_mut(0).add_comment(1, "#2").unwrap();
+        view.board.brain_mut(0).add_comment(2, "PR #1, then #3").unwrap();
+        view.board.open_entry(crate::state::Key::new(0, 1));
+        cx.notify();
+    });
+    cx.run_until_parked();
+    // The reference starts the text: a click a few pixels in is on it.
+    let follow = |cx: &mut gpui::VisualTestContext, selector: &'static str, x: f32| {
+        let text = cx.debug_bounds(selector).unwrap_or_else(|| panic!("{selector} is drawn"));
+        cx.simulate_click(text.origin + gpui::point(gpui::px(x), text.size.height / 2.), gpui::Modifiers::none());
+        cx.run_until_parked();
+    };
+    follow(cx, "links comment 0 1", 5.);
+    view.read_with(cx, |view, _| {
+        assert_eq!(
+            (view.board.tab, view.board.selected, view.board.drawer),
+            (Tab::Decisions, Some(crate::state::Key::new(0, 2)), true)
+        );
+    });
+    // `PR #1` is text: a click on it opens nothing.
+    follow(cx, "links comment 0 1", 30.);
+    view.read_with(cx, |view, _| assert_eq!(view.board.selected, Some(crate::state::Key::new(0, 2))));
+    let note = cx.debug_bounds("links comment 0 1").unwrap();
+    // Comments are drawn at 13px.
+    let width = cx.update(|window, _| {
+        let run = window.text_style().to_run("PR #1, then ".len());
+        window.text_system().layout_line("PR #1, then ", gpui::px(13.), &[run], None).width
+    });
+    cx.simulate_click(note.origin + gpui::point(width + gpui::px(3.), note.size.height / 2.), gpui::Modifiers::none());
+    cx.run_until_parked();
+    view.read_with(cx, |view, _| {
+        assert_eq!((view.board.tab, view.board.selected), (Tab::Notes, Some(crate::state::Key::new(0, 3))));
+    });
+}
+
+#[gpui::test]
+fn following_a_reference_leaves_manage_project(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a", "b"]);
+    view.update(cx, |view, _| {
+        view.board.mode = Mode::ManageProject(0);
+        view.board.follow(crate::state::Key::new(0, 2));
+        assert!(matches!(view.board.mode, Mode::Normal), "{:?}", view.board.mode);
+        assert_eq!((view.board.selected, view.board.drawer), (Some(crate::state::Key::new(0, 2)), true));
+    });
+}
+
+#[gpui::test]
+fn a_projects_description_names_entries_only_with_their_repository(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["a"]);
+    view.read_with(cx, |view, _| {
+        let here = crate::ui::markdown::written_in(&view.board, 0);
+        assert_eq!(here(None, 1), Some(crate::state::Key::new(0, 1)), "a repository's text names its own entries");
+        let project = crate::ui::markdown::written_for_project(&view.board, 0);
+        assert_eq!(project(None, 1), None, "the project's is no one repository's");
+    });
+}
+
+#[test]
+fn a_repositorys_reference_names_the_entry_of_that_repository_of_its_own_project() {
+    let (central, shop, blog) =
+        (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    for (code, project, repo) in [(&shop, "shop", "api"), (&shop, "shop", "web"), (&blog, "blog", "api")] {
+        let dir = code.path().join(repo).join(".brain");
+        Store::at(&dir).unwrap().save(&mut Task::new(1, format!("{project} {repo}"), now())).unwrap();
+        kanbrain_core::projects::register(central.path(), project, &dir).unwrap();
+        let card = kanbrain_core::projects::RepoCard { project: project.into(), repo: None, notes: String::new() };
+        kanbrain_core::projects::write_repo_card(&dir, &card).unwrap();
+    }
+    let board = Board::open(central.path(), None).unwrap();
+    let src = |project: &str, repo: &str| {
+        (0..board.sources.len())
+            .find(|&s| board.brain(s).project.as_ref().is_some_and(|p| p.name == project && p.repo == repo))
+            .unwrap_or_else(|| panic!("{project}/{repo} is loaded"))
+    };
+    let (shop_api, shop_web) = (src("shop", "api"), src("shop", "web"));
+    let named = |from, repo: &str| board.resolve(from, Some(repo), 1).map(|k| k.src);
+    assert_eq!(named(shop_web, "api"), Some(shop_api), "its own project's api, not blog's");
+    assert_eq!(named(shop_api, "web"), Some(shop_web));
+    assert_eq!(named(shop_api, "api"), Some(shop_api), "a repository names itself too");
+    assert_eq!(board.resolve(shop_api, Some("web"), 2), None, "an entry that isn't there");
+    assert_eq!(named(src("blog", "api"), "web"), None, "blog has no web");
+    assert_eq!(named(shop_api, "shop/web"), Some(shop_web), "named with its project, as the app names it");
+    assert_eq!(named(src("blog", "api"), "shop/web"), None, "not from another project");
+    assert_eq!(named(src("blog", "api"), "shop/api"), None, "nor its own repository of that name");
+    let project = crate::ui::markdown::written_for_project(&board, shop_api);
+    assert_eq!(project(Some("web"), 1).map(|k| k.src), Some(shop_web), "a project's description names them so");
 }

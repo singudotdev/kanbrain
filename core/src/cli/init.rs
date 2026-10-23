@@ -47,7 +47,8 @@ The user follows them live on a kanban board: keep it showing what you're doing 
   lines: what changed, what's next); `done ID` as soon as one is finished. Stopping before it is: `comment`, then
   `park ID`. Doing isn't limited for you: several of your tasks can run at once. Never park, finish or move a task
   you didn't start (the user's, or another session's). A pull request, issue, CI run, commit or page named in a
-  comment or body goes with its link, `[PR #39](URL)`, not just `PR #39`: the user opens it from the board.
+  comment or body goes with its link, `[PR #39](URL)`, not just `PR #39`: the user opens it from the board. An entry
+  is named plainly, `#12`, or `REPO#12` in another repository of the project: the board makes it a link.
 - Before ending a turn in which you changed the repository: that change is on a task you started (create it now if
   you skipped it), the turn's work is commented there, and a finished task is `done`. Work that goes through a pull
   request is finished once every check has passed and it's merged; until then its task stays in Doing. Nothing is
@@ -70,6 +71,10 @@ The user follows them live on a kanban board: keep it showing what you're doing 
   then `add --decision --link ID --body - TITLE` with Context / Decision / Consequences on stdin. Non-obvious
   findings: `add --note --link ID --body - TITLE`; a problem someone has to fix is a task instead, in the
   repository that has to change.
+- Always base what you do and write on official documentation: that of the language, library, tool or API, at the
+  version this repository pins (its manifest or lockfile), never on memory or posts elsewhere. Whatever you write
+  that rests on it (a description, decision, note or comment) links the page it rests on, so the user can check
+  where it comes from: `[serde: field attributes](URL)`. With no official documentation for it, say so.
 - `## Project` in `context` is the application's shared context. If it isn't described, or you're asked to set up
   or load the brain, describe it first, from the README and manifests: `project describe -` (what the app is, its
   services and how they connect, conventions they share: the big picture, in at most five lines, without tables,

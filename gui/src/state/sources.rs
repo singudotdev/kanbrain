@@ -437,6 +437,28 @@ impl Board {
             .flat_map(move |other| self.brain(other).tasks.iter().map(move |t| (Key::new(other, t.id), t)))
     }
 
+    /// The entry a reference written in the brain at `src` names, if it's there: `#3` one of that brain, `api#3` (or
+    /// `shop/api #3`) one of the repository `api` of its project `shop` (itself too, as its own name).
+    pub fn resolve(&self, src: usize, repo: Option<&str>, id: u32) -> Option<Key> {
+        let key = match repo {
+            None => Key::new(src, id),
+            Some(repo) => {
+                let here = self.brain(src).project.as_ref()?;
+                // `shop/api`, as the app names a repository, only in its own project.
+                let repo = match repo.split_once('/') {
+                    Some((project, repo)) if project == here.name => repo,
+                    Some(_) => return None,
+                    None => repo,
+                };
+                let there = (0..self.sources.len()).find(|&other| {
+                    self.brain(other).project.as_ref().is_some_and(|p| p.name == here.name && p.repo == repo)
+                })?;
+                Key::new(there, id)
+            }
+        };
+        self.task(key).map(|_| key)
+    }
+
     /// How a link from the brain at `src` names `to`: `#3` in the same brain, `shop/api #3` in another.
     pub fn link_name(&self, src: usize, to: Key) -> String {
         if to.src == src { format!("#{}", to.id) } else { format!("{} #{}", self.brain_name(to.src), to.id) }

@@ -58,7 +58,7 @@ fn an_unclosed_marker_is_left_alone() {
 fn the_docs_show_the_section_as_written() {
     // On Windows, git may check the docs out with CRLF line endings.
     let docs = include_str!("../../../docs/agents.md").replace("\r\n", "\n");
-    assert!(docs.contains(SECTION), "update docs/agents.md with SECTION");
+    assert!(docs.contains(&format!("```markdown\n{SECTION}\n```")), "docs/agents.md quotes SECTION word for word");
 }
 
 #[test]

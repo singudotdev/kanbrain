@@ -679,6 +679,14 @@ impl Board {
         self.drawer = true;
     }
 
+    /// Opens the entry a reference in a text names, leaving Manage project, whose texts have them too.
+    pub fn follow(&mut self, key: Key) {
+        if matches!(self.mode, Mode::ManageProject(_)) {
+            self.mode = Mode::Normal;
+        }
+        self.open_entry(key);
+    }
+
     /// Shows another tab with its own search, keeping the current tab's for when it's back:
     /// filtering notes by `#stripe` leaves the board as it was.
     pub(super) fn show_tab(&mut self, tab: Tab) {
