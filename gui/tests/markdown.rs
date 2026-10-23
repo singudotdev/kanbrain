@@ -184,3 +184,20 @@ fn only_a_url_markdown_did_not_already_draw_is_linked() {
     // Only an entity's name, letters and digits, ends it with its `;`.
     assert_eq!(links_of("https://x.dev/?a&b-c;"), [("https://x.dev/?a&b-c;".into(), url("https://x.dev/?a&b-c;"))]);
 }
+
+#[test]
+fn references_listed_with_slashes_are_each_a_link() {
+    let entry = |src, id| LinkTarget::Entry(Key::new(src, id));
+    assert_eq!(
+        links_of("read #1/#2/api#3 and #4/ #5"),
+        [
+            ("#1".into(), entry(0, 1)),
+            ("#2".into(), entry(0, 2)),
+            ("api#3".into(), entry(1, 3)),
+            ("#4".into(), entry(0, 4)),
+            ("#5".into(), entry(0, 5)),
+        ]
+    );
+    // After a path's `/` it's still that path's: `owner/api#3`, `docs/#2`, `v1/#3`.
+    assert_eq!(links_of("owner/api#3 docs/#2 v1/#3 owner/api#3/#4"), []);
+}

@@ -346,9 +346,12 @@ impl Builder<'_> {
 /// Where `text` says `#12` or `api#3`, references to entries: the byte range, the repository if it names one, and
 /// the id. A repository's name is letters, digits, `-`, `_` and `.`, all a link word's can hold that prose doesn't
 /// put around it, as `(#3)` and `#3,` are, and starts with neither `-` nor `.`; one after `/` or `@` is a path's or an
-/// address's (`owner/api#3`), after `#` or `&` an anchor's or an entity's, and none is in a URL.
+/// address's (`owner/api#3`), unless the `/` follows a reference, listing them (`#1/#2/api#3`), after `#` or `&` an
+/// anchor's or an entity's, and none is in a URL.
 fn references(text: &str) -> impl Iterator<Item = (Range<usize>, Option<&str>, u32)> {
     let name = |c: char| c.is_alphanumeric() || matches!(c, '-' | '_' | '.');
+    // Where the last reference ends.
+    let mut last = None;
     text.match_indices('#').filter_map(move |(hash, _)| {
         let digits = text[hash + 1..].find(|c: char| !c.is_ascii_digit()).map_or(text.len(), |n| hash + 1 + n);
         let ends = text[digits..].chars().next().is_none_or(|c| !c.is_alphanumeric() && c != '_');
@@ -362,8 +365,11 @@ fn references(text: &str) -> impl Iterator<Item = (Range<usize>, Option<&str>, u
             .into_iter()
             .flatten()
             .any(|w| w.contains("://"));
-        let fits = !in_url && !repo.starts_with(['-', '.']) && !matches!(before, Some('/' | '@' | '#' | '&'));
+        let listed = before == Some('/') && last == Some(start - 1);
+        let fits =
+            !in_url && !repo.starts_with(['-', '.']) && (listed || !matches!(before, Some('/' | '@' | '#' | '&')));
         let id = text[hash + 1..digits].parse().ok().filter(|_| ends && fits)?;
+        last = Some(digits);
         Some((start..digits, Some(repo).filter(|r| !r.is_empty()), id))
     })
 }
