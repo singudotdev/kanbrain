@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- The kanban app's project filter shows several projects at once, as the tag filter does with tags: **Project ▾**
+  (`P`) stays open and each row picked is shown too, or no longer if picked again; **All** takes them all out. The
+  central brain, projects and repositories mix; a project picked takes its repositories' place, and a repository its
+  project's. The button names what's shown (`Projects: shop, blog`); the project's description and Manage project
+  show with one project shown.
+
 ## [0.6.6] - 2026-10-23
 
 ### Changed

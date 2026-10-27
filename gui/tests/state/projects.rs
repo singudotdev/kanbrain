@@ -112,7 +112,7 @@ fn a_shown_project_taken_out_from_the_command_line_shows_all() {
     board.set_scope(Scope::Project("blog".into()));
     kanbrain_core::cli::remove_repo_steps(central.path(), &code.path().join("blog/.brain"), false).unwrap();
     board.reload().unwrap();
-    assert_eq!(board.scope, Scope::All, "not a blank scope");
+    assert_eq!(board.scope, Vec::<Scope>::new(), "not a blank scope");
 }
 
 #[test]
@@ -122,13 +122,13 @@ fn a_shown_project_renamed_from_the_command_line_stays_shown() {
     board.set_scope(Scope::Project("shop".into()));
     kanbrain_core::cli::rename_project_steps(central.path(), "shop", "store").unwrap();
     board.reload().unwrap();
-    assert_eq!(board.scope, Scope::Project("store".into()), "under its new name");
+    assert_eq!(board.scope, [Scope::Project("store".into())], "under its new name");
 
     // Its last repository joining a project that has others is no rename: all of them.
     board.set_scope(Scope::Project("blog".into()));
     kanbrain_core::cli::move_repo_steps(central.path(), &code.path().join("blog/.brain"), "store").unwrap();
     board.reload().unwrap();
-    assert_eq!(board.scope, Scope::All);
+    assert_eq!(board.scope, Vec::<Scope>::new());
 }
 
 #[test]
@@ -156,11 +156,107 @@ fn every_project_shows_and_the_scope_filters_them() {
     let names: Vec<String> = board.scope_candidates(picker).into_iter().map(|(_, n)| n).collect();
     assert_eq!(names, ["shop/api"]);
     press(&mut board, KeyCode::Enter);
-    assert!(matches!(board.mode, Mode::Normal), "Enter closes it");
-    assert_eq!((board.scope.clone(), titles(&board)), (Scope::Repo(1), vec!["rate limit".to_string()]));
+    assert!(matches!(board.mode, Mode::Scopes(_)), "Enter keeps it open, for several");
+    assert_eq!((board.scope.clone(), titles(&board)), (vec![Scope::Repo(1)], vec!["rate limit".to_string()]));
     assert_eq!(board.source_label(1), None, "one brain shown: no labels");
+    press(&mut board, KeyCode::Esc);
+    assert!(matches!(board.mode, Mode::Normal), "esc closes it");
     board.set_scope(Scope::Central);
     assert_eq!(titles(&board), ["renew passport"]);
+}
+
+#[test]
+fn the_project_filter_shows_several_at_once() {
+    let (central, _code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    let titles = |board: &Board| {
+        let mut titles: Vec<String> = board.column(Status::Todo).iter().map(|(_, t)| t.title.clone()).collect();
+        titles.sort();
+        titles
+    };
+    let pick = |board: &mut Board, name: &str| {
+        let Mode::Scopes(picker) = &board.mode else { panic!("the dropdown stays open") };
+        let index = board.scope_candidates(picker).iter().position(|(_, n)| n == name).unwrap();
+        board.choose_scope(index);
+    };
+    let (blog, shop) = (Scope::Project("blog".into()), Scope::Project("shop".into()));
+    press(&mut board, KeyCode::Char('P'));
+    pick(&mut board, "blog");
+    assert_eq!(board.scope, std::slice::from_ref(&blog));
+    pick(&mut board, "Central");
+    assert_eq!(titles(&board), ["post", "renew passport"], "both shown");
+    assert_eq!(board.source_label(3), Some("blog"), "cards say where they're from");
+    pick(&mut board, "shop/api");
+    assert_eq!(titles(&board), ["post", "rate limit", "renew passport"]);
+    pick(&mut board, "shop");
+    assert_eq!(board.scope, [blog.clone(), Scope::Central, shop.clone()], "a project takes its repositories' place");
+    pick(&mut board, "shop/web");
+    assert_eq!(board.scope, [blog, Scope::Central, Scope::Repo(2)], "and a repository its project's");
+    assert_eq!(board.title(), "kanbrain", "several shown: none named");
+    let checked: Vec<String> =
+        board.scopes().into_iter().filter(|(s, _)| board.scope_checked(s)).map(|(_, name)| name).collect();
+    assert_eq!(checked, ["Central", "shop/web", "blog"], "the rows picked are checked, not All");
+    pick(&mut board, "blog");
+    assert_eq!(board.scope, [Scope::Central, Scope::Repo(2)], "picking one again takes it out");
+    assert_eq!(titles(&board), ["checkout", "renew passport"]);
+    assert_eq!(board.project_src(), None, "no one project shown: nothing for its card or Manage project");
+    pick(&mut board, "Central");
+    board.selected = None;
+    assert_eq!(board.title(), "shop/web · kanbrain");
+    assert_eq!((board.project_src(), board.repo_here()), (Some(2), Some(2)), "one repository shown, none selected");
+    pick(&mut board, "shop");
+    assert_eq!(board.title(), "shop · kanbrain");
+    pick(&mut board, "All");
+    assert_eq!(board.scope, Vec::<Scope>::new(), "All shows every brain again");
+    assert!(board.scope_checked(&Scope::All));
+    assert_eq!(titles(&board), ["checkout", "post", "rate limit", "renew passport"]);
+    press(&mut board, KeyCode::Esc);
+    assert!(matches!(board.mode, Mode::Normal));
+}
+
+#[test]
+fn the_other_projects_shown_stay_when_one_changes() {
+    let (central, _code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    let (shop, blog) = (Scope::Project("shop".into()), Scope::Project("blog".into()));
+    let src = |board: &Board, label: &str| board.sources.iter().position(|s| s.label.as_deref() == Some(label));
+    let move_to = |board: &mut Board, label: &str, to: &str| {
+        board.ask_move_repo(src(board, label).unwrap());
+        to.chars().for_each(|c| press(board, KeyCode::Char(c)));
+        press(board, KeyCode::Enter);
+    };
+    board.set_scope(shop.clone());
+    board.toggle_scope(blog.clone());
+    move_to(&mut board, "blog", "journal");
+    let journal = Scope::Project("journal".into());
+    assert_eq!(board.scope, [shop.clone(), journal.clone()], "blog under its new name");
+
+    // Into a project shown, which stays shown: not picked again, which would take it out.
+    move_to(&mut board, "shop/web", "journal");
+    assert_eq!(board.scope, [shop.clone(), journal.clone()], "shop still has api, and web shows in journal");
+
+    kanbrain_core::cli::remove_project_steps(central.path(), "journal", false).unwrap();
+    board.reload().unwrap();
+    assert_eq!(board.scope, [shop], "a project gone leaves the others shown");
+}
+
+#[test]
+fn a_repository_shown_whose_project_is_left_with_it_alone_shows_as_the_project() {
+    let (central, code) = projects();
+    let mut board = Board::open(central.path(), Some(code.path().join("api/.brain"))).unwrap();
+    assert_eq!(board.scope, [Scope::Repo(1)], "opened in shop/api");
+    kanbrain_core::cli::remove_repo_steps(central.path(), &code.path().join("web/.brain"), false).unwrap();
+    board.reload().unwrap();
+    assert_eq!(board.scope, [Scope::Project("shop".into())], "shop/api is no row of the filter any more: shop is");
+
+    // Moved into a project shown, a repository shown is that project's, picked once.
+    let mut board = Board::open(central.path(), None).unwrap();
+    board.set_scope(Scope::Project("blog".into()));
+    let api = board.sources.iter().position(|s| s.label.as_deref() == Some("shop")).unwrap();
+    board.toggle_scope(Scope::Repo(api));
+    kanbrain_core::cli::move_repo_steps(central.path(), &code.path().join("api/.brain"), "blog").unwrap();
+    board.reload().unwrap();
+    assert_eq!(board.scope, [Scope::Project("blog".into())]);
 }
 
 #[test]
@@ -170,7 +266,7 @@ fn new_entries_go_to_the_repository_shown_and_ids_are_per_brain() {
     // repository, not another brain.
     let web = code.path().join("web/../web/.brain");
     let mut board = Board::open(central.path(), Some(web)).unwrap();
-    assert_eq!(board.scope, Scope::Repo(2), "opened in a repository of a project with several");
+    assert_eq!(board.scope, [Scope::Repo(2)], "opened in a repository of a project with several");
     press(&mut board, KeyCode::Char('n'));
     "cart".chars().for_each(|c| board.on_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)));
     press(&mut board, KeyCode::Enter);
@@ -291,7 +387,7 @@ fn an_entry_moves_to_another_project_and_is_renumbered_there() {
     "blog".chars().for_each(|c| press(&mut board, KeyCode::Char(c)));
     press(&mut board, KeyCode::Enter);
     assert_eq!(board.brain(3).task(2).unwrap().title, "rate limit");
-    assert_eq!(board.scope, Scope::Project("shop".into()), "the filter stays as it was");
+    assert_eq!(board.scope, [Scope::Project("shop".into())], "the filter stays as it was");
     assert!(board.message().unwrap().contains("moved shop/web #2 to blog as #2"), "{:?}", board.message());
 }
 
@@ -480,7 +576,7 @@ fn a_picked_folder_becomes_a_project_as_kb_init_makes_it() {
     assert_eq!(options(&board), [ProjectOption::New("journal".into())]);
     press(&mut board, KeyCode::Enter);
     assert!(matches!(board.mode, Mode::Normal));
-    assert_eq!(board.scope, Scope::Project("journal".into()), "the new project is shown");
+    assert_eq!(board.scope, [Scope::Project("journal".into())], "the new project is shown");
     assert_eq!(
         board.message(),
         Some("added project journal; its agent instructions tell agents to use kanbrain"),
@@ -562,7 +658,7 @@ fn projects_and_repositories_are_managed_from_the_projects_info() {
     press(&mut board, KeyCode::Enter);
     assert_eq!(labels(&board), ["store/api", "store/web", "blog"]);
     assert!(matches!(board.mode, Mode::ManageProject(_)), "back to Manage project");
-    assert_eq!(board.scope, Scope::Project("store".into()), "the board follows the new name");
+    assert_eq!(board.scope, [Scope::Project("store".into())], "the board follows the new name");
 
     board.ask_rename_repo(src(&board, "store/api"));
     type_in(&mut board, "web");
@@ -709,20 +805,20 @@ fn a_shown_project_follows_command_line_changes_seen_by_the_watcher() {
     kanbrain_core::cli::rename_project_steps(central.path(), "shop", "store").unwrap();
     // As the watcher hands it over: the cards' folder changed.
     board.reload_changed(&[kanbrain_core::projects::cards_dir(central.path())]).unwrap();
-    assert_eq!(board.scope, Scope::Project("store".into()), "renamed");
+    assert_eq!(board.scope, [Scope::Project("store".into())], "renamed");
 
     // A one-repository project's repository moved to a project of its own is the same project renamed.
     board.set_scope(Scope::Project("blog".into()));
     kanbrain_core::cli::move_repo_steps(central.path(), &code.path().join("blog/.brain"), "journal").unwrap();
     board.reload().unwrap();
-    assert_eq!(board.scope, Scope::Project("journal".into()));
+    assert_eq!(board.scope, [Scope::Project("journal".into())]);
 
     // Split across two projects before the board looks again: neither is it.
     board.set_scope(Scope::Project("store".into()));
     kanbrain_core::cli::move_repo_steps(central.path(), &code.path().join("web/.brain"), "front").unwrap();
     kanbrain_core::cli::move_repo_steps(central.path(), &code.path().join("api/.brain"), "back").unwrap();
     board.reload().unwrap();
-    assert_eq!(board.scope, Scope::All, "store is gone, split in two");
+    assert_eq!(board.scope, Vec::<Scope>::new(), "store is gone, split in two");
 }
 
 #[test]
@@ -835,7 +931,7 @@ fn removing_one_of_a_projects_repositories_keeps_the_project_shown() {
     let web = board.sources.iter().position(|s| s.label.as_deref() == Some("shop/web")).unwrap();
     board.ask_remove(web, false);
     press(&mut board, KeyCode::Char('y'));
-    assert_eq!(board.scope, Scope::Project("shop".into()), "shop still has api");
+    assert_eq!(board.scope, [Scope::Project("shop".into())], "shop still has api");
 }
 
 #[test]

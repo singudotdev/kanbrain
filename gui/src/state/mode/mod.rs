@@ -31,7 +31,7 @@ pub enum Mode {
     Links(LinkPicker),
     /// Choosing one of an entry's comments to edit or delete.
     Comments(CommentPicker),
-    /// Choosing which project to show, from a list filtered by a search.
+    /// Choosing which projects to show, from a list filtered by a search.
     Scopes(Picker),
     /// Choosing which brain a quick-added task goes in, when the scope shows several, or which an entry
     /// moves to.

@@ -277,8 +277,8 @@ fn the_project_dropdown_filters_and_picks_with_the_mouse(cx: &mut gpui::TestAppC
     let row = cx.debug_bounds("project 0").expect("the dropdown lists what matches").center();
     cx.simulate_click(row, gpui::Modifiers::none());
     view.read_with(cx, |view, _| {
-        assert_eq!(view.board.scope, crate::state::Scope::Repo(2));
-        assert!(matches!(view.board.mode, crate::state::Mode::Normal), "choosing closes it");
+        assert_eq!(view.board.scope, [crate::state::Scope::Repo(2)]);
+        assert!(matches!(view.board.mode, crate::state::Mode::Scopes(_)), "it stays open, for several");
     });
 }
 
