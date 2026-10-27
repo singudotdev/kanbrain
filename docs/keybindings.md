@@ -37,11 +37,11 @@ tabs. While you type in a field, keys are just letters; `esc` or `enter` leave t
 | `esc` | close the details; with them closed, clear the search (words and tags) |
 | `f` | on the board, show every done task, or only the latest 20 |
 | `1` `2` `3` `4` `5` / `tab` / `shift+tab` | Board, Notes, Decisions, Report, Calendar; `tab` the next, `shift+tab` the previous |
-| `I` | **manage the project** shown, or with **All** of the selected card's project: description, repositories with their roles, tasks per status, what's running, this week's time; with buttons to rename, move and remove them and add a repository |
-| `E` | **edit the description** of the project shown, or with **All** of the selected card's project, shared by its repositories |
+| `I` | **manage the project** shown, or with **All** or several shown of the selected card's project: description, repositories with their roles, tasks per status, what's running, this week's time; with buttons to rename, move and remove them and add a repository |
+| `E` | **edit the description** of the project shown, or with **All** or several shown of the selected card's project, shared by its repositories |
 | `N` | edit **the role** of the selected card's repository in its project, or of the repository shown (what it owns, exposes and consumes) |
 | `A` | **add a project**: pick its code folder, then a project from the list or a new name; see [Projects](tasks-and-tags.md#projects) |
-| `P` | choose the project shown: a dropdown of All, Central, each project and each repository of a project with several; type to filter, `↑` `↓` and `enter` to show one, `esc` to close |
+| `P` | filter by projects: a dropdown of All, Central, each project and each repository of a project with several; type to filter, `↑` `↓` move, `enter` shows the highlighted one too or no longer (All, every one), staying open for more; `esc` closes it |
 | `u` | **undo** the last change the board made (a delete, a move, an edit…); pressed again, redo it. Refused if another program changed those files since |
 | `R` | reload the files (the board also reloads by itself when they change) |
 | `U` | **update** to the newer release the status bar offers (it asks first); not while an agent has a task in doing |
@@ -123,7 +123,7 @@ aren't text to select: dragging them moves them, and their title and tags are se
 | **Kanban** / **List** next to the tabs | lay the board out as columns or as a list |
 | `+` on a column, or on a list's section | the new task form, with that column picked |
 | click a day in the calendar's month | show that day |
-| **Project ▾**, then a project in the list | show only it (or All); type in its box to filter, click outside to close |
+| **Project ▾**, then projects in the list | show each too, or no longer (All, every one); type in its box to filter, click outside to close |
 | **Tags ▾**, then tags in the list | add or take out each as `#tag` in the search box; type in its box to filter, click outside to close |
 | click an interaction in the calendar | show its entry's details |
 | **Park & quit**, at the end of the projects row while a task of yours runs | park your running tasks and quit, as `Q` |

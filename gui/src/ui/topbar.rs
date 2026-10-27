@@ -70,8 +70,15 @@ fn scope_bar(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<Bra
             .child(dim_small(hint).flex_1().min_w_0().truncate())
             .child(today(board, cx));
     }
-    let name = board.scopes().into_iter().find(|(s, _)| *s == board.scope).map_or_else(String::new, |(_, n)| n);
-    let button = action("scope", format!("Project: {name}  ▾"), Kind::Secondary, KeyCode::Char('P'), cx);
+    // What's picked, in the dropdown's order.
+    let names: Vec<String> =
+        board.scopes().into_iter().filter(|(s, _)| board.scope.contains(s)).map(|(_, name)| name).collect();
+    let label = match names.as_slice() {
+        [] => "Project: All".to_string(),
+        [one] => format!("Project: {one}"),
+        several => format!("Projects: {}", several.join(", ")),
+    };
+    let button = action("scope", format!("{label}  ▾"), Kind::Secondary, KeyCode::Char('P'), cx);
     let picker = div().flex().flex_col().child(button).children(match &board.mode {
         Mode::Scopes(picker) => Some(scope_dropdown(board, picker, &scroll.dropdown, follow, cx)),
         _ => None,
@@ -89,7 +96,7 @@ fn scope_bar(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<Bra
 }
 
 /// The dropdown under the project button: every scope matching its search, a project's repositories
-/// indented under it.
+/// indented under it, those shown checked (All with none picked).
 fn scope_dropdown(
     board: &Board,
     picker: &Picker,
@@ -101,7 +108,7 @@ fn scope_dropdown(
         .scope_candidates(picker)
         .into_iter()
         .map(|(scope, name)| Row {
-            checked: board.scope == scope,
+            checked: board.scope_checked(&scope),
             nested: matches!(scope, Scope::Repo(_)),
             content: div().truncate().child(name).into_any_element(),
         })
@@ -137,7 +144,7 @@ fn project_card(board: &Board, cx: &mut Context<BrainView>) -> Option<Div> {
         &project.description,
         action("edit-project", "Edit", Kind::Ghost, KeyCode::Char('E'), cx),
     ));
-    let repo = matches!(board.scope, Scope::Repo(_)).then(|| {
+    let repo = matches!(board.shown_alone(), Some(Scope::Repo(_))).then(|| {
         let edit = action("edit-repo-notes", "Edit", Kind::Ghost, KeyCode::Char('N'), cx);
         line(project.repo.clone(), &project.notes, edit)
     });

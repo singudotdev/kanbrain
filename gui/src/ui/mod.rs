@@ -48,7 +48,7 @@ mod theme;
 mod topbar;
 mod widgets;
 
-use crate::state::{Board, COLUMNS, Clock, Layout, Mode, Request, Scope, Tab};
+use crate::state::{Board, COLUMNS, Clock, Layout, Mode, Request, Tab};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::update;
 use crate::watch::{self, Watcher};
@@ -150,12 +150,7 @@ pub fn run(board: Board) {
     application().run(move |cx: &mut GpuiApp| {
         load_fonts(cx);
         let opened = cx.open_window(window_options(size(px(1400.), px(860.)), cx), |window, cx| {
-            let title = match &board.scope {
-                Scope::Project(name) => format!("{name} · kanbrain"),
-                Scope::Repo(src) => format!("{} · kanbrain", board.sources[*src].label.as_deref().unwrap_or_default()),
-                Scope::All | Scope::Central => "kanbrain".to_string(),
-            };
-            window.set_window_title(&title);
+            window.set_window_title(&board.title());
             cx.new(|cx| BrainView::new(board, window, cx))
         });
         match opened {

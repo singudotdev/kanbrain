@@ -333,7 +333,7 @@ pub const ACTIONS: &[Action] = &[
     letter("#", Tabs::Every, When::Always, "Filter by tags", Board::open_tags),
     named(KeyCode::Esc, "esc", Tabs::Every, When::Drawer, "Close the details", escape),
     named(KeyCode::Esc, "esc", Tabs::Every, When::Searched, "Clear the search", escape),
-    letter("P", Tabs::Every, When::Always, "Choose the project shown", Board::open_scopes),
+    letter("P", Tabs::Every, When::Always, "Filter by projects", Board::open_scopes),
     letter(
         "I",
         Tabs::Every,
