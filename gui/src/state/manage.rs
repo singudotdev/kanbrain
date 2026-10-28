@@ -122,11 +122,11 @@ impl Board {
             // Removing has its own keys, which `key_manage` runs.
             Manage::Remove { .. } => return,
         };
-        // Asked before reloading, which may take a shown project that's gone to All: a move's project is shown.
-        let shown = matches!(self.scope, Scope::Project(_) | Scope::Repo(_));
+        // Asked before reloading: a repository shown stays shown, its project picked too where it's gone, as a move does.
+        let shown = self.in_scope(src);
         if self.reloaded(done) {
-            if shown {
-                self.set_scope(Scope::Project(project));
+            if shown && self.src_at(&dir).is_some_and(|now| !self.in_scope(now)) {
+                self.toggle_scope(Scope::Project(project));
             }
             self.mode = self.src_at(&dir).map_or(Mode::Normal, Mode::ManageProject);
         }
@@ -154,10 +154,6 @@ impl Board {
                 )),
             }
             self.mode = Mode::Normal;
-            let gone = |board: &Self| board.src_at(&dir).is_none() && board.repos_of(&project).count() == 0;
-            if matches!(self.scope, Scope::Project(_) | Scope::Repo(_)) && gone(self) {
-                self.set_scope(Scope::All);
-            }
             // One repository out of several: back to Manage project, on another of its repositories.
             let other = self.repos_of(&project).next().filter(|_| !whole);
             if let Some(other) = other {

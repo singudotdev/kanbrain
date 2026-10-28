@@ -233,8 +233,8 @@ pub struct Board {
     skipped: Vec<sources::Skipped>,
     /// What was skipped when last said, so each read says only what's newly skipped.
     warned: Vec<String>,
-    /// Which brains are shown.
-    pub scope: Scope,
+    /// Which brains are shown: those the project filter's picks cover, in the order picked; every brain with none.
+    pub scope: Vec<Scope>,
     /// The tab shown.
     pub tab: Tab,
     /// How the board tab lays its tasks out.
@@ -286,7 +286,7 @@ impl Board {
             warned: Vec::new(),
             central: central.to_path_buf(),
             opened_in,
-            scope: Scope::All,
+            scope: Vec::new(),
             tab: Tab::default(),
             layout: Layout::default(),
             selected: None,
@@ -309,7 +309,7 @@ impl Board {
         if let Some(src) = board.opened_in.as_ref().and_then(|dir| board.src_at(dir)) {
             let project = board.project_name(src).to_string();
             let repos = board.repos_of(&project).count();
-            board.scope = if repos > 1 { Scope::Repo(src) } else { Scope::Project(project) };
+            board.scope = vec![if repos > 1 { Scope::Repo(src) } else { Scope::Project(project) }];
         }
         board.after_load();
         // Opening isn't an input: what it found shows, and the first key's message replaces it.
@@ -389,33 +389,59 @@ impl Board {
     }
 
     /// Re-reads every brain, and the list of projects, which may have gained or lost one. The
-    /// selection, a one-repository scope and an open dialog stay on the same folders, wherever they now are in
+    /// selection, the repositories the scope picks and an open dialog stay on the same folders, wherever they now are in
     /// the list; a dialog on a folder no longer there closes.
     pub fn reload(&mut self) -> Result<()> {
         let before: Vec<PathBuf> = self.sources.iter().map(|s| s.brain.store.dir().to_path_buf()).collect();
-        let shown: Vec<usize> = match &self.scope {
-            Scope::Project(name) => self.repos_of(name).collect(),
-            _ => Vec::new(),
-        };
+        // The repositories each project shown has, to find it again under a new name.
+        let had: Vec<Vec<usize>> = self
+            .scope
+            .iter()
+            .map(|scope| match scope {
+                Scope::Project(name) => self.repos_of(name).collect(),
+                _ => Vec::new(),
+            })
+            .collect();
         (self.sources, self.skipped) = sources::load(&self.central, self.opened_in.as_deref())?;
         let now_at: Vec<Option<usize>> = before.iter().map(|dir| self.src_at(dir)).collect();
         let to = |src: usize| now_at.get(src).copied().flatten();
         self.selected = self.selected.and_then(|k| Some(Key::new(to(k.src)?, k.id)));
-        if let Scope::Repo(src) = self.scope {
-            self.scope = to(src).map_or(Scope::All, Scope::Repo);
+        for (scope, had) in std::mem::take(&mut self.scope).into_iter().zip(had) {
+            let now = match scope {
+                Scope::Repo(src) => to(src).map(Scope::Repo),
+                // A project shown that's gone from the command line: under its new name when its repositories are now
+                // all of another's, as after a rename or a move of its only repository to a new project; else
+                // dropped, leaving the others shown (all of them, with none left).
+                Scope::Project(name) if self.repos_of(&name).next().is_none() => {
+                    let mut now: Vec<usize> = had.iter().filter_map(|&src| to(src)).collect();
+                    now.sort_unstable();
+                    now.first()
+                        .and_then(|&src| self.sources[src].project.clone())
+                        .filter(|project| now.len() == had.len() && self.repos_of(project).eq(now.iter().copied()))
+                        .map(Scope::Project)
+                }
+                other => Some(other),
+            };
+            // Renamed to another project shown, the two are one.
+            if let Some(now) = now.filter(|now| !self.scope.contains(now)) {
+                self.scope.push(now);
+            }
         }
-        // A project shown that's gone from the command line: under its new name when its repositories are now all of
-        // another's, as after a rename or a move of its only repository to a new project; else all of them.
-        if let Scope::Project(name) = &self.scope
-            && self.repos_of(name).next().is_none()
-        {
-            let mut now: Vec<usize> = shown.iter().filter_map(|&src| to(src)).collect();
-            now.sort_unstable();
-            let renamed = now
-                .first()
-                .and_then(|&src| self.sources[src].project.clone())
-                .filter(|project| now.len() == shown.len() && self.repos_of(project).eq(now.iter().copied()));
-            self.scope = renamed.map_or(Scope::All, Scope::Project);
+        // A repository picked that's now in a project picked, or its project's only one, whose row the filter no
+        // longer has: its project, as `toggle_scope` keeps them.
+        let picks = std::mem::take(&mut self.scope);
+        for pick in &picks {
+            let pick = match pick {
+                Scope::Repo(src) => {
+                    let project = Scope::Project(self.project_name(*src).to_string());
+                    let alone = self.project_repos(*src).len() == 1;
+                    if alone || picks.contains(&project) { project } else { pick.clone() }
+                }
+                other => other.clone(),
+            };
+            if !self.scope.contains(&pick) {
+                self.scope.push(pick);
+            }
         }
         let open = !matches!(self.mode, Mode::Normal);
         self.mode = std::mem::replace(&mut self.mode, Mode::Normal).remap(to).unwrap_or(Mode::Normal);
@@ -670,7 +696,7 @@ impl Board {
         self.show_tab(tab);
         self.all_done |= done;
         if !self.in_scope(key.src) {
-            self.scope = Scope::All;
+            self.scope.clear();
         }
         if !self.visible_ids().contains(&key) {
             self.search.clear();

@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-10-28
+
+### Added
+
+- The kanban app's project filter shows several projects at once, as the tag filter does with tags: **Project ▾**
+  (`P`) stays open and each row picked is shown too, or no longer if picked again; **All** takes them all out. The
+  central brain, projects and repositories mix; a project picked takes its repositories' place, and a repository its
+  project's. The button names what's shown (`Projects: shop, blog`); the project's description and Manage project
+  show with one project shown.
+
 ## [0.6.6] - 2026-10-23
 
 ### Changed
@@ -683,7 +693,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.6...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.7...HEAD
+[0.6.7]: https://github.com/singudotdev/kanbrain/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/singudotdev/kanbrain/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/singudotdev/kanbrain/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/singudotdev/kanbrain/compare/v0.6.3...v0.6.4

@@ -38,16 +38,21 @@ To add a project from the app, click **+ Add project** under the toolbar (or pre
    kanbrain.
 
 While there are projects, the **Project ▾** button under the toolbar filters what every tab shows. It opens a dropdown with a search
-box, so it stays quick with many projects: type part of a name, then click it or press `enter`.
+box, so it stays quick with many projects: type part of a name, then click it or press `enter`. As with tags, it stays open
+and you can pick several, shown together; picking one again takes it out, and `esc` or a click outside closes it.
 
 | filter | shows |
 | --- | --- |
-| **All** | everything; each card says where it's from (`shop/api #3`) |
+| **All** | everything; each card says where it's from (`shop/api #3`). Takes out every one picked |
 | **Central** | what's outside any project |
 | **shop** | every repository of project shop |
 | **shop/api** | one repository, for a project with several |
 
-`P` opens the dropdown from the keyboard. Started from inside a project, the app opens on it. With a project shown, the bar also shows
+Picked together they show what any of them does: **Central** and **blog**, or **shop/api** and **blog**, with each card
+saying where it's from. A project and its own repositories aren't picked together: picking **shop** takes the place of
+**shop/api**, and picking **shop/api** that of **shop**. The button names what's shown, `Projects: shop, blog`.
+
+`P` opens the dropdown from the keyboard. Started from inside a project, the app opens on it. With one project shown, the bar also shows
 its description, shared by its repositories, and with one repository shown, that repository's role; **Edit** changes
 them (`E` the description). **Manage project** (`I`), before **+ Add project**, shows the whole project: its description,
 each repository with its folder, notes, tasks per status and what's running, and the time tracked this week.
@@ -66,12 +71,12 @@ Each repository of a project has its own name, its folder's unless another repos
 goes first (`backend-app`), so two folders named alike can join one project.
 
 New entries (**+ New task**, `n` or a column's `+`) go where the filter points: with **Central**, a project of one
-repository, or one repository shown, that brain; with **All**, or a project of several repositories, the selected
-card's brain, or else the first shown. The form's **Project** field says which and changes it: click it (or `tab`
+repository, or one repository shown, that brain; with **All**, several picked, or a project of several repositories,
+the selected card's brain, or else the first shown. The form's **Project** field says which and changes it: click it (or `tab`
 to it) for every brain, with a search box, whatever the filter shows. Picking another drops the related entries
 already checked, since they're within one repository.
 
-`a` has no form, so with **All** or a project of several repositories it first asks **which project**: a list of the
+`a` has no form, so with **All**, several picked, or a project of several repositories it first asks **which project**: a list of the
 brains shown, with a search box, the selected card's highlighted. Pick one with a click or `enter`; `esc` creates
 nothing.
 
@@ -307,7 +312,7 @@ of the window:
 
 | filter | how |
 | --- | --- |
-| **project** | **Project ▾** (`P`): all, the central brain, a project or one of its repositories. Shared by every tab |
+| **project** | **Project ▾** (`P`): all, or any of the central brain, projects and their repositories. Shared by every tab |
 | **text** | the search box (`/`): words in titles and tags |
 | **tags** | **Tags ▾** (`#`) next to it, or `#tag` typed in the search box |
 

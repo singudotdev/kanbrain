@@ -1,6 +1,6 @@
 //! The brains the window shows: the central one and every registered project repository, each
-//! with its own entries, and the scope that filters them (all, the central brain, a project, or one
-//! repository of a project with several). Entries are known by [`Key`]: which brain, and the id
+//! with its own entries, and the scope that filters them (all, or any of the central brain, projects and repositories
+//! of a project with several, together). Entries are known by [`Key`]: which brain, and the id
 //! there, since every brain numbers its entries from 1.
 
 use super::{AddProject, Board, Form, Mode, Picker, ProjectOption, WhereFor};
@@ -44,11 +44,10 @@ pub struct Source {
     pub project: Option<String>,
 }
 
-/// Which brains the window shows.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+/// A row of the project filter: what it shows, alone or picked with others (see [`Board::scope`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Scope {
-    /// Every brain together.
-    #[default]
+    /// Every brain together: the filter with nothing picked.
     All,
     /// The central brain: what's outside any project.
     Central,
@@ -153,15 +152,20 @@ impl Board {
         self.sources.get(key.src)?.brain.task(key.id)
     }
 
-    /// Whether the scope shows the brain at `src`.
-    pub fn in_scope(&self, src: usize) -> bool {
+    /// Whether `scope` covers the brain at `src`.
+    fn covers(&self, scope: &Scope, src: usize) -> bool {
         let source = &self.sources[src];
-        match &self.scope {
+        match scope {
             Scope::All => true,
             Scope::Central => source.project.is_none(),
             Scope::Project(name) => source.project.as_ref() == Some(name),
             Scope::Repo(repo) => *repo == src,
         }
+    }
+
+    /// Whether the scope shows the brain at `src`: every brain with nothing picked, else those a pick covers.
+    pub fn in_scope(&self, src: usize) -> bool {
+        self.scope.is_empty() || self.scope.iter().any(|scope| self.covers(scope, src))
     }
 
     /// The brains the scope shows, with their index.
@@ -212,8 +216,56 @@ impl Board {
 
     /// Shows only what `scope` covers, keeping the selection if it's still shown.
     pub fn set_scope(&mut self, scope: Scope) {
-        self.scope = scope;
+        self.scope = if scope == Scope::All { Vec::new() } else { vec![scope] };
         self.keep_selection();
+    }
+
+    /// Shows what `scope` covers too, or no longer if it's picked; [`Scope::All`] takes every pick out. A project
+    /// and its repositories aren't picked together, since the project covers them: picking one takes the other's
+    /// place, so a repository picked narrows its project and the project picked widens to all of it.
+    pub fn toggle_scope(&mut self, scope: Scope) {
+        if let Some(at) = self.scope.iter().position(|picked| *picked == scope) {
+            self.scope.remove(at);
+        } else {
+            let sources = &self.sources;
+            let project_of = |src: usize| sources[src].project.as_deref();
+            match &scope {
+                Scope::All => self.scope.clear(),
+                Scope::Central => {}
+                Scope::Project(name) => {
+                    self.scope.retain(|p| !matches!(p, Scope::Repo(src) if project_of(*src) == Some(name)));
+                }
+                Scope::Repo(src) => {
+                    self.scope.retain(|p| !matches!(p, Scope::Project(name) if project_of(*src) == Some(name)));
+                }
+            }
+            if scope != Scope::All {
+                self.scope.push(scope);
+            }
+        }
+        self.keep_selection();
+    }
+
+    /// Whether the project filter's row `scope` is checked: picked, or All with nothing picked.
+    pub fn scope_checked(&self, scope: &Scope) -> bool {
+        if *scope == Scope::All { self.scope.is_empty() } else { self.scope.contains(scope) }
+    }
+
+    /// The window's title: the project or repository shown, if it's the only one.
+    pub fn title(&self) -> String {
+        match self.shown_alone() {
+            Some(Scope::Project(name)) => format!("{name} · kanbrain"),
+            Some(Scope::Repo(src)) => format!("{} · kanbrain", self.brain_name(*src)),
+            _ => "kanbrain".to_string(),
+        }
+    }
+
+    /// The one project or repository shown, if that's all the scope picks.
+    pub fn shown_alone(&self) -> Option<&Scope> {
+        match self.scope.as_slice() {
+            [one @ (Scope::Project(_) | Scope::Repo(_))] => Some(one),
+            _ => None,
+        }
     }
 
     /// The scopes whose name contains every word of the picker's search, ignoring case, in the
@@ -222,18 +274,20 @@ impl Board {
         self.scopes().into_iter().filter(|(_, name)| picker.matches(name)).collect()
     }
 
-    /// Opens the project filter's dropdown, on the scope shown.
+    /// Opens the project filter's dropdown, on the first scope shown.
     pub fn open_scopes(&mut self) {
-        let sel = self.scope_candidates(&Picker::default()).iter().position(|(s, _)| *s == self.scope).unwrap_or(0);
-        self.mode = Mode::Scopes(Picker::at(sel));
+        let sel = self.scope_candidates(&Picker::default()).iter().position(|(s, _)| self.scope.contains(s));
+        self.mode = Mode::Scopes(Picker::at(sel.unwrap_or(0)));
     }
 
-    /// Shows the dropdown's candidate at `index` and closes it.
+    /// Shows the dropdown's candidate at `index` too, or no longer (see [`Board::toggle_scope`]). The dropdown stays
+    /// open, as the tag filter's does, so several can be picked; `esc` or a click outside closes it.
     pub fn choose_scope(&mut self, index: usize) {
+        let Mode::Scopes(picker) = &mut self.mode else { return };
+        picker.sel = index;
         let Mode::Scopes(picker) = &self.mode else { return };
         let Some((scope, _)) = self.scope_candidates(picker).into_iter().nth(index) else { return };
-        self.mode = Mode::Normal;
-        self.set_scope(scope);
+        self.toggle_scope(scope);
     }
 
     /// Asks which project the folder `dir`, picked in the system's dialog, joins or starts. The name begins as the
@@ -318,14 +372,10 @@ impl Board {
         }
     }
 
-    /// A brain of the project shown, if the scope shows one project (or one of its repositories):
+    /// A brain of the project shown, if the scope shows only one project (or one of its repositories):
     /// the repository shown, else the project's first.
     pub fn project_src(&self) -> Option<usize> {
-        match &self.scope {
-            Scope::Repo(src) => Some(*src),
-            Scope::Project(_) => self.scoped().next().map(|(src, _)| src),
-            Scope::All | Scope::Central => None,
-        }
+        self.shown_alone().and(self.scoped().next()).map(|(src, _)| src)
     }
 
     /// The brains of project `name`, its repositories, in order.
@@ -346,8 +396,8 @@ impl Board {
 
     /// The project's repository whose role `N` edits: the selected entry's, else the one shown alone.
     pub fn repo_here(&self) -> Option<usize> {
-        let shown = match self.scope {
-            Scope::Repo(src) => Some(src),
+        let shown = match self.shown_alone() {
+            Some(Scope::Repo(src)) => Some(*src),
             _ => None,
         };
         self.selected.map(|key| key.src).or(shown).filter(|&src| self.sources[src].project.is_some())
