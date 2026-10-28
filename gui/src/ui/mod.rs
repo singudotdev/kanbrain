@@ -38,6 +38,7 @@ mod keys;
 mod list;
 mod markdown;
 mod menu;
+mod offscreen;
 mod pointer;
 mod report;
 mod scrollbar;
@@ -210,13 +211,13 @@ pub struct BrainView {
 #[derive(Default)]
 struct Scrolls {
     /// Each board column, in `COLUMNS` order.
-    columns: [ScrollHandle; COLUMNS.len()],
+    columns: [offscreen::Rows; COLUMNS.len()],
     /// The board's columns, sideways when the window (with the details open) is too narrow for them.
     board: ScrollHandle,
     /// The notes or decisions list.
-    list: ScrollHandle,
+    list: offscreen::Rows,
     /// The board's tasks in its list layout.
-    tasks: ScrollHandle,
+    tasks: offscreen::Rows,
     /// The details drawer.
     drawer: ScrollHandle,
     /// The report tab.
