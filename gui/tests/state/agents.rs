@@ -253,7 +253,7 @@ fn the_user_answers_questions_and_decides_on_proposals() {
     let decision = agent.propose(1, new).unwrap();
     agent.ask(2, "Which colour?").unwrap();
     f.press(KeyCode::Char('R'));
-    assert_eq!(f.board.waiting(), [k(1), k(2)]);
+    assert_eq!(*f.board.waiting(), [k(1), k(2)]);
     for expected in [1, 2, 1] {
         f.press(KeyCode::Char('w'));
         assert_eq!((f.board.selected, f.board.drawer), (Some(k(expected)), true), "w cycles through them");
@@ -286,7 +286,7 @@ fn the_user_answers_questions_and_decides_on_proposals() {
     let task = f.on_disk(1);
     assert_eq!(task.comments.last().unwrap().body, format!("Rejected decision #{decision}, Use Redis: too costly"));
     assert!(matches!(task.asked(), Some(Asked::Answered(_))));
-    assert_eq!(f.board.waiting(), []);
+    assert!(f.board.waiting().is_empty());
     f.press(KeyCode::Char('y'));
     assert_eq!(f.on_disk(decision).decision, DecisionState::Accepted, "and reconsidered");
 }

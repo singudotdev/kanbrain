@@ -58,7 +58,7 @@ impl Board {
     /// Adds another folder to the project of `src`: asks the window for it, then for its project, this one
     /// already named.
     pub fn add_repo_to(&mut self, src: usize) {
-        self.request = Some(Request::Folder(Some(self.sources[src].brain.store.dir().to_path_buf())));
+        self.request = Some(Request::Folder(Some(self.sources[src].brain().store.dir().to_path_buf())));
     }
 
     /// The move dialog's rows: as adding a project's, without the repository's own project.

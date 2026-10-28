@@ -284,11 +284,7 @@ impl Board {
     /// How many tasks, notes and decisions in the scope carry `tag`, in that order: where a tag
     /// that isn't on any card is.
     pub fn tag_uses(&self, tag: &str) -> [usize; Kind::ALL.len()] {
-        let mut uses = [0; Kind::ALL.len()];
-        for task in self.scoped().flat_map(|(_, brain)| &brain.tasks).filter(|t| t.tags.iter().any(|t| t == tag)) {
-            uses[task.kind.position()] += 1;
-        }
-        uses
+        self.showing().tags.get(tag).copied().unwrap_or_default()
     }
 
     /// Opens the tag dropdown, on the first tag the search filters by.
