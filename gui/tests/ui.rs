@@ -1,4 +1,7 @@
 use super::*;
+
+#[path = "perf.rs"]
+mod perf;
 use crate::state::{Board, Mode};
 use gpui::MouseButton;
 use kanbrain_core::model::{Author, Kind, Status, Task, now};

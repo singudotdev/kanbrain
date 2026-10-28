@@ -470,6 +470,21 @@ Linux, that with no display, a dead `WAYLAND_DISPLAY` or a dead `DISPLAY` it fai
 runs them on all three systems, Linux under Xvfb with Mesa's software Vulkan, and keeps the screenshots as the
 run's artifacts.
 
+### Performance
+
+Two ignored tests time a big board, for performance work to measure itself by before and after: `gui/tests/perf.rs`
+opens the window over 1,000 and 10,000 tasks to do (with a fifth as many done tasks and notes, tags, links, comments
+and one running) and times opening it, a frame, a scroll, the idle look at the disk, one file another program
+changed, and a search key; `perf_commands_over_ten_thousand_entries` in `cli/tests/kb.rs` times `kb`'s commands over
+14,000 entries. Run them in a release build, as the times mean nothing in a debug one:
+
+```sh
+cargo test --release -p kanbrain-app perf -- --ignored --nocapture
+cargo test --release -p kanbrain perf -- --ignored --nocapture
+```
+
+They print the times and assert none, since machines differ.
+
 ### Mutation testing
 
 `cargo mutants --in-diff FILE` alters every changed line (`==` for `!=`, a body for `Ok(())`…) and runs the tests
