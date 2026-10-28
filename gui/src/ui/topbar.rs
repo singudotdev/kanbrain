@@ -12,7 +12,7 @@ use crate::text::event::KeyCode;
 use gpui::{
     ClickEvent, Context, Div, FontWeight, Image, ImageFormat, ScrollHandle, Stateful, div, img, prelude::*, px, rgb,
 };
-use kanbrain_core::model::{Kind as EntryKind, Status, counted, fmt_dur, now, worked};
+use kanbrain_core::model::{Kind as EntryKind, counted, fmt_dur, now, worked};
 use kanbrain_core::period::{Period, Unit};
 
 /// The New button's longest label, whose width it keeps on every tab.
@@ -158,9 +158,9 @@ pub(super) fn first_line(text: &str) -> String {
 
 /// The tabs with their counts, the search box, and New / Reload / Shortcuts.
 fn toolbar(board: &Board, scroll: &Scrolls, follow: bool, cx: &mut Context<BrainView>) -> Div {
-    let entries = || board.scoped().flat_map(|(_, brain)| &brain.tasks);
-    let count = |kind: EntryKind| entries().filter(|t| t.kind == kind).count();
-    let active = entries().filter(|t| t.is_task() && t.status != Status::Done).count();
+    let showing = board.showing();
+    let count = |kind: EntryKind| showing.kinds[kind.position()];
+    let active = showing.active;
     let tabs: Vec<_> = Tab::ALL
         .iter()
         .enumerate()
@@ -266,7 +266,7 @@ fn layout_switch(board: &Board, cx: &mut Context<BrainView>) -> Div {
 fn today(board: &Board, cx: &mut Context<BrainView>) -> Div {
     let (from, to) = Period::current(Unit::Day).bounds();
     // By the clock: tasks that ran at once (yours beside an agent's) count that time once.
-    let today = worked(board.sources.iter().flat_map(|s| &s.brain.tasks), from, to, now());
+    let today = worked(board.sources.iter().flat_map(|s| &s.brain().tasks), from, to, now());
     let mine = board.any_mine_running();
     // As tall as the row's buttons, so it lines up with them in a row aligned to its top.
     div()

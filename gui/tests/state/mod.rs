@@ -4,6 +4,7 @@ mod agents;
 mod board;
 mod editor;
 mod form;
+mod index;
 mod on_disk;
 mod projects;
 

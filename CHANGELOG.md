@@ -11,6 +11,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   a long board: GPUI draws the window again on each step of a move, and every card of every column was laid out each
   time. The columns, the list layout and the notes and decisions lists now draw only the rows in view and near it;
   with 200 tasks to do, a frame takes a seventh of the time it did.
+- The kanban app works out its columns, their counts, each entry's related entries, the tags in use and the tasks
+  waiting for an answer once per change of the brains, the scope or the search, not on every frame, and finds an
+  entry by its id directly: with 10,000 tasks to do, building a frame takes 1.6 ms.
 
 ## [0.6.7] - 2026-10-28
 

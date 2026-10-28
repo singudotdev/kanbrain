@@ -8,7 +8,7 @@ fn only_the_brains_that_changed_are_read_again() {
     use kanbrain_core::{brain::Brain, projects};
     let (central, code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
-    let dirs: Vec<_> = board.sources.iter().map(|s| s.brain.store.dir().to_path_buf()).collect();
+    let dirs: Vec<_> = board.sources.iter().map(|s| s.brain().store.dir().to_path_buf()).collect();
     let finish =
         |dir: &std::path::Path| Brain::open(Store::at(dir).unwrap()).unwrap().set_status(1, Status::Done).unwrap();
     for dir in &dirs[1..=3] {
@@ -33,7 +33,7 @@ fn a_repository_renamed_by_another_program_reads_with_its_new_name() {
     let (central, code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
     let api = code.path().join("api").join(".brain");
-    let src = board.sources.iter().position(|s| s.brain.store.dir() == api).unwrap();
+    let src = board.sources.iter().position(|s| s.brain().store.dir() == api).unwrap();
     assert_eq!(board.sources[src].label.as_deref(), Some("shop/api"));
     // As `kb project repo backend` there: only its own `project.md` changes.
     projects::write_repo_card(
@@ -334,7 +334,7 @@ fn entries_related_across_a_projects_repositories_show_on_both() {
     let mut board = Board::open(central.path(), None).unwrap();
     let (api, web) = (Key::new(1, 1), Key::new(2, 1));
     let to_api = [RepoLink { repo: "api".into(), id: 1 }];
-    board.sources[2].brain.link(1, &[], &to_api).unwrap();
+    board.sources[2].brain_mut().link(1, &[], &to_api).unwrap();
     assert_eq!(board.repo_related(web), [api], "web's checkout links api's rate limit");
     assert_eq!(board.repo_related(api), [web], "and api's shows it back");
     assert!(board.repo_related(Key::new(3, 1)).is_empty(), "another project's entries never are");
@@ -616,7 +616,7 @@ fn a_brain_found_while_the_board_acts_is_locked_and_read_under_its_lock() {
     let shop = code.path().join("shop/.brain");
     std::fs::create_dir_all(&shop).unwrap();
     projects::register(central.path(), "shop", &shop).unwrap();
-    board.reload_changed(&[board.sources[0].brain.store.dir().to_path_buf()]).unwrap();
+    board.reload_changed(&[board.sources[0].brain().store.dir().to_path_buf()]).unwrap();
     let src = board.src_at(&shop).expect("found");
     // A `kb` writing to it between that read and the lock.
     let new = |title: &str| kanbrain_core::brain::NewEntry { title: title.into(), ..Default::default() };
@@ -692,7 +692,7 @@ fn projects_and_repositories_are_managed_from_the_projects_info() {
 
     let blog = src(&board, "blog");
     board.add_repo_to(blog);
-    let blog_dir = board.sources[blog].brain.store.dir().to_path_buf();
+    let blog_dir = board.sources[blog].brain().store.dir().to_path_buf();
     assert_eq!(board.request.take(), Some(Request::Folder(Some(blog_dir.clone()))), "the folder joins this project");
     let mobile = code.path().join("mobile");
     std::fs::create_dir(&mobile).unwrap();
@@ -738,7 +738,7 @@ fn a_repository_a_newer_kanbrain_wrote_is_left_out_and_said() {
     kanbrain_core::brain::Brain::open(Store::at(&blog).unwrap()).unwrap().set_status(1, Status::Done).unwrap();
     let api = code.path().join("api/.brain");
     board.reload_changed(&[api]).unwrap();
-    let blog_src = board.sources.iter().position(|s| s.brain.store.dir() == blog).unwrap();
+    let blog_src = board.sources.iter().position(|s| s.brain().store.dir() == blog).unwrap();
     assert_eq!(board.brain(blog_src).task(1).unwrap().status, Status::Todo, "blog wasn't read again");
 }
 
@@ -879,7 +879,8 @@ fn a_decision_already_decided_is_named_with_its_repository() {
     brain.resolve(accepted, DecisionState::Accepted, "").unwrap();
     let mut board = Board::open(central.path(), None).unwrap();
     // By folder: `/var` is `/private/var` on macOS, and Windows prefixes `\\?\`.
-    let src = board.sources.iter().position(|s| kanbrain_core::projects::same_dir(s.brain.store.dir(), &api)).unwrap();
+    let src =
+        board.sources.iter().position(|s| kanbrain_core::projects::same_dir(s.brain().store.dir(), &api)).unwrap();
     board.selected = Some(Key::new(src, rejected));
     board.reject_selected();
     assert_eq!(board.message(), Some(format!("shop/api #{rejected} is already rejected").as_str()));
@@ -939,12 +940,12 @@ fn the_add_project_dialog_goes_back_to_its_repository_after_a_reload() {
     let (central, code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
     let blog = board.sources.iter().position(|s| s.label.as_deref() == Some("blog")).unwrap();
-    let blog_dir = board.sources[blog].brain.store.dir().to_path_buf();
+    let blog_dir = board.sources[blog].brain().store.dir().to_path_buf();
     let mobile = code.path().join("mobile");
     std::fs::create_dir(&mobile).unwrap();
     board.name_project(mobile, Some(&blog_dir));
     kanbrain_core::projects::unregister(central.path(), &code.path().join("api/.brain")).unwrap();
     board.reload().unwrap();
     let Mode::AddProject(add) = &board.mode else { panic!("still open: {:?}", board.mode) };
-    assert_eq!(add.back, board.sources.iter().position(|s| s.brain.store.dir() == blog_dir));
+    assert_eq!(add.back, board.sources.iter().position(|s| s.brain().store.dir() == blog_dir));
 }

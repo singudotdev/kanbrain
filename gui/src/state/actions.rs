@@ -630,10 +630,10 @@ impl Board {
     /// nothing, like typing or moving the selection, leaves the last change to undo as it was.
     pub fn recorded(&mut self, act: impl FnOnce(&mut Self)) {
         for source in &self.sources {
-            source.brain.store.record();
+            source.brain().store.record();
         }
         act(self);
-        let changes: Vec<_> = self.sources.iter().flat_map(|s| s.brain.store.recorded()).collect();
+        let changes: Vec<_> = self.sources.iter().flat_map(|s| s.brain().store.recorded()).collect();
         if !changes.is_empty() {
             self.last_change = changes;
             self.next_undo = NextUndo::Undo;
@@ -684,7 +684,7 @@ impl Board {
         self.brain_mut(src).set_project_description(text)?;
         let project = self.sources[src].project.clone();
         for source in self.sources.iter_mut().filter(|s| s.project == project) {
-            source.brain.reload()?;
+            source.brain_mut().reload()?;
         }
         Ok(())
     }
