@@ -699,3 +699,47 @@ fn init_says_so_when_kb_isnt_on_the_path() {
     let bin = Path::new(env!("CARGO_BIN_EXE_kb")).parent().unwrap();
     assert!(!init(bin.as_os_str()).contains(said));
 }
+
+/// How long `kb`'s commands take over a brain of 10,000 tasks to do, 2,000 done and 2,000 notes, for the performance
+/// work to measure itself by. Ignored by default and timed only in a release build (`cargo test --release -p
+/// kanbrain perf -- --ignored --nocapture`); it prints the times rather than assert them, since machines differ.
+#[test]
+#[ignore = "a benchmark: run in release with --ignored --nocapture"]
+fn perf_commands_over_ten_thousand_entries() {
+    use kanbrain_core::model::{Kind, Status, Task, now};
+    let (central, repo) = (tempdir(), tempdir());
+    let run = |args: &[&str], stdin: &str| kb(repo.path(), central.path(), args, stdin);
+    ok(&run(&["init", "demo"], ""));
+    let brain = repo.path().join(".brain");
+    let (todo, done, notes) = (10_000, 2_000, 2_000);
+    for id in 1..=todo + done + notes {
+        let mut task = Task::new(id, format!("task {id} with a title about as long as most"), now());
+        task.tags = vec![["auth", "api", "ui", "db", "perf", "bug"][id as usize % 6].to_string()];
+        if id > todo + done {
+            task.kind = Kind::Note;
+        } else if id > todo {
+            task.status = Status::Done;
+        }
+        let file = brain.join(format!("{id:04}-task-{id}-with-a-title-about-as-long-as-most.md"));
+        std::fs::write(file, task.to_markdown()).unwrap();
+    }
+    let hook = format!("{{\"cwd\":{:?}}}", repo.path());
+    let commands: [(&str, &[&str], &str); 9] = [
+        ("context", &["context"], ""),
+        ("show", &["show", "5000"], ""),
+        ("comment", &["comment", "5000", "a comment"], ""),
+        ("start", &["start", "5001"], ""),
+        ("done", &["done", "5001"], ""),
+        ("search", &["search", "title", "5000"], ""),
+        ("list todo", &["list", "todo"], ""),
+        ("add", &["add", "one more task"], ""),
+        ("hook tool", &["hook", "tool"], &hook),
+    ];
+    let mut times = Vec::new();
+    for (name, args, stdin) in commands {
+        let start = std::time::Instant::now();
+        ok(&run(args, stdin));
+        times.push(format!("{name} {:?}", start.elapsed()));
+    }
+    eprintln!("PERF kb at {}: {}", todo + done + notes, times.join(", "));
+}
