@@ -17,6 +17,12 @@ exclude_re = [
     'gui/src/ui/scrollbar\.rs:87:20: delete ! in bar$',
     # The hover style of a list row: the window tests have no pointer to hover with.
     'gui/src/ui/list\.rs:.*delete ! in row',
+    # The highlight of a notes or decisions row and its hover style: a color, and the window tests read bounds, not
+    # colors, with no pointer to hover with (the state tests check which entry is selected).
+    'gui/src/ui/entries\.rs:.*(replace == with != |delete ! )in entry_row$',
+    # Which rows stand in, and whether one shows (by their lines): only a row whose edge is exactly on the edge drawn
+    # or shown, to the sub-pixel, is taken otherwise, and a row that only touches the view shows nothing of it.
+    'gui/src/ui/offscreen\.rs:(84|146):.*replace (< with <=|> with >=) in (Rows::frame|in_view)$',
     # The highlight of the form's tags list (by its line, so the row the list follows stays tested): a color, and the
     # window tests read bounds, not colors (the state tests check which tag it is, `Form::tag_sel`).
     'gui/src/ui/dialogs/form\.rs:168:.*replace == with != in tags_field',

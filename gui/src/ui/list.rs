@@ -6,51 +6,82 @@ use super::board::{
     clock, draggable, drop_target, empty_hint, meta, quick_add, show_all_done, status_header, title_color,
 };
 use super::entries::LABEL_WIDTH;
+use super::offscreen::Rows;
 use super::theme;
 use super::widgets::{self, card, dim, dim_small, tag_chips};
 use super::{BrainView, menu};
 use crate::state::{Board, COLUMNS, Key};
-use gpui::{AnyElement, ClickEvent, Context, Div, ElementId, ScrollHandle, Stateful, div, prelude::*, px, rgb};
+use gpui::{AnyElement, ClickEvent, Context, Div, ElementId, Stateful, div, prelude::*, px, rgb};
 use kanbrain_core::model::{Status, Task, fmt_age, now};
 
 /// Every section, one under the other, scrolling together.
-pub fn draw(board: &Board, scroll: &ScrollHandle, follow: bool, cx: &mut Context<BrainView>) -> Div {
+pub fn draw(board: &Board, rows: &Rows, follow: bool, cx: &mut Context<BrainView>) -> Div {
     let now = now();
     // The scroll handle finds a row by its index among the list's children, so they're kept flat:
     // each section's header, its quick-add field, rows and hints are all children of the list.
-    let mut items: Vec<AnyElement> = Vec::new();
+    let mut items: Vec<Item> = Vec::new();
     let mut follow_row = None;
     for status in COLUMNS {
-        let rows = board.column(status);
-        items.push(header(board, status, rows.len(), cx).into_any_element());
+        let tasks = board.column(status);
+        items.push(Item::Other(header(board, status, tasks.len(), cx).into_any_element()));
         let adding = quick_add(board, status, cx);
-        let empty = rows.is_empty() && adding.is_none();
+        let empty = tasks.is_empty() && adding.is_none();
         if let Some(field) = adding {
             follow_row = Some(items.len());
-            items.push(field.px_3().py_2().into_any_element());
+            items.push(Item::Other(field.px_3().py_2().into_any_element()));
         }
-        for &(key, task) in &rows {
+        for &(key, task) in &tasks {
             if follow_row.is_none() && board.selected == Some(key) {
                 follow_row = Some(items.len());
             }
-            items.push(menu::on_right_click(row(board, key, task, now, cx), key, cx).into_any_element());
+            items.push(Item::Row(key, task));
         }
         if empty {
-            items.push(dim_small(empty_hint(board, status)).px_3().py_2().into_any_element());
+            let hint = dim_small(empty_hint(board, status)).px_3().py_2();
+            items
+                .push(Item::Other(hint.debug_selector(move || format!("hint {}", status.as_str())).into_any_element()));
         }
         if status == Status::Done
             && let Some(more) = show_all_done(board, cx)
         {
-            items.push(div().flex().py_2().child(more).into_any_element());
+            items.push(Item::Other(div().flex().py_2().child(more).into_any_element()));
         }
     }
-    if follow && let Some(index) = follow_row {
-        scroll.scroll_to_item(index);
+    let follow_row = follow_row.filter(|_| follow);
+    if let Some(index) = follow_row {
+        rows.scroll.scroll_to_item(index);
     }
-    card()
+    let order = items.iter().map(|item| match item {
+        Item::Row(key, _) => Some(*key),
+        Item::Other(_) => None,
+    });
+    let mut frame = rows.frame(order.collect(), follow_row);
+    let items: Vec<_> = items
+        .into_iter()
+        .map(|item| match item {
+            Item::Row(key, task) => {
+                frame.child(|| menu::on_right_click(row(board, key, task, now, cx), key, cx).into_any_element())
+            }
+            Item::Other(element) => frame.child(|| element),
+        })
+        .collect();
+    let list = frame
+        .finish(div())
+        .id("task-list")
+        .debug_selector(|| "task-list".to_string())
         .flex_1()
-        .overflow_hidden()
-        .child(div().id("task-list").flex_1().min_h_0().overflow_y_scroll().track_scroll(scroll).children(items))
+        .min_h_0()
+        .overflow_y_scroll()
+        .track_scroll(&rows.scroll);
+    card().flex_1().overflow_hidden().child(list.children(items))
+}
+
+/// A child of the list: a task's row, drawn only near the view, or what's between them.
+enum Item<'a> {
+    /// The row of this task.
+    Row(Key, &'a Task),
+    /// A header, a field or a hint.
+    Other(AnyElement),
 }
 
 /// A section's header: the status, its count, and `+` to add a task there. Dropping a row on it moves

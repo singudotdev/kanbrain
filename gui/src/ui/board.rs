@@ -1,6 +1,7 @@
 //! The board: one column per status, To do · Doing · Parked · Done, each a scrolling stack of cards
 //! with a `+` for a new task in it. Cards are dragged between columns to change their status.
 
+use super::offscreen::Rows;
 use super::pointer::TextBox;
 use super::theme::{self, BORDER, DIM, TEXT};
 use super::widgets::{self, Kind, card, dim, dim_small, small, state_pill, tag_chips};
@@ -66,7 +67,7 @@ impl Render for DragPreview {
 /// The four columns side by side.
 pub fn draw(
     board: &Board,
-    scrolls: &[ScrollHandle; COLUMNS.len()],
+    scrolls: &[Rows; COLUMNS.len()],
     sideways: &ScrollHandle,
     follow: bool,
     cx: &mut Context<BrainView>,
@@ -75,7 +76,7 @@ pub fn draw(
     if follow && let Some(at) = board.selected_task().and_then(|t| COLUMNS.iter().position(|&s| s == t.status)) {
         sideways.scroll_to_item(at);
     }
-    let columns = COLUMNS.iter().zip(scrolls).map(|(&status, scroll)| column(board, status, scroll, follow, cx));
+    let columns = COLUMNS.iter().zip(scrolls).map(|(&status, rows)| column(board, status, rows, follow, cx));
     let columns: Vec<_> = columns.collect();
     let row = each_axis(div().id("board")).size_full().track_scroll(sideways).flex().gap_3().children(columns);
     // The columns and the bar under them.
@@ -136,7 +137,8 @@ pub(super) fn status_header(board: &Board, status: Status, shown: usize, cx: &mu
 }
 
 /// A column: its name and count, the quick-add field while adding there, and its cards.
-fn column(board: &Board, status: Status, scroll: &ScrollHandle, follow: bool, cx: &mut Context<BrainView>) -> Div {
+fn column(board: &Board, status: Status, rows: &Rows, follow: bool, cx: &mut Context<BrainView>) -> Div {
+    let scroll = &rows.scroll;
     let cards = board.column(status);
     let adding = quick_add(board, status, cx);
     // The field is the first child, above the cards: in view while typing, with each new task landing
@@ -147,12 +149,20 @@ fn column(board: &Board, status: Status, scroll: &ScrollHandle, follow: bool, cx
     }
     let header = status_header(board, status, cards.len(), cx);
     let now = now();
-    let rows: Vec<_> = cards
-        .iter()
-        .map(|&(key, task)| menu::on_right_click(draw_card(board, key, task, now, cx), key, cx).into_any_element())
-        .collect();
     let empty = (cards.is_empty() && adding.is_none()).then(|| dim_small(empty_hint(board, status)).p_2());
-    let body = div()
+    let more = (status == Status::Done).then(|| show_all_done(board, cx)).flatten();
+    let other = |shown: bool| std::iter::repeat_n(None, usize::from(shown));
+    let cards_keys = cards.iter().map(|&(key, _)| Some(key));
+    let order = other(adding.is_some()).chain(cards_keys).chain(other(empty.is_some())).chain(other(more.is_some()));
+    let mut frame = rows.frame(order.collect(), row.filter(|_| follow));
+    let mut children: Vec<_> = adding.into_iter().map(|field| frame.child(|| field.into_any_element())).collect();
+    children.extend(cards.iter().map(|&(key, task)| {
+        frame.child(|| menu::on_right_click(draw_card(board, key, task, now, cx), key, cx).into_any_element())
+    }));
+    children.extend(empty.map(|hint| frame.child(|| hint.into_any_element())));
+    children.extend(more.map(|more| frame.child(|| more.into_any_element())));
+    let body = frame
+        .finish(div())
         .id(("column", status as usize))
         .debug_selector(move || format!("column {}", status.as_str()))
         .flex_1()
@@ -162,10 +172,7 @@ fn column(board: &Board, status: Status, scroll: &ScrollHandle, follow: bool, cx
         .flex_col()
         .gap_2()
         .p_2()
-        .children(adding)
-        .children(rows)
-        .children(empty)
-        .children((status == Status::Done).then(|| show_all_done(board, cx)).flatten());
+        .children(children);
     // The whole column, its header too.
     let over = scrollbar::Over::default();
     // In the cards' right padding, beside them.
@@ -363,12 +370,15 @@ pub(super) fn show_all_done(board: &Board, cx: &mut Context<BrainView>) -> Optio
         (true, _) if board.column_total(Status::Done) <= crate::state::DONE_LIMIT => return None,
         (true, _) => "Show only the latest".to_string(),
     };
-    Some(small(widgets::button("all-done", label, Kind::Ghost)).self_center().on_click(cx.listener(
-        |this, _: &ClickEvent, _, cx| {
-            this.act(cx, |b| {
-                b.all_done = !b.all_done;
-                b.keep_selection();
-            });
-        },
-    )))
+    Some(
+        small(widgets::button("all-done", label, Kind::Ghost))
+            .debug_selector(|| "all done".to_string())
+            .self_center()
+            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                this.act(cx, |b| {
+                    b.all_done = !b.all_done;
+                    b.keep_selection();
+                });
+            })),
+    )
 }
