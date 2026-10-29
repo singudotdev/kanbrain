@@ -152,13 +152,16 @@ fn column(board: &Board, status: Status, rows: &Rows, follow: bool, cx: &mut Con
     let cards_keys = cards.iter().map(|&(key, _)| Some(key));
     let order = other(adding.is_some()).chain(cards_keys).chain(other(empty.is_some())).chain(other(more.is_some()));
     let mut frame = rows.frame(order.collect(), row.filter(|_| follow));
+    // Each child spaced from the next by its margin, as the boxes standing in for cards are: see `body`.
     let mut children: Vec<_> =
-        adding.into_iter().filter_map(|field| frame.child(|| field.into_any_element())).collect();
+        adding.into_iter().filter_map(|field| frame.child(|| field.mb_2().into_any_element())).collect();
     children.extend(cards.iter().filter_map(|&(key, task)| {
-        frame.child(|| menu::on_right_click(draw_card(board, key, task, now, cx), key, cx).into_any_element())
+        frame.child(|| menu::on_right_click(draw_card(board, key, task, now, cx), key, cx).mb_2().into_any_element())
     }));
-    children.extend(empty.and_then(|hint| frame.child(|| hint.into_any_element())));
-    children.extend(more.and_then(|more| frame.child(|| more.into_any_element())));
+    children.extend(empty.and_then(|hint| frame.child(|| hint.mb_2().into_any_element())));
+    children.extend(
+        more.and_then(|more| frame.child(|| div().flex().justify_center().mb_2().child(more).into_any_element())),
+    );
     let body = frame
         .finish(div())
         .id(("column", status as usize))
@@ -166,9 +169,9 @@ fn column(board: &Board, status: Status, rows: &Rows, follow: bool, cx: &mut Con
         .flex_1()
         .min_h_0()
         .track_scroll(scroll)
-        .flex()
-        .flex_col()
-        .gap_2()
+        // A block, its children spaced by their margins, which GPUI leaves out of what scrolls, the last one's too: as
+        // a flex column with a gap, taffy measured each card twice a frame (4.5 ms of a frame at 10,000 tasks, 3.4 ms
+        // as a block).
         .p_2()
         .children(children);
     // The whole column, its header too.
@@ -247,10 +250,9 @@ fn draw_card(
         // would share GPUI's hit-testing and click state, and only the first would take clicks.
         .id(ElementId::Name(format!("card {}/{id}", key.src).into()))
         .debug_selector(move || format!("card {}/{id}", key.src))
-        .flex()
+        // A block, its parts spaced by margins: as a flex column, taffy measured each part several times a frame, and
+        // laying out the cards took most of one (14 ms of a frame at 10,000 tasks, 4.5 ms as blocks).
         .flex_none()
-        .flex_col()
-        .gap_1p5()
         .p_2p5()
         .rounded_md()
         .border_1()
@@ -285,15 +287,18 @@ fn draw_card(
         )
         .child(
             div()
+                .mt_1p5()
                 .text_size(px(13.))
                 .text_color(rgb(title_color(task.status)))
                 .child(truncate_words(&task.title, TITLE_CHARS)),
         )
         .when(!task.tags.is_empty(), |d| {
-            d.child(tag_chips(board, &task.tags).debug_selector(move || format!("tags {}/{}", key.src, key.id)))
+            d.child(
+                tag_chips(board, &task.tags).mt_1p5().debug_selector(move || format!("tags {}/{}", key.src, key.id)),
+            )
         })
-        .children(asked(task).map(|d| d.debug_selector(move || format!("asked {}/{}", key.src, key.id))))
-        .child(footer)
+        .children(asked(task).map(|d| d.mt_1p5().debug_selector(move || format!("asked {}/{}", key.src, key.id))))
+        .child(footer.mt_1p5())
 }
 
 /// A task's title color, on its card or its row: dimmed once done, as what's no longer to do.
