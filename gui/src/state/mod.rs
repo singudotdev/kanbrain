@@ -475,24 +475,30 @@ impl Board {
         Ok(())
     }
 
-    /// Re-reads the brains whose folders are among `dirs`, those another program changed, and the other
-    /// repositories of their projects, rather than all of them: an agent's every command changes one, and
-    /// the window may show many. Everything is re-read when the list of projects or their shared cards may
-    /// have changed, a repository was renamed, or a folder is gone.
-    pub fn reload_changed(&mut self, dirs: &[PathBuf]) -> Result<()> {
+    /// Re-reads the files of `changes`, those another program changed, and mends the other repositories of their
+    /// projects, rather than reading every brain: an agent's every command changes a file or two, and the window may
+    /// show many brains. Everything is re-read when the list of projects or their shared cards may have changed, a
+    /// repository was renamed, or a folder is gone.
+    pub fn reload_changed(&mut self, changes: &[watch::Changes]) -> Result<()> {
         let cards = projects::cards_dir(&self.central);
         let left_out = |d: &PathBuf| self.skipped.iter().any(|s| s.dir == *d);
-        let everything = dirs.iter().any(|d| *d == cards || !d.is_dir() || left_out(d)) || !self.same_repos()?;
+        let everything =
+            changes.iter().any(|c| c.dir == cards || !c.dir.is_dir() || left_out(&c.dir)) || !self.same_repos()?;
         if everything {
             return self.reload();
         }
-        // A project's other repositories too: an entry deleted in one drops the links the others have to it.
-        let changed = |s: &Source| dirs.iter().any(|d| d == s.brain().store.dir());
+        let files = |s: &Source| changes.iter().find(|c| c.dir == s.brain().store.dir()).map(|c| &c.files);
         let projects: Vec<String> =
-            self.sources.iter().filter(|s| changed(s)).filter_map(|s| s.project.clone()).collect();
-        for source in &mut self.sources {
-            if changed(source) || source.project.as_ref().is_some_and(|p| projects.contains(p)) {
-                source.brain_mut().reload()?;
+            self.sources.iter().filter(|s| files(s).is_some()).filter_map(|s| s.project.clone()).collect();
+        for at in 0..self.sources.len() {
+            let source = &self.sources[at];
+            // Only the files that changed: reading every entry of a long brain again took a tenth of a second.
+            if let Some(files) = files(source) {
+                self.sources[at].brain_mut().reload_files(files)?;
+            // A project's other repositories mended, none of their files read: an entry deleted in one drops the
+            // links the others have to it.
+            } else if source.project.as_ref().is_some_and(|p| projects.contains(p)) {
+                self.sources[at].brain_mut().reload_files(&[])?;
             }
         }
         self.after_load();

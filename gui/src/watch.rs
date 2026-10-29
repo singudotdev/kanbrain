@@ -10,41 +10,100 @@ use std::time::{Duration, SystemTime};
 /// How often the folder is listed.
 pub const INTERVAL: Duration = Duration::from_secs(1);
 
+/// How long after a folder last changed its listing can't be trusted to hold until it changes again, on a file system
+/// that keeps times to the second or two (FAT): a change made in the tick of a listing can leave the folder's time as
+/// it was. Within it, the folder is listed again.
+const TICK: Duration = Duration::from_secs(2);
+
+/// [`TICK`] on a file system keeping times to the nanosecond, which the kernel advances by its clock's tick, a few
+/// milliseconds.
+const FINE_TICK: Duration = Duration::from_millis(50);
+
 /// The markdown files of a folder (and its `format` file) by name, with when they last changed and their size.
 type Snapshot = Vec<(String, Option<SystemTime>, u64)>;
+
+/// A folder as listed: its files, when the folder itself last changed, and when it was listed.
+#[derive(Clone, Default)]
+pub struct Listing {
+    /// Its files.
+    files: Snapshot,
+    /// When an entry of it was last added, removed or renamed: a save writes a temporary file and renames it, so
+    /// every save `kb` and the app make changes it.
+    changed: Option<SystemTime>,
+    /// When it was listed.
+    at: Option<SystemTime>,
+}
+
+/// The files of one folder changed, added or deleted since it was last looked at.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Changes {
+    /// The folder.
+    pub dir: PathBuf,
+    /// Its files that changed, by their paths.
+    pub files: Vec<PathBuf>,
+}
 
 /// Watches data folders by comparing listings of them.
 pub struct Watcher {
     /// The folders.
     dirs: Vec<PathBuf>,
     /// Their listings when last looked at, in the same order.
-    last: Vec<Snapshot>,
+    last: Vec<Listing>,
+    /// Listings the timer took that differ from those, for [`Watcher::changed`] to take rather than list again.
+    noticed: Vec<Option<Listing>>,
 }
 
 impl Watcher {
     /// Watches `dirs`, none of them seen yet: one with files reads as changed at the first look, since the board
     /// was read before the watcher started (before the window opened), and a write in between would be missed.
     pub fn new(dirs: Vec<PathBuf>) -> Self {
-        let last = vec![Snapshot::new(); dirs.len()];
-        Self { dirs, last }
+        let last = vec![Listing::default(); dirs.len()];
+        let noticed = vec![None; dirs.len()];
+        Self { dirs, last, noticed }
     }
 
-    /// Whether any folder changed since it was last looked at, leaving that for [`Self::changed`] to take.
-    pub fn dirty(&self) -> bool {
-        self.dirs.iter().zip(&self.last).any(|(dir, last)| snapshot(dir) != *last)
+    /// The folders watched, for [`list`] to list away from the window's thread.
+    pub fn dirs(&self) -> &[PathBuf] {
+        &self.dirs
     }
 
-    /// The folders that changed since they were last looked at; either way, takes their state as seen.
-    pub fn changed(&mut self) -> Vec<PathBuf> {
-        let mut changed = Vec::new();
-        for (dir, last) in self.dirs.iter().zip(&mut self.last) {
-            let now = snapshot(dir);
-            if now != *last {
-                changed.push(dir.clone());
-                *last = now;
+    /// Whether `listings` of `dirs`, as [`list`] took them, show a change since the folders were last looked at,
+    /// leaving it for [`Self::changed`] to take: from these listings while their folders' times say they still hold,
+    /// else from listing them again, never by the folders' times alone, which a file written over in place leaves
+    /// as they were. Folders watched since, or no longer, are left to it too.
+    pub fn noticed(&mut self, dirs: &[PathBuf], listings: Vec<Listing>) -> bool {
+        let mut noticed = false;
+        for (dir, now) in dirs.iter().zip(listings) {
+            if let Some(at) = self.dirs.iter().position(|d| d == dir)
+                && self.last[at].files != now.files
+            {
+                self.last[at].at = None;
+                self.noticed[at] = Some(now);
+                noticed = true;
             }
         }
-        changed
+        noticed
+    }
+
+    /// The files changed in each folder since it was last looked at, taking their state as seen. A folder that hasn't
+    /// changed since a tick after it was listed isn't listed again: a key pressed in a long brain took that long.
+    /// Not a file written over in place, as some editors do, which only [`list`] finds, every [`INTERVAL`] (see
+    /// [`Self::noticed`]): the store refuses to save over such a file meanwhile.
+    pub fn changed(&mut self) -> Vec<Changes> {
+        let mut changes = Vec::new();
+        for ((dir, last), noticed) in self.dirs.iter().zip(&mut self.last).zip(&mut self.noticed) {
+            let now = match noticed.take() {
+                Some(noticed) if unchanged(dir, &noticed) => noticed,
+                _ if unchanged(dir, last) => continue,
+                _ => listing(dir),
+            };
+            let files = differences(&last.files, &now.files);
+            if !files.is_empty() {
+                changes.push(Changes { dir: dir.clone(), files: files.iter().map(|name| dir.join(name)).collect() });
+            }
+            *last = now;
+        }
+        changes
     }
 
     /// Watches `dirs` from now on, taking the state of those already watched as seen without asking: after the
@@ -52,8 +111,78 @@ impl Watcher {
     /// after a reload, which may have found projects added or gone. A folder new to it reads as changed unless
     /// empty, since the board read it without holding its lock: it's read again, under the locks, next time.
     pub fn sync(&mut self, dirs: Vec<PathBuf>) {
-        let last = dirs.iter().map(|d| if self.dirs.contains(d) { snapshot(d) } else { Snapshot::new() }).collect();
-        *self = Self { dirs, last };
+        let last = dirs
+            .iter()
+            .map(|dir| match self.dirs.iter().position(|d| d == dir) {
+                // Not written to since it was listed, by the folder's time: a write of another program in that tick
+                // reads as a change at the next look, rather than as seen.
+                Some(at) if folder_time(dir) == self.last[at].changed => std::mem::take(&mut self.last[at]),
+                Some(_) => listing(dir),
+                None => Listing::default(),
+            })
+            .collect();
+        let noticed = vec![None; dirs.len()];
+        *self = Self { dirs, last, noticed };
+    }
+}
+
+/// Lists `dirs`: what the window's timer has done away from its thread, as listing a long brain takes a while.
+pub fn list(dirs: &[PathBuf]) -> Vec<Listing> {
+    dirs.iter().map(|dir| listing(dir)).collect()
+}
+
+/// Whether the folder's entries are as `last` listed them, by the folder's time alone: it hasn't changed since, and
+/// was listed a tick after it last did.
+fn unchanged(dir: &Path, last: &Listing) -> bool {
+    let (Some(changed), Some(at)) = (last.changed, last.at) else { return false };
+    // Kept to the second or two, a time lands on a whole second; kept finer, it does only once in a while, and is
+    // then taken as coarse, which lists the folder again.
+    let coarse = changed.duration_since(SystemTime::UNIX_EPOCH).is_ok_and(|since| since.subsec_nanos() == 0);
+    let tick = if coarse { TICK } else { FINE_TICK };
+    folder_time(dir) == Some(changed) && at.duration_since(changed).is_ok_and(|since| since > tick)
+}
+
+/// When an entry of the folder was last added, removed or renamed.
+fn folder_time(dir: &Path) -> Option<SystemTime> {
+    fs::metadata(dir).and_then(|meta| meta.modified()).ok()
+}
+
+/// The folder listed now.
+fn listing(dir: &Path) -> Listing {
+    // Its time before its files: changed in between, it reads as changed at the next look.
+    let changed = folder_time(dir);
+    let at = Some(SystemTime::now());
+    Listing { files: snapshot(dir), changed, at }
+}
+
+/// The names of the files in one listing and not the other, or in both but changed: both sorted by name.
+fn differences<'a>(was: &'a Snapshot, now: &'a Snapshot) -> Vec<&'a str> {
+    let (mut old, mut new) = (0, 0);
+    let mut names = Vec::new();
+    loop {
+        match (was.get(old), now.get(new)) {
+            (Some(a), Some(b)) if a.0 == b.0 => {
+                if a != b {
+                    names.push(b.0.as_str());
+                }
+                (old, new) = (old + 1, new + 1);
+            }
+            // Added: before the next one listed then, or after the last.
+            (Some(a), Some(b)) if b.0 < a.0 => {
+                names.push(b.0.as_str());
+                new += 1;
+            }
+            (None, Some(b)) => {
+                names.push(b.0.as_str());
+                new += 1;
+            }
+            // Gone: before the next one listed now, or after the last.
+            (Some(a), _) => {
+                names.push(a.0.as_str());
+                old += 1;
+            }
+            (None, None) => return names,
+        }
     }
 }
 

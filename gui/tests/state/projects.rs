@@ -14,15 +14,16 @@ fn only_the_brains_that_changed_are_read_again() {
     for dir in &dirs[1..=3] {
         finish(dir);
     }
-    board.reload_changed(&dirs[1..2]).unwrap();
+    board.reload_changed(&all_of(&board, &dirs[1..2])).unwrap();
     let status = |board: &Board, src| board.brain(src).task(1).unwrap().status;
     let statuses = [1, 2, 3].map(|src| status(&board, src));
-    assert_eq!(statuses, [Status::Done, Status::Done, Status::Todo], "api as named, web of its project, not blog");
+    // Web, of api's project, is mended without being read: its own changes come named by the watcher.
+    assert_eq!(statuses, [Status::Done, Status::Todo, Status::Todo], "api as named, not web nor blog");
 
     let another = code.path().join("shop").join(".brain");
     std::fs::create_dir_all(&another).unwrap();
     projects::register(central.path(), "shop", &another).unwrap();
-    board.reload_changed(&dirs[..1]).unwrap();
+    board.reload_changed(&all_of(&board, &dirs[..1])).unwrap();
     assert_eq!(board.sources.len(), 5, "a repository registered in the central brain reads everything");
     assert_eq!(status(&board, 3), Status::Done);
 }
@@ -41,7 +42,7 @@ fn a_repository_renamed_by_another_program_reads_with_its_new_name() {
         &projects::RepoCard { project: "shop".into(), repo: Some("backend".into()), notes: String::new() },
     )
     .unwrap();
-    board.reload_changed(&[api]).unwrap();
+    board.reload_changed(&all_of(&board, &[api])).unwrap();
     assert_eq!(board.sources[src].label.as_deref(), Some("shop/backend"));
 }
 
@@ -325,6 +326,22 @@ fn a_new_entry_goes_where_the_filter_points_and_its_form_picks_another_project()
     board.set_scope(Scope::Central);
     press(&mut board, KeyCode::Char('a'));
     assert!(matches!(board.mode, Mode::QuickAdd(QuickAdd { src: 0, .. })), "one brain shown: no question");
+}
+
+#[test]
+fn an_entry_another_program_deleted_takes_the_links_to_it_from_the_projects_other_repositories() {
+    use kanbrain_core::model::RepoLink;
+    let (central, _code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    let to_api = [RepoLink { repo: "api".into(), id: 1 }];
+    board.sources[2].brain_mut().link(1, &[], &to_api).unwrap();
+    let api = board.brain(1).store.dir().to_path_buf();
+    let gone = board.brain(1).task(1).unwrap().path.clone().unwrap();
+    // As `kb delete 1` in api does: web isn't written to.
+    std::fs::remove_file(&gone).unwrap();
+    let changes = [crate::watch::Changes { dir: api, files: vec![gone] }];
+    board.reload_changed(&changes).unwrap();
+    assert!(board.brain(2).task(1).unwrap().repo_links.is_empty(), "web's link to it went with it");
 }
 
 #[test]
@@ -616,7 +633,7 @@ fn a_brain_found_while_the_board_acts_is_locked_and_read_under_its_lock() {
     let shop = code.path().join("shop/.brain");
     std::fs::create_dir_all(&shop).unwrap();
     projects::register(central.path(), "shop", &shop).unwrap();
-    board.reload_changed(&[board.sources[0].brain().store.dir().to_path_buf()]).unwrap();
+    board.reload_changed(&all_of(&board, &[board.sources[0].brain().store.dir().to_path_buf()])).unwrap();
     let src = board.src_at(&shop).expect("found");
     // A `kb` writing to it between that read and the lock.
     let new = |title: &str| kanbrain_core::brain::NewEntry { title: title.into(), ..Default::default() };
@@ -737,7 +754,7 @@ fn a_repository_a_newer_kanbrain_wrote_is_left_out_and_said() {
     let blog = code.path().join("blog/.brain");
     kanbrain_core::brain::Brain::open(Store::at(&blog).unwrap()).unwrap().set_status(1, Status::Done).unwrap();
     let api = code.path().join("api/.brain");
-    board.reload_changed(&[api]).unwrap();
+    board.reload_changed(&all_of(&board, &[api])).unwrap();
     let blog_src = board.sources.iter().position(|s| s.brain().store.dir() == blog).unwrap();
     assert_eq!(board.brain(blog_src).task(1).unwrap().status, Status::Todo, "blog wasn't read again");
 }
@@ -756,17 +773,17 @@ fn a_repository_that_cant_be_read_is_left_out_and_said() {
     board.message = None;
     let blog = code.path().join("blog/.brain");
     kanbrain_core::brain::Brain::open(Store::at(&blog).unwrap()).unwrap().set_status(1, Status::Done).unwrap();
-    board.reload_changed(&[blog]).unwrap();
+    board.reload_changed(&all_of(&board, &[blog])).unwrap();
     assert_eq!(board.message(), None);
     // Nor a write to it, which reads everything again, nor the full read a second after the window opens.
     std::fs::write(web.join("0002-from-a-newer-agent.md"), "# x\n\n- id: 2\n").unwrap();
-    board.reload_changed(std::slice::from_ref(&web)).unwrap();
+    board.reload_changed(&all_of(&board, std::slice::from_ref(&web))).unwrap();
     board.reload().unwrap();
     assert_eq!(board.message(), None);
     // Watched, it's shown once repaired.
     assert!(board.watched_dirs().contains(&web), "{:?}", board.watched_dirs());
     std::fs::write(web.join(kanbrain_core::migrate::FORMAT_FILE), "1\n").unwrap();
-    board.reload_changed(&[web]).unwrap();
+    board.reload_changed(&all_of(&board, &[web])).unwrap();
     assert_eq!(labels(&board), ["shop/api", "shop/web", "blog"]);
 }
 
@@ -792,7 +809,7 @@ fn a_card_changed_by_another_program_reads_again_with_everything() {
     let (central, _code) = projects();
     let mut board = Board::open(central.path(), None).unwrap();
     projects::write_description(central.path(), "shop", "A bigger shop.").unwrap();
-    board.reload_changed(&[projects::cards_dir(central.path())]).unwrap();
+    board.reload_changed(&all_of(&board, &[projects::cards_dir(central.path())])).unwrap();
     let shop = board.repos_of("shop").next().unwrap();
     assert_eq!(board.brain(shop).project.as_ref().unwrap().description, "A bigger shop.");
 }
@@ -804,7 +821,7 @@ fn a_shown_project_follows_command_line_changes_seen_by_the_watcher() {
     board.set_scope(Scope::Project("shop".into()));
     kanbrain_core::cli::rename_project_steps(central.path(), "shop", "store").unwrap();
     // As the watcher hands it over: the cards' folder changed.
-    board.reload_changed(&[kanbrain_core::projects::cards_dir(central.path())]).unwrap();
+    board.reload_changed(&all_of(&board, &[kanbrain_core::projects::cards_dir(central.path())])).unwrap();
     assert_eq!(board.scope, [Scope::Project("store".into())], "renamed");
 
     // A one-repository project's repository moved to a project of its own is the same project renamed.

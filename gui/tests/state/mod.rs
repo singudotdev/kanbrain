@@ -16,6 +16,23 @@ use kanbrain_core::store::Store;
 use std::cell::Cell;
 use tempfile::TempDir;
 
+/// Every entry in `dirs` changed, as far as the board can tell: each entry's file there now (named by its id), and
+/// each it read from there.
+fn all_of(board: &Board, dirs: &[PathBuf]) -> Vec<crate::watch::Changes> {
+    dirs.iter()
+        .map(|dir| {
+            let now = std::fs::read_dir(dir).into_iter().flatten().flatten().map(|entry| entry.path());
+            let read = board.sources.iter().filter(|s| s.brain().store.dir() == dir);
+            let read = read.flat_map(|s| s.brain().tasks.iter().filter_map(|t| t.path.clone()).collect::<Vec<_>>());
+            let entry = |f: &PathBuf| f.file_name().is_some_and(|n| n.to_string_lossy().starts_with(char::is_numeric));
+            let mut files: Vec<_> = now.chain(read).filter(entry).collect();
+            files.sort();
+            files.dedup();
+            crate::watch::Changes { dir: dir.clone(), files }
+        })
+        .collect()
+}
+
 /// An entry of the central brain, where these tests' entries are.
 fn k(id: u32) -> Key {
     Key::new(0, id)

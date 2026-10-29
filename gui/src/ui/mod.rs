@@ -274,7 +274,14 @@ impl BrainView {
         let watch = cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(watch::INTERVAL).await;
-                if this.update(cx, BrainView::follow_disk).is_err() {
+                let Ok(dirs) = this.update(cx, |view, _| view.watcher.dirs().to_vec()) else { break };
+                // Away from the window's thread: listing a brain of 10,000 entries took over 10 ms, every second.
+                let listed = cx.background_executor().spawn(async move {
+                    let listings = watch::list(&dirs);
+                    (dirs, listings)
+                });
+                let (dirs, listings) = listed.await;
+                if this.update(cx, |view, cx| view.follow_disk(&dirs, listings, cx)).is_err() {
                     break;
                 }
             }
@@ -462,8 +469,8 @@ impl BrainView {
     /// The selection stays on the same entry and whatever is being typed is kept. Under the locks, as input
     /// is, once there's something to read: a write landing between the reload and taking the files as seen
     /// would otherwise never be read.
-    fn follow_disk(&mut self, cx: &mut Context<Self>) {
-        if self.watcher.dirty() {
+    fn follow_disk(&mut self, dirs: &[PathBuf], listings: Vec<watch::Listing>, cx: &mut Context<Self>) {
+        if self.watcher.noticed(dirs, listings) {
             self.locked(|_| ());
             cx.notify();
         }

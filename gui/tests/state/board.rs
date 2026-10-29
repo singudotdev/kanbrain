@@ -297,7 +297,7 @@ fn a_dialog_on_an_entry_deleted_meanwhile_closes() {
         assert!(!matches!(f.board.mode, Mode::Normal), "{open} opens a dialog on #2");
         let store = Store::at(f.dir.path()).unwrap();
         store.delete(&f.on_disk(2)).unwrap();
-        f.board.reload_changed(&[f.dir.path().to_path_buf()]).unwrap();
+        f.board.reload_changed(&all_of(&f.board, &[f.dir.path().to_path_buf()])).unwrap();
         assert!(matches!(f.board.mode, Mode::Normal), "{open}: closed, not left taking the keys unseen");
         assert_eq!(f.board.message(), Some("closed: #2 is gone, deleted or moved meanwhile"));
     }
