@@ -301,6 +301,19 @@ impl Store {
         Ok((tasks, skipped))
     }
 
+    /// [`Store::load_entries`] of only `files`, entries' files of this folder: those gone since are left out.
+    pub(crate) fn load_files(&self, files: &[PathBuf]) -> (Vec<Task>, Vec<Skipped>) {
+        let mut tasks = Vec::new();
+        let mut skipped = Vec::new();
+        for path in files {
+            self.read.borrow_mut().remove(path);
+            if path.exists() {
+                self.read_entry(path.clone(), &mut tasks, &mut skipped);
+            }
+        }
+        (tasks, skipped)
+    }
+
     /// Reads the entry in the file at `path` into `tasks`, or why it doesn't read as one into `skipped`.
     fn read_entry(&self, path: PathBuf, tasks: &mut Vec<Task>, skipped: &mut Vec<Skipped>) {
         let file = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
@@ -508,8 +521,13 @@ fn forget_cut_writes(dir: &Path) {
     for file in files {
         let name = file.file_name();
         let name = name.to_string_lossy();
+        // By the name first: the lock is taken for every write, and reading the metadata of every entry's file for
+        // the few temporary files among them made it cost as much as the entries are many.
+        if !is_cut_write(&name) {
+            continue;
+        }
         let age = file.metadata().and_then(|m| m.modified()).ok().and_then(|at| at.elapsed().ok());
-        if is_cut_write(&name) && age.is_some_and(|age| age > CUT_WRITE_AGE) {
+        if age.is_some_and(|age| age > CUT_WRITE_AGE) {
             let _ = fs::remove_file(file.path());
         }
     }
@@ -656,7 +674,7 @@ pub fn find_project(start: &Path) -> Option<PathBuf> {
 
 /// Task files are the `.md` files in the folder, except the tag colors, the project's card and the
 /// central brain's list of projects.
-fn is_task_file(path: &Path) -> bool {
+pub(crate) fn is_task_file(path: &Path) -> bool {
     let other = [TAGS_FILE, projects::PROJECT_FILE, projects::REGISTRY_FILE];
     path.extension().is_some_and(|e| e == "md") && path.file_name().is_some_and(|n| !other.iter().any(|o| n == *o))
 }
