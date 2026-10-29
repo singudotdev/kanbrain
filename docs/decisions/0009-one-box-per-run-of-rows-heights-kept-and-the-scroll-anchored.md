@@ -18,10 +18,14 @@ heights of the rows it left out.
   list is. The list's `ScrollHandle` finds a row by its index among the children, so `Rows::frame` scrolls to the row
   it follows itself, by its place among the boxes.
 - A row never laid out is reckoned at the average height of the rows known, not drawn. The heights are kept by entry,
-  merged frame after frame, and never forgotten while the app runs. The average is that of every row known, not of the
-  last frame's rows, so it hardly moves as the list scrolls. Before any row was laid out, a row is reckoned at 48 px
-  and the view at 1,000 px.
-- When the heights reckoned for the rows above the first row in view change from one frame to the next (one laid out
+  merged frame after frame, and forgotten only when the rows' width changes (below). The average is that of every row
+  known, not of the last frame's rows, so it hardly moves as the list scrolls. It's added up anew each frame, a few
+  microseconds at 10,000 rows: a sum kept by the heights that changed drifts with the rounding of floats. Before any
+  row was laid out, a row is reckoned at 48 px and the view at 1,000 px.
+- The heights known hold for the rows' width they were laid out at. When the rows are laid out wider or narrower (the
+  window resized, the scrollbar's gutter), they're all dropped, and the average starts again from the rows laid out at
+  the new width: rows wrap onto other lines, and heights kept from before made a column thousands of pixels short.
+- When the heights reckoned for the rows above the first row drawn change from one frame to the next (one laid out
   at last, or the average moving), the scroll moves by the difference so that row stays where it was. This is what
   GPUI's [`list`](https://github.com/zed-industries/zed/blob/v1.23.2/crates/gpui/src/elements/list.rs) does with its
   logical scroll top. It happens only when the entries above that row are the same as in the last frame; when entries

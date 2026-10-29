@@ -1817,6 +1817,37 @@ fn most_laid_out(view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContex
 }
 
 #[gpui::test]
+fn a_long_columns_length_is_that_of_its_cards_as_they_wrap(cx: &mut gpui::TestAppContext) {
+    // 300 cards alike, a few of them laid out: those never laid out are reckoned as tall as those that were.
+    let titles: Vec<String> = (1..=300)
+        .map(|n| format!("task {n:03} with a title as long as one line of a wide column, and some more"))
+        .collect();
+    let (view, cx, _dir) = window(cx, &titles.iter().map(String::as_str).collect::<Vec<_>>());
+    let pitch_and_length = |view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext| {
+        let mut card = |id: u32| cx.debug_bounds(format!("card 0/{id}").leak()).expect("the newest cards are drawn");
+        // Over five cards past the first, which is selected and shows more.
+        let pitch = (card(294).top() - card(299).top()) / 5.;
+        let length = view.read_with(cx, |view, _| {
+            let scroll = &view.scroll.columns[0].scroll;
+            scroll.max_offset().y + scroll.bounds().size.height
+        });
+        (pitch, length)
+    };
+    next_frames(cx);
+    let (wide, length) = pitch_and_length(&view, cx);
+    // Within ten cards: the column's padding and the items that aren't cards add a few hundred pixels.
+    assert!((length - wide * 300.).abs() < wide * 10., "300 cards of {wide:?} each: {length:?} long");
+    // Narrower, the cards laid out wrap onto more lines: so do those reckoned.
+    cx.simulate_resize(gpui::size(px(600.), px(800.)));
+    next_frames(cx);
+    // Learnt from a layout, the heights reckon the frame after it.
+    redraw(cx);
+    let (narrow, length) = pitch_and_length(&view, cx);
+    assert!(narrow > wide, "the cards wrap onto more lines: {narrow:?}, were {wide:?}");
+    assert!((length - narrow * 300.).abs() < narrow * 10., "300 cards of {narrow:?} each: {length:?} long");
+}
+
+#[gpui::test]
 fn a_long_column_lays_out_only_the_cards_near_the_view(cx: &mut gpui::TestAppContext) {
     let (view, cx, _dir) = small_board_of(cx, 2000);
     // A view holds about ten cards: those, a view's worth on either side, and a box above and below for the rest.

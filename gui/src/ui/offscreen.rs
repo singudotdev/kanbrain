@@ -50,10 +50,9 @@ struct Seen {
     pad: Pixels,
     /// Space between two children.
     gap: Pixels,
-    /// The heights in [`Seen::heights`] added up, and how many there are: their average is reckoned for a row not
-    /// laid out yet. Of every row known, not only those near the view last, so it hardly changes as the list scrolls:
-    /// each change of it moves every row reckoned by it.
-    known: (Pixels, u32),
+    /// The rows' width when the heights known were laid out: wider or narrower, rows wrap onto other lines, so the
+    /// heights known then say nothing of those now.
+    width: Pixels,
     /// The children that stood in, in the last frame.
     #[cfg(test)]
     stood_in: Vec<usize>,
@@ -90,8 +89,14 @@ impl Rows {
         #[cfg(test)]
         self.most.set(self.most.get().max(laid));
         let anchor = if laid == seen.children.len() { self.learn(&mut seen) } else { None };
+        // Of every row known, not only those near the view last, so it hardly changes as the list scrolls: each change
+        // of it moves every row reckoned by it. Added up anew each frame: a few microseconds at 10,000 rows, and a sum
+        // kept by what changed would drift.
         #[expect(clippy::cast_precision_loss, reason = "a list holds far fewer than 2^23 rows")]
-        let typical = if seen.known.1 > 0 { seen.known.0 / seen.known.1 as f32 } else { FIRST_GUESS };
+        let typical = match seen.heights.len() {
+            0 => FIRST_GUESS,
+            known => seen.heights.values().copied().sum::<Pixels>() / known as f32,
+        };
         let height = |key: &Option<Key>| key.map_or(typical, |key| seen.heights.get(&key).copied().unwrap_or(typical));
         // Where each item goes, from the heights known or reckoned, in this frame's order.
         let mut y = seen.pad;
@@ -147,23 +152,24 @@ impl Rows {
         let mut slots = Vec::with_capacity(order.len());
         let mut child = 0;
         let mut follow_child = None;
-        let mut ix = 0;
-        while ix < order.len() {
+        // Where the box for the run of far rows so far is, among the slots.
+        let mut run = None;
+        for (ix, key) in order.iter().enumerate() {
             if !far(ix) {
+                run = None;
                 if Some(ix) == follow {
                     follow_child = Some(child);
                 }
                 slots.push(Slot::Draw);
-                (ix, child) = (ix + 1, child + 1);
-                continue;
+                child += 1;
+            } else if let Some(Slot::Box(tall)) = run.and_then(|at| slots.get_mut(at)) {
+                *tall += seen.gap + height(key);
+                slots.push(Slot::Skip);
+            } else {
+                run = Some(slots.len());
+                slots.push(Slot::Box(height(key)));
+                child += 1;
             }
-            let run = (ix..order.len()).take_while(|&ix| far(ix)).count();
-            #[expect(clippy::cast_precision_loss, reason = "a list holds far fewer than 2^23 children")]
-            let gaps = seen.gap * (run - 1) as f32;
-            let tall = order[ix..ix + run].iter().map(&height).sum::<Pixels>() + gaps;
-            slots.push(Slot::Box(tall));
-            slots.extend(std::iter::repeat_n(Slot::Skip, run - 1));
-            (ix, child) = (ix + run, child + 1);
         }
         let reckoned = order.iter().map(&height).collect();
         seen.reckoned = reckoned;
@@ -176,34 +182,34 @@ impl Rows {
     }
 
     /// Learns from the last frame's layout each row's height, the list's padding and gap; and which row was the first
-    /// in view, where the view should stay as long as the rows above it are the same.
+    /// drawn, where the view should stay as long as the rows above it are the same. Drawn near the view, it's in view
+    /// or above it, and the rows between it and the view were drawn too: as tall as laid out, they move nothing.
     fn learn(&self, seen: &mut Seen) -> Option<Key> {
         let view = self.scroll.bounds();
         let bounds: Vec<_> = (0..seen.children.len()).filter_map(|ix| self.scroll.bounds_for_item(ix)).collect();
-        let Seen { heights, children, reckoned, pad, gap, known, .. } = seen;
+        let Seen { heights, children, reckoned, pad, gap, width, .. } = seen;
+        // The first child's width: the rows', which the scrollbar's gutter narrows as the list gets long.
+        let now = bounds.first().map_or(*width, |first| first.size.width);
+        if now != *width {
+            heights.clear();
+            *width = now;
+        }
         for (child, bounds) in children.iter().zip(&bounds) {
             if let Child::Drawn(Some(key), ix) = child {
                 let height = bounds.size.height;
                 if let Some(was) = reckoned.get_mut(*ix) {
                     *was = height;
                 }
-                // As it was, it's left alone: added and taken out again every frame, the sum would drift.
-                match heights.insert(*key, height) {
-                    Some(was) if was == height => continue,
-                    Some(was) => known.0 -= was,
-                    None => known.1 += 1,
-                }
-                known.0 += height;
+                heights.insert(*key, height);
             }
         }
         if let Some(first) = bounds.first() {
             *pad = first.top() - view.top();
             *gap = bounds.get(1).map_or(px(0.), |next| next.top() - first.bottom());
         }
-        let shown_top = view.top() - self.scroll.offset().y;
-        children.iter().zip(&bounds).find_map(|(child, row)| match child {
-            Child::Drawn(Some(key), _) if row.bottom() > shown_top => Some(*key),
-            _ => None,
+        children.iter().find_map(|child| match child {
+            Child::Drawn(Some(key), _) => Some(*key),
+            Child::Drawn(None, _) | Child::Box => None,
         })
     }
 }
