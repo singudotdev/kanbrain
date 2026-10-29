@@ -345,6 +345,30 @@ fn an_entry_another_program_deleted_takes_the_links_to_it_from_the_projects_othe
 }
 
 #[test]
+fn a_brain_that_fails_to_reload_leaves_the_others_reloaded() {
+    use kanbrain_core::model::RepoLink;
+    let (central, _code) = projects();
+    let mut board = Board::open(central.path(), None).unwrap();
+    board.sources[2].brain_mut().link(1, &[], &[RepoLink { repo: "api".into(), id: 1 }]).unwrap();
+    // Edited in place by another program, unseen yet: web's store won't save over it to drop the link.
+    let web = board.brain(2).task(1).unwrap().path.clone().unwrap();
+    let text = std::fs::read_to_string(&web).unwrap();
+    std::fs::write(&web, text + "\n").unwrap();
+    let api = board.brain(1).task(1).unwrap().path.clone().unwrap();
+    std::fs::remove_file(&api).unwrap();
+    let mut post = board.brain(3).task(1).unwrap().clone();
+    let was = post.path.clone().unwrap();
+    post.title = "post, edited".into();
+    Store::at(board.brain(3).store.dir()).unwrap().save(&mut post).unwrap();
+    let changes = [
+        crate::watch::Changes { dir: api.parent().unwrap().to_path_buf(), files: vec![api] },
+        crate::watch::Changes { dir: was.parent().unwrap().to_path_buf(), files: vec![was, post.path.unwrap()] },
+    ];
+    assert!(board.reload_changed(&changes).is_err(), "web's repair refused");
+    assert_eq!(board.brain(3).task(1).unwrap().title, "post, edited", "blog's change read all the same");
+}
+
+#[test]
 fn entries_related_across_a_projects_repositories_show_on_both() {
     use kanbrain_core::model::RepoLink;
     let (central, _code) = projects();

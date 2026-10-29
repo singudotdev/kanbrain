@@ -99,12 +99,43 @@ fn temporary_and_other_files_are_ignored() {
     assert_eq!(changed(&mut watcher), 0);
 }
 
+/// A file as it is now, as the board's stores know one they just read or wrote.
+fn now(path: &Path) -> Option<(Option<SystemTime>, u64)> {
+    fs::metadata(path).ok().map(|meta| (meta.modified().ok(), meta.len()))
+}
+
 #[test]
 fn sync_takes_own_writes_as_seen() {
     let dir = tempfile::tempdir().unwrap();
     let mut watcher = Watcher::new(vec![dir.path().to_path_buf()]);
     fs::write(dir.path().join("0001-a.md"), "# a").unwrap();
-    watcher.sync(vec![dir.path().to_path_buf()]);
+    watcher.sync(vec![dir.path().to_path_buf()], now);
+    assert_eq!(changed(&mut watcher), 0);
+}
+
+#[test]
+fn sync_takes_as_seen_only_the_files_as_the_board_read_or_wrote_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let [a, b, c, d] = ["0001-a.md", "0002-b.md", "0003-c.md", "0004-d.md"].map(|name| dir.path().join(name));
+    for file in [&a, &b, &c] {
+        fs::write(file, "# x").unwrap();
+    }
+    let mut watcher = Watcher::new(vec![dir.path().to_path_buf()]);
+    changed(&mut watcher);
+    let read = [&a, &c].map(|file| (file.clone(), now(file)));
+    // Another program, unseen yet: an edit in place, which the folder's time doesn't show, and a delete.
+    fs::write(&a, "# a, edited elsewhere").unwrap();
+    fs::remove_file(&c).unwrap();
+    // The board: an entry added, and one deleted.
+    fs::write(&d, "# d").unwrap();
+    fs::remove_file(&b).unwrap();
+    let known = |file: &Path| match read.iter().find(|(read, _)| read == file) {
+        Some((_, was)) => *was,
+        None => now(file),
+    };
+    watcher.sync(vec![dir.path().to_path_buf()], known);
+    let files: Vec<_> = watcher.changed().into_iter().flat_map(|c| c.files).collect();
+    assert_eq!(files, [a, c], "what another program did, never what the board did");
     assert_eq!(changed(&mut watcher), 0);
 }
 
@@ -113,7 +144,7 @@ fn a_folder_new_to_sync_is_read_again() {
     let (a, b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let mut watcher = Watcher::new(vec![a.path().to_path_buf()]);
     fs::write(b.path().join("0001-a.md"), "# a").unwrap();
-    watcher.sync(vec![a.path().to_path_buf(), b.path().to_path_buf()]);
+    watcher.sync(vec![a.path().to_path_buf(), b.path().to_path_buf()], now);
     let dirs: Vec<_> = watcher.changed().into_iter().map(|c| c.dir).collect();
     assert_eq!(dirs, [b.path()], "read before its lock was held");
     assert_eq!(changed(&mut watcher), 0);

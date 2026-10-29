@@ -106,18 +106,21 @@ impl Watcher {
         changes
     }
 
-    /// Watches `dirs` from now on, taking the state of those already watched as seen without asking: after the
-    /// board wrote to them itself, so its own saves don't read as outside changes and reload it for nothing, and
-    /// after a reload, which may have found projects added or gone. A folder new to it reads as changed unless
-    /// empty, since the board read it without holding its lock: it's read again, under the locks, next time.
-    pub fn sync(&mut self, dirs: Vec<PathBuf>) {
+    /// Watches `dirs` from now on, taking the files of those already watched as seen where they are as `known`
+    /// says the board read or wrote them (`None` for none, or deleted): after the board wrote to them itself, so
+    /// its own saves don't read as outside changes and reload it for nothing, and after a reload, which may have
+    /// found projects added or gone. Any other change reads as one at the next look: a file another program wrote
+    /// over in place, which the last look passed over by the folder's time, would otherwise be taken as read. A
+    /// folder new to it reads as changed unless empty, since the board read it without holding its lock: it's read
+    /// again, under the locks, next time.
+    pub fn sync(&mut self, dirs: Vec<PathBuf>, known: impl Fn(&Path) -> Option<(Option<SystemTime>, u64)>) {
         let last = dirs
             .iter()
             .map(|dir| match self.dirs.iter().position(|d| d == dir) {
                 // Not written to since it was listed, by the folder's time: a write of another program in that tick
                 // reads as a change at the next look, rather than as seen.
                 Some(at) if folder_time(dir) == self.last[at].changed => std::mem::take(&mut self.last[at]),
-                Some(_) => listing(dir),
+                Some(at) => own(dir, &self.last[at], listing(dir), &known),
                 None => Listing::default(),
             })
             .collect();
@@ -129,6 +132,36 @@ impl Watcher {
 /// Lists `dirs`: what the window's timer has done away from its thread, as listing a long brain takes a while.
 pub fn list(dirs: &[PathBuf]) -> Vec<Listing> {
     dirs.iter().map(|dir| listing(dir)).collect()
+}
+
+/// `now`, but with each file that differs from `was` and isn't as the board read or wrote it (`known`) as `was` had
+/// it, and then to be listed again.
+fn own(
+    dir: &Path,
+    was: &Listing,
+    mut now: Listing,
+    known: impl Fn(&Path) -> Option<(Option<SystemTime>, u64)>,
+) -> Listing {
+    let state = |files: &Snapshot, name: &str| {
+        files.binary_search_by(|file| file.0.as_str().cmp(name)).ok().map(|at| (files[at].1, files[at].2))
+    };
+    let names: Vec<String> = differences(&was.files, &now.files).into_iter().map(str::to_owned).collect();
+    for name in names {
+        let then = state(&was.files, &name);
+        if known(&dir.join(&name)) == state(&now.files, &name) {
+            continue;
+        }
+        match (now.files.binary_search_by(|file| file.0.cmp(&name)), then) {
+            (Ok(at), Some((time, len))) => now.files[at] = (name, time, len),
+            (Ok(at), None) => {
+                now.files.remove(at);
+            }
+            (Err(at), Some((time, len))) => now.files.insert(at, (name, time, len)),
+            (Err(_), None) => {}
+        }
+        now.at = None;
+    }
+    now
 }
 
 /// Whether the folder's entries are as `last` listed them, by the folder's time alone: it hasn't changed since, and

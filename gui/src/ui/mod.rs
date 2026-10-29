@@ -416,7 +416,7 @@ impl BrainView {
         self.board.lock_found_brains(&mut locks, &mut tried);
         let result = input(self);
         self.board.input_done();
-        self.watcher.sync(self.board.watched_dirs());
+        self.watcher.sync(self.board.watched_dirs(), |file| self.board.known(file));
         drop(locks);
         result
     }
@@ -490,7 +490,7 @@ impl BrainView {
         }
         // Loading may have written files itself, when it fixed several tasks left running, and may
         // have found projects added or gone.
-        self.watcher.sync(self.board.watched_dirs());
+        self.watcher.sync(self.board.watched_dirs(), |file| self.board.known(file));
     }
 
     /// Quits when the board asked to, runs a requested `$EDITOR`, shares the selected text, and redraws.

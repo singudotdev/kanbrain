@@ -598,3 +598,15 @@ fn opening_waits_for_a_brain_another_program_is_writing() {
     writer.join().unwrap();
     assert_eq!(opening.join().unwrap().unwrap(), 4);
 }
+
+#[test]
+fn the_boards_own_writes_never_read_as_changes() {
+    let mut f = Fixture::new(&["feature", "bug"]);
+    let mut watcher = crate::watch::Watcher::new(f.board.watched_dirs());
+    watcher.changed();
+    f.board.select(k(1));
+    f.press(KeyCode::Char('s'));
+    assert_eq!(f.status(1), Status::Doing);
+    watcher.sync(f.board.watched_dirs(), |file| f.board.known(file));
+    assert!(watcher.changed().is_empty(), "the start it saved, known as written");
+}

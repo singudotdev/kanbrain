@@ -256,6 +256,12 @@ impl Store {
         }
     }
 
+    /// The file at `path` as this store last read or wrote it: when it last changed, and its size. `None` for a file
+    /// it hasn't, or deleted since. What it is now differing, another program changed it.
+    pub fn known(&self, path: &Path) -> Option<(Option<SystemTime>, u64)> {
+        self.read.borrow().get(path).copied()
+    }
+
     /// The data folder.
     pub fn dir(&self) -> &Path {
         &self.dir

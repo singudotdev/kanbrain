@@ -385,3 +385,22 @@ fn saving_never_brings_back_an_entry_deleted_on_disk_since_it_was_read() {
     assert!(store.save(&mut tasks[0]).is_err());
     assert!(!file.exists(), "not written back");
 }
+
+#[test]
+fn the_store_knows_each_file_as_it_last_read_or_wrote_it() {
+    let dir = tempfile::tempdir().unwrap();
+    Store::at(dir.path()).unwrap().save(&mut Task::new(1, "Fix".into(), now())).unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let (mut tasks, _) = store.load_entries().unwrap();
+    let file = tasks[0].path.clone().unwrap();
+    assert_eq!(store.known(&file), seen(&file), "as read");
+    fs::write(&file, fs::read_to_string(&file).unwrap() + "\n").unwrap();
+    assert_ne!(store.known(&file), seen(&file), "another program's write isn't");
+    tasks[0] = store.load_entries().unwrap().0.remove(0);
+    tasks[0].title = "Fix it".into();
+    store.save(&mut tasks[0]).unwrap();
+    let renamed = tasks[0].path.clone().unwrap();
+    assert_eq!((store.known(&file), store.known(&renamed)), (None, seen(&renamed)), "as written, under its new name");
+    store.delete(&tasks[0]).unwrap();
+    assert_eq!(store.known(&renamed), None, "deleted");
+}

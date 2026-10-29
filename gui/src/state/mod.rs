@@ -490,19 +490,26 @@ impl Board {
         let files = |s: &Source| changes.iter().find(|c| c.dir == s.brain().store.dir()).map(|c| &c.files);
         let projects: Vec<String> =
             self.sources.iter().filter(|s| files(s).is_some()).filter_map(|s| s.project.clone()).collect();
+        // Every brain, though one fails: the watcher took all their changes as seen.
+        let mut failed = None;
         for at in 0..self.sources.len() {
             let source = &self.sources[at];
             // Only the files that changed: reading every entry of a long brain again took a tenth of a second.
-            if let Some(files) = files(source) {
-                self.sources[at].brain_mut().reload_files(files)?;
+            let reloaded = if let Some(files) = files(source) {
+                self.sources[at].brain_mut().reload_files(files)
             // A project's other repositories mended, none of their files read: an entry deleted in one drops the
             // links the others have to it.
             } else if source.project.as_ref().is_some_and(|p| projects.contains(p)) {
-                self.sources[at].brain_mut().reload_files(&[])?;
+                self.sources[at].brain_mut().reload_files(&[])
+            } else {
+                Ok(())
+            };
+            if let Err(e) = reloaded {
+                failed.get_or_insert(e);
             }
         }
         self.after_load();
-        Ok(())
+        failed.map_or(Ok(()), Err)
     }
 
     /// Reports what is newly skipped, files and repositories left out, and puts the selection somewhere visible.
