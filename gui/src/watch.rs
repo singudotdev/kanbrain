@@ -3,6 +3,7 @@
 //! listing of a few hundred small files every second is cheap, and works the same on every platform
 //! and on network drives, where events are unreliable.
 
+use std::cmp::Ordering;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
@@ -190,31 +191,28 @@ fn listing(dir: &Path) -> Listing {
 
 /// The names of the files in one listing and not the other, or in both but changed: both sorted by name.
 fn differences<'a>(was: &'a Snapshot, now: &'a Snapshot) -> Vec<&'a str> {
-    let (mut old, mut new) = (0, 0);
+    // Walked by iterators, not by indices: each step takes a file off one or both, so the walk ends.
+    let (mut was, mut now) = (was.iter().peekable(), now.iter().peekable());
     let mut names = Vec::new();
     loop {
-        match (was.get(old), now.get(new)) {
-            (Some(a), Some(b)) if a.0 == b.0 => {
-                if a != b {
+        let order = match (was.peek(), now.peek()) {
+            (Some(a), Some(b)) => a.0.cmp(&b.0),
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (None, None) => return names,
+        };
+        match order {
+            Ordering::Equal => {
+                if let (Some(a), Some(b)) = (was.next(), now.next())
+                    && a != b
+                {
                     names.push(b.0.as_str());
                 }
-                (old, new) = (old + 1, new + 1);
-            }
-            // Added: before the next one listed then, or after the last.
-            (Some(a), Some(b)) if b.0 < a.0 => {
-                names.push(b.0.as_str());
-                new += 1;
-            }
-            (None, Some(b)) => {
-                names.push(b.0.as_str());
-                new += 1;
             }
             // Gone: before the next one listed now, or after the last.
-            (Some(a), _) => {
-                names.push(a.0.as_str());
-                old += 1;
-            }
-            (None, None) => return names,
+            Ordering::Less => names.extend(was.next().map(|a| a.0.as_str())),
+            // Added: before the next one listed then, or after the last.
+            Ordering::Greater => names.extend(now.next().map(|b| b.0.as_str())),
         }
     }
 }
