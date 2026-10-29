@@ -228,7 +228,7 @@ fn a_brain_read_again_is_indexed_again() {
     let mut cli = Brain::open(Store::at(central.path()).unwrap()).unwrap();
     cli.set_status(1, Status::Done).unwrap();
     cli.update(2, "entry 2", vec!["fresh".into()]).unwrap();
-    board.reload_changed(&[central.path().to_path_buf()]).unwrap();
+    board.reload_changed(&all_of(&board, &[central.path().to_path_buf()])).unwrap();
     agrees(&board, "kb changed it and the board read it again");
     assert!(board.showing().tags.contains_key("fresh"), "the tag kb added");
     board.reload().unwrap();

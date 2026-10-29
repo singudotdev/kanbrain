@@ -588,3 +588,88 @@ fn deleting_an_entry_logs_nothing_in_those_related_to_it() {
     f.brain.delete(2).unwrap();
     assert_eq!(f.reloaded()[0].activity.len(), 1, "only the link: its going is the entry's, not a change to this one");
 }
+
+/// Another program's brain over the fixture's folder, as an agent's `kb` opens it.
+fn other(f: &Fixture) -> Brain {
+    Brain::open(Store::at(f.dir.path()).unwrap()).unwrap()
+}
+
+/// Where the brain read the entry with this id from.
+fn path(brain: &Brain, id: u32) -> PathBuf {
+    brain.task(id).unwrap().path.clone().unwrap()
+}
+
+#[test]
+fn reloading_files_reads_those_changed_added_or_deleted_and_no_other() {
+    let mut f = Fixture::with_titles(&["one", "two", "three", "four"]);
+    let mut kb = other(&f);
+    kb.add_comment(1, "seen").unwrap();
+    // A new title, a new file name: the old one is gone.
+    kb.update(2, "two renamed", Vec::new()).unwrap();
+    let five = kb.add(NewEntry { title: "five".into(), ..NewEntry::default() }).unwrap();
+    kb.delete(3).unwrap();
+    kb.add_comment(4, "not listed").unwrap();
+    let files = [path(&kb, 1), path(&f.brain, 2), path(&kb, 2), path(&kb, five), path(&f.brain, 3)];
+    f.brain.reload_files(&files).unwrap();
+    let mut ids: Vec<u32> = f.brain.tasks.iter().map(|t| t.id).collect();
+    ids.sort_unstable();
+    assert_eq!(ids, [1, 2, 4, five], "the deleted entry gone, the added one there, the renamed one once");
+    assert_eq!(f.brain.task(1).unwrap().comments.len(), 1, "a changed file is read again");
+    assert_eq!(f.brain.task(2).unwrap().title, "two renamed");
+    assert_eq!(f.brain.task(4).unwrap().comments, [], "a file left out stays as read");
+}
+
+#[test]
+fn reloading_a_file_deleted_by_hand_drops_the_links_to_it() {
+    let mut f = Fixture::with_titles(&["one", "two"]);
+    f.brain.toggle_link(1, 2).unwrap();
+    let gone = path(&f.brain, 2);
+    std::fs::remove_file(&gone).unwrap();
+    f.brain.reload_files(&[gone]).unwrap();
+    assert!(f.brain.task(1).unwrap().links.is_empty(), "in memory");
+    assert!(f.reloaded()[0].links.is_empty(), "and on disk");
+}
+
+#[test]
+fn reloading_a_file_that_no_longer_reads_skips_it_until_it_does() {
+    let mut f = Fixture::with_titles(&["one", "two"]);
+    let file = path(&f.brain, 1);
+    let text = std::fs::read_to_string(&file).unwrap();
+    std::fs::write(&file, "not an entry").unwrap();
+    f.brain.reload_files(std::slice::from_ref(&file)).unwrap();
+    assert!(f.brain.task(1).is_none(), "skipped");
+    let name = file.file_name().unwrap().to_string_lossy().into_owned();
+    assert!(matches!(&f.brain.warnings[..], [w] if w.starts_with(&format!("{name}: "))), "{:?}", f.brain.warnings);
+    std::fs::write(&file, text).unwrap();
+    f.brain.reload_files(&[file]).unwrap();
+    assert!(f.brain.task(1).is_some() && f.brain.warnings.is_empty(), "read again: {:?}", f.brain.warnings);
+}
+
+#[test]
+fn reloading_a_copy_of_an_entry_gives_the_copy_a_new_id() {
+    let mut f = Fixture::with_titles(&["one", "two"]);
+    let copy = f.dir.path().join("0001-one (conflicted copy).md");
+    std::fs::copy(path(&f.brain, 1), &copy).unwrap();
+    f.brain.reload_files(&[copy]).unwrap();
+    let mut ids: Vec<u32> = f.brain.tasks.iter().map(|t| t.id).collect();
+    ids.sort_unstable();
+    assert_eq!(ids, [1, 2, 3], "as a full load does");
+}
+
+#[test]
+fn reloading_the_tag_colors_file_reads_the_colors_again() {
+    let mut f = Fixture::new(vec![{
+        let mut task = Task::new(1, "one".into(), now());
+        task.tags = vec!["ui".into()];
+        task
+    }]);
+    let mut kb = other(&f);
+    let tags = kb.store.dir().join(store::TAGS_FILE);
+    let before = std::fs::read_to_string(&tags).unwrap();
+    kb.tag_colors = crate::tags::TagColors::default();
+    kb.tag_colors.assign(["ux".to_string()].iter());
+    kb.store.save_tag_colors(&kb.tag_colors).unwrap();
+    assert_ne!(std::fs::read_to_string(&tags).unwrap(), before);
+    f.brain.reload_files(&[tags]).unwrap();
+    assert!(f.brain.tag_colors.chip("ux").is_some(), "the colors as the file has them now");
+}

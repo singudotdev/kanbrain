@@ -34,6 +34,8 @@ fn a_save_that_stops_after_telling_the_agent_asks_again_with_the_note() {
     f.type_text("!");
     f.press(KeyCode::Enter);
     f.type_text("renamed");
+    // As each `kb` does, reading the files first: the board saved over the agent's since.
+    agent.reload().unwrap();
     agent.update(1, "feature, the agent's", vec![]).unwrap();
     f.board.reload().unwrap();
     f.press(KeyCode::Enter);

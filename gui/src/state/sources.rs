@@ -16,6 +16,7 @@ use kanbrain_core::store::{BrainLock, PROJECT_DIR, Store};
 use std::cell::OnceCell;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::SystemTime;
 
 /// An entry in one of the brains: the brain's index in [`Board::sources`], and the entry's id there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -706,5 +707,11 @@ impl Board {
         // Those left out too, so one repaired is shown.
         dirs.extend(self.skipped.iter().map(|s| s.dir.clone()));
         dirs
+    }
+
+    /// The file at `path` as the board last read or wrote it (see [`Store::known`]).
+    pub fn known(&self, path: &Path) -> Option<(Option<SystemTime>, u64)> {
+        let store = self.sources.iter().map(|s| &s.brain().store).find(|store| Some(store.dir()) == path.parent())?;
+        store.known(path)
     }
 }

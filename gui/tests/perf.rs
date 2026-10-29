@@ -79,6 +79,9 @@ fn measure(cx: &mut gpui::TestAppContext, todo: u32) {
         cx.executor().advance_clock(crate::watch::INTERVAL);
         cx.run_until_parked();
     });
+    // Of that and of a file reloaded, what the app does away from the window's thread, where the test does it all.
+    let dirs = view.read_with(cx, |view, _| view.watcher.dirs().to_vec());
+    let listing = average(5, || drop(crate::watch::list(&dirs)));
     // What another program's write to one entry takes the window: noticing it, reading it again, and drawing it.
     let path = dir.path().join(format!("{todo:04}-task-{todo}-with-a-title-about-as-long-as-most.md"));
     let mut round = 0;
@@ -100,7 +103,8 @@ fn measure(cx: &mut gpui::TestAppContext, todo: u32) {
     });
     eprintln!(
         "PERF todo={todo}: open {opened:?}, open+shown {shown:?}, frame {frame:?}, notified frame {notified:?}, scroll \
-         {scroll:?}, idle poll {idle:?}, one file reloaded {reload:?}, search key {search:?}"
+         {scroll:?}, idle poll {idle:?}, one file reloaded {reload:?}, of which listing the folders {listing:?}, search \
+         key {search:?}"
     );
 }
 
