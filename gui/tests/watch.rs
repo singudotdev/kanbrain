@@ -75,6 +75,20 @@ fn a_folder_unchanged_a_tick_after_its_listing_is_not_listed_again() {
 }
 
 #[test]
+fn a_folder_kept_to_the_nanosecond_is_trusted_a_fine_tick_after_it_changed() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("0001-a.md"), "# a").unwrap();
+    let mut listed = listing(dir.path());
+    let changed = listed.changed.unwrap();
+    let nanos = changed.duration_since(SystemTime::UNIX_EPOCH).unwrap().subsec_nanos();
+    assert_ne!(nanos, 0, "a file system keeping times finer than a second");
+    listed.at = Some(changed + FINE_TICK);
+    assert!(!unchanged(dir.path(), &listed), "listed in its tick: a change then may have left the time as it was");
+    listed.at = Some(changed + FINE_TICK + Duration::from_millis(1));
+    assert!(unchanged(dir.path(), &listed), "a fine tick after, not two seconds");
+}
+
+#[test]
 fn a_listing_the_same_as_the_last_notices_nothing() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(dir.path().join("0001-a.md"), "# a").unwrap();
@@ -190,4 +204,22 @@ fn the_timers_listing_is_taken_under_the_locks_while_the_folder_holds_still() {
     let files: Vec<_> = watcher.changed().into_iter().flat_map(|c| c.files).collect();
     assert_eq!(files, [dir.path().join("0001-a.md")], "as the timer listed it");
     assert!(watcher.noticed(&dirs, list(&dirs)), "the later edit, at the timer's next look");
+}
+
+#[test]
+fn the_timers_listing_is_not_taken_once_the_folder_changed_since() {
+    let dir = tempfile::tempdir().unwrap();
+    let [a, b] = ["0001-a.md", "0002-b.md"].map(|name| dir.path().join(name));
+    fs::write(&a, "# a").unwrap();
+    let mut watcher = Watcher::new(vec![dir.path().to_path_buf()]);
+    changed(&mut watcher);
+    fs::write(&a, "# a, edited").unwrap();
+    let dirs = watcher.dirs().to_vec();
+    let mut listings = list(&dirs);
+    listings[0].at = listings[0].changed.map(|changed| changed + TICK * 2);
+    assert!(watcher.noticed(&dirs, listings));
+    std::thread::sleep(Duration::from_millis(20));
+    fs::write(&b, "# b").unwrap();
+    let files: Vec<_> = watcher.changed().into_iter().flat_map(|c| c.files).collect();
+    assert_eq!(files, [a, b], "listed again: the timer's listing missed what was added after it");
 }

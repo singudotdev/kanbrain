@@ -27,6 +27,9 @@ exclude_re = [
     # The highlight of the form's tags list (by its line, so the row the list follows stays tested): a color, and the
     # window tests read bounds, not colors (the state tests check which tag it is, `Form::tag_sel`).
     'gui/src/ui/dialogs/form\.rs:168:.*replace == with != in tags_field',
+    # After the board's writes, a folder whose time shows nothing written since keeps its last listing: listing it
+    # again comes to the same, only slower.
+    'gui/src/watch\.rs:.*replace match guard folder_time\(dir\) == self\.last\[at\]\.changed with false in Watcher::sync$',
     # Runs the user's editor and waits for it: the choice of editor (`editor_of`) is what tests check.
     'gui/src/ui/mod\.rs:.*(replace run_editor_on -> Result| in run_editor_on$)',
     # A leftover exactly CUT_WRITE_AGE old, to the nanosecond, is the only one `>=` would delete too.
