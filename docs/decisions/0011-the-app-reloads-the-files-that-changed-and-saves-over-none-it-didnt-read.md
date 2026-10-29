@@ -30,6 +30,11 @@ disk to ask instead: the folders have to be listed to find what changed.
   wrote it (`Store::save`), comparing its time and length
   ([`Metadata::modified`](https://doc.rust-lang.org/1.88.0/std/fs/struct.Metadata.html#method.modified)): written
   from memory, what the other program wrote would be lost. The app says so, and the next reload has it.
+- After the board writes, the watcher takes as seen only the files as the board's stores read or wrote them
+  (`Store::known`, `watch::Watcher::sync`). Taking the folder's listing then as seen, a file written over in place
+  that the last look passed over by the folder's time would count as read: the board would show it as it was, and
+  refuse every save of it.
+- A brain whose reload fails leaves the others reloaded: the watcher took all their changes as seen.
 
 ## Consequences
 
