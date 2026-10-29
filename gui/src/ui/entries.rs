@@ -47,14 +47,11 @@ pub fn draw(board: &Board, rows: &Rows, follow: bool, cx: &mut Context<BrainView
         return card().flex_1().child(header).child(empty);
     }
     let follow = entries.iter().position(|(key, _)| Some(*key) == board.selected).filter(|_| follow);
-    if let Some(row) = follow {
-        rows.scroll.scroll_to_item(row);
-    }
     let mut frame = rows.frame(entries.iter().map(|&(key, _)| Some(key)).collect(), follow);
     let items: Vec<_> = entries
         .iter()
         .enumerate()
-        .map(|(row, &(key, entry))| frame.child(|| entry_row(board, row, key, entry, cx).into_any_element()))
+        .filter_map(|(row, &(key, entry))| frame.child(|| entry_row(board, row, key, entry, cx).into_any_element()))
         .collect();
     let list = frame
         .finish(div())

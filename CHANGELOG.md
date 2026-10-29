@@ -14,6 +14,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The kanban app works out its columns, their counts, each entry's related entries, the tags in use and the tasks
   waiting for an answer once per change of the brains, the scope or the search, not on every frame, and finds an
   entry by its id directly: with 10,000 tasks to do, building a frame takes 1.6 ms.
+- The kanban app's long lists draw only the rows in view and near it, with one empty box standing in for each run
+  of rows elsewhere, and keep every row's height once laid out: with 10,000 tasks to do, the board shows in a third of
+  a second rather than 8.6, a search key takes 41 ms rather than 3 s, and a frame costs the same as with 1,000. The
+  view stays on the row it shows as rows above it are laid out, and a list scrolled to its end stays there.
 
 ## [0.6.7] - 2026-10-28
 

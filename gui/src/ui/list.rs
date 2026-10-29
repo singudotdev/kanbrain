@@ -48,9 +48,6 @@ pub fn draw(board: &Board, rows: &Rows, follow: bool, cx: &mut Context<BrainView
         }
     }
     let follow_row = follow_row.filter(|_| follow);
-    if let Some(index) = follow_row {
-        rows.scroll.scroll_to_item(index);
-    }
     let order = items.iter().map(|item| match item {
         Item::Row(key, _) => Some(*key),
         Item::Other(_) => None,
@@ -58,7 +55,7 @@ pub fn draw(board: &Board, rows: &Rows, follow: bool, cx: &mut Context<BrainView
     let mut frame = rows.frame(order.collect(), follow_row);
     let items: Vec<_> = items
         .into_iter()
-        .map(|item| match item {
+        .filter_map(|item| match item {
             Item::Row(key, task) => {
                 frame.child(|| menu::on_right_click(row(board, key, task, now, cx), key, cx).into_any_element())
             }
