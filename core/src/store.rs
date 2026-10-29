@@ -5,11 +5,12 @@ use crate::projects;
 use crate::tags::TagColors;
 use anyhow::{Context, Result, bail};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fs;
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 /// Tag color assignments; lives next to the task files but isn't a task.
 pub(crate) const TAGS_FILE: &str = "tags.md";
@@ -32,6 +33,17 @@ pub struct Store {
     dir: PathBuf,
     /// While recording (see [`Store::record`]), each file written or deleted as it was before.
     journal: RefCell<Option<Vec<Change>>>,
+    /// Each entry's file as this store last read or wrote it: [`Store::save`] refuses to write over one another
+    /// program changed since, which would lose what it wrote.
+    read: RefCell<HashMap<PathBuf, Seen>>,
+}
+
+/// When a file last changed, and its size: what tells it changed without reading it.
+type Seen = (Option<SystemTime>, u64);
+
+/// The file at `path` as it is now, if it's there.
+fn seen(path: &Path) -> Option<Seen> {
+    fs::metadata(path).ok().map(|meta| (meta.modified().ok(), meta.len()))
 }
 
 /// A markdown file [`Store::load_entries`] didn't read as an entry, said as `{file}: {why}`.
@@ -180,7 +192,7 @@ impl Store {
             let format = format!("{}\n", crate::migrate::FORMAT);
             write_file(&dir.join(crate::migrate::FORMAT_FILE), &format)?;
         }
-        Ok(Self { dir, journal: RefCell::new(None) })
+        Ok(Self { dir, journal: RefCell::new(None), read: RefCell::default() })
     }
 
     /// Takes this brain's write lock, waiting while another program holds it, until the returned guard is
@@ -279,27 +291,37 @@ impl Store {
         let mut tasks = Vec::new();
         let mut skipped = Vec::new();
         let entries = fs::read_dir(&self.dir).with_context(|| format!("reading {}", self.dir.display()))?;
+        self.read.borrow_mut().clear();
         for entry in entries {
             let path = entry?.path();
-            if !is_task_file(&path) {
-                continue;
-            }
-            let file = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
-            let parsed = read_text(&path).map_err(|e| SkipReason::Unreadable(e.to_string())).and_then(|text| {
-                Task::parse(&text).map_err(|e| match e {
-                    ParseError::MissingId => SkipReason::NoId,
-                    ParseError::Line(why) => SkipReason::Broken(why),
-                })
-            });
-            match parsed {
-                Ok(mut task) => {
-                    task.path = Some(path);
-                    tasks.push(task);
-                }
-                Err(why) => skipped.push(Skipped { file, why }),
+            if is_task_file(&path) {
+                self.read_entry(path, &mut tasks, &mut skipped);
             }
         }
         Ok((tasks, skipped))
+    }
+
+    /// Reads the entry in the file at `path` into `tasks`, or why it doesn't read as one into `skipped`.
+    fn read_entry(&self, path: PathBuf, tasks: &mut Vec<Task>, skipped: &mut Vec<Skipped>) {
+        let file = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+        // Before reading: changed in between, the file reads as changed since, never as read when it wasn't.
+        let was = seen(&path);
+        let parsed = read_text(&path).map_err(|e| SkipReason::Unreadable(e.to_string())).and_then(|text| {
+            Task::parse(&text).map_err(|e| match e {
+                ParseError::MissingId => SkipReason::NoId,
+                ParseError::Line(why) => SkipReason::Broken(why),
+            })
+        });
+        match parsed {
+            Ok(mut task) => {
+                if let Some(was) = was {
+                    self.read.borrow_mut().insert(path.clone(), was);
+                }
+                task.path = Some(path);
+                tasks.push(task);
+            }
+            Err(why) => skipped.push(Skipped { file, why }),
+        }
     }
 
     /// Writes atomically and renames the file when the title (slug) changed.
@@ -316,11 +338,27 @@ impl Store {
         if task.path.as_ref() != Some(&path) && path.exists() {
             bail!("{} is there and couldn't be read as #{}: fix or move it, then try again", path.display(), task.id);
         }
+        // Changed by another program since it was read (an editor writing over the file, which the app's watcher
+        // takes a second to notice) or deleted: written from memory, what it holds now would be lost.
+        if let Some(old) = &task.path
+            && let Some(was) = self.read.borrow().get(old).copied()
+            && seen(old) != Some(was)
+        {
+            bail!("{} changed on disk since it was read: not saved over it, read it again first", old.display());
+        }
         self.remember(&path);
         if let Some(old) = &task.path {
             self.remember(old);
         }
         write_file(&path, &task.to_markdown())?;
+        let mut read = self.read.borrow_mut();
+        if let Some(old) = &task.path {
+            read.remove(old);
+        }
+        if let Some(now) = seen(&path) {
+            read.insert(path.clone(), now);
+        }
+        drop(read);
         // A new title means a new file name: remove the file saved under the old one.
         if let Some(old) = task.path.replace(path)
             && Some(&old) != task.path.as_ref()
@@ -338,6 +376,7 @@ impl Store {
             bail!("refusing to delete {}: not in {}", path.display(), self.dir.display());
         }
         self.remember(path);
+        self.read.borrow_mut().remove(path);
         remove_file(path).with_context(|| format!("deleting {}", path.display()))
     }
 

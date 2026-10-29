@@ -166,7 +166,10 @@ fn a_thread_holding_a_brains_lock_takes_it_again_without_waiting_for_itself() {
 fn a_relative_brain_is_named_after_the_current_folder() {
     let here = std::env::current_dir().unwrap();
     let name = here.file_name().unwrap().to_string_lossy().into_owned();
-    assert_eq!(Store { dir: PathBuf::from(PROJECT_DIR), journal: RefCell::new(None) }.project(), Some(name));
+    assert_eq!(
+        Store { dir: PathBuf::from(PROJECT_DIR), journal: RefCell::new(None), read: RefCell::default() }.project(),
+        Some(name)
+    );
 }
 
 #[test]
@@ -345,4 +348,40 @@ fn a_skipped_file_says_why_as_load_always_has() {
     said.sort();
     assert_eq!(said, ["0002-broken.md: bad session line: nonsense", "README.md: missing `- id:` line"]);
     assert_eq!(skipped.iter().map(ToString::to_string).collect::<Vec<_>>(), said);
+}
+
+#[test]
+fn saving_never_writes_over_an_entry_changed_on_disk_since_it_was_read() {
+    let dir = tempfile::tempdir().unwrap();
+    Store::at(dir.path()).unwrap().save(&mut Task::new(1, "Fix".into(), now())).unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let (mut tasks, _) = store.load_entries().unwrap();
+    let file = tasks[0].path.clone().unwrap();
+    // An editor writing over the file in place, as some do, rather than replacing it.
+    let edited = fs::read_to_string(&file).unwrap() + "\nedited by hand\n";
+    fs::write(&file, &edited).unwrap();
+    tasks[0].description = "from memory".into();
+    let error = store.save(&mut tasks[0]).unwrap_err().to_string();
+    assert!(error.contains("changed"), "{error}");
+    assert_eq!(fs::read_to_string(&file).unwrap(), edited, "the edit is kept");
+    // Read again, it's saved; and saved again, as written.
+    let (mut tasks, _) = store.load_entries().unwrap();
+    tasks[0].description = "from memory".into();
+    store.save(&mut tasks[0]).unwrap();
+    tasks[0].title = "Fix it".into();
+    store.save(&mut tasks[0]).unwrap();
+    tasks[0].description = "again".into();
+    store.save(&mut tasks[0]).unwrap();
+}
+
+#[test]
+fn saving_never_brings_back_an_entry_deleted_on_disk_since_it_was_read() {
+    let dir = tempfile::tempdir().unwrap();
+    Store::at(dir.path()).unwrap().save(&mut Task::new(1, "Fix".into(), now())).unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let (mut tasks, _) = store.load_entries().unwrap();
+    let file = tasks[0].path.clone().unwrap();
+    fs::remove_file(&file).unwrap();
+    assert!(store.save(&mut tasks[0]).is_err());
+    assert!(!file.exists(), "not written back");
 }
