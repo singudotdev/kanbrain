@@ -66,6 +66,12 @@ fn measure(cx: &mut gpui::TestAppContext, todo: u32) {
     redraw(cx);
     let shown = opening.elapsed();
     let frame = average(20, || redraw(cx));
+    // A frame the view asked for itself, as a hover, the caret's blink or the clock's tick does: GPUI reuses what's
+    // cached in it, where a refresh (the window moved or resized) draws everything again.
+    let notified = average(20, || {
+        view.update(cx, |_, cx| cx.notify());
+        next_frames(cx);
+    });
     let scroll = average(20, || {
         wheel(&view, cx, gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(-200.))), false);
     });
@@ -93,8 +99,8 @@ fn measure(cx: &mut gpui::TestAppContext, todo: u32) {
         next_frames(cx);
     });
     eprintln!(
-        "PERF todo={todo}: open {opened:?}, open+shown {shown:?}, frame {frame:?}, scroll {scroll:?}, idle poll \
-         {idle:?}, one file reloaded {reload:?}, search key {search:?}"
+        "PERF todo={todo}: open {opened:?}, open+shown {shown:?}, frame {frame:?}, notified frame {notified:?}, scroll \
+         {scroll:?}, idle poll {idle:?}, one file reloaded {reload:?}, search key {search:?}"
     );
 }
 

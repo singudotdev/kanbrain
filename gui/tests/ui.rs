@@ -1900,6 +1900,29 @@ fn a_cleared_search_puts_every_card_back_where_it_was(cx: &mut gpui::TestAppCont
 }
 
 #[gpui::test]
+fn a_column_cut_to_one_card_by_a_search_keeps_its_length_once_cleared(cx: &mut gpui::TestAppContext) {
+    // One card far down matching: the column cut to it has no gap between two cards to show.
+    let titles: Vec<String> =
+        (1..=300).map(|n| if n == 150 { format!("task {n} needle") } else { format!("task {n}") }).collect();
+    let (view, cx, _dir) = window(cx, &titles.iter().map(String::as_str).collect::<Vec<_>>());
+    cx.simulate_resize(gpui::size(px(600.), px(400.)));
+    next_frames(cx);
+    cx.simulate_keystrokes("/ n e e d l e");
+    next_frames(cx);
+    click(cx, "card 0/150");
+    // Cleared, the column follows the card selected, far from its top: the first child is the box above it.
+    cx.simulate_keystrokes("escape escape");
+    next_frames(cx);
+    redraw(cx);
+    let pitch = cx.debug_bounds("card 0/148").unwrap().top() - cx.debug_bounds("card 0/149").unwrap().top();
+    let length = view.read_with(cx, |view, _| {
+        let scroll = &view.scroll.columns[0].scroll;
+        scroll.max_offset().y + scroll.bounds().size.height
+    });
+    assert!((length - pitch * 300.).abs() < pitch * 3., "300 cards {pitch:?} apart: {length:?} long");
+}
+
+#[gpui::test]
 fn a_list_scrolled_part_way_stays_put_frame_after_frame(cx: &mut gpui::TestAppContext) {
     // The list layout: a section's header above the view, as tall as no row, and rows reckoned, not laid out.
     let (view, cx, _dir) = small_board_of(cx, 300);

@@ -97,14 +97,19 @@ impl Rows {
             0 => FIRST_GUESS,
             known => seen.heights.values().copied().sum::<Pixels>() / known as f32,
         };
-        let height = |key: &Option<Key>| key.map_or(typical, |key| seen.heights.get(&key).copied().unwrap_or(typical));
-        // Where each item goes, from the heights known or reckoned, in this frame's order.
-        let mut y = seen.pad;
-        let tops: Vec<_> = order
+        // Each item's height, known or reckoned, in this frame's order: looked up once, as hashing the keys of 10,000
+        // rows again for each use of their heights took a tenth of a frame.
+        let heights: Vec<_> = order
             .iter()
-            .map(|key| {
+            .map(|key| key.map_or(typical, |key| seen.heights.get(&key).copied().unwrap_or(typical)))
+            .collect();
+        // Where each item goes.
+        let mut y = seen.pad;
+        let tops: Vec<_> = heights
+            .iter()
+            .map(|&height| {
                 let top = y;
-                y += height(key) + seen.gap;
+                y += height + seen.gap;
                 top
             })
             .collect();
@@ -125,8 +130,8 @@ impl Rows {
             && let Some(was) = seen.reckoned.get(..then)
         {
             // Only the rows' heights: the items that aren't rows are laid out as they were, whatever was reckoned.
-            let rows = order[..now].iter().zip(was).filter(|(key, _)| key.is_some());
-            let moved: Pixels = rows.map(|(key, was)| height(key) - *was).sum();
+            let rows = order[..now].iter().zip(&heights).zip(was).filter(|((key, _), _)| key.is_some());
+            let moved: Pixels = rows.map(|((_, height), was)| *height - *was).sum();
             if moved != px(0.) {
                 let mut offset = self.scroll.offset();
                 offset.y = (offset.y - moved).min(px(0.));
@@ -145,8 +150,8 @@ impl Rows {
         // A view's worth above and below too, so the wheel finds them drawn.
         let near = (top - shown, top + shown * 2.);
         let far = |ix: usize| {
-            let (top, key) = (tops[ix], &order[ix]);
-            key.is_some() && Some(ix) != follow && (top + height(key) < near.0 || top > near.1)
+            let top = tops[ix];
+            order[ix].is_some() && Some(ix) != follow && (top + heights[ix] < near.0 || top > near.1)
         };
         // Each run of rows far from the view, one box as tall as they are and the gaps between them.
         let mut slots = Vec::with_capacity(order.len());
@@ -154,7 +159,7 @@ impl Rows {
         let mut follow_child = None;
         // Where the box for the run of far rows so far is, among the slots.
         let mut run = None;
-        for (ix, key) in order.iter().enumerate() {
+        for (ix, &height) in heights.iter().enumerate() {
             if !far(ix) {
                 run = None;
                 if Some(ix) == follow {
@@ -163,22 +168,22 @@ impl Rows {
                 slots.push(Slot::Draw);
                 child += 1;
             } else if let Some(Slot::Box(tall)) = run.and_then(|at| slots.get_mut(at)) {
-                *tall += seen.gap + height(key);
+                *tall += seen.gap + height;
                 slots.push(Slot::Skip);
             } else {
                 run = Some(slots.len());
-                slots.push(Slot::Box(height(key)));
+                slots.push(Slot::Box(height));
                 child += 1;
             }
         }
-        let reckoned = order.iter().map(&height).collect();
-        seen.reckoned = reckoned;
+        seen.reckoned = heights;
+        let gap = seen.gap;
         drop(seen);
         // By its place among the children, the boxes standing in for runs of rows.
         if let Some(child) = follow_child {
             self.scroll.scroll_to_item(child);
         }
-        Frame { rows: self, order, slots, children: Vec::with_capacity(child), next: 0 }
+        Frame { rows: self, order, slots, children: Vec::with_capacity(child), next: 0, gap }
     }
 
     /// Learns from the last frame's layout each row's height, the list's padding and gap; and which row was the first
@@ -205,7 +210,11 @@ impl Rows {
         }
         if let Some(first) = bounds.first() {
             *pad = first.top() - view.top();
-            *gap = bounds.get(1).map_or(px(0.), |next| next.top() - first.bottom());
+            // Kept from before with one child, which shows none: a list a search cut to one row learned a gap of none,
+            // and the boxes, spaced by the gap learned, kept teaching it once the search was cleared.
+            if let Some(next) = bounds.get(1) {
+                *gap = next.top() - first.bottom();
+            }
         }
         children.iter().find_map(|child| match child {
             Child::Drawn(Some(key), _) => Some(*key),
@@ -226,6 +235,8 @@ pub struct Frame<'a> {
     children: Vec<Child>,
     /// The item [`Frame::child`] gives next.
     next: usize,
+    /// Space between two children, as last laid out.
+    gap: Pixels,
 }
 
 impl Frame<'_> {
@@ -241,7 +252,8 @@ impl Frame<'_> {
             }
             Slot::Box(height) => {
                 self.children.push(Child::Box);
-                Some(div().flex_none().h(height).into_any_element())
+                // Spaced from the next child as the rows are, for a list that spaces them by their margins.
+                Some(div().flex_none().h(height).mb(self.gap).into_any_element())
             }
             Slot::Skip => None,
         }
