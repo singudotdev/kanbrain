@@ -22,7 +22,7 @@ exclude_re = [
     'gui/src/ui/entries\.rs:.*(replace == with != |delete ! )in entry_row$',
     # Which rows stand in, and whether one shows (by their lines): only a row whose edge is exactly on the edge drawn
     # or shown, to the sub-pixel, is taken otherwise, and a row that only touches the view shows nothing of it.
-    'gui/src/ui/offscreen\.rs:(84|146):.*replace (< with <=|> with >=) in (Rows::frame|in_view)$',
+    'gui/src/ui/offscreen\.rs:(144|279):.*replace (< with <=|> with >=) in (Rows::frame|in_view)$',
     # The highlight of the form's tags list (by its line, so the row the list follows stays tested): a color, and the
     # window tests read bounds, not colors (the state tests check which tag it is, `Form::tag_sel`).
     'gui/src/ui/dialogs/form\.rs:168:.*replace == with != in tags_field',

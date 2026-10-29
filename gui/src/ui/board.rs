@@ -144,9 +144,6 @@ fn column(board: &Board, status: Status, rows: &Rows, follow: bool, cx: &mut Con
     // The field is the first child, above the cards: in view while typing, with each new task landing
     // right under it, since the newest move comes first.
     let row = if adding.is_some() { Some(0) } else { cards.iter().position(|(key, _)| Some(*key) == board.selected) };
-    if follow && let Some(row) = row {
-        scroll.scroll_to_item(row);
-    }
     let header = status_header(board, status, cards.len(), cx);
     let now = now();
     let empty = (cards.is_empty() && adding.is_none()).then(|| dim_small(empty_hint(board, status)).p_2());
@@ -155,12 +152,13 @@ fn column(board: &Board, status: Status, rows: &Rows, follow: bool, cx: &mut Con
     let cards_keys = cards.iter().map(|&(key, _)| Some(key));
     let order = other(adding.is_some()).chain(cards_keys).chain(other(empty.is_some())).chain(other(more.is_some()));
     let mut frame = rows.frame(order.collect(), row.filter(|_| follow));
-    let mut children: Vec<_> = adding.into_iter().map(|field| frame.child(|| field.into_any_element())).collect();
-    children.extend(cards.iter().map(|&(key, task)| {
+    let mut children: Vec<_> =
+        adding.into_iter().filter_map(|field| frame.child(|| field.into_any_element())).collect();
+    children.extend(cards.iter().filter_map(|&(key, task)| {
         frame.child(|| menu::on_right_click(draw_card(board, key, task, now, cx), key, cx).into_any_element())
     }));
-    children.extend(empty.map(|hint| frame.child(|| hint.into_any_element())));
-    children.extend(more.map(|more| frame.child(|| more.into_any_element())));
+    children.extend(empty.and_then(|hint| frame.child(|| hint.into_any_element())));
+    children.extend(more.and_then(|more| frame.child(|| more.into_any_element())));
     let body = frame
         .finish(div())
         .id(("column", status as usize))

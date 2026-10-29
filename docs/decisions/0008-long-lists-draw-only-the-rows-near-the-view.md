@@ -1,6 +1,6 @@
 # 8. Long lists draw only the rows near the view
 
-Date: 2026-10-28. Status: accepted.
+Date: 2026-10-28. Status: accepted; superseded in part by [9](0009-one-box-per-run-of-rows-heights-kept-and-the-scroll-anchored.md).
 
 ## Context
 
