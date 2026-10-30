@@ -431,7 +431,10 @@ impl Store {
             && let Some(was) = self.read.borrow().get(old).copied()
             && seen(old) != Some(was)
         {
-            bail!("{} changed on disk since it was read: not saved over it, read it again first", old.display());
+            bail!(
+                "{} changed or deleted on disk since it was read: not saved over it, read it again first",
+                old.display()
+            );
         }
         self.remember(&path);
         if let Some(old) = &task.path {
