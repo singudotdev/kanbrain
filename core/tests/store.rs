@@ -445,3 +445,20 @@ fn an_entry_read_alone_is_known_as_read() {
     tasks[0].description = "from memory".into();
     assert!(store.save(&mut tasks[0]).is_err());
 }
+
+#[test]
+fn saving_never_writes_over_an_entry_rewritten_to_the_same_length_since_it_was_read() {
+    let dir = tempfile::tempdir().unwrap();
+    Store::at(dir.path()).unwrap().save(&mut Task::new(1, "Fix".into(), now())).unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let (mut tasks, _) = store.load_entries().unwrap();
+    let file = tasks[0].path.clone().unwrap();
+    // Only its time tells: the same length, and a time set apart from the read's, as a coarse clock may not.
+    let edited = fs::read_to_string(&file).unwrap().replacen("Fix", "Fax", 1);
+    fs::write(&file, &edited).unwrap();
+    let later = fs::metadata(&file).unwrap().modified().unwrap() + std::time::Duration::from_secs(10);
+    fs::File::options().write(true).open(&file).unwrap().set_modified(later).unwrap();
+    tasks[0].description = "from memory".into();
+    assert!(store.save(&mut tasks[0]).is_err());
+    assert_eq!(fs::read_to_string(&file).unwrap(), edited, "the edit is kept");
+}
