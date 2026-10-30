@@ -404,3 +404,44 @@ fn the_store_knows_each_file_as_it_last_read_or_wrote_it() {
     store.delete(&tasks[0]).unwrap();
     assert_eq!(store.known(&renamed), None, "deleted");
 }
+
+#[test]
+fn a_brain_read_by_several_threads_loads_every_entry_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    // More than three threads' shares, with broken files among them.
+    let share = u32::try_from(READ_PER_THREAD).unwrap();
+    let count = 3 * share + 1;
+    for id in 1..=count {
+        let text = Task::new(id, format!("Task {id}"), now()).to_markdown();
+        let text = if id.is_multiple_of(share) { format!("{text}\n## Sessions\n\n- nonsense\n") } else { text };
+        fs::write(dir.path().join(format!("{id:04}-task.md")), text).unwrap();
+    }
+    let (tasks, skipped) = store.load_entries().unwrap();
+    let mut ids: Vec<u32> = tasks.iter().map(|task| task.id).collect();
+    ids.sort_unstable();
+    let broken = |id: &u32| id.is_multiple_of(share);
+    assert_eq!(ids, (1..=count).filter(|id| !broken(id)).collect::<Vec<_>>(), "each entry read, once");
+    let mut said: Vec<String> = skipped.iter().map(|file| file.file.clone()).collect();
+    said.sort();
+    assert_eq!(said, (1..=count).filter(broken).map(|id| format!("{id:04}-task.md")).collect::<Vec<_>>());
+    for task in &tasks {
+        let file = task.path.as_ref().expect("read from its file");
+        assert_eq!(store.known(file), seen(file), "{} known as read", file.display());
+    }
+}
+
+#[test]
+fn an_entry_read_alone_is_known_as_read() {
+    let dir = tempfile::tempdir().unwrap();
+    Store::at(dir.path()).unwrap().save(&mut Task::new(7, "Fix".into(), now())).unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let (mut tasks, skipped) = store.load_named(7).unwrap();
+    assert_eq!(skipped, []);
+    let file = tasks[0].path.clone().unwrap();
+    assert_eq!(store.known(&file), seen(&file));
+    // Written over in place since: not saved over it, as after a whole read.
+    fs::write(&file, fs::read_to_string(&file).unwrap() + "\nedited by hand\n").unwrap();
+    tasks[0].description = "from memory".into();
+    assert!(store.save(&mut tasks[0]).is_err());
+}

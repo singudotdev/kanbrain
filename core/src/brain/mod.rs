@@ -99,6 +99,31 @@ impl Brain {
         Self::open_skipping(store, Some(central.to_path_buf()))
     }
 
+    /// [`Brain::open_in_skipping`], or, for a command on entry `alone` that changes it and no other, only that entry:
+    /// its file read, rather than every entry's. Only when that file is the only one named for it and reads as it:
+    /// otherwise (renamed by hand, a sync conflict's copy beside it, broken) every entry is read and repaired, as the
+    /// copy is given an id of its own and the broken file is said. Nothing else is repaired then: the next command
+    /// reading the whole brain does.
+    pub(crate) fn open_for(store: Store, central: &Path, alone: Option<u32>) -> Result<(Self, Vec<Skipped>)> {
+        if let Some(id) = alone {
+            crate::migrate::migrate(&store)?;
+            let (tasks, skipped) = store.load_named(id)?;
+            if skipped.is_empty() && matches!(tasks.as_slice(), [task] if task.id == id) {
+                let brain = Self {
+                    store,
+                    tasks,
+                    tag_colors: TagColors::default(),
+                    warnings: Vec::new(),
+                    project: None,
+                    central: Some(central.to_path_buf()),
+                    author: Author::Human,
+                };
+                return Ok((brain, skipped));
+            }
+        }
+        Self::open_in_skipping(store, central)
+    }
+
     /// Re-reads every file from disk.
     pub fn reload(&mut self) -> Result<()> {
         self.reload_skipping().map(drop)

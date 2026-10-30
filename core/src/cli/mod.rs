@@ -634,7 +634,7 @@ fn run_entries(store: Store, central: &Path, mut args: EntryArgs) -> Result<()> 
     // Held from reading the files to writing them, so parallel commands each see the others' changes; opening may
     // write too, as it repairs. `wait` lets go once open, not to hold it while it waits.
     let lock = store.lock()?;
-    let (brain, skipped) = Brain::open_in_skipping(store, central)?;
+    let (brain, skipped) = Brain::open_for(store, central, args.alone())?;
     let brain = Brain { author, ..brain };
     say_skipped(&skipped);
     let _lock = (!matches!(args.command, EntryCommand::Wait(..))).then_some(lock);

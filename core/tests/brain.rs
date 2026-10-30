@@ -673,3 +673,51 @@ fn reloading_the_tag_colors_file_reads_the_colors_again() {
     f.brain.reload_files(&[tags]).unwrap();
     assert!(f.brain.tag_colors.chip("ux").is_some(), "the colors as the file has them now");
 }
+
+#[test]
+fn a_command_on_one_entry_reads_only_its_file_when_it_alone_is_named_for_it() {
+    let tasks = [5, 50, 15].map(|id| Task::new(id, format!("task {id}"), now())).into();
+    let fixture = Fixture::new(tasks);
+    let central = tempfile::tempdir().unwrap();
+    let open = |id| Brain::open_for(Store::at(fixture.dir.path()).unwrap(), central.path(), Some(id)).unwrap();
+    let (brain, skipped) = open(5);
+    let ids: Vec<u32> = brain.tasks.iter().map(|t| t.id).collect();
+    assert_eq!((ids, skipped), (vec![5], vec![]), "#50's and #15's files aren't #5's");
+    // Without an entry alone, every one.
+    let (brain, _) = Brain::open_for(Store::at(fixture.dir.path()).unwrap(), central.path(), None).unwrap();
+    assert_eq!(brain.tasks.len(), 3);
+    // Nothing named for it, as a file renamed by hand: every entry is read to find it.
+    let named = fixture.dir.path().join("0015-task-15.md");
+    std::fs::rename(&named, fixture.dir.path().join("fifteen.md")).unwrap();
+    assert_eq!(open(15).0.tasks.len(), 3, "renamed");
+    // A file named for it holding another id, edited by hand: every entry too.
+    std::fs::write(&named, Task::new(51, "task 51".into(), now()).to_markdown()).unwrap();
+    assert_eq!(open(15).0.tasks.len(), 4, "named for it, another's");
+}
+
+#[test]
+fn a_command_on_one_entry_reads_every_one_when_its_file_isnt_alone_or_doesnt_read() {
+    let fixture = Fixture::with_titles(&["one", "two"]);
+    let central = tempfile::tempdir().unwrap();
+    let open = |id| Brain::open_for(Store::at(fixture.dir.path()).unwrap(), central.path(), Some(id)).unwrap();
+    // A sync conflict's copy beside it: the whole read gives the copy an id of its own, as every command's did.
+    let copy = fixture.dir.path().join("0001-one (conflicted copy).md");
+    std::fs::copy(fixture.dir.path().join("0001-one.md"), &copy).unwrap();
+    let (brain, _) = open(1);
+    assert_eq!(brain.tasks.iter().map(|t| t.id).max(), Some(3), "renumbered");
+    assert!(!copy.exists());
+    // A broken file named for it: read whole, the command says it was skipped.
+    std::fs::write(fixture.dir.path().join("0002-two (broken).md"), "# two\n\nno id\n").unwrap();
+    let (brain, skipped) = open(2);
+    assert_eq!((brain.tasks.len(), skipped.len()), (3, 1));
+}
+
+#[test]
+fn a_brain_a_newer_kanbrain_wrote_is_refused_before_one_entry_is_read() {
+    let fixture = Fixture::with_titles(&["one"]);
+    let central = tempfile::tempdir().unwrap();
+    let newer = crate::migrate::FORMAT + 1;
+    std::fs::write(fixture.dir.path().join(crate::migrate::FORMAT_FILE), format!("{newer}\n")).unwrap();
+    let opened = Brain::open_for(Store::at(fixture.dir.path()).unwrap(), central.path(), Some(1));
+    assert!(opened.unwrap_err().is::<crate::migrate::TooNew>());
+}
