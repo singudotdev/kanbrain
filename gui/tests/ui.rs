@@ -2632,6 +2632,30 @@ fn a_repositorys_reference_names_the_entry_of_that_repository_of_its_own_project
 }
 
 #[gpui::test]
+fn going_to_a_card_among_cards_shorter_than_reckoned_leaves_no_blank_in_view(cx: &mut gpui::TestAppContext) {
+    // The top cards, laid out on opening, wrap onto three lines; those far down, never laid out, are a line each.
+    // Gone to, a card shows at the view's bottom, with a view's worth above it drawn as reckoned: as tall as the top
+    // ones, those end below the view's top, and the box above them shows until the next frame draws them.
+    let titles: Vec<String> = (1..=300)
+        .map(|n| match n {
+            ..=250 => format!("task {n}"),
+            _ => format!("task {n} with a title long enough to wrap onto several lines of a narrow column, and more"),
+        })
+        .collect();
+    let (view, cx, _dir) = window(cx, &titles.iter().map(String::as_str).collect::<Vec<_>>());
+    cx.simulate_resize(gpui::size(px(600.), px(800.)));
+    next_frames(cx);
+    view.update(cx, |view, cx| {
+        view.board.selected = Some(crate::state::Key::new(0, 100));
+        view.follow = true;
+        cx.notify();
+    });
+    next_frames(cx);
+    assert!(shown_in(cx, "card 0/100", "column todo"), "gone to");
+    assert_eq!(blanks(&view, cx), 0, "the next frame draws the cards where the box showed");
+}
+
+#[gpui::test]
 fn wheeling_up_through_cards_never_laid_out_moves_the_view_by_the_wheel(cx: &mut gpui::TestAppContext) {
     // Cards of one, two and three lines, far more than a view: those the wheel brings in from above were never laid out.
     let titles: Vec<String> = (1..=300)
