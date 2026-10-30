@@ -402,6 +402,74 @@ fn long_lists_say_how_many_more_and_follow_the_highlight(cx: &mut gpui::TestAppC
 }
 
 #[gpui::test]
+fn a_long_list_draws_only_the_rows_near_its_view(cx: &mut gpui::TestAppContext) {
+    use super::dropdown::MAX_ROWS;
+    let titles: Vec<String> = (1..=300).map(|i| format!("task {i}")).collect();
+    let titles: Vec<&str> = titles.iter().map(String::as_str).collect();
+    let (_view, cx, _dir) = window(cx, &titles);
+    cx.simulate_keystrokes("r");
+    let list = cx.debug_bounds("links-list").expect("the list is drawn");
+    let drawn = |cx: &mut gpui::VisualTestContext| {
+        let rows: Vec<_> = (1..=300).filter_map(|id| cx.debug_bounds(Box::leak(format!("link {id}").into()))).collect();
+        let shown = rows.iter().filter(|row| row.top() >= list.top() && row.bottom() <= list.bottom() + px(1.)).count();
+        (rows.len(), shown)
+    };
+    let (rows, shown) = drawn(cx);
+    assert!(rows <= 3 * MAX_ROWS, "a view of rows either side at most, not 299: {rows}");
+    assert_eq!(shown, MAX_ROWS, "and the list full");
+    for _ in 0..150 {
+        cx.simulate_keystrokes("down");
+    }
+    cx.update(|window, _| window.refresh());
+    cx.run_until_parked();
+    let (rows, shown) = drawn(cx);
+    assert_eq!((rows, shown), (3 * MAX_ROWS, MAX_ROWS), "followed down, a view drawn either side of the one shown");
+    // The boxes standing in for the rest are their rows' height, so the list scrolls as far as its rows go.
+    let (above, below) = (cx.debug_bounds("links-above").unwrap(), cx.debug_bounds("links-below").unwrap());
+    let rest = super::dropdown::ROW_HEIGHT * f32::from(u16::try_from(299 - rows).unwrap());
+    assert_eq!(f32::from(above.size.height + below.size.height), rest, "the 299 rows' height in all");
+    let highlighted = cx.debug_bounds("link 150").expect("the 151st row, newest first, is drawn");
+    assert!(highlighted.bottom() <= list.bottom() + px(1.) && highlighted.top() >= list.top(), "and in view");
+    // The wheel takes the list where no row was drawn: those there are, by the frame it shows.
+    let modifiers = gpui::Modifiers::none();
+    // Fifty rows down, so none is cut at its edges.
+    let delta = gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(-50. * super::dropdown::ROW_HEIGHT)));
+    let touch_phase = gpui::TouchPhase::Moved;
+    cx.simulate_event(gpui::ScrollWheelEvent { position: list.center(), delta, modifiers, touch_phase });
+    next_frames(cx);
+    let (rows, shown) = drawn(cx);
+    assert!(rows <= 3 * MAX_ROWS && shown == MAX_ROWS, "scrolled: {rows} drawn, {shown} shown");
+    let row = cx.debug_bounds("link 100").expect("the row fifty below the highlight's is drawn");
+    assert!(row.top() >= list.top() && row.bottom() <= list.bottom() + px(1.), "and in view");
+}
+
+#[gpui::test]
+fn a_list_opened_on_a_row_far_down_shows_it_at_once(cx: &mut gpui::TestAppContext) {
+    use kanbrain_core::projects;
+    let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    for i in 10..40 {
+        let dir = code.path().join(format!("repo{i}")).join(".brain");
+        Store::at(&dir).unwrap().save(&mut Task::new(1, format!("task in p{i}"), now())).unwrap();
+        projects::register(central.path(), &format!("p{i}"), &dir).unwrap();
+        let card = projects::RepoCard { project: format!("p{i}"), repo: None, notes: String::new() };
+        projects::write_repo_card(&dir, &card).unwrap();
+    }
+    let board = Board::open(central.path(), None).unwrap();
+    let (view, cx) = cx.add_window_view(|window, cx| BrainView::new(board, window, cx));
+    cx.run_until_parked();
+    let far = view.read_with(cx, |view, _| view.board.sources.len() - 3);
+    view.update(cx, |view, _| view.board.select(crate::state::Key::new(far, 1)));
+    // "Which project?" for a quick add, its own scroll used for the first time, highlights the selected entry's.
+    cx.simulate_keystrokes("a");
+    let list = cx.debug_bounds("where-list").expect("the list is drawn");
+    let shown = (0..40)
+        .filter_map(|i| cx.debug_bounds(Box::leak(format!("where {i}").into())))
+        .filter(|row| row.top() >= list.top() && row.bottom() <= list.bottom() + px(1.))
+        .count();
+    assert_eq!(shown, super::dropdown::MAX_ROWS, "rows in view on the first frame, not the room left for them");
+}
+
+#[gpui::test]
 fn a_list_that_fits_says_nothing_under_it(cx: &mut gpui::TestAppContext) {
     let titles: Vec<String> = (0..=super::dropdown::MAX_ROWS).map(|i| format!("task {i}")).collect();
     let titles: Vec<&str> = titles.iter().map(String::as_str).collect();
@@ -463,6 +531,22 @@ fn every_dropdown_with_a_search_scrolls_past_its_most_rows(cx: &mut gpui::TestAp
     assert!((rows_shown(cx, "link option 0") - form_rows).abs() < 1., "the form's related field");
     cx.simulate_keystrokes("escape ?");
     assert!((rows_shown(cx, "command 0") - 12.).abs() < 1., "the command palette, the longest");
+}
+
+#[gpui::test]
+fn the_palette_names_each_section_on_its_first_row(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["one"]);
+    cx.simulate_keystrokes("?");
+    let firsts: Vec<usize> = view.read_with(cx, |view, _| {
+        let crate::state::Mode::Palette(picker) = &view.board.mode else { panic!("the palette is open") };
+        let commands = view.board.commands(picker);
+        (0..commands.len()).filter(|&i| i == 0 || commands[i - 1].section() != commands[i].section()).collect()
+    });
+    assert!(firsts.len() > 1, "several sections: {firsts:?}");
+    // Every row drawn: the palette shows twelve, and a view either side of them is drawn.
+    let headed: Vec<usize> =
+        (0..36).filter(|i| cx.debug_bounds(Box::leak(format!("heading {i}").into_boxed_str())).is_some()).collect();
+    assert_eq!(headed, firsts.into_iter().filter(|&i| i < 36).collect::<Vec<_>>());
 }
 
 #[test]
@@ -1000,13 +1084,17 @@ fn the_project_card_shows_a_descriptions_first_line_that_isnt_blank() {
 
 #[test]
 fn a_list_counts_the_rows_out_of_view_from_its_scroll_or_the_highlight() {
-    use super::dropdown::{ROW_HEIGHT, hidden};
-    assert_eq!(hidden(12, 0, 8, 0., false), (0, 4));
-    assert_eq!(hidden(12, 0, 8, ROW_HEIGHT * 1.4, false), (1, 3), "a row more than half hidden is out of view");
-    assert_eq!(hidden(12, 0, 8, ROW_HEIGHT * 2.4, false), (2, 2), "one less than half hidden isn't");
-    assert_eq!(hidden(12, 9, 8, 0., true), (2, 2), "the highlight below the view scrolls it just enough");
-    assert_eq!(hidden(12, 1, 8, ROW_HEIGHT * 4., true), (1, 3), "and above it, just enough too");
-    assert_eq!(hidden(12, 11, 8, ROW_HEIGHT * 4., false), (4, 0));
+    use super::dropdown::{ROW_HEIGHT, followed, hidden};
+    assert_eq!(hidden(12, 8, 0.), (0, 4));
+    assert_eq!(hidden(12, 8, ROW_HEIGHT * 1.4), (1, 3), "a row more than half hidden is out of view");
+    assert_eq!(hidden(12, 8, ROW_HEIGHT * 2.4), (2, 2), "one less than half hidden isn't");
+    assert_eq!(hidden(12, 8, ROW_HEIGHT * 1.6), (2, 2), "nor one more than half hidden");
+    assert_eq!(hidden(12, 8, followed(12, 9, 8, 0.)), (2, 2), "the highlight below the view scrolls it just enough");
+    assert_eq!(hidden(12, 8, followed(12, 1, 8, ROW_HEIGHT * 4.)), (1, 3), "and above it, just enough too");
+    assert_eq!(hidden(12, 8, ROW_HEIGHT * 4.), (4, 0));
+    assert_eq!(followed(12, 5, 8, ROW_HEIGHT * 2.), ROW_HEIGHT * 2., "one in view stays where it is");
+    assert_eq!(followed(12, 30, 8, 0.), ROW_HEIGHT * 4., "and none is past the end, as a list cut short leaves it");
+    assert_eq!(hidden(12, 8, ROW_HEIGHT * 40.), (12, 0), "nor counted past it");
 }
 
 /// Draws the frames the window asked for since, as the platform would: tests have no frame loop. A few at most,
