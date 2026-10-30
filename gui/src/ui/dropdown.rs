@@ -197,7 +197,8 @@ fn most(count: usize, max_rows: usize) -> f32 {
     (rows_height(count) - rows_height(max_rows)).max(0.)
 }
 
-/// How tall `n` rows are; lists are short, so `n` fits a `u16`.
+/// How tall `n` rows are: the link picker lists every entry of the project, tens of thousands.
+#[expect(clippy::cast_precision_loss, reason = "a list holds far fewer than 2^24 rows, which an f32 counts exactly")]
 fn rows_height(n: usize) -> f32 {
-    ROW_HEIGHT * f32::from(u16::try_from(n).unwrap_or(u16::MAX))
+    ROW_HEIGHT * n as f32
 }
