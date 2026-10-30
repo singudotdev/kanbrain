@@ -83,6 +83,11 @@ impl Index {
         self.at.get(&id).copied()
     }
 
+    /// Every tag in use, by name, with how many tasks, notes and decisions carry it (in `Kind::ALL` order).
+    pub fn tags(&self) -> &BTreeMap<String, [usize; Kind::ALL.len()]> {
+        &self.tags
+    }
+
     /// The ids of the entries related to the one with this id, as `Brain::related` lists them.
     pub fn related(&self, id: u32) -> &[u32] {
         self.related.get(&id).map_or(&[], Vec::as_slice)
