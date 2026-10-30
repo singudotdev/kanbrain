@@ -620,6 +620,20 @@ fn reloading_files_reads_those_changed_added_or_deleted_and_no_other() {
 }
 
 #[test]
+fn reloading_a_file_given_twice_or_spelled_otherwise_reads_it_once() {
+    let mut f = Fixture::with_titles(&["one", "two"]);
+    let mut kb = other(&f);
+    kb.add_comment(1, "seen").unwrap();
+    let file = path(&f.brain, 1);
+    let spelled = f.dir.path().join(".").join(file.file_name().unwrap());
+    f.brain.reload_files(&[file.clone(), spelled, file]).unwrap();
+    let mut ids: Vec<u32> = f.brain.tasks.iter().map(|t| t.id).collect();
+    ids.sort_unstable();
+    assert_eq!(ids, [1, 2], "not two of #1, nor one renumbered");
+    assert_eq!(f.brain.task(1).unwrap().comments.len(), 1);
+}
+
+#[test]
 fn reloading_a_file_deleted_by_hand_drops_the_links_to_it() {
     let mut f = Fixture::with_titles(&["one", "two"]);
     f.brain.toggle_link(1, 2).unwrap();
