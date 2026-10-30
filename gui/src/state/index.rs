@@ -184,6 +184,9 @@ impl Showing {
     }
 }
 
+/// An entry related to another, after what orders it among the others: its repository, its kind's rank, its id.
+type Ranked = (usize, u8, Reverse<u32>, Key);
+
 /// Each entry's related entries in the project's other repositories (see [`Showing::repo_related`]), from every brain
 /// on the board: each with its place there, the project and repository it is, and its index.
 pub fn repo_related<'a>(
@@ -194,27 +197,30 @@ pub fn repo_related<'a>(
             .clone()
             .find(|(_, brain, _)| brain.project.as_ref().is_some_and(|p| p.name == project && p.repo == repo))
     };
-    // Each pair once from each side, with where the other entry is in its brain to put them in that order.
-    let mut related: HashMap<Key, Vec<(usize, usize, Key)>> = HashMap::new();
+    // Each pair once from each side, with what orders them: by repository, then as `Brain::repo_related` does (notes,
+    // decisions, tasks, the newest first), not by where they are in their brain, which a reload of one changes.
+    let mut related: HashMap<Key, Vec<Ranked>> = HashMap::new();
     for (src, brain, _) in sources.clone() {
         let Some(here) = &brain.project else { continue };
-        for (place, task) in brain.tasks.iter().enumerate() {
+        for task in &brain.tasks {
             for link in &task.repo_links {
                 let Some((there, other, index)) = at(&here.name, &link.repo).filter(|&(there, ..)| there != src) else {
                     continue;
                 };
                 let Some(other_place) = index.at(link.id) else { continue };
-                let (from, to) = (Key::new(src, task.id), Key::new(there, other.tasks[other_place].id));
-                related.entry(from).or_default().push((there, other_place, to));
-                related.entry(to).or_default().push((src, place, from));
+                let target = &other.tasks[other_place];
+                let (from, to) = (Key::new(src, task.id), Key::new(there, target.id));
+                related.entry(from).or_default().push((there, related_rank(target.kind), Reverse(target.id), to));
+                related.entry(to).or_default().push((src, related_rank(task.kind), Reverse(task.id), from));
             }
         }
     }
     related
         .into_iter()
         .map(|(key, mut keys)| {
-            keys.sort_unstable_by_key(|&(src, place, _)| (src, place));
-            keys.dedup_by_key(|&mut (src, place, _)| (src, place));
+            // A key is its repository and id: those order and tell apart.
+            keys.sort_unstable_by_key(|&(src, rank, id, _)| (src, rank, id));
+            keys.dedup_by_key(|&mut (src, rank, id, _)| (src, rank, id));
             (key, keys.into_iter().map(|(.., key)| key).collect())
         })
         .collect()

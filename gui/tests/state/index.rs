@@ -43,7 +43,8 @@ fn board(n: u32) -> (Board, TempDir, TempDir) {
     (Board::open(central.path(), None).unwrap(), central, code)
 }
 
-/// The entries of the project's other repositories related to `key`'s, worked out as frames did before the index.
+/// The entries of the project's other repositories related to `key`'s, worked out as frames did before the index, in
+/// the order of the core's `Brain::repo_related`: by repository, then notes, decisions and tasks, the newest first.
 fn repo_related(board: &Board, key: Key) -> Vec<Key> {
     let Some(here) = &board.brain(key.src).project else { return Vec::new() };
     let links = board.brain(key.src).task(key.id).map_or(&[][..], |t| t.repo_links.as_slice());
@@ -54,7 +55,10 @@ fn repo_related(board: &Board, key: Key) -> Vec<Key> {
         let Some(there) = brain.project.as_ref().filter(|p| p.name == here.name) else { continue };
         let linked =
             |t: &&Task| links.iter().any(|l| l.repo == there.repo && l.id == t.id) || t.repo_links.contains(&back);
-        related.extend(brain.tasks.iter().filter(linked).map(|t| Key::new(src, t.id)));
+        let mut found: Vec<&Task> = brain.tasks.iter().filter(linked).collect();
+        let rank = |kind| [Kind::Note, Kind::Decision, Kind::Task].iter().position(|k| *k == kind);
+        found.sort_by_key(|t| (rank(t.kind), std::cmp::Reverse(t.id)));
+        related.extend(found.into_iter().map(|t| Key::new(src, t.id)));
     }
     related
 }
@@ -252,4 +256,26 @@ fn the_scope_or_the_search_alone_changes_what_shows() {
         board.search = crate::text::editor::LineInput::new(search);
         agrees(&board, &format!("the search alone, now {search:?}"));
     }
+}
+
+#[test]
+fn another_repositorys_related_entries_keep_their_order_once_one_is_read_again() {
+    let (mut board, _central, code) = board(6);
+    let (api, web) = (code.path().join("api/.brain"), code.path().join("web/.brain"));
+    // api's #1 linked to web's #1 to #4: a task, a note, a decision and a task.
+    let mut cli = Brain::open(Store::at(&api).unwrap()).unwrap();
+    let index = cli.tasks.iter().position(|t| t.id == 1).unwrap();
+    let links = (1..=4).map(|id| kanbrain_core::model::RepoLink { repo: "web".into(), id });
+    cli.tasks[index].repo_links = links.collect();
+    cli.store.save(&mut cli.tasks[index]).unwrap();
+    board.reload().unwrap();
+    let in_web = |board: &Board| -> Vec<u32> {
+        board.related_keys(Key::new(1, 1)).into_iter().filter(|key| key.src == 2).map(|key| key.id).collect()
+    };
+    assert_eq!(in_web(&board), [2, 3, 4, 1], "the note, the decision, then the tasks, the newest first");
+    // An agent comments on web's #4: read again alone, it's the last of its brain's entries.
+    let mut cli = Brain::open(Store::at(&web).unwrap()).unwrap();
+    cli.add_comment(4, "seen").unwrap();
+    board.reload_changed(&all_of(&board, &[web])).unwrap();
+    assert_eq!(in_web(&board), [2, 3, 4, 1], "as before");
 }
