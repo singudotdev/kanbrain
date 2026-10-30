@@ -101,10 +101,32 @@ fn measure(cx: &mut gpui::TestAppContext, todo: u32) {
         cx.simulate_keystrokes(if key % 2 == 1 { "4" } else { "backspace" });
         next_frames(cx);
     });
+    cx.simulate_keystrokes("escape escape");
+    next_frames(cx);
+    view.update(cx, |view, _| view.board.select(crate::state::Key::new(0, 1)));
+    // The dialogs that list entries or commands: opening one, a frame with it open, and a key in its search.
+    let mut dialogs = Vec::new();
+    for (name, open) in [("links", "r"), ("form", "e"), ("palette", "?")] {
+        let start = Instant::now();
+        cx.simulate_keystrokes(open);
+        next_frames(cx);
+        let opened = start.elapsed();
+        let frame = average(10, || redraw(cx));
+        let mut key = 0;
+        let typed = average(6, || {
+            key += 1;
+            cx.simulate_keystrokes(if key % 2 == 1 { "4" } else { "backspace" });
+            next_frames(cx);
+        });
+        cx.simulate_keystrokes("escape");
+        next_frames(cx);
+        dialogs.push(format!("{name}: opened {opened:?}, frame {frame:?}, key {typed:?}"));
+    }
     eprintln!(
         "PERF todo={todo}: open {opened:?}, open+shown {shown:?}, frame {frame:?}, notified frame {notified:?}, scroll \
          {scroll:?}, idle poll {idle:?}, one file reloaded {reload:?}, of which listing the folders {listing:?}, search \
-         key {search:?}"
+         key {search:?}; {}",
+        dialogs.join("; ")
     );
 }
 
