@@ -2630,3 +2630,113 @@ fn a_repositorys_reference_names_the_entry_of_that_repository_of_its_own_project
     let project = crate::ui::markdown::written_for_project(&board, shop_api);
     assert_eq!(project(Some("web"), 1).map(|k| k.src), Some(shop_web), "a project's description names them so");
 }
+
+#[gpui::test]
+fn wheeling_up_through_cards_never_laid_out_moves_the_view_by_the_wheel(cx: &mut gpui::TestAppContext) {
+    // Cards of one, two and three lines, far more than a view: those the wheel brings in from above were never laid out.
+    let titles: Vec<String> = (1..=300)
+        .map(|n| match n % 3 {
+            0 => format!("task {n} with a title long enough to wrap onto several lines of a narrow column, and more"),
+            1 => format!("task {n}"),
+            _ => format!("task {n} with a title long enough to wrap onto two lines"),
+        })
+        .collect();
+    let (view, cx, _dir) = window(cx, &titles.iter().map(String::as_str).collect::<Vec<_>>());
+    cx.simulate_resize(gpui::size(px(600.), px(800.)));
+    next_frames(cx);
+    wheel(&view, cx, gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(-15000.))), false);
+    redraw(cx);
+    for step in 0..40 {
+        let (card, top) = first_in_view(cx, 300);
+        // The scroll's offset moves by more or less: the rows above reckoned anew as they're laid out.
+        wheel(&view, cx, gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(60.))), false);
+        let now = cx.debug_bounds(format!("card 0/{card}").leak()).expect("the card stays drawn").top();
+        let moved = (now - top).as_f32();
+        assert!((moved - 60.).abs() < 1., "step {step}: card {card} moved {moved} px for a wheel of 60");
+        // The rows laid out out of sight make what the column scrolls over no wider (nor longer).
+        let wider = view.read_with(cx, |view, _| view.scroll.columns[0].scroll.max_offset().x);
+        assert_eq!(wider, px(0.), "step {step}");
+    }
+}
+
+#[gpui::test]
+fn wheeling_up_through_cards_laid_out_every_other_moves_the_view_by_the_wheel(cx: &mut gpui::TestAppContext) {
+    // As `wheeling_up_through_cards_never_laid_out_moves_the_view_by_the_wheel`, but every other card laid out, by a
+    // search that showed only them: wheeled up, one never laid out comes in under one laid out above it, the first
+    // drawn, and the view stays on the first that shows, not on that one.
+    let titles: Vec<String> = (1..=300)
+        .map(|n| {
+            let kind = if n % 2 == 0 { "pine" } else { "oak" };
+            match n % 3 {
+                0 => format!("task {n} {kind}, with a title long enough to wrap onto several lines of a narrow column"),
+                1 => format!("task {n} {kind}"),
+                _ => format!("task {n} {kind}, with a title long enough to wrap onto two lines"),
+            }
+        })
+        .collect();
+    let (view, cx, _dir) = window(cx, &titles.iter().map(String::as_str).collect::<Vec<_>>());
+    cx.simulate_resize(gpui::size(px(600.), px(800.)));
+    next_frames(cx);
+    cx.simulate_keystrokes("/ p i n e");
+    next_frames(cx);
+    let shown = view.read_with(cx, |view, _| view.scroll.columns[0].scroll.bounds().size.height);
+    // Down to the search's end, every card it shows laid out on the way.
+    while !view.read_with(cx, |view, _| {
+        let scroll = &view.scroll.columns[0].scroll;
+        -scroll.offset().y >= scroll.max_offset().y
+    }) {
+        wheel(&view, cx, gpui::ScrollDelta::Pixels(gpui::point(px(0.), -shown / 2.)), false);
+        redraw(cx);
+    }
+    cx.simulate_keystrokes("escape escape");
+    next_frames(cx);
+    to_the_end(&view, cx);
+    redraw(cx);
+    // Wheels of three cards' height or so: two at a time come in, one laid out above one that wasn't.
+    for step in 0..20 {
+        let (card, top) = first_in_view(cx, 300);
+        wheel(&view, cx, gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(250.))), false);
+        let now = cx.debug_bounds(format!("card 0/{card}").leak()).expect("the card stays drawn").top();
+        let moved = (now - top).as_f32();
+        assert!((moved - 250.).abs() < 1., "step {step}: card {card} moved {moved} px for a wheel of 250");
+    }
+}
+
+#[gpui::test]
+fn a_list_first_shown_on_a_card_far_down_shows_it(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    // The oldest task, at the to-do column's bottom.
+    view.update(cx, |view, cx| {
+        view.board.selected = Some(crate::state::Key::new(0, 1));
+        view.follow = true;
+        cx.notify();
+    });
+    next_frames(cx);
+    assert!(shown_in(cx, "card 0/1", "column todo"), "in the column");
+    // The frames a key asks for, as the platform draws them: the second goes to the row as laid out.
+    cx.simulate_keystrokes("v");
+    // The first frame puts it at the view's top as reckoned, with the headers above it reckoned too.
+    let list = cx.debug_bounds("task-list").expect("the list is drawn");
+    let row = cx.debug_bounds("row 0/1").expect("the row is drawn");
+    assert!(row.bottom() > list.top() && row.top() < list.bottom(), "the first frame shows it: {row:?} in {list:?}");
+    next_frames(cx);
+    assert!(shown_in(cx, "row 0/1", "task-list"), "the list layout shows it");
+    redraw(cx);
+    assert!(shown_in(cx, "row 0/1", "task-list"), "and the next");
+}
+
+#[gpui::test]
+fn a_list_first_shown_on_its_first_row_shows_it_whole(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    // The newest task, the list's first row, with every row near it drawn: no box for the second frame to fill.
+    view.update(cx, |view, cx| {
+        view.board.selected = Some(crate::state::Key::new(0, 30));
+        view.follow = true;
+        cx.notify();
+    });
+    next_frames(cx);
+    cx.simulate_keystrokes("v");
+    // The headers above it are shorter than reckoned: the first frame leaves it part above the view.
+    next_frames(cx);
+    assert!(shown_in(cx, "row 0/30", "task-list"), "the second frame shows it whole");
+}

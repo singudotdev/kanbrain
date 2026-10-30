@@ -54,14 +54,14 @@ pub fn draw(board: &Board, rows: &Rows, follow: bool, cx: &mut Context<BrainView
         .filter_map(|(row, &(key, entry))| frame.child(|| entry_row(board, row, key, entry, cx).into_any_element()))
         .collect();
     let list = frame
-        .finish(div())
+        .finish(div(), items)
         .id("entries")
         .debug_selector(|| "entries".to_string())
         .flex_1()
         .min_h_0()
         .overflow_y_scroll()
         .track_scroll(&rows.scroll);
-    card().flex_1().overflow_hidden().child(header).child(list.children(items))
+    card().flex_1().overflow_hidden().child(header).child(list)
 }
 
 /// The row of `entry`, the `row`th: its id, title, state and tags, and its text's first line under them.

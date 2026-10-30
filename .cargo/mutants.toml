@@ -21,9 +21,10 @@ exclude_re = [
     # The highlight of a notes or decisions row and its hover style: a color, and the window tests read bounds, not
     # colors, with no pointer to hover with (the state tests check which entry is selected).
     'gui/src/ui/entries\.rs:.*(replace == with != |delete ! )in entry_row$',
-    # Which rows stand in, and whether one shows (by their lines): only a row whose edge is exactly on the edge drawn
-    # or shown, to the sub-pixel, is taken otherwise, and a row that only touches the view shows nothing of it.
-    'gui/src/ui/offscreen\.rs:(154|297):.*replace (< with <=|> with >=) in (Rows::frame|in_view)$',
+    # Which rows stand in, whether one shows, and the first that shows, where the view stays (by their lines): only a
+    # row whose edge is exactly on the edge drawn or shown, to the sub-pixel, is taken otherwise, and a row that only
+    # touches the view shows nothing of it (the one under it, the view's first, then laid out as it was).
+    'gui/src/ui/offscreen\.rs:(156|281|395):.*replace (< with <=|> with >=) in (Rows::frame|Rows::learn|in_view)$',
     # The highlight of each picker's and dropdown's row, and the line above every row but the first (by their lines, so
     # the rows the lists follow stay tested): colors, and the window tests read bounds, not colors (the state tests
     # check which row is highlighted, each picker's `sel`).

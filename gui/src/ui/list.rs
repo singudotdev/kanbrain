@@ -63,14 +63,14 @@ pub fn draw(board: &Board, rows: &Rows, follow: bool, cx: &mut Context<BrainView
         })
         .collect();
     let list = frame
-        .finish(div())
+        .finish(div(), items)
         .id("task-list")
         .debug_selector(|| "task-list".to_string())
         .flex_1()
         .min_h_0()
         .overflow_y_scroll()
         .track_scroll(&rows.scroll);
-    card().flex_1().overflow_hidden().child(list.children(items))
+    card().flex_1().overflow_hidden().child(list)
 }
 
 /// A child of the list: a task's row, drawn only near the view, or what's between them.
