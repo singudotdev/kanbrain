@@ -166,7 +166,10 @@ fn a_thread_holding_a_brains_lock_takes_it_again_without_waiting_for_itself() {
 fn a_relative_brain_is_named_after_the_current_folder() {
     let here = std::env::current_dir().unwrap();
     let name = here.file_name().unwrap().to_string_lossy().into_owned();
-    assert_eq!(Store { dir: PathBuf::from(PROJECT_DIR), journal: RefCell::new(None) }.project(), Some(name));
+    assert_eq!(
+        Store { dir: PathBuf::from(PROJECT_DIR), journal: RefCell::new(None), read: RefCell::default() }.project(),
+        Some(name)
+    );
 }
 
 #[test]
@@ -345,4 +348,117 @@ fn a_skipped_file_says_why_as_load_always_has() {
     said.sort();
     assert_eq!(said, ["0002-broken.md: bad session line: nonsense", "README.md: missing `- id:` line"]);
     assert_eq!(skipped.iter().map(ToString::to_string).collect::<Vec<_>>(), said);
+}
+
+#[test]
+fn saving_never_writes_over_an_entry_changed_on_disk_since_it_was_read() {
+    let dir = tempfile::tempdir().unwrap();
+    Store::at(dir.path()).unwrap().save(&mut Task::new(1, "Fix".into(), now())).unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let (mut tasks, _) = store.load_entries().unwrap();
+    let file = tasks[0].path.clone().unwrap();
+    // An editor writing over the file in place, as some do, rather than replacing it.
+    let edited = fs::read_to_string(&file).unwrap() + "\nedited by hand\n";
+    fs::write(&file, &edited).unwrap();
+    tasks[0].description = "from memory".into();
+    let error = store.save(&mut tasks[0]).unwrap_err().to_string();
+    assert!(error.contains("changed"), "{error}");
+    assert_eq!(fs::read_to_string(&file).unwrap(), edited, "the edit is kept");
+    // Read again, it's saved; and saved again, as written.
+    let (mut tasks, _) = store.load_entries().unwrap();
+    tasks[0].description = "from memory".into();
+    store.save(&mut tasks[0]).unwrap();
+    tasks[0].title = "Fix it".into();
+    store.save(&mut tasks[0]).unwrap();
+    tasks[0].description = "again".into();
+    store.save(&mut tasks[0]).unwrap();
+}
+
+#[test]
+fn saving_never_brings_back_an_entry_deleted_on_disk_since_it_was_read() {
+    let dir = tempfile::tempdir().unwrap();
+    Store::at(dir.path()).unwrap().save(&mut Task::new(1, "Fix".into(), now())).unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let (mut tasks, _) = store.load_entries().unwrap();
+    let file = tasks[0].path.clone().unwrap();
+    fs::remove_file(&file).unwrap();
+    assert!(store.save(&mut tasks[0]).is_err());
+    assert!(!file.exists(), "not written back");
+}
+
+#[test]
+fn the_store_knows_each_file_as_it_last_read_or_wrote_it() {
+    let dir = tempfile::tempdir().unwrap();
+    Store::at(dir.path()).unwrap().save(&mut Task::new(1, "Fix".into(), now())).unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let (mut tasks, _) = store.load_entries().unwrap();
+    let file = tasks[0].path.clone().unwrap();
+    assert_eq!(store.known(&file), seen(&file), "as read");
+    fs::write(&file, fs::read_to_string(&file).unwrap() + "\n").unwrap();
+    assert_ne!(store.known(&file), seen(&file), "another program's write isn't");
+    tasks[0] = store.load_entries().unwrap().0.remove(0);
+    tasks[0].title = "Fix it".into();
+    store.save(&mut tasks[0]).unwrap();
+    let renamed = tasks[0].path.clone().unwrap();
+    assert_eq!((store.known(&file), store.known(&renamed)), (None, seen(&renamed)), "as written, under its new name");
+    store.delete(&tasks[0]).unwrap();
+    assert_eq!(store.known(&renamed), None, "deleted");
+}
+
+#[test]
+fn a_brain_read_by_several_threads_loads_every_entry_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    // More than three threads' shares, with broken files among them.
+    let share = u32::try_from(READ_PER_THREAD).unwrap();
+    let count = 3 * share + 1;
+    for id in 1..=count {
+        let text = Task::new(id, format!("Task {id}"), now()).to_markdown();
+        let text = if id.is_multiple_of(share) { format!("{text}\n## Sessions\n\n- nonsense\n") } else { text };
+        fs::write(dir.path().join(format!("{id:04}-task.md")), text).unwrap();
+    }
+    let (tasks, skipped) = store.load_entries().unwrap();
+    let mut ids: Vec<u32> = tasks.iter().map(|task| task.id).collect();
+    ids.sort_unstable();
+    let broken = |id: &u32| id.is_multiple_of(share);
+    assert_eq!(ids, (1..=count).filter(|id| !broken(id)).collect::<Vec<_>>(), "each entry read, once");
+    let mut said: Vec<String> = skipped.iter().map(|file| file.file.clone()).collect();
+    said.sort();
+    assert_eq!(said, (1..=count).filter(broken).map(|id| format!("{id:04}-task.md")).collect::<Vec<_>>());
+    for task in &tasks {
+        let file = task.path.as_ref().expect("read from its file");
+        assert_eq!(store.known(file), seen(file), "{} known as read", file.display());
+    }
+}
+
+#[test]
+fn an_entry_read_alone_is_known_as_read() {
+    let dir = tempfile::tempdir().unwrap();
+    Store::at(dir.path()).unwrap().save(&mut Task::new(7, "Fix".into(), now())).unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let (mut tasks, skipped) = store.load_named(7).unwrap();
+    assert_eq!(skipped, []);
+    let file = tasks[0].path.clone().unwrap();
+    assert_eq!(store.known(&file), seen(&file));
+    // Written over in place since: not saved over it, as after a whole read.
+    fs::write(&file, fs::read_to_string(&file).unwrap() + "\nedited by hand\n").unwrap();
+    tasks[0].description = "from memory".into();
+    assert!(store.save(&mut tasks[0]).is_err());
+}
+
+#[test]
+fn saving_never_writes_over_an_entry_rewritten_to_the_same_length_since_it_was_read() {
+    let dir = tempfile::tempdir().unwrap();
+    Store::at(dir.path()).unwrap().save(&mut Task::new(1, "Fix".into(), now())).unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    let (mut tasks, _) = store.load_entries().unwrap();
+    let file = tasks[0].path.clone().unwrap();
+    // Only its time tells: the same length, and a time set apart from the read's, as a coarse clock may not.
+    let edited = fs::read_to_string(&file).unwrap().replacen("Fix", "Fax", 1);
+    fs::write(&file, &edited).unwrap();
+    let later = fs::metadata(&file).unwrap().modified().unwrap() + std::time::Duration::from_secs(10);
+    fs::File::options().write(true).open(&file).unwrap().set_modified(later).unwrap();
+    tasks[0].description = "from memory".into();
+    assert!(store.save(&mut tasks[0]).is_err());
+    assert_eq!(fs::read_to_string(&file).unwrap(), edited, "the edit is kept");
 }

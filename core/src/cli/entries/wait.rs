@@ -3,6 +3,7 @@
 use crate::api::ApiError;
 use crate::brain::Brain;
 use crate::model::{Asked, DecisionState, Kind, Task};
+use crate::store::Store;
 use anyhow::{Context, Result, bail};
 use std::time::Duration;
 
@@ -47,7 +48,7 @@ pub(super) fn wait(brain: &Brain, id: u32, timeout: Option<Duration>) -> Result<
     let started = std::time::Instant::now();
     let mut watch = Watch::default();
     loop {
-        if let Some(said) = watch.look(id, brain.store.load_entries().map(|(tasks, _)| tasks)) {
+        if let Some(said) = watch.look(id, read_for(&brain.store, id)) {
             println!("{}", said?);
             return Ok(());
         }
@@ -56,6 +57,16 @@ pub(super) fn wait(brain: &Brain, id: u32, timeout: Option<Duration>) -> Result<
         }
         std::thread::sleep(WAIT_POLL);
     }
+}
+
+/// One look's read of the brain for entry `id`: its file, rather than every entry's each second; every entry when no
+/// file named for it holds it (renamed by hand, or gone, which [`Watch::look`] tells apart by looking again).
+pub(super) fn read_for(store: &Store, id: u32) -> Result<Vec<Task>> {
+    let (tasks, _) = store.load_named(id)?;
+    if tasks.iter().any(|task| task.id == id) {
+        return Ok(tasks);
+    }
+    Ok(store.load_entries()?.0)
 }
 
 /// What `wait` keeps from one look at the brain to the next, apart from the clock so a test can play

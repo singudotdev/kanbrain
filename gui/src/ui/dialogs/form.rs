@@ -138,23 +138,21 @@ fn project_field(
             .child(dim("▾"));
         return div().child(current);
     }
-    let rows: Vec<_> = board
-        .form_projects(form)
-        .into_iter()
-        .enumerate()
-        .map(|(index, (option, name))| {
-            let dir = board.brain(option).store.dir().display().to_string();
-            row(("project-option", index), format!("project option {index}"), index == picker.sel, true)
-                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                    this.act(cx, |b| b.choose_form_project(index));
-                }))
-                .child(check(option == src))
-                .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(name))
-                .child(dim_small(dir).min_w_0().truncate())
-        })
-        .collect();
-    let empty = rows.is_empty();
-    let options = list_box(list("project-options", rows, picker.sel, FORM_LINK_ROWS, scroll, follow))
+    let options = board.form_projects(form);
+    let draw = |index: usize| {
+        let (option, name) = &options[index];
+        let option = *option;
+        let dir = board.brain(option).store.dir().display().to_string();
+        row(("project-option", index), format!("project option {index}"), index == picker.sel, true)
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                this.act(cx, |b| b.choose_form_project(index));
+            }))
+            .child(check(option == src))
+            .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(name.clone()))
+            .child(dim_small(dir).min_w_0().truncate())
+    };
+    let empty = options.is_empty();
+    let options = list_box(list("project-options", options.len(), picker.sel, FORM_LINK_ROWS, scroll, follow, draw))
         .text_size(px(13.))
         .when(empty, |d| d.child(dim("No project matches.").px_2()));
     div().flex().flex_col().gap_1().child(search).child(options)
@@ -204,19 +202,17 @@ fn tags_field(
         });
     }
     let (one, many) = (kind.as_str(), format!("{}s", kind.as_str()));
-    let rows: Vec<_> = tags
-        .iter()
-        .enumerate()
-        .map(|(index, (tag, uses))| {
-            let chosen = tag.clone();
-            row(("tag-option", index), format!("tag option {index}"), form.tag_sel.as_ref() == Some(tag), true)
-                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.choose_form_tag(&chosen))))
-                .child(tag_chip(board, tag))
-                .child(dim_small(counted(*uses, one, &many)))
-        })
-        .collect();
+    let draw = |index: usize| {
+        let (tag, uses) = &tags[index];
+        let chosen = tag.clone();
+        row(("tag-option", index), format!("tag option {index}"), form.tag_sel.as_ref() == Some(tag), true)
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.choose_form_tag(&chosen))))
+            .child(tag_chip(board, tag))
+            .child(dim_small(counted(*uses, one, &many)))
+    };
     let sel = form.tag_sel.as_ref().and_then(|sel| tags.iter().position(|(tag, _)| tag == sel)).unwrap_or(0);
-    field.child(list_box(list("tag-options", rows, sel, FORM_LINK_ROWS, scroll, follow)).text_size(px(13.)))
+    let list = list("tag-options", tags.len(), sel, FORM_LINK_ROWS, scroll, follow, draw);
+    field.child(list_box(list).text_size(px(13.)))
 }
 
 /// The related field: the entries checked, each a chip with ×, then the search box; while it has the
@@ -252,23 +248,18 @@ fn related_field(
     });
     let open = form.field == Field::Links;
     let options = open.then(|| {
-        let rows: Vec<_> = board
-            .form_link_options(form)
-            .into_iter()
-            .enumerate()
-            .map(|(index, (key, other))| {
-                let checked = form.links.contains(&key);
-                row(("link-option", index), format!("link option {index}"), index == form.related.sel, true)
-                    .on_click(
-                        cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.toggle_form_link(index))),
-                    )
-                    .child(check(checked))
-                    .child(entry_pill(other))
-                    .child(div().min_w_0().truncate().child(format!("{} {}", board.link_name(src, key), other.title)))
-            })
-            .collect();
-        let empty = rows.is_empty();
-        list_box(list("link-options", rows, form.related.sel, FORM_LINK_ROWS, scroll, follow))
+        let options = board.form_link_options(form);
+        let draw = |index: usize| {
+            let (key, other) = options[index];
+            let checked = form.links.contains(&key);
+            row(("link-option", index), format!("link option {index}"), index == form.related.sel, true)
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.toggle_form_link(index))))
+                .child(check(checked))
+                .child(entry_pill(other))
+                .child(div().min_w_0().truncate().child(format!("{} {}", board.link_name(src, key), other.title)))
+        };
+        let empty = options.is_empty();
+        list_box(list("link-options", options.len(), form.related.sel, FORM_LINK_ROWS, scroll, follow, draw))
             .text_size(px(13.))
             .when(empty, |d| d.child(dim("Nothing matches.").px_2()))
     });

@@ -67,23 +67,20 @@ fn move_dialog(
     follow: bool,
     cx: &mut Context<BrainView>,
 ) -> Div {
-    let rows: Vec<_> = board
-        .move_options(src, picker)
-        .into_iter()
-        .enumerate()
-        .map(|(index, option)| {
-            let row = row(("move-option", index), format!("move option {index}"), index == picker.sel, true)
-                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.apply_manage(index))));
-            match option {
-                ProjectOption::New(name) => row
-                    .child(dim("+ New project").flex_none())
-                    .child(div().font_weight(FontWeight::MEDIUM).min_w_0().truncate().child(name)),
-                ProjectOption::Existing(name) => row.child(div().font_weight(FontWeight::MEDIUM).child(name)),
-            }
-        })
-        .collect();
-    let empty = rows.is_empty();
-    let options = list_box(list("move-options", rows, picker.sel, PROJECT_ROWS, scroll, follow))
+    let options = board.move_options(src, picker);
+    let draw = |index: usize| {
+        let option = &options[index];
+        let row = row(("move-option", index), format!("move option {index}"), index == picker.sel, true)
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.apply_manage(index))));
+        match option {
+            ProjectOption::New(name) => row
+                .child(dim("+ New project").flex_none())
+                .child(div().font_weight(FontWeight::MEDIUM).min_w_0().truncate().child(name.clone())),
+            ProjectOption::Existing(name) => row.child(div().font_weight(FontWeight::MEDIUM).child(name.clone())),
+        }
+    };
+    let empty = options.is_empty();
+    let options = list_box(list("move-options", options.len(), picker.sel, PROJECT_ROWS, scroll, follow, draw))
         .text_size(px(13.))
         .when(empty, |d| d.child(dim("Type the project's name.").px_2()));
     let content = div()

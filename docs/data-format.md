@@ -194,7 +194,11 @@ The `- status:` line decides where the task stands; the history is only the reco
 
 These fixes are made by whatever works in the folder: the app, which shows every brain, and `kb` run in it or
 with `--project`. Reading another repository's entries to show or check a link to them, or completing a command
-line, writes nothing there.
+line, writes nothing there. A `kb` command that changes one entry alone (`comment`, `ask`, `describe`, a move to a
+status other than `doing`) reads only that entry's file, so it fixes nothing else; the next command that reads every
+entry (`list`, `context`, `show`, `start`, `add`, or any command with `--json`) does. When no file is named for the
+entry's number (renamed by hand), another shares it (a conflict copy), or that file can't be read or holds another
+id, it reads every entry too.
 
 Other `.md` files in the folder that aren't tasks (such as a README) are reported as skipped and otherwise ignored.
 `last-id` holds the highest id given so far, so ids aren't reused; without it (a folder from an older version),

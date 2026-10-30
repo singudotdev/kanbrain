@@ -26,6 +26,7 @@ use crate::projects::{self, ProjectInfo};
 use crate::store::{self, Skipped, Store};
 use crate::tags::TagColors;
 use anyhow::{Context, Result};
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 /// Every entry in the data folder, with the tag colors.
@@ -99,6 +100,31 @@ impl Brain {
         Self::open_skipping(store, Some(central.to_path_buf()))
     }
 
+    /// [`Brain::open_in_skipping`], or, for a command on entry `alone` that changes it and no other, only that entry:
+    /// its file read, rather than every entry's. Only when that file is the only one named for it and reads as it:
+    /// otherwise (renamed by hand, a sync conflict's copy beside it, broken) every entry is read and repaired, as the
+    /// copy is given an id of its own and the broken file is said. Nothing else is repaired then: the next command
+    /// reading the whole brain does.
+    pub(crate) fn open_for(store: Store, central: &Path, alone: Option<u32>) -> Result<(Self, Vec<Skipped>)> {
+        if let Some(id) = alone {
+            crate::migrate::migrate(&store)?;
+            let (tasks, skipped) = store.load_named(id)?;
+            if skipped.is_empty() && matches!(tasks.as_slice(), [task] if task.id == id) {
+                let brain = Self {
+                    store,
+                    tasks,
+                    tag_colors: TagColors::default(),
+                    warnings: Vec::new(),
+                    project: None,
+                    central: Some(central.to_path_buf()),
+                    author: Author::Human,
+                };
+                return Ok((brain, skipped));
+            }
+        }
+        Self::open_in_skipping(store, central)
+    }
+
     /// Re-reads every file from disk.
     pub fn reload(&mut self) -> Result<()> {
         self.reload_skipping().map(drop)
@@ -109,15 +135,49 @@ impl Brain {
         let (tasks, skipped) = self.store.load_entries()?;
         self.tasks = tasks;
         self.warnings = skipped.iter().map(ToString::to_string).collect();
+        self.tag_colors = self.store.load_tag_colors()?;
+        self.repair()?;
+        Ok(skipped)
+    }
+
+    /// Re-reads only `files`, of this brain's folder, that another program changed, added or deleted since they were
+    /// read, and repairs what [`Brain::reload`] does: an agent's write costs reading the file it wrote, where a reload
+    /// reads every entry. Any other file of the folder (the tag colors, the project's) reads the brain again whole.
+    pub fn reload_files(&mut self, files: &[PathBuf]) -> Result<()> {
+        let dir = self.store.dir();
+        if files.iter().any(|file| file.parent() != Some(dir) || !store::is_task_file(file)) {
+            return self.reload();
+        }
+        // As every read: a brain a newer kanbrain wrote is refused before anything misreads it.
+        crate::migrate::check(dir)?;
+        // By their names, all in this folder: a path spelled otherwise (`dir/./x.md`) or given twice would leave the
+        // entry read before beside the one read again, two of one id.
+        let mut names: Vec<&OsStr> = files.iter().filter_map(|file| file.file_name()).collect();
+        names.sort_unstable();
+        names.dedup();
+        let gone = |path: &PathBuf| path.file_name().is_some_and(|name| names.binary_search(&name).is_ok());
+        self.tasks.retain(|task| task.path.as_ref().is_none_or(|path| !gone(path)));
+        // Said as `file: why` (see `Skipped`), the warnings of the files read again go before they're read.
+        let said = |warning: &String| {
+            names.iter().any(|name| warning.strip_prefix(&*name.to_string_lossy()).is_some_and(|w| w.starts_with(": ")))
+        };
+        self.warnings.retain(|warning| !said(warning));
+        let files: Vec<PathBuf> = names.iter().map(|name| dir.join(name)).collect();
+        let (tasks, skipped) = self.store.load_files(&files);
+        self.tasks.extend(tasks);
+        self.warnings.extend(skipped.iter().map(ToString::to_string));
+        self.repair()
+    }
+
+    /// What every read of the files mends, in the files too: ids shared, several tasks doing, links to entries gone.
+    fn repair(&mut self) -> Result<()> {
         self.renumber_shared_ids()?;
         self.keep_one_person_doing()?;
         self.drop_dangling_links()?;
         self.remember_highest_id()?;
-        self.tag_colors = self.store.load_tag_colors()?;
         self.project = projects::info(self.store.dir(), self.central.as_deref());
         self.drop_dangling_repo_links()?;
-        self.sync_tag_colors()?;
-        Ok(skipped)
+        self.sync_tag_colors()
     }
 
     /// The entry with this id.
@@ -258,6 +318,11 @@ impl Brain {
     /// two machines at once, would each take commands meant for the other, and saving one could overwrite the
     /// other's file: all but one get new ids. The one kept is under its own name, else the oldest.
     fn renumber_shared_ids(&mut self) -> Result<()> {
+        // Most reads share none: telling which to keep names every entry's file, a while for a long brain.
+        let mut ids = std::collections::HashSet::with_capacity(self.tasks.len());
+        if self.tasks.iter().all(|t| ids.insert(t.id)) {
+            return Ok(());
+        }
         let own_name =
             |t: &Task| t.path.as_ref().and_then(|p| p.file_name()).is_some_and(|n| *n == *store::file_name(t));
         let mut order: Vec<usize> = (0..self.tasks.len()).collect();
@@ -323,6 +388,10 @@ impl Brain {
 
     /// Colors any new tags, oldest entries first so earlier tags claim colors first.
     fn sync_tag_colors(&mut self) -> Result<()> {
+        // Most reads find none new: ordering every entry by age for them took a while in a long brain.
+        if self.tasks.iter().flat_map(|t| &t.tags).all(|tag| self.tag_colors.get(tag).is_some()) {
+            return Ok(());
+        }
         let mut by_age: Vec<&Task> = self.tasks.iter().collect();
         by_age.sort_by_key(|t| t.id);
         if self.tag_colors.assign(by_age.iter().flat_map(|t| &t.tags)) {

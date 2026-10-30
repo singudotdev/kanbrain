@@ -18,6 +18,7 @@
 mod actions;
 mod decisions;
 mod form;
+mod index;
 mod input;
 pub(crate) mod keys;
 mod manage;
@@ -44,11 +45,13 @@ use crate::text::editor::LineInput;
 use crate::text::merge::{self, Merged};
 use crate::watch;
 use anyhow::Result;
+use index::Showing;
 use kanbrain_core::brain::{CalendarView, ReportView};
 use kanbrain_core::model::{Kind, Status, Task};
 use kanbrain_core::period::{Period, Unit};
 use kanbrain_core::projects;
 use kanbrain_core::store::Change;
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -58,6 +61,22 @@ const MESSAGE_TTL: Duration = Duration::from_secs(5);
 
 /// The board's columns, left to right, in the order a task usually moves through them.
 pub const COLUMNS: [Status; 4] = [Status::Todo, Status::Doing, Status::Parked, Status::Done];
+
+/// Where `status`'s column is in [`COLUMNS`].
+fn column_place(status: Status) -> usize {
+    COLUMNS.iter().position(|&s| s == status).unwrap_or_default()
+}
+
+/// What [`Board::showing`] was worked out of: the revision of every brain, the scope and the search.
+#[derive(Debug)]
+struct ShowingOf {
+    /// Each source's [`Source::revision`], in order.
+    revisions: Vec<u64>,
+    /// The scope.
+    scope: Vec<Scope>,
+    /// The search's text.
+    search: String,
+}
 
 /// Done tasks shown before "Show all": the most recently finished.
 pub const DONE_LIMIT: usize = 20;
@@ -272,6 +291,9 @@ pub struct Board {
     next_undo: NextUndo,
     /// The text shown, not typed into, that the mouse selected in, if any.
     shown: Option<Shown>,
+    /// What the board shows of the brains in scope through the search, and of which brains' revisions, scope and
+    /// search: worked out again only once one of those changed.
+    showing: RefCell<Option<(ShowingOf, Rc<Showing>)>>,
 }
 
 impl Board {
@@ -305,6 +327,7 @@ impl Board {
             last_change: Vec::new(),
             next_undo: NextUndo::Undo,
             shown: None,
+            showing: RefCell::default(),
         };
         if let Some(src) = board.opened_in.as_ref().and_then(|dir| board.src_at(dir)) {
             let project = board.project_name(src).to_string();
@@ -319,7 +342,7 @@ impl Board {
 
     /// The index of the brain whose folder is `dir`.
     fn src_at(&self, dir: &Path) -> Option<usize> {
-        self.sources.iter().position(|s| projects::same_dir(s.brain.store.dir(), dir))
+        self.sources.iter().position(|s| projects::same_dir(s.brain().store.dir(), dir))
     }
 
     /// Shows `msg` in the status bar for a few seconds.
@@ -392,7 +415,7 @@ impl Board {
     /// selection, the repositories the scope picks and an open dialog stay on the same folders, wherever they now are in
     /// the list; a dialog on a folder no longer there closes.
     pub fn reload(&mut self) -> Result<()> {
-        let before: Vec<PathBuf> = self.sources.iter().map(|s| s.brain.store.dir().to_path_buf()).collect();
+        let before: Vec<PathBuf> = self.sources.iter().map(|s| s.brain().store.dir().to_path_buf()).collect();
         // The repositories each project shown has, to find it again under a new name.
         let had: Vec<Vec<usize>> = self
             .scope
@@ -452,28 +475,41 @@ impl Board {
         Ok(())
     }
 
-    /// Re-reads the brains whose folders are among `dirs`, those another program changed, and the other
-    /// repositories of their projects, rather than all of them: an agent's every command changes one, and
-    /// the window may show many. Everything is re-read when the list of projects or their shared cards may
-    /// have changed, a repository was renamed, or a folder is gone.
-    pub fn reload_changed(&mut self, dirs: &[PathBuf]) -> Result<()> {
+    /// Re-reads the files of `changes`, those another program changed, and mends the other repositories of their
+    /// projects, rather than reading every brain: an agent's every command changes a file or two, and the window may
+    /// show many brains. Everything is re-read when the list of projects or their shared cards may have changed, a
+    /// repository was renamed, or a folder is gone.
+    pub fn reload_changed(&mut self, changes: &[watch::Changes]) -> Result<()> {
         let cards = projects::cards_dir(&self.central);
         let left_out = |d: &PathBuf| self.skipped.iter().any(|s| s.dir == *d);
-        let everything = dirs.iter().any(|d| *d == cards || !d.is_dir() || left_out(d)) || !self.same_repos()?;
+        let everything =
+            changes.iter().any(|c| c.dir == cards || !c.dir.is_dir() || left_out(&c.dir)) || !self.same_repos()?;
         if everything {
             return self.reload();
         }
-        // A project's other repositories too: an entry deleted in one drops the links the others have to it.
-        let changed = |s: &Source| dirs.iter().any(|d| d == s.brain.store.dir());
+        let files = |s: &Source| changes.iter().find(|c| c.dir == s.brain().store.dir()).map(|c| &c.files);
         let projects: Vec<String> =
-            self.sources.iter().filter(|s| changed(s)).filter_map(|s| s.project.clone()).collect();
-        for source in &mut self.sources {
-            if changed(source) || source.project.as_ref().is_some_and(|p| projects.contains(p)) {
-                source.brain.reload()?;
+            self.sources.iter().filter(|s| files(s).is_some()).filter_map(|s| s.project.clone()).collect();
+        // Every brain, though one fails: the watcher took all their changes as seen.
+        let mut failed = None;
+        for at in 0..self.sources.len() {
+            let source = &self.sources[at];
+            // Only the files that changed: reading every entry of a long brain again took a tenth of a second.
+            let reloaded = if let Some(files) = files(source) {
+                self.sources[at].brain_mut().reload_files(files)
+            // A project's other repositories mended, none of their files read: an entry deleted in one drops the
+            // links the others have to it.
+            } else if source.project.as_ref().is_some_and(|p| projects.contains(p)) {
+                self.sources[at].brain_mut().reload_files(&[])
+            } else {
+                Ok(())
+            };
+            if let Err(e) = reloaded {
+                failed.get_or_insert(e);
             }
         }
         self.after_load();
-        Ok(())
+        failed.map_or(Ok(()), Err)
     }
 
     /// Reports what is newly skipped, files and repositories left out, and puts the selection somewhere visible.
@@ -492,7 +528,7 @@ impl Board {
         let left_out = self.skipped.iter().map(|s| s.said.clone());
         // Named with their brain: two repositories may skip files of one name.
         let files = self.sources.iter().flat_map(|s| {
-            s.brain.warnings.iter().map(move |w| s.label.as_ref().map_or_else(|| w.clone(), |l| format!("{l}: {w}")))
+            s.brain().warnings.iter().map(move |w| s.label.as_ref().map_or_else(|| w.clone(), |l| format!("{l}: {w}")))
         });
         let now: Vec<String> = left_out.chain(files).collect();
         let new: Vec<&str> = now.iter().filter(|w| !self.warned.contains(w)).map(String::as_str).collect();
@@ -597,35 +633,45 @@ impl Board {
         if form.changed_on_disk { None } else { self.form_changed_on_disk(form) }
     }
 
+    /// What the board shows of the brains in scope through the search: worked out once per change of the brains, the
+    /// scope or the search, so frames only read it.
+    pub fn showing(&self) -> Rc<Showing> {
+        let mut showing = self.showing.borrow_mut();
+        if let Some((of, shown)) = showing.as_ref()
+            && of.revisions.iter().copied().eq(self.sources.iter().map(Source::revision))
+            && of.scope == self.scope
+            && of.search == self.search.text()
+        {
+            return shown.clone();
+        }
+        let search = self.search.text();
+        let every = (0..self.sources.len()).map(|src| (src, self.sources[src].brain(), self.sources[src].index()));
+        let mut shown = Showing::new(every.clone().filter(|&(src, ..)| self.in_scope(src)), |t| {
+            search.is_empty() || t.matches(search)
+        });
+        shown.repo_related = index::repo_related(&every);
+        let shown = Rc::new(shown);
+        let of = ShowingOf {
+            revisions: self.sources.iter().map(Source::revision).collect(),
+            scope: self.scope.clone(),
+            search: search.to_string(),
+        };
+        *showing = Some((of, shown.clone()));
+        shown
+    }
+
     /// Tasks in a column, filtered by the scope and the search, most recently moved there first; the
     /// Done column stops at `DONE_LIMIT` unless `all_done`.
     pub fn column(&self, status: Status) -> Vec<(Key, &Task)> {
         let limit = if status == Status::Done && !self.all_done { DONE_LIMIT } else { usize::MAX };
-        let mut cards = self.all_in_column(status);
-        cards.truncate(limit);
-        cards
-    }
-
-    /// Every task in a column matching the scope and the search, most recently moved there first.
-    fn all_in_column(&self, status: Status) -> Vec<(Key, &Task)> {
-        let mut cards: Vec<(Key, &Task)> = self
-            .scoped()
-            .flat_map(|(src, brain)| brain.column(status).into_iter().map(move |t| (Key::new(src, t.id), t)))
-            .filter(|(_, t)| self.shows(t))
-            .collect();
-        // As within one brain (`Brain::column`): among moves at the same time, the newest entry first.
-        cards.sort_by_key(|(key, t)| (std::cmp::Reverse(t.status_since()), key.src, std::cmp::Reverse(key.id)));
-        cards
+        let showing = self.showing();
+        let keys = &showing.columns[column_place(status)];
+        keys.iter().take(limit).filter_map(|&key| Some((key, self.task(key)?))).collect()
     }
 
     /// Every task in a column in scope, whether or not the search shows it.
     pub fn column_total(&self, status: Status) -> usize {
-        self.scoped().map(|(_, brain)| brain.column(status).len()).sum()
-    }
-
-    /// Whether the tab's search keeps `task`.
-    pub fn shows(&self, task: &Task) -> bool {
-        task.matches(self.search.text())
+        self.showing().totals[column_place(status)]
     }
 
     /// The tags the search filters by: its `#tag` words, without the `#`.
@@ -641,20 +687,14 @@ impl Board {
 
     /// Done tasks matching the search that the Done column leaves out.
     pub fn hidden_done(&self) -> usize {
-        let all = self.all_in_column(Status::Done).len();
+        let all = self.showing().columns[column_place(Status::Done)].len();
         if self.all_done { 0 } else { all.saturating_sub(DONE_LIMIT) }
     }
 
     /// The notes or decisions of the current tab, filtered by the scope and the search, newest first.
     pub fn entries(&self) -> Vec<(Key, &Task)> {
-        let Some(kind) = self.tab.kind() else { return Vec::new() };
-        let mut entries: Vec<(Key, &Task)> = self
-            .scoped()
-            .flat_map(|(src, brain)| brain.tasks.iter().map(move |t| (Key::new(src, t.id), t)))
-            .filter(|(_, t)| t.kind == kind && self.shows(t))
-            .collect();
-        entries.sort_by_key(|(key, t)| (std::cmp::Reverse(t.created), key.src, std::cmp::Reverse(key.id)));
-        entries
+        let Some(place) = self.tab.kind().and_then(index::entries_place) else { return Vec::new() };
+        self.showing().entries[place].iter().filter_map(|&key| Some((key, self.task(key)?))).collect()
     }
 
     /// The entries the current tab shows, in reading order: column by column on the board, by first

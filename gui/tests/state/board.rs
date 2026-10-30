@@ -297,7 +297,7 @@ fn a_dialog_on_an_entry_deleted_meanwhile_closes() {
         assert!(!matches!(f.board.mode, Mode::Normal), "{open} opens a dialog on #2");
         let store = Store::at(f.dir.path()).unwrap();
         store.delete(&f.on_disk(2)).unwrap();
-        f.board.reload_changed(&[f.dir.path().to_path_buf()]).unwrap();
+        f.board.reload_changed(&all_of(&f.board, &[f.dir.path().to_path_buf()])).unwrap();
         assert!(matches!(f.board.mode, Mode::Normal), "{open}: closed, not left taking the keys unseen");
         assert_eq!(f.board.message(), Some("closed: #2 is gone, deleted or moved meanwhile"));
     }
@@ -597,4 +597,16 @@ fn opening_waits_for_a_brain_another_program_is_writing() {
     release.0.send(()).unwrap();
     writer.join().unwrap();
     assert_eq!(opening.join().unwrap().unwrap(), 4);
+}
+
+#[test]
+fn the_boards_own_writes_never_read_as_changes() {
+    let mut f = Fixture::new(&["feature", "bug"]);
+    let mut watcher = crate::watch::Watcher::new(f.board.watched_dirs());
+    watcher.changed();
+    f.board.select(k(1));
+    f.press(KeyCode::Char('s'));
+    assert_eq!(f.status(1), Status::Doing);
+    watcher.sync(f.board.watched_dirs(), |file| f.board.known(file));
+    assert!(watcher.changed().is_empty(), "the start it saved, known as written");
 }

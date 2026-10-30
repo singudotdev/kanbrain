@@ -339,6 +339,22 @@ impl EntryArgs {
         Ok(Some(Self { command, json }))
     }
 
+    /// The entry the command reads and changes alone, if it does: a comment, a question, a description, a move to a
+    /// status other than doing (which looks for room among the others), or waiting on it. Said as a line, never as JSON,
+    /// which names the entries linked to it. Only for commands that touch nothing else of the brain: the one it
+    /// opens holds no tag colors nor project ([`Brain::open_for`]), which a command saving them would wipe.
+    pub(crate) fn alone(&self) -> Option<u32> {
+        match self.command {
+            _ if self.json => None,
+            EntryCommand::Comment(id, _)
+            | EntryCommand::Ask(id, _)
+            | EntryCommand::Describe(id, _)
+            | EntryCommand::Wait(id, _) => Some(id),
+            EntryCommand::SetStatus(id, status) if status != Status::Doing => Some(id),
+            _ => None,
+        }
+    }
+
     /// Runs the command against `brain` and prints the result.
     pub fn run(self, mut brain: Brain) -> Result<()> {
         let json = self.json;

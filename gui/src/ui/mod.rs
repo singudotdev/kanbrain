@@ -38,6 +38,7 @@ mod keys;
 mod list;
 mod markdown;
 mod menu;
+mod offscreen;
 mod pointer;
 mod report;
 mod scrollbar;
@@ -210,13 +211,13 @@ pub struct BrainView {
 #[derive(Default)]
 struct Scrolls {
     /// Each board column, in `COLUMNS` order.
-    columns: [ScrollHandle; COLUMNS.len()],
+    columns: [offscreen::Rows; COLUMNS.len()],
     /// The board's columns, sideways when the window (with the details open) is too narrow for them.
     board: ScrollHandle,
     /// The notes or decisions list.
-    list: ScrollHandle,
+    list: offscreen::Rows,
     /// The board's tasks in its list layout.
-    tasks: ScrollHandle,
+    tasks: offscreen::Rows,
     /// The details drawer.
     drawer: ScrollHandle,
     /// The report tab.
@@ -273,7 +274,14 @@ impl BrainView {
         let watch = cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(watch::INTERVAL).await;
-                if this.update(cx, BrainView::follow_disk).is_err() {
+                let Ok(dirs) = this.update(cx, |view, _| view.watcher.dirs().to_vec()) else { break };
+                // Away from the window's thread: listing a brain of 10,000 entries took over 10 ms, every second.
+                let listed = cx.background_executor().spawn(async move {
+                    let listings = watch::list(&dirs);
+                    (dirs, listings)
+                });
+                let (dirs, listings) = listed.await;
+                if this.update(cx, |view, cx| view.follow_disk(&dirs, listings, cx)).is_err() {
                     break;
                 }
             }
@@ -408,7 +416,7 @@ impl BrainView {
         self.board.lock_found_brains(&mut locks, &mut tried);
         let result = input(self);
         self.board.input_done();
-        self.watcher.sync(self.board.watched_dirs());
+        self.watcher.sync(self.board.watched_dirs(), |file| self.board.known(file));
         drop(locks);
         result
     }
@@ -461,8 +469,8 @@ impl BrainView {
     /// The selection stays on the same entry and whatever is being typed is kept. Under the locks, as input
     /// is, once there's something to read: a write landing between the reload and taking the files as seen
     /// would otherwise never be read.
-    fn follow_disk(&mut self, cx: &mut Context<Self>) {
-        if self.watcher.dirty() {
+    fn follow_disk(&mut self, dirs: &[PathBuf], listings: Vec<watch::Listing>, cx: &mut Context<Self>) {
+        if self.watcher.noticed(dirs, listings) {
             self.locked(|_| ());
             cx.notify();
         }
@@ -482,7 +490,7 @@ impl BrainView {
         }
         // Loading may have written files itself, when it fixed several tasks left running, and may
         // have found projects added or gone.
-        self.watcher.sync(self.board.watched_dirs());
+        self.watcher.sync(self.board.watched_dirs(), |file| self.board.known(file));
     }
 
     /// Quits when the board asked to, runs a requested `$EDITOR`, shares the selected text, and redraws.

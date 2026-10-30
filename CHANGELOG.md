@@ -5,6 +5,38 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-10-30
+
+### Changed
+
+- The kanban app and `kb` keep their pace on a board of 10,000 entries. Measured at 10,000 tasks to do (with 2,000
+  done and 2,000 notes), against 0.6.7: the board shows in a third of a second rather than 8.6; a frame (a window move,
+  a hover, the clock's tick) takes 3 ms rather than 169, as with 1,000; a search key 7 ms rather than 3 s; the link
+  picker 4 ms a frame rather than 877; a file another program changed is taken in within 30 ms rather than 98; `kb
+  show` and `kb context` 38 ms rather than 54, `kb comment` 48 rather than 100 (on a spinning disk, most of it the
+  write's flush).
+- The kanban app draws only the rows in view and near it, in the board's columns, the list layout, the notes and
+  decisions lists, the pickers, the form's lists, the command palette and the dropdowns, with one empty box of their
+  height for each run of the others. It keeps every row's height once laid out, and the view stays on the row it shows
+  as rows above it are laid out. GPUI draws the window again on each step of a move, which on Windows and X11 desktops
+  (KDE's, for one) made a long board lag behind the pointer: such a step now draws only what's in view.
+- The kanban app works out its columns, their counts, each entry's related entries, the tags in use and the tasks
+  waiting for an answer once per change, not on every frame, and finds an entry by its id directly.
+- The kanban app looks for changes on disk away from the window, and reads again only the files that changed.
+- `kb` reads a brain's files side by side, and a command that changes one entry alone (`comment`, `ask`, `describe`,
+  a move to a status other than doing, `wait`) reads only that entry's file. It fixes nothing else in the brain then:
+  the next command that reads every entry does (see `docs/data-format.md`).
+
+### Fixed
+
+- The kanban app no longer saves over a file another program changed or deleted since the app read it (an editor
+  writing over it in place): it says so, and shows the file as it is now.
+
+### Security
+
+- pulldown-cmark, which renders the app's markdown, is 0.13.5, for
+  [RUSTSEC-2026-0414](https://rustsec.org/advisories/RUSTSEC-2026-0414).
+
 ## [0.6.7] - 2026-10-28
 
 ### Added
@@ -693,7 +725,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.7...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.8...HEAD
+[0.6.8]: https://github.com/singudotdev/kanbrain/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/singudotdev/kanbrain/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/singudotdev/kanbrain/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/singudotdev/kanbrain/compare/v0.6.4...v0.6.5

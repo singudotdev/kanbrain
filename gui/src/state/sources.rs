@@ -3,6 +3,7 @@
 //! of a project with several, together). Entries are known by [`Key`]: which brain, and the id
 //! there, since every brain numbers its entries from 1.
 
+use super::index::Index;
 use super::{AddProject, Board, Form, Mode, Picker, ProjectOption, WhereFor};
 use crate::text::event::KeyEvent;
 use anyhow::Result;
@@ -12,7 +13,10 @@ use kanbrain_core::migrate::TooNew;
 use kanbrain_core::model::{Author, RepoLink, Task};
 use kanbrain_core::projects::{self, Repo};
 use kanbrain_core::store::{BrainLock, PROJECT_DIR, Store};
+use std::cell::OnceCell;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::SystemTime;
 
 /// An entry in one of the brains: the brain's index in [`Board::sources`], and the entry's id there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -36,12 +40,50 @@ const CENTRAL: &str = "Central";
 /// One brain the window shows.
 #[derive(Debug)]
 pub struct Source {
-    /// Its entries.
-    pub brain: Brain,
+    /// Its entries: changed only through [`Source::brain_mut`], which keeps `index` and `revision` in step.
+    brain: Brain,
     /// How it's named on cards and in the scope filter (`shop`, `shop/api`); `None` for the central brain.
     pub label: Option<String>,
     /// The project it's a repository of; `None` for the central brain.
     pub project: Option<String>,
+    /// What frames read of `brain`, built the first time it's asked for since the brain last changed.
+    index: OnceCell<Index>,
+    /// Which state of `brain` this is: a new one on every change, never seen before by any source, so what was worked
+    /// out from another (the board's [`super::index::Showing`]) is known stale.
+    revision: u64,
+}
+
+/// The revision the next change of a brain takes: one counter for every source, so that a source built again in a
+/// reload never reuses one.
+static REVISIONS: AtomicU64 = AtomicU64::new(0);
+
+impl Source {
+    /// A brain the window shows, named `label`, of `project`.
+    pub(super) fn new(brain: Brain, label: Option<String>, project: Option<String>) -> Self {
+        Self { brain, label, project, index: OnceCell::new(), revision: REVISIONS.fetch_add(1, Ordering::Relaxed) }
+    }
+
+    /// Its entries.
+    pub fn brain(&self) -> &Brain {
+        &self.brain
+    }
+
+    /// Its entries, to change: what was worked out of them is dropped, to be worked out again when next asked for.
+    pub fn brain_mut(&mut self) -> &mut Brain {
+        self.index.take();
+        self.revision = REVISIONS.fetch_add(1, Ordering::Relaxed);
+        &mut self.brain
+    }
+
+    /// What frames read of its entries.
+    pub fn index(&self) -> &Index {
+        self.index.get_or_init(|| Index::new(&self.brain))
+    }
+
+    /// Which state of its entries this is.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
 }
 
 /// A row of the project filter: what it shows, alone or picked with others (see [`Board::scope`]).
@@ -69,14 +111,14 @@ pub(super) fn load(central: &Path, also: Option<&Path>) -> Result<(Vec<Source>, 
     let central_store = Store::at(central)?;
     locks.extend(central_store.lock().ok());
     let repos = repos(central, also)?;
-    let mut sources = vec![Source { brain: Brain::open_in(central_store, central)?, label: None, project: None }];
+    let mut sources = vec![Source::new(Brain::open_in(central_store, central)?, None, None)];
     let mut skipped = Vec::new();
     for repo in repos.iter().filter(|r| r.dir.is_dir()) {
         let store = Store::at(&repo.dir)?;
         locks.extend(store.lock().ok());
         match Brain::open_in(store, central) {
             Ok(brain) => {
-                sources.push(Source { brain, label: Some(repo.label(&repos)), project: Some(repo.project.clone()) });
+                sources.push(Source::new(brain, Some(repo.label(&repos)), Some(repo.project.clone())));
             }
             // One repository that can't be read (a newer kanbrain's, a damaged `format` file) mustn't keep the
             // board from showing the others.
@@ -122,12 +164,12 @@ fn folder_name(dir: &Path) -> String {
 impl Board {
     /// The brain at `src`.
     pub fn brain(&self, src: usize) -> &Brain {
-        &self.sources[src].brain
+        self.sources[src].brain()
     }
 
     /// The brain at `src`, to change.
     pub fn brain_mut(&mut self, src: usize) -> &mut Brain {
-        &mut self.sources[src].brain
+        self.sources[src].brain_mut()
     }
 
     /// The brains at `a` and `b`, both to change at once, as a move or a link across repositories does: `a` and `b`
@@ -135,10 +177,10 @@ impl Board {
     pub(super) fn two_brains_mut(&mut self, a: usize, b: usize) -> (&mut Brain, &mut Brain) {
         if a < b {
             let (left, right) = self.sources.split_at_mut(b);
-            (&mut left[a].brain, &mut right[0].brain)
+            (left[a].brain_mut(), right[0].brain_mut())
         } else {
             let (left, right) = self.sources.split_at_mut(a);
-            (&mut right[0].brain, &mut left[b].brain)
+            (right[0].brain_mut(), left[b].brain_mut())
         }
     }
 
@@ -149,7 +191,8 @@ impl Board {
 
     /// The entry `key` names.
     pub fn task(&self, key: Key) -> Option<&Task> {
-        self.sources.get(key.src)?.brain.task(key.id)
+        let source = self.sources.get(key.src)?;
+        source.index().at(key.id).map(|at| &source.brain().tasks[at])
     }
 
     /// Whether `scope` covers the brain at `src`.
@@ -366,7 +409,7 @@ impl Board {
         // Added from Manage project: back to it, on the repository just added.
         let added = dir.join(PROJECT_DIR);
         if from_manage
-            && let Some(src) = self.sources.iter().position(|s| projects::same_dir(s.brain.store.dir(), &added))
+            && let Some(src) = self.sources.iter().position(|s| projects::same_dir(s.brain().store.dir(), &added))
         {
             self.mode = Mode::ManageProject(src);
         }
@@ -457,17 +500,7 @@ impl Board {
     /// Entries of the project's other repositories related to `key`'s, whichever side stores the link: the
     /// core's `Brain::repo_related`, but from the brains already loaded, since it's drawn every frame.
     pub fn repo_related(&self, key: Key) -> Vec<Key> {
-        let Some(here) = &self.brain(key.src).project else { return Vec::new() };
-        let links = self.task(key).map_or(&[][..], |t| t.repo_links.as_slice());
-        let back = RepoLink { repo: here.repo.clone(), id: key.id };
-        let mut related = Vec::new();
-        for (src, source) in self.sources.iter().enumerate().filter(|&(src, _)| src != key.src) {
-            let Some(there) = source.brain.project.as_ref().filter(|p| p.name == here.name) else { continue };
-            let linked =
-                |t: &&Task| links.iter().any(|l| l.repo == there.repo && l.id == t.id) || t.repo_links.contains(&back);
-            related.extend(source.brain.tasks.iter().filter(linked).map(|t| Key::new(src, t.id)));
-        }
-        related
+        self.showing().repo_related.get(&key).cloned().unwrap_or_default()
     }
 
     /// The brains whose entries one in the brain at `src` can be related to: its own, then the other
@@ -516,7 +549,7 @@ impl Board {
 
     /// Every entry related to `key`'s, in its brain and the project's other repositories.
     pub fn related_keys(&self, key: Key) -> Vec<Key> {
-        let here = self.brain(key.src).related(key.id).into_iter().map(|t| Key::new(key.src, t.id));
+        let here = self.sources[key.src].index().related(key.id).iter().map(|&id| Key::new(key.src, id));
         here.chain(self.repo_related(key)).collect()
     }
 
@@ -555,20 +588,17 @@ impl Board {
     /// then the repositories' in order): one tag, one color, wherever it shows and whatever the scope, though two
     /// brains may have given it different ones.
     pub fn tag_colors(&self, tag: &str) -> Option<(u32, u32)> {
-        self.sources.iter().find_map(|s| s.brain.tag_colors.chip(tag))
+        self.sources.iter().find_map(|s| s.brain().tag_colors.chip(tag))
     }
 
     /// Every tag the scope's entries use, sorted.
     pub fn all_tags(&self) -> Vec<String> {
-        let mut tags: Vec<String> = self.scoped().flat_map(|(_, b)| b.all_tags()).collect();
-        tags.sort();
-        tags.dedup();
-        tags
+        self.showing().tags.keys().cloned().collect()
     }
 
     /// The tasks whose clocks run, in every brain whatever the scope shows.
     pub fn running(&self) -> impl Iterator<Item = (Key, &Task)> {
-        self.sources.iter().enumerate().flat_map(|(src, s)| s.brain.running().map(move |t| (Key::new(src, t.id), t)))
+        self.sources.iter().enumerate().flat_map(|(src, s)| s.brain().running().map(move |t| (Key::new(src, t.id), t)))
     }
 
     /// Whether a task's clock runs, yours or an agent's, in any brain whatever the scope shows.
@@ -630,7 +660,7 @@ impl Board {
             .iter()
             .filter(|r| r.dir.is_dir() && !self.skipped.iter().any(|s| s.dir == r.dir))
             .map(|r| (r.dir.as_path(), Some(r.project.as_str()), Some(r.label(&repos))));
-        let shown = self.sources.iter().skip(1).map(|s| (s.brain.store.dir(), s.project.as_deref(), s.label.clone()));
+        let shown = self.sources.iter().skip(1).map(|s| (s.brain().store.dir(), s.project.as_deref(), s.label.clone()));
         Ok(registered.eq(shown))
     }
 
@@ -641,7 +671,7 @@ impl Board {
     pub fn lock_brains(&mut self, tried: &mut Vec<PathBuf>) -> Vec<BrainLock> {
         let mut locks = Vec::with_capacity(self.sources.len());
         for src in 0..self.sources.len() {
-            let store = &self.sources[src].brain.store;
+            let store = &self.sources[src].brain().store;
             if tried.iter().any(|dir| dir == store.dir()) {
                 continue;
             }
@@ -672,10 +702,16 @@ impl Board {
 
     /// The data folders to watch: every brain's, and the central brain's project cards.
     pub fn watched_dirs(&self) -> Vec<PathBuf> {
-        let mut dirs: Vec<PathBuf> = self.sources.iter().map(|s| s.brain.store.dir().to_path_buf()).collect();
+        let mut dirs: Vec<PathBuf> = self.sources.iter().map(|s| s.brain().store.dir().to_path_buf()).collect();
         dirs.push(projects::cards_dir(&self.central));
         // Those left out too, so one repaired is shown.
         dirs.extend(self.skipped.iter().map(|s| s.dir.clone()));
         dirs
+    }
+
+    /// The file at `path` as the board last read or wrote it (see [`Store::known`]).
+    pub fn known(&self, path: &Path) -> Option<(Option<SystemTime>, u64)> {
+        let store = self.sources.iter().map(|s| &s.brain().store).find(|store| Some(store.dir()) == path.parent())?;
+        store.known(path)
     }
 }

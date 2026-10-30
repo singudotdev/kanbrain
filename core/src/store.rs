@@ -5,11 +5,12 @@ use crate::projects;
 use crate::tags::TagColors;
 use anyhow::{Context, Result, bail};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fs;
-use std::io::{ErrorKind, Write};
+use std::io::{ErrorKind, Read as _, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 /// Tag color assignments; lives next to the task files but isn't a task.
 pub(crate) const TAGS_FILE: &str = "tags.md";
@@ -32,6 +33,61 @@ pub struct Store {
     dir: PathBuf,
     /// While recording (see [`Store::record`]), each file written or deleted as it was before.
     journal: RefCell<Option<Vec<Change>>>,
+    /// Each entry's file as this store last read or wrote it: [`Store::save`] refuses to write over one another
+    /// program changed since, which would lose what it wrote.
+    read: RefCell<HashMap<PathBuf, Seen>>,
+}
+
+/// When a file last changed, and its size: what tells it changed without reading it.
+type Seen = (Option<SystemTime>, u64);
+
+/// The file at `path` as it is now, if it's there.
+fn seen(path: &Path) -> Option<Seen> {
+    fs::metadata(path).ok().as_ref().map(seen_in)
+}
+
+/// [`seen`] of a file already open, so it's looked up by its path once.
+fn seen_in(meta: &fs::Metadata) -> Seen {
+    (meta.modified().ok(), meta.len())
+}
+
+/// Threads that read a brain's files at most: with four, `kb show` over 14,000 entries took as long as with eight.
+const READ_THREADS: usize = 4;
+/// Files a thread reads at least: a small brain is read by one, rather than wait for threads to start.
+pub(crate) const READ_PER_THREAD: usize = 512;
+
+/// An entry read from its file, with the file as it was before it was read (see [`seen`]), or why it isn't one.
+type ReadEntry = Result<(Task, Option<Seen>), Skipped>;
+
+/// One thread's share of [`Store::load_entries`].
+fn read_entries(paths: &[PathBuf]) -> Vec<ReadEntry> {
+    paths.iter().map(|path| read_entry(path)).collect()
+}
+
+/// What [`Store::load_entries`] and [`Store::load_files`] make of one file.
+fn read_entry(path: &Path) -> ReadEntry {
+    // Before reading, of the file opened: changed in between, it reads as changed since, never as read when it wasn't.
+    // Opened once for both, as looking a file up by its path costs as much as reading it.
+    let mut was = None;
+    let read = fs::File::open(path).and_then(|mut file| {
+        was = file.metadata().ok().as_ref().map(seen_in);
+        let mut text = String::new();
+        file.read_to_string(&mut text)?;
+        Ok(without_bom(text))
+    });
+    let parsed = read.map_err(|e| SkipReason::Unreadable(e.to_string())).and_then(|text| {
+        Task::parse(&text).map_err(|e| match e {
+            ParseError::MissingId => SkipReason::NoId,
+            ParseError::Line(why) => SkipReason::Broken(why),
+        })
+    });
+    match parsed {
+        Ok(mut task) => {
+            task.path = Some(path.to_path_buf());
+            Ok((task, was))
+        }
+        Err(why) => Err(Skipped { file: path.file_name().unwrap_or_default().to_string_lossy().into_owned(), why }),
+    }
 }
 
 /// A markdown file [`Store::load_entries`] didn't read as an entry, said as `{file}: {why}`.
@@ -180,7 +236,7 @@ impl Store {
             let format = format!("{}\n", crate::migrate::FORMAT);
             write_file(&dir.join(crate::migrate::FORMAT_FILE), &format)?;
         }
-        Ok(Self { dir, journal: RefCell::new(None) })
+        Ok(Self { dir, journal: RefCell::new(None), read: RefCell::default() })
     }
 
     /// Takes this brain's write lock, waiting while another program holds it, until the returned guard is
@@ -244,6 +300,12 @@ impl Store {
         }
     }
 
+    /// The file at `path` as this store last read or wrote it: when it last changed, and its size. `None` for a file
+    /// it hasn't, or deleted since. What it is now differing, another program changed it.
+    pub fn known(&self, path: &Path) -> Option<(Option<SystemTime>, u64)> {
+        self.read.borrow().get(path).copied()
+    }
+
     /// The data folder.
     pub fn dir(&self) -> &Path {
         &self.dir
@@ -276,30 +338,77 @@ impl Store {
     pub fn load_entries(&self) -> Result<(Vec<Task>, Vec<Skipped>)> {
         // Every read goes through here: a brain a newer kanbrain wrote is refused before anything misreads it.
         crate::migrate::check(&self.dir)?;
-        let mut tasks = Vec::new();
-        let mut skipped = Vec::new();
         let entries = fs::read_dir(&self.dir).with_context(|| format!("reading {}", self.dir.display()))?;
+        let mut files = Vec::new();
         for entry in entries {
             let path = entry?.path();
-            if !is_task_file(&path) {
-                continue;
-            }
-            let file = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
-            let parsed = read_text(&path).map_err(|e| SkipReason::Unreadable(e.to_string())).and_then(|text| {
-                Task::parse(&text).map_err(|e| match e {
-                    ParseError::MissingId => SkipReason::NoId,
-                    ParseError::Line(why) => SkipReason::Broken(why),
-                })
-            });
-            match parsed {
-                Ok(mut task) => {
-                    task.path = Some(path);
-                    tasks.push(task);
-                }
-                Err(why) => skipped.push(Skipped { file, why }),
+            if is_task_file(&path) {
+                files.push(path);
             }
         }
-        Ok((tasks, skipped))
+        self.read.borrow_mut().clear();
+        // Side by side: a command reads every entry of the brain, and one after another ten thousand took most of the
+        // time of a `kb show`.
+        let mut shares = files.chunks(files.len().div_ceil(READ_THREADS).max(READ_PER_THREAD));
+        let read = std::thread::scope(|scope| {
+            let first = shares.next().unwrap_or_default();
+            let spawn = |share| std::thread::Builder::new().spawn_scoped(scope, move || read_entries(share));
+            let others: Vec<_> = shares.map(|share| (share, spawn(share))).collect();
+            let mut read = read_entries(first);
+            for (share, other) in others {
+                read.extend(match other {
+                    Ok(other) => other.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic)),
+                    // No thread to be had (a container's limit on them): read here, as a brain was before.
+                    Err(_) => read_entries(share),
+                });
+            }
+            read
+        });
+        Ok(self.keep_read(read))
+    }
+
+    /// [`Store::load_entries`] of only the files named for entry `id` (`0007-…`, as [`file_name`] names them): what a
+    /// command on that entry alone reads, a listing of the folder and its file rather than every entry's.
+    pub(crate) fn load_named(&self, id: u32) -> Result<(Vec<Task>, Vec<Skipped>)> {
+        crate::migrate::check(&self.dir)?;
+        let named = format!("{id:04}-");
+        let entries = fs::read_dir(&self.dir).with_context(|| format!("reading {}", self.dir.display()))?;
+        let mut files = Vec::new();
+        for entry in entries {
+            let entry = entry?;
+            if entry.file_name().to_str().is_some_and(|name| name.starts_with(&named)) && is_task_file(&entry.path()) {
+                files.push(entry.path());
+            }
+        }
+        Ok(self.keep_read(files.iter().map(|path| read_entry(path))))
+    }
+
+    /// [`Store::load_entries`] of only `files`, entries' files of this folder: those gone since are left out.
+    pub(crate) fn load_files(&self, files: &[PathBuf]) -> (Vec<Task>, Vec<Skipped>) {
+        let mut read = self.read.borrow_mut();
+        for path in files {
+            read.remove(path);
+        }
+        drop(read);
+        self.keep_read(files.iter().filter(|path| path.exists()).map(|path| read_entry(path)))
+    }
+
+    /// The entries read, each file remembered as read (see [`Store::known`]), and the files that didn't read as one.
+    fn keep_read(&self, read: impl IntoIterator<Item = ReadEntry>) -> (Vec<Task>, Vec<Skipped>) {
+        let (mut tasks, mut skipped) = (Vec::new(), Vec::new());
+        let mut known = self.read.borrow_mut();
+        for one in read {
+            match one {
+                Ok((task, was)) => {
+                    if let (Some(path), Some(was)) = (&task.path, was) {
+                        known.insert(path.clone(), was);
+                    }
+                    tasks.push(task);
+                }
+                Err(why) => skipped.push(why),
+            }
+        }
+        (tasks, skipped)
     }
 
     /// Writes atomically and renames the file when the title (slug) changed.
@@ -316,11 +425,30 @@ impl Store {
         if task.path.as_ref() != Some(&path) && path.exists() {
             bail!("{} is there and couldn't be read as #{}: fix or move it, then try again", path.display(), task.id);
         }
+        // Changed by another program since it was read (an editor writing over the file, which the app's watcher
+        // takes a second to notice) or deleted: written from memory, what it holds now would be lost.
+        if let Some(old) = &task.path
+            && let Some(was) = self.read.borrow().get(old).copied()
+            && seen(old) != Some(was)
+        {
+            bail!(
+                "{} changed or deleted on disk since it was read: not saved over it, read it again first",
+                old.display()
+            );
+        }
         self.remember(&path);
         if let Some(old) = &task.path {
             self.remember(old);
         }
         write_file(&path, &task.to_markdown())?;
+        let mut read = self.read.borrow_mut();
+        if let Some(old) = &task.path {
+            read.remove(old);
+        }
+        if let Some(now) = seen(&path) {
+            read.insert(path.clone(), now);
+        }
+        drop(read);
         // A new title means a new file name: remove the file saved under the old one.
         if let Some(old) = task.path.replace(path)
             && Some(&old) != task.path.as_ref()
@@ -338,6 +466,7 @@ impl Store {
             bail!("refusing to delete {}: not in {}", path.display(), self.dir.display());
         }
         self.remember(path);
+        self.read.borrow_mut().remove(path);
         remove_file(path).with_context(|| format!("deleting {}", path.display()))
     }
 
@@ -469,8 +598,13 @@ fn forget_cut_writes(dir: &Path) {
     for file in files {
         let name = file.file_name();
         let name = name.to_string_lossy();
+        // By the name first: the lock is taken for every write, and reading the metadata of every entry's file for
+        // the few temporary files among them made it cost as much as the entries are many.
+        if !is_cut_write(&name) {
+            continue;
+        }
         let age = file.metadata().and_then(|m| m.modified()).ok().and_then(|at| at.elapsed().ok());
-        if is_cut_write(&name) && age.is_some_and(|age| age > CUT_WRITE_AGE) {
+        if age.is_some_and(|age| age > CUT_WRITE_AGE) {
             let _ = fs::remove_file(file.path());
         }
     }
@@ -504,11 +638,15 @@ pub(crate) fn cache_of(dir: &Path) -> Result<[PathBuf; 2]> {
 /// Reads a text file people may edit, without the byte-order mark some editors (Notepad, older Windows ones) put
 /// first: left in, it hides a file's first line, an entry's `# title` among them.
 pub(crate) fn read_text(path: &Path) -> std::io::Result<String> {
-    let text = fs::read_to_string(path)?;
-    Ok(match text.strip_prefix('\u{feff}') {
+    fs::read_to_string(path).map(without_bom)
+}
+
+/// `text` without its byte-order mark, as [`read_text`] reads it.
+fn without_bom(text: String) -> String {
+    match text.strip_prefix('\u{feff}') {
         Some(rest) => rest.to_string(),
         None => text,
-    })
+    }
 }
 
 /// Writes `text` to `path`, creating its folder if missing. It goes to a hidden temporary file beside it
@@ -617,7 +755,7 @@ pub fn find_project(start: &Path) -> Option<PathBuf> {
 
 /// Task files are the `.md` files in the folder, except the tag colors, the project's card and the
 /// central brain's list of projects.
-fn is_task_file(path: &Path) -> bool {
+pub(crate) fn is_task_file(path: &Path) -> bool {
     let other = [TAGS_FILE, projects::PROJECT_FILE, projects::REGISTRY_FILE];
     path.extension().is_some_and(|e| e == "md") && path.file_name().is_some_and(|n| !other.iter().any(|o| n == *o))
 }

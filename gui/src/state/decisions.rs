@@ -2,6 +2,7 @@
 
 use super::{Board, Key, Target};
 use kanbrain_core::model::{DecisionState, Kind, Task};
+use std::rc::Rc;
 
 impl Board {
     /// Whether saving `target` answers a question the task waits on.
@@ -61,15 +62,8 @@ impl Board {
     }
 
     /// Tasks waiting for an answer to an agent's question, in every brain shown, in board order.
-    pub fn waiting(&self) -> Vec<Key> {
-        let mut waiting: Vec<Key> = self
-            .scoped()
-            .flat_map(|(src, brain)| {
-                brain.tasks.iter().filter(|t| t.waits_for_answer()).map(move |t| Key::new(src, t.id))
-            })
-            .collect();
-        waiting.sort_by_key(|k| (k.src, k.id));
-        waiting
+    pub fn waiting(&self) -> Rc<[Key]> {
+        self.showing().waiting.clone()
     }
 
     /// The decisions an agent proposed about the task `key`, which it waits on until they're accepted or rejected.

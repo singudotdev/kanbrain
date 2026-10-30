@@ -1,4 +1,7 @@
 use super::*;
+
+#[path = "perf.rs"]
+mod perf;
 use crate::state::{Board, Mode};
 use gpui::MouseButton;
 use kanbrain_core::model::{Author, Kind, Status, Task, now};
@@ -399,6 +402,74 @@ fn long_lists_say_how_many_more_and_follow_the_highlight(cx: &mut gpui::TestAppC
 }
 
 #[gpui::test]
+fn a_long_list_draws_only_the_rows_near_its_view(cx: &mut gpui::TestAppContext) {
+    use super::dropdown::MAX_ROWS;
+    let titles: Vec<String> = (1..=300).map(|i| format!("task {i}")).collect();
+    let titles: Vec<&str> = titles.iter().map(String::as_str).collect();
+    let (_view, cx, _dir) = window(cx, &titles);
+    cx.simulate_keystrokes("r");
+    let list = cx.debug_bounds("links-list").expect("the list is drawn");
+    let drawn = |cx: &mut gpui::VisualTestContext| {
+        let rows: Vec<_> = (1..=300).filter_map(|id| cx.debug_bounds(Box::leak(format!("link {id}").into()))).collect();
+        let shown = rows.iter().filter(|row| row.top() >= list.top() && row.bottom() <= list.bottom() + px(1.)).count();
+        (rows.len(), shown)
+    };
+    let (rows, shown) = drawn(cx);
+    assert!(rows <= 3 * MAX_ROWS, "a view of rows either side at most, not 299: {rows}");
+    assert_eq!(shown, MAX_ROWS, "and the list full");
+    for _ in 0..150 {
+        cx.simulate_keystrokes("down");
+    }
+    cx.update(|window, _| window.refresh());
+    cx.run_until_parked();
+    let (rows, shown) = drawn(cx);
+    assert_eq!((rows, shown), (3 * MAX_ROWS, MAX_ROWS), "followed down, a view drawn either side of the one shown");
+    // The boxes standing in for the rest are their rows' height, so the list scrolls as far as its rows go.
+    let (above, below) = (cx.debug_bounds("links-above").unwrap(), cx.debug_bounds("links-below").unwrap());
+    let rest = super::dropdown::ROW_HEIGHT * f32::from(u16::try_from(299 - rows).unwrap());
+    assert_eq!(f32::from(above.size.height + below.size.height), rest, "the 299 rows' height in all");
+    let highlighted = cx.debug_bounds("link 150").expect("the 151st row, newest first, is drawn");
+    assert!(highlighted.bottom() <= list.bottom() + px(1.) && highlighted.top() >= list.top(), "and in view");
+    // The wheel takes the list where no row was drawn: those there are, by the frame it shows.
+    let modifiers = gpui::Modifiers::none();
+    // Fifty rows down, so none is cut at its edges.
+    let delta = gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(-50. * super::dropdown::ROW_HEIGHT)));
+    let touch_phase = gpui::TouchPhase::Moved;
+    cx.simulate_event(gpui::ScrollWheelEvent { position: list.center(), delta, modifiers, touch_phase });
+    next_frames(cx);
+    let (rows, shown) = drawn(cx);
+    assert!(rows <= 3 * MAX_ROWS && shown == MAX_ROWS, "scrolled: {rows} drawn, {shown} shown");
+    let row = cx.debug_bounds("link 100").expect("the row fifty below the highlight's is drawn");
+    assert!(row.top() >= list.top() && row.bottom() <= list.bottom() + px(1.), "and in view");
+}
+
+#[gpui::test]
+fn a_list_opened_on_a_row_far_down_shows_it_at_once(cx: &mut gpui::TestAppContext) {
+    use kanbrain_core::projects;
+    let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    for i in 10..40 {
+        let dir = code.path().join(format!("repo{i}")).join(".brain");
+        Store::at(&dir).unwrap().save(&mut Task::new(1, format!("task in p{i}"), now())).unwrap();
+        projects::register(central.path(), &format!("p{i}"), &dir).unwrap();
+        let card = projects::RepoCard { project: format!("p{i}"), repo: None, notes: String::new() };
+        projects::write_repo_card(&dir, &card).unwrap();
+    }
+    let board = Board::open(central.path(), None).unwrap();
+    let (view, cx) = cx.add_window_view(|window, cx| BrainView::new(board, window, cx));
+    cx.run_until_parked();
+    let far = view.read_with(cx, |view, _| view.board.sources.len() - 3);
+    view.update(cx, |view, _| view.board.select(crate::state::Key::new(far, 1)));
+    // "Which project?" for a quick add, its own scroll used for the first time, highlights the selected entry's.
+    cx.simulate_keystrokes("a");
+    let list = cx.debug_bounds("where-list").expect("the list is drawn");
+    let shown = (0..40)
+        .filter_map(|i| cx.debug_bounds(Box::leak(format!("where {i}").into())))
+        .filter(|row| row.top() >= list.top() && row.bottom() <= list.bottom() + px(1.))
+        .count();
+    assert_eq!(shown, super::dropdown::MAX_ROWS, "rows in view on the first frame, not the room left for them");
+}
+
+#[gpui::test]
 fn a_list_that_fits_says_nothing_under_it(cx: &mut gpui::TestAppContext) {
     let titles: Vec<String> = (0..=super::dropdown::MAX_ROWS).map(|i| format!("task {i}")).collect();
     let titles: Vec<&str> = titles.iter().map(String::as_str).collect();
@@ -460,6 +531,22 @@ fn every_dropdown_with_a_search_scrolls_past_its_most_rows(cx: &mut gpui::TestAp
     assert!((rows_shown(cx, "link option 0") - form_rows).abs() < 1., "the form's related field");
     cx.simulate_keystrokes("escape ?");
     assert!((rows_shown(cx, "command 0") - 12.).abs() < 1., "the command palette, the longest");
+}
+
+#[gpui::test]
+fn the_palette_names_each_section_on_its_first_row(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = window(cx, &["one"]);
+    cx.simulate_keystrokes("?");
+    let firsts: Vec<usize> = view.read_with(cx, |view, _| {
+        let crate::state::Mode::Palette(picker) = &view.board.mode else { panic!("the palette is open") };
+        let commands = view.board.commands(picker);
+        (0..commands.len()).filter(|&i| i == 0 || commands[i - 1].section() != commands[i].section()).collect()
+    });
+    assert!(firsts.len() > 1, "several sections: {firsts:?}");
+    // Every row drawn: the palette shows twelve, and a view either side of them is drawn.
+    let headed: Vec<usize> =
+        (0..36).filter(|i| cx.debug_bounds(Box::leak(format!("heading {i}").into_boxed_str())).is_some()).collect();
+    assert_eq!(headed, firsts.into_iter().filter(|&i| i < 36).collect::<Vec<_>>());
 }
 
 #[test]
@@ -997,13 +1084,17 @@ fn the_project_card_shows_a_descriptions_first_line_that_isnt_blank() {
 
 #[test]
 fn a_list_counts_the_rows_out_of_view_from_its_scroll_or_the_highlight() {
-    use super::dropdown::{ROW_HEIGHT, hidden};
-    assert_eq!(hidden(12, 0, 8, 0., false), (0, 4));
-    assert_eq!(hidden(12, 0, 8, ROW_HEIGHT * 1.4, false), (1, 3), "a row more than half hidden is out of view");
-    assert_eq!(hidden(12, 0, 8, ROW_HEIGHT * 2.4, false), (2, 2), "one less than half hidden isn't");
-    assert_eq!(hidden(12, 9, 8, 0., true), (2, 2), "the highlight below the view scrolls it just enough");
-    assert_eq!(hidden(12, 1, 8, ROW_HEIGHT * 4., true), (1, 3), "and above it, just enough too");
-    assert_eq!(hidden(12, 11, 8, ROW_HEIGHT * 4., false), (4, 0));
+    use super::dropdown::{ROW_HEIGHT, followed, hidden};
+    assert_eq!(hidden(12, 8, 0.), (0, 4));
+    assert_eq!(hidden(12, 8, ROW_HEIGHT * 1.4), (1, 3), "a row more than half hidden is out of view");
+    assert_eq!(hidden(12, 8, ROW_HEIGHT * 2.4), (2, 2), "one less than half hidden isn't");
+    assert_eq!(hidden(12, 8, ROW_HEIGHT * 1.6), (2, 2), "nor one more than half hidden");
+    assert_eq!(hidden(12, 8, followed(12, 9, 8, 0.)), (2, 2), "the highlight below the view scrolls it just enough");
+    assert_eq!(hidden(12, 8, followed(12, 1, 8, ROW_HEIGHT * 4.)), (1, 3), "and above it, just enough too");
+    assert_eq!(hidden(12, 8, ROW_HEIGHT * 4.), (4, 0));
+    assert_eq!(followed(12, 5, 8, ROW_HEIGHT * 2.), ROW_HEIGHT * 2., "one in view stays where it is");
+    assert_eq!(followed(12, 30, 8, 0.), ROW_HEIGHT * 4., "and none is past the end, as a list cut short leaves it");
+    assert_eq!(hidden(12, 8, ROW_HEIGHT * 40.), (12, 0), "nor counted past it");
 }
 
 /// Draws the frames the window asked for since, as the platform would: tests have no frame loop. A few at most,
@@ -1517,7 +1608,15 @@ fn a_selection_under_a_dialog_isnt_copied_from_it(cx: &mut gpui::TestAppContext)
 fn small_board(
     cx: &mut gpui::TestAppContext,
 ) -> (gpui::Entity<BrainView>, &mut gpui::VisualTestContext, tempfile::TempDir) {
-    let titles: Vec<String> = (1..=30).map(|n| format!("task {n}")).collect();
+    small_board_of(cx, 30)
+}
+
+/// [`small_board`] with `tasks` to do.
+fn small_board_of(
+    cx: &mut gpui::TestAppContext,
+    tasks: u32,
+) -> (gpui::Entity<BrainView>, &mut gpui::VisualTestContext, tempfile::TempDir) {
+    let titles: Vec<String> = (1..=tasks).map(|n| format!("task {n}")).collect();
     let (view, cx, dir) = window(cx, &titles.iter().map(String::as_str).collect::<Vec<_>>());
     cx.simulate_resize(gpui::size(px(600.), px(400.)));
     next_frames(cx);
@@ -1526,7 +1625,9 @@ fn small_board(
 
 /// How far the to-do column has scrolled down and the board to the right.
 fn scrolled(view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext) -> (f32, f32) {
-    view.read_with(cx, |view, _| (-view.scroll.columns[0].offset().y.as_f32(), -view.scroll.board.offset().x.as_f32()))
+    view.read_with(cx, |view, _| {
+        (-view.scroll.columns[0].scroll.offset().y.as_f32(), -view.scroll.board.offset().x.as_f32())
+    })
 }
 
 /// Turns a wheel or swipes a touchpad by `delta` over the to-do column, with shift held or not: how far that
@@ -1589,6 +1690,545 @@ fn a_touchpad_scrolls_each_way_its_fingers_go(cx: &mut gpui::TestAppContext) {
     let (down, right) = wheel(&view, cx, pixels(-30., -20.), false);
     assert!(down > 0. && right > 0., "a slanting swipe scrolls both, not the way it mostly goes: {down}, {right}");
 }
+/// Draws the window again, as a move of it does: the first frame of a list draws every row, and lays them out for the
+/// next to know which are in view.
+fn redraw(cx: &mut gpui::VisualTestContext) {
+    cx.update(|window, _| window.refresh());
+    next_frames(cx);
+}
+
+/// Whether `selector` is drawn, and inside the area `within` is drawn in.
+fn shown_in(cx: &mut gpui::VisualTestContext, selector: &'static str, within: &'static str) -> bool {
+    let area = cx.debug_bounds(within).expect("the area is drawn");
+    cx.debug_bounds(selector).is_some_and(|row| row.top() >= area.top() && row.bottom() <= area.bottom())
+}
+
+#[gpui::test]
+fn a_long_columns_cards_out_of_view_stand_in_at_their_height(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    // To do lists the newest first: #30 on top, #1 at the bottom, far out of view.
+    assert!(shown_in(cx, "card 0/30", "column todo"), "the cards in view are drawn");
+    assert!(cx.debug_bounds("card 0/1").is_none(), "one far out of view isn't");
+    // Every card is a line high: 30 of them, a gap between each and the column's padding around them.
+    let card = cx.debug_bounds("card 0/30").expect("the top card is drawn").size.height;
+    let (shown, max) = view.read_with(cx, |view, _| {
+        let scroll = &view.scroll.columns[0].scroll;
+        (scroll.bounds().size.height, scroll.max_offset().y)
+    });
+    let (gap, padding) = (px(8.), px(8.));
+    let long = card * 30. + gap * 29. + padding * 2.;
+    assert!((max - (long - shown)).abs() < px(1.), "each stands in as tall as it is: {max:?} for {long:?} long");
+    wheel(&view, cx, gpui::ScrollDelta::Pixels(gpui::point(px(0.), -max)), false);
+    assert!(shown_in(cx, "card 0/1", "column todo"), "scrolled to, it is");
+    assert!(cx.debug_bounds("card 0/30").is_none(), "and the one now far out of view isn't");
+}
+
+/// How many rows of the to-do column stand in where the column shows them, as the last frame laid it out.
+fn blanks(view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext) -> usize {
+    view.read_with(cx, |view, _| {
+        let rows = &view.scroll.columns[0];
+        let shown = rows.scroll.bounds();
+        let top = shown.top() - rows.scroll.offset().y;
+        let shown = |row: gpui::Bounds<gpui::Pixels>| row.bottom() > top && row.top() < top + shown.size.height;
+        rows.stood_in().into_iter().filter(|&ix| rows.scroll.bounds_for_item(ix).is_some_and(shown)).count()
+    })
+}
+
+/// How many frames so far drew a blank in the to-do column where a card should be.
+fn blank_frames(view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext) -> usize {
+    view.read_with(cx, |view, _| view.scroll.columns[0].blank_frames())
+}
+
+/// Scrolls the to-do column to its end.
+fn to_the_end(view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext) {
+    let max = view.read_with(cx, |view, _| view.scroll.columns[0].scroll.max_offset().y);
+    wheel(view, cx, gpui::ScrollDelta::Pixels(gpui::point(px(0.), -max)), false);
+}
+
+#[gpui::test]
+fn a_search_that_brings_rows_into_view_draws_them_in_the_same_frame(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    to_the_end(&view, cx);
+    assert!(!view.read_with(cx, |view, _| view.scroll.columns[0].stood_in()).is_empty(), "the top cards stand in");
+    let before = blank_frames(&view, cx);
+    // Matches #2 and #20 to #29, which were at the top, far out of view: the column is short now, back at its top.
+    cx.simulate_keystrokes("/ t a s k space 2");
+    next_frames(cx);
+    assert_eq!(blank_frames(&view, cx), before, "no frame showed a blank where a card goes");
+    assert!(shown_in(cx, "card 0/29", "column todo"), "the first match is drawn");
+}
+
+#[gpui::test]
+fn a_column_left_shorter_than_its_scroll_draws_what_it_scrolls_back_to(cx: &mut gpui::TestAppContext) {
+    let (view, cx, dir) = small_board(cx);
+    to_the_end(&view, cx);
+    view.update(cx, |view, _| view.board.selected = None);
+    let before = blank_frames(&view, cx);
+    // An agent finishes the top 20, far out of view: the column's 10 left are shorter than it was scrolled.
+    let mut cli = kanbrain_core::brain::Brain::open(Store::at(dir.path()).unwrap()).unwrap();
+    for id in 11..=30 {
+        cli.set_status(id, Status::Done).unwrap();
+    }
+    cx.executor().advance_clock(crate::watch::INTERVAL);
+    cx.run_until_parked();
+    next_frames(cx);
+    assert_eq!(blank_frames(&view, cx), before, "no frame showed a blank where a card goes");
+    assert!(cx.debug_bounds("card 0/1").is_some(), "the last card is drawn");
+}
+
+#[gpui::test]
+fn adding_at_the_top_of_a_column_draws_the_cards_under_the_field(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    to_the_end(&view, cx);
+    let card = cx.debug_bounds("card 0/1").expect("the bottom card is drawn");
+    cx.simulate_click(card.center(), gpui::Modifiers::none());
+    next_frames(cx);
+    let before = blank_frames(&view, cx);
+    // The last card selected, at the bottom: the field opens at the top, which the column scrolls to.
+    cx.simulate_keystrokes("a x");
+    next_frames(cx);
+    assert_eq!(blank_frames(&view, cx), before, "no frame showed a blank where a card goes");
+    // The column is shorter than the field and a card.
+    let (card, column) = (cx.debug_bounds("card 0/30"), cx.debug_bounds("column todo").expect("the column is drawn"));
+    assert!(card.is_some_and(|card| column.contains(&card.origin)), "the card under the field is drawn: {card:?}");
+}
+
+#[gpui::test]
+fn selecting_a_card_far_out_of_view_draws_it_where_the_column_jumps_to(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    let before = blank_frames(&view, cx);
+    // What `w` or a reference's link does: the selection lands far down, and the column follows it there.
+    view.update(cx, |view, cx| {
+        view.board.selected = Some(crate::state::Key::new(0, 3));
+        view.follow = true;
+        cx.notify();
+    });
+    next_frames(cx);
+    assert_eq!(blank_frames(&view, cx), before, "no frame showed a blank where a card goes");
+    assert!(shown_in(cx, "card 0/3", "column todo"), "the card is drawn, in view");
+}
+
+#[gpui::test]
+fn tall_rows_added_far_above_the_view_draw_no_blank(cx: &mut gpui::TestAppContext) {
+    let (view, cx, dir) = small_board(cx);
+    to_the_end(&view, cx);
+    let before = blank_frames(&view, cx);
+    // An agent adds tasks with long titles, on top of the column, far above the view: they stand in, reckoned as tall
+    // as the cards are on average, and draw only once scrolled near.
+    let store = Store::at(dir.path()).unwrap();
+    for id in 31..=40 {
+        let title = "a task with a title long enough to wrap onto several lines of a narrow column".to_string();
+        store.save(&mut Task::new(id, title, now())).unwrap();
+    }
+    cx.executor().advance_clock(crate::watch::INTERVAL);
+    cx.run_until_parked();
+    next_frames(cx);
+    assert_eq!(blank_frames(&view, cx), before, "no frame showed a blank where a card goes");
+    assert!(cx.debug_bounds("card 0/40").is_none(), "the new cards, far above, stand in");
+}
+
+#[gpui::test]
+fn a_column_scrolled_to_its_end_stays_there_as_its_cards_turn_out_taller(cx: &mut gpui::TestAppContext) {
+    // The top cards are a line each; the 100 under them, never laid out until scrolled to, wrap onto two lines.
+    let titles: Vec<String> = (1..=200)
+        .map(|n| match n {
+            ..=100 => format!("task {n} with a title long enough to wrap onto several lines of a narrow column"),
+            _ => format!("task {n}"),
+        })
+        .collect();
+    let (view, cx, _dir) = window(cx, &titles.iter().map(String::as_str).collect::<Vec<_>>());
+    cx.simulate_resize(gpui::size(px(600.), px(400.)));
+    next_frames(cx);
+    // Reckoned as tall as the cards laid out, those at the end make the column longer once drawn: GPUI keeps the
+    // scroll where it was, short of the end.
+    to_the_end(&view, cx);
+    let (offset, max) = view.read_with(cx, |view, _| {
+        let scroll = &view.scroll.columns[0].scroll;
+        (-scroll.offset().y, scroll.max_offset().y)
+    });
+    assert!((offset - max).abs() < px(1.), "still at its end: {offset:?} of {max:?}");
+    // Taller than the column shows, the last card ends in view, at its bottom.
+    let column = cx.debug_bounds("column todo").expect("the column is drawn");
+    let last = cx.debug_bounds("card 0/1");
+    let at_bottom = last.is_some_and(|card| card.bottom() <= column.bottom() && card.bottom() > column.top());
+    assert!(at_bottom, "the last card ends in view: {last:?} in {column:?}");
+    assert_eq!(blanks(&view, cx), 0, "no blank in view");
+}
+
+#[gpui::test]
+fn a_window_made_taller_draws_the_cards_it_brings_into_view_the_next_frame(cx: &mut gpui::TestAppContext) {
+    // Ten cards: more than the view holds, fewer than the window made taller does.
+    let (view, cx, _dir) = small_board_of(cx, 10);
+    let before = blank_frames(&view, cx);
+    // Maximized: the frame after is laid out for the old height, the box standing in for the cards under the view
+    // now in it.
+    cx.simulate_resize(gpui::size(px(600.), px(1600.)));
+    next_frames(cx);
+    assert!(blank_frames(&view, cx) > before, "a frame showed the cards brought into view as blanks");
+    assert_eq!(blanks(&view, cx), 0, "the next drew them");
+    assert!(shown_in(cx, "card 0/1", "column todo"), "every card in view");
+}
+
+#[gpui::test]
+fn a_card_the_keys_select_out_of_view_is_drawn_where_it_scrolls_to(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    let card = cx.debug_bounds("card 0/30").expect("the top card is drawn");
+    cx.simulate_click(card.center(), gpui::Modifiers::none());
+    next_frames(cx);
+    for _ in 0..29 {
+        cx.simulate_keystrokes("down");
+    }
+    next_frames(cx);
+    view.read_with(cx, |view, _| assert_eq!(view.board.selected, Some(crate::state::Key::new(0, 1))));
+    assert!(shown_in(cx, "card 0/1", "column todo"), "the last card is drawn, in view");
+}
+
+#[gpui::test]
+fn the_list_layout_draws_the_rows_in_view(cx: &mut gpui::TestAppContext) {
+    // Rows are a line each: it takes more than a column's cards to run far out of view.
+    let (view, cx, _dir) = small_board_of(cx, 100);
+    cx.simulate_keystrokes("v");
+    next_frames(cx);
+    redraw(cx);
+    assert!(shown_in(cx, "row 0/100", "task-list"), "the rows in view are drawn");
+    assert!(cx.debug_bounds("row 0/1").is_none(), "one far out of view isn't");
+    let max = view.read_with(cx, |view, _| view.scroll.tasks.scroll.max_offset().y);
+    let list = cx.debug_bounds("task-list").expect("the list is drawn");
+    wheel_at(&view, cx, list.center(), gpui::ScrollDelta::Pixels(gpui::point(px(0.), -max)), false);
+    // The last to do, with the other sections' headers and hints under it at the end.
+    assert!(cx.debug_bounds("row 0/1").is_some(), "scrolled to near it, it is");
+}
+
+/// The most children the to-do column laid out in a frame since last asked.
+fn most_laid_out(view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext) -> usize {
+    view.read_with(cx, |view, _| view.scroll.columns[0].take_most_laid_out())
+}
+
+#[gpui::test]
+fn a_long_columns_length_is_that_of_its_cards_as_they_wrap(cx: &mut gpui::TestAppContext) {
+    // 300 cards alike, a few of them laid out: those never laid out are reckoned as tall as those that were.
+    let titles: Vec<String> = (1..=300)
+        .map(|n| format!("task {n:03} with a title as long as one line of a wide column, and some more"))
+        .collect();
+    let (view, cx, _dir) = window(cx, &titles.iter().map(String::as_str).collect::<Vec<_>>());
+    let pitch_and_length = |view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext| {
+        let mut card = |id: u32| cx.debug_bounds(format!("card 0/{id}").leak()).expect("the newest cards are drawn");
+        // Over five cards past the first, which is selected and shows more.
+        let pitch = (card(294).top() - card(299).top()) / 5.;
+        let length = view.read_with(cx, |view, _| {
+            let scroll = &view.scroll.columns[0].scroll;
+            scroll.max_offset().y + scroll.bounds().size.height
+        });
+        (pitch, length)
+    };
+    next_frames(cx);
+    let (wide, length) = pitch_and_length(&view, cx);
+    // Within ten cards: the column's padding and the items that aren't cards add a few hundred pixels.
+    assert!((length - wide * 300.).abs() < wide * 10., "300 cards of {wide:?} each: {length:?} long");
+    // Narrower, the cards laid out wrap onto more lines: so do those reckoned.
+    cx.simulate_resize(gpui::size(px(600.), px(800.)));
+    next_frames(cx);
+    // Learnt from a layout, the heights reckon the frame after it.
+    redraw(cx);
+    let (narrow, length) = pitch_and_length(&view, cx);
+    assert!(narrow > wide, "the cards wrap onto more lines: {narrow:?}, were {wide:?}");
+    assert!((length - narrow * 300.).abs() < narrow * 10., "300 cards of {narrow:?} each: {length:?} long");
+}
+
+#[gpui::test]
+fn a_long_column_lays_out_only_the_cards_near_the_view(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board_of(cx, 2000);
+    // A view holds about ten cards: those, a view's worth on either side, and a box above and below for the rest.
+    let near = 60;
+    let opened = most_laid_out(&view, cx);
+    assert!(opened < near, "opening lays out {opened} children for 2,000 cards");
+    assert!(shown_in(cx, "card 0/2000", "column todo"), "the top card is drawn");
+    to_the_end(&view, cx);
+    assert!(shown_in(cx, "card 0/1", "column todo"), "scrolled to the end, the last card is drawn");
+    let scrolled = most_laid_out(&view, cx);
+    assert!(scrolled < near, "scrolling lays out {scrolled}");
+    // Matches #1, #10 to #19, #100 to #199 and #1000 to #1999, most of them never laid out; then every card again.
+    cx.simulate_keystrokes("/ t a s k space 1");
+    next_frames(cx);
+    let searched = most_laid_out(&view, cx);
+    assert!(searched < near, "a search lays out {searched}");
+    cx.simulate_keystrokes("escape escape");
+    next_frames(cx);
+    let cleared = most_laid_out(&view, cx);
+    assert!(cleared < near, "clearing it lays out {cleared}");
+    assert_eq!(blanks(&view, cx), 0, "no blank in view");
+}
+
+#[gpui::test]
+fn a_cleared_search_puts_every_card_back_where_it_was(cx: &mut gpui::TestAppContext) {
+    // Every other card wraps onto several lines: one card's height says little of another's.
+    let titles: Vec<String> = (1..=20)
+        .map(|n| match n % 2 {
+            0 => format!("task {n} with a title long enough to wrap onto several lines of a narrow column"),
+            _ => format!("task {n}"),
+        })
+        .collect();
+    let (view, cx, _dir) = window(cx, &titles.iter().map(String::as_str).collect::<Vec<_>>());
+    cx.simulate_resize(gpui::size(px(600.), px(400.)));
+    next_frames(cx);
+    // Each card laid out once, the column knows its length.
+    to_the_end(&view, cx);
+    wheel(&view, cx, gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(100_000.))), false);
+    let length = |view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext| {
+        view.read_with(cx, |view, _| view.scroll.columns[0].scroll.max_offset().y)
+    };
+    let before = length(&view, cx);
+    // Only the long ones: the cards laid out are all much taller than the short ones left out.
+    cx.simulate_keystrokes("/ w r a p");
+    next_frames(cx);
+    cx.simulate_keystrokes("escape escape");
+    next_frames(cx);
+    let after = length(&view, cx);
+    assert!((after - before).abs() < px(1.), "the column as long as before the search: {after:?}, not {before:?}");
+}
+
+#[gpui::test]
+fn a_column_cut_to_one_card_by_a_search_keeps_its_length_once_cleared(cx: &mut gpui::TestAppContext) {
+    // One card far down matching: the column cut to it has no gap between two cards to show.
+    let titles: Vec<String> =
+        (1..=300).map(|n| if n == 150 { format!("task {n} needle") } else { format!("task {n}") }).collect();
+    let (view, cx, _dir) = window(cx, &titles.iter().map(String::as_str).collect::<Vec<_>>());
+    cx.simulate_resize(gpui::size(px(600.), px(400.)));
+    next_frames(cx);
+    cx.simulate_keystrokes("/ n e e d l e");
+    next_frames(cx);
+    click(cx, "card 0/150");
+    // Cleared, the column follows the card selected, far from its top: the first child is the box above it.
+    cx.simulate_keystrokes("escape escape");
+    next_frames(cx);
+    redraw(cx);
+    let pitch = cx.debug_bounds("card 0/148").unwrap().top() - cx.debug_bounds("card 0/149").unwrap().top();
+    let length = view.read_with(cx, |view, _| {
+        let scroll = &view.scroll.columns[0].scroll;
+        scroll.max_offset().y + scroll.bounds().size.height
+    });
+    assert!((length - pitch * 300.).abs() < pitch * 3., "300 cards {pitch:?} apart: {length:?} long");
+}
+
+#[gpui::test]
+fn a_list_scrolled_part_way_stays_put_frame_after_frame(cx: &mut gpui::TestAppContext) {
+    // The list layout: a section's header above the view, as tall as no row, and rows reckoned, not laid out.
+    let (view, cx, _dir) = small_board_of(cx, 300);
+    cx.simulate_keystrokes("v");
+    next_frames(cx);
+    let list = cx.debug_bounds("task-list").expect("the list is drawn");
+    wheel_at(&view, cx, list.center(), gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(-3000.))), false);
+    next_frames(cx);
+    let offset = |view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext| {
+        view.read_with(cx, |view, _| view.scroll.tasks.scroll.offset().y)
+    };
+    let before = offset(&view, cx);
+    for _ in 0..10 {
+        redraw(cx);
+    }
+    assert_eq!(offset(&view, cx), before, "frames that change nothing leave the scroll where it was");
+}
+
+#[gpui::test]
+fn a_column_that_fits_stays_at_its_top_as_it_grows(cx: &mut gpui::TestAppContext) {
+    let (view, cx, dir) = small_board_of(cx, 1);
+    // An agent adds forty: the column, at its top and its end both before, is long now, the newest on top.
+    let store = Store::at(dir.path()).unwrap();
+    for id in 2..=41 {
+        store.save(&mut Task::new(id, format!("task {id}"), now())).unwrap();
+    }
+    cx.executor().advance_clock(crate::watch::INTERVAL);
+    cx.run_until_parked();
+    next_frames(cx);
+    assert_eq!(scrolled(&view, cx).0, 0., "still at its top");
+    assert!(shown_in(cx, "card 0/41", "column todo"), "the newest card in view");
+}
+
+/// The first card wholly in the to-do column's view, of those with ids up to `last`, and its top.
+fn first_in_view(cx: &mut gpui::VisualTestContext, last: u32) -> (u32, gpui::Pixels) {
+    let column = cx.debug_bounds("column todo").expect("the column is drawn");
+    (1..=last)
+        .filter_map(|id| {
+            let card = cx.debug_bounds(format!("card 0/{id}").leak())?;
+            (card.top() >= column.top() && card.bottom() <= column.bottom()).then_some((id, card.top()))
+        })
+        .min_by(|a, b| a.1.as_f32().total_cmp(&b.1.as_f32()))
+        .expect("a card in view")
+}
+
+#[gpui::test]
+fn the_card_in_view_stays_put_as_the_cards_above_it_are_reckoned_anew(cx: &mut gpui::TestAppContext) {
+    // The top 20 are a line each, laid out on opening; the 280 under them, never laid out, wrap onto two.
+    let titles: Vec<String> = (1..=300)
+        .map(|n| match n {
+            ..=280 => format!("task {n} with a title long enough to wrap onto several lines of a narrow column"),
+            _ => format!("task {n}"),
+        })
+        .collect();
+    let (_view, cx, _dir) = window(cx, &titles.iter().map(String::as_str).collect::<Vec<_>>());
+    cx.simulate_resize(gpui::size(px(600.), px(800.)));
+    next_frames(cx);
+    // One turn of the wheel far down, and the frame it draws: the cards near the view laid out, those above it never
+    // laid out reckoned as tall as the short ones. Taller than a 400 px window shows, no card would be wholly in view.
+    let column = cx.debug_bounds("column todo").expect("the column is drawn");
+    let delta = gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(-8000.)));
+    let (modifiers, touch_phase) = (gpui::Modifiers::none(), gpui::TouchPhase::Moved);
+    cx.simulate_event(gpui::ScrollWheelEvent { position: column.center(), delta, modifiers, touch_phase });
+    let (card, top) = first_in_view(cx, 300);
+    // The cards reckoned above it now as tall as those laid out on average: the column longer above the view.
+    next_frames(cx);
+    redraw(cx);
+    let moved = cx.debug_bounds(format!("card 0/{card}").leak()).map(|c| c.top() - top);
+    assert!(moved.is_some_and(|d| d.abs() < px(1.)), "card {card} stays where it showed: moved {moved:?}");
+}
+
+#[gpui::test]
+fn a_column_scrolled_part_way_left_shorter_draws_what_it_scrolls_back_to(cx: &mut gpui::TestAppContext) {
+    let (view, cx, dir) = small_board(cx);
+    wheel(&view, cx, gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(-2000.))), false);
+    let (offset, max) = view.read_with(cx, |view, _| {
+        let scroll = &view.scroll.columns[0].scroll;
+        (-scroll.offset().y, scroll.max_offset().y)
+    });
+    assert!(offset > px(0.) && offset < max, "part way down, not at its end: {offset:?} of {max:?}");
+    view.update(cx, |view, _| view.board.selected = None);
+    let before = blank_frames(&view, cx);
+    // An agent finishes the top 20: the column's 10 left are shorter than it was scrolled.
+    let mut cli = kanbrain_core::brain::Brain::open(Store::at(dir.path()).unwrap()).unwrap();
+    for id in 11..=30 {
+        cli.set_status(id, Status::Done).unwrap();
+    }
+    cx.executor().advance_clock(crate::watch::INTERVAL);
+    cx.run_until_parked();
+    next_frames(cx);
+    assert_eq!(blank_frames(&view, cx), before, "no frame showed a blank where a card goes");
+    assert!(cx.debug_bounds("card 0/1").is_some(), "the last card is drawn");
+}
+
+/// A window over a fresh folder holding 100 notes, smaller than their list, on the notes tab.
+fn many_notes(
+    cx: &mut gpui::TestAppContext,
+) -> (gpui::Entity<BrainView>, &mut gpui::VisualTestContext, tempfile::TempDir) {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    for id in 1..=100 {
+        let mut note = Task::new(id, format!("note {id}"), now());
+        note.kind = Kind::Note;
+        store.save(&mut note).unwrap();
+    }
+    let board = Board::open(dir.path(), None).unwrap();
+    let (view, cx) = cx.add_window_view(|window, cx| BrainView::new(board, window, cx));
+    cx.simulate_resize(gpui::size(px(600.), px(400.)));
+    cx.simulate_keystrokes("2");
+    next_frames(cx);
+    redraw(cx);
+    (view, cx, dir)
+}
+
+#[gpui::test]
+fn the_notes_list_draws_the_entries_in_view(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = many_notes(cx);
+    let (first, last) = view.read_with(cx, |view, _| {
+        let entries = view.board.entries();
+        (entries[0].1.id, entries[entries.len() - 1].1.id)
+    });
+    let [first, last]: [&'static str; 2] = [first, last].map(|id| format!("entry 0/{id}").leak() as &str);
+    assert!(shown_in(cx, first, "entries"), "the entries in view are drawn");
+    assert!(cx.debug_bounds(last).is_none(), "one far out of view isn't");
+    let max = view.read_with(cx, |view, _| view.scroll.list.scroll.max_offset().y);
+    let area = cx.debug_bounds("entries").expect("the list is drawn");
+    wheel_at(&view, cx, area.center(), gpui::ScrollDelta::Pixels(gpui::point(px(0.), -max)), false);
+    assert!(shown_in(cx, last, "entries"), "scrolled to, it is");
+}
+
+#[gpui::test]
+fn the_notes_list_scrolls_to_an_entry_selected_far_out_of_view(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = many_notes(cx);
+    let last = view.read_with(cx, |view, _| view.board.entries().last().unwrap().0);
+    view.update(cx, |view, cx| {
+        view.board.selected = Some(last);
+        view.follow = true;
+        cx.notify();
+    });
+    next_frames(cx);
+    let selector: &'static str = format!("entry 0/{}", last.id).leak();
+    assert!(shown_in(cx, selector, "entries"), "the entry is drawn, in view");
+}
+
+#[gpui::test]
+fn a_rows_line_of_text_starts_under_its_title(cx: &mut gpui::TestAppContext) {
+    let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let repo = code.path().join("blog/.brain");
+    for dir in [central.path(), repo.as_path()] {
+        let mut note = Task::new(1, "pool size".to_string(), now());
+        note.kind = Kind::Note;
+        note.description = "Ten connections.".to_string();
+        Store::at(dir).unwrap().save(&mut note).unwrap();
+    }
+    kanbrain_core::projects::register(central.path(), "blog", &repo).unwrap();
+    let board = Board::open(central.path(), None).unwrap();
+    let (view, cx) = cx.add_window_view(|window, cx| BrainView::new(board, window, cx));
+    cx.simulate_keystrokes("2");
+    next_frames(cx);
+    let left = |cx: &mut gpui::VisualTestContext, selector: String| {
+        cx.debug_bounds(selector.clone().leak()).unwrap_or_else(|| panic!("{selector} is drawn")).left()
+    };
+    // Both brains shown: each row names its own, which the line starts past too.
+    for src in [0, 1] {
+        assert_eq!(left(cx, format!("entry {src}/1 line")), left(cx, format!("entry {src}/1 title")), "brain {src}");
+    }
+    view.update(cx, |view, cx| {
+        view.board.scope = vec![crate::state::Scope::Central];
+        cx.notify();
+    });
+    next_frames(cx);
+    assert_eq!(left(cx, "entry 0/1 line".into()), left(cx, "entry 0/1 title".into()), "one brain, no label");
+}
+
+#[test]
+fn a_rows_line_is_its_texts_first_else_its_first_heading() {
+    use super::entries::first_line;
+    assert_eq!(first_line("\n  \n# Pool\n\nTen connections.\nMore."), Some("Ten connections."));
+    assert_eq!(first_line("# Pool\n## Size"), Some("# Pool"), "headings alone: the first");
+    assert_eq!(first_line(" \n"), None, "nothing but blanks");
+}
+
+#[gpui::test]
+fn only_the_done_column_offers_its_older_tasks(cx: &mut gpui::TestAppContext) {
+    let titles: Vec<String> = (1..=crate::state::DONE_LIMIT + 3).map(|n| format!("task {n}")).collect();
+    let (view, cx, _dir) = window(cx, &titles.iter().map(String::as_str).collect::<Vec<_>>());
+    view.update(cx, |view, cx| {
+        for id in 1..=u32::try_from(titles.len()).unwrap() {
+            view.board.brain_mut(0).set_status(id, Status::Done).unwrap();
+        }
+        cx.notify();
+    });
+    next_frames(cx);
+    let button = cx.debug_bounds("all done").expect("the done column offers the older ones");
+    let done = cx.debug_bounds("column done").expect("the done column is drawn");
+    // At the column's end, under its cards: below the window, but in the column, not another.
+    assert!((done.left()..done.right()).contains(&button.center().x), "in the done column");
+    // Tall enough for the button to show, and take a click.
+    cx.simulate_resize(gpui::size(px(1400.), px(3000.)));
+    next_frames(cx);
+    let button = cx.debug_bounds("all done").expect("the button is drawn");
+    cx.simulate_click(button.center(), gpui::Modifiers::none());
+    view.read_with(cx, |view, _| assert!(view.board.all_done, "a click shows them all"));
+    next_frames(cx);
+    let button = cx.debug_bounds("all done").expect("the button is drawn");
+    cx.simulate_click(button.center(), gpui::Modifiers::none());
+    view.read_with(cx, |view, _| assert!(!view.board.all_done, "another shows the latest again"));
+}
+
+#[gpui::test]
+fn the_list_layout_hints_only_at_empty_sections(cx: &mut gpui::TestAppContext) {
+    let (_view, cx, _dir) = window(cx, &["a"]);
+    cx.simulate_keystrokes("v");
+    next_frames(cx);
+    assert!(cx.debug_bounds("hint todo").is_none(), "to do has a task");
+    assert!(cx.debug_bounds("hint doing").is_some(), "doing has none");
+}
+
 /// Comes to `from`, presses the left button there, drags to `to` by way of halfway, lets go and draws what that
 /// asked for.
 fn drag_on(cx: &mut gpui::VisualTestContext, from: gpui::Point<gpui::Pixels>, to: gpui::Point<gpui::Pixels>) {
@@ -1606,7 +2246,7 @@ fn drag_on(cx: &mut gpui::VisualTestContext, from: gpui::Point<gpui::Pixels>, to
 fn todo_thumb(view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext) -> (gpui::Pixels, gpui::Pixels, f32) {
     let bar = cx.debug_bounds("scrollbar column todo").expect("the long column has a scrollbar");
     let (shown, max, offset) = view.read_with(cx, |view, _| {
-        let scroll = &view.scroll.columns[0];
+        let scroll = &view.scroll.columns[0].scroll;
         (scroll.bounds().size.height, scroll.max_offset().y, scroll.offset().y)
     });
     let (start, len) = super::scrollbar::thumb(bar.size.height, shown, max, offset).expect("a thumb");
@@ -1657,7 +2297,7 @@ fn a_columns_scrollbar_drags_it_up_and_down(cx: &mut gpui::TestAppContext) {
     // Dragged past its end, the column stops at its last card; and back past its start, at its first.
     let bottom = gpui::point(bar.center().x, bar.bottom() - px(2.));
     drag_on(cx, bottom, bottom + gpui::point(px(0.), px(200.)));
-    let max = view.read_with(cx, |view, _| view.scroll.columns[0].max_offset().y.as_f32());
+    let max = view.read_with(cx, |view, _| view.scroll.columns[0].scroll.max_offset().y.as_f32());
     assert_eq!(scrolled(&view, cx).0, max, "at its end");
     drag_on(cx, bottom, gpui::point(bar.center().x, bar.top() - px(100.)));
     assert_eq!(scrolled(&view, cx).0, 0., "and back at its start");
@@ -1830,7 +2470,7 @@ fn a_drag_cut_short_by_the_bar_going_ends_with_it(cx: &mut gpui::TestAppContext)
     // Grown tall enough for every card, the bar goes, and the button comes up with it gone.
     cx.simulate_resize(gpui::size(px(600.), px(4000.)));
     next_frames(cx);
-    assert!(view.read_with(cx, |view, _| view.scroll.columns[0].max_offset().y) < px(1.), "it all fits");
+    assert!(view.read_with(cx, |view, _| view.scroll.columns[0].scroll.max_offset().y) < px(1.), "it all fits");
     cx.simulate_mouse_up(thumb, MouseButton::Left, none);
     cx.simulate_resize(gpui::size(px(600.), px(400.)));
     next_frames(cx);
@@ -1989,4 +2629,138 @@ fn a_repositorys_reference_names_the_entry_of_that_repository_of_its_own_project
     assert_eq!(named(src("blog", "api"), "shop/api"), None, "nor its own repository of that name");
     let project = crate::ui::markdown::written_for_project(&board, shop_api);
     assert_eq!(project(Some("web"), 1).map(|k| k.src), Some(shop_web), "a project's description names them so");
+}
+
+#[gpui::test]
+fn going_to_a_card_among_cards_shorter_than_reckoned_leaves_no_blank_in_view(cx: &mut gpui::TestAppContext) {
+    // The top cards, laid out on opening, wrap onto three lines; those far down, never laid out, are a line each.
+    // Gone to, a card shows at the view's bottom, with a view's worth above it drawn as reckoned: as tall as the top
+    // ones, those end below the view's top, and the box above them shows until the next frame draws them.
+    let titles: Vec<String> = (1..=300)
+        .map(|n| match n {
+            ..=250 => format!("task {n}"),
+            _ => format!("task {n} with a title long enough to wrap onto several lines of a narrow column, and more"),
+        })
+        .collect();
+    let (view, cx, _dir) = window(cx, &titles.iter().map(String::as_str).collect::<Vec<_>>());
+    cx.simulate_resize(gpui::size(px(600.), px(800.)));
+    next_frames(cx);
+    view.update(cx, |view, cx| {
+        view.board.selected = Some(crate::state::Key::new(0, 100));
+        view.follow = true;
+        cx.notify();
+    });
+    next_frames(cx);
+    assert!(shown_in(cx, "card 0/100", "column todo"), "gone to");
+    assert_eq!(blanks(&view, cx), 0, "the next frame draws the cards where the box showed");
+}
+
+#[gpui::test]
+fn wheeling_up_through_cards_never_laid_out_moves_the_view_by_the_wheel(cx: &mut gpui::TestAppContext) {
+    // Cards of one, two and three lines, far more than a view: those the wheel brings in from above were never laid out.
+    let titles: Vec<String> = (1..=300)
+        .map(|n| match n % 3 {
+            0 => format!("task {n} with a title long enough to wrap onto several lines of a narrow column, and more"),
+            1 => format!("task {n}"),
+            _ => format!("task {n} with a title long enough to wrap onto two lines"),
+        })
+        .collect();
+    let (view, cx, _dir) = window(cx, &titles.iter().map(String::as_str).collect::<Vec<_>>());
+    cx.simulate_resize(gpui::size(px(600.), px(800.)));
+    next_frames(cx);
+    wheel(&view, cx, gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(-15000.))), false);
+    redraw(cx);
+    for step in 0..40 {
+        let (card, top) = first_in_view(cx, 300);
+        // The scroll's offset moves by more or less: the rows above reckoned anew as they're laid out.
+        wheel(&view, cx, gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(60.))), false);
+        let now = cx.debug_bounds(format!("card 0/{card}").leak()).expect("the card stays drawn").top();
+        let moved = (now - top).as_f32();
+        assert!((moved - 60.).abs() < 1., "step {step}: card {card} moved {moved} px for a wheel of 60");
+        // The rows laid out out of sight make what the column scrolls over no wider (nor longer).
+        let wider = view.read_with(cx, |view, _| view.scroll.columns[0].scroll.max_offset().x);
+        assert_eq!(wider, px(0.), "step {step}");
+    }
+}
+
+#[gpui::test]
+fn wheeling_up_through_cards_laid_out_every_other_moves_the_view_by_the_wheel(cx: &mut gpui::TestAppContext) {
+    // As `wheeling_up_through_cards_never_laid_out_moves_the_view_by_the_wheel`, but every other card laid out, by a
+    // search that showed only them: wheeled up, one never laid out comes in under one laid out above it, the first
+    // drawn, and the view stays on the first that shows, not on that one.
+    let titles: Vec<String> = (1..=300)
+        .map(|n| {
+            let kind = if n % 2 == 0 { "pine" } else { "oak" };
+            match n % 3 {
+                0 => format!("task {n} {kind}, with a title long enough to wrap onto several lines of a narrow column"),
+                1 => format!("task {n} {kind}"),
+                _ => format!("task {n} {kind}, with a title long enough to wrap onto two lines"),
+            }
+        })
+        .collect();
+    let (view, cx, _dir) = window(cx, &titles.iter().map(String::as_str).collect::<Vec<_>>());
+    cx.simulate_resize(gpui::size(px(600.), px(800.)));
+    next_frames(cx);
+    cx.simulate_keystrokes("/ p i n e");
+    next_frames(cx);
+    let shown = view.read_with(cx, |view, _| view.scroll.columns[0].scroll.bounds().size.height);
+    // Down to the search's end, every card it shows laid out on the way.
+    while !view.read_with(cx, |view, _| {
+        let scroll = &view.scroll.columns[0].scroll;
+        -scroll.offset().y >= scroll.max_offset().y
+    }) {
+        wheel(&view, cx, gpui::ScrollDelta::Pixels(gpui::point(px(0.), -shown / 2.)), false);
+        redraw(cx);
+    }
+    cx.simulate_keystrokes("escape escape");
+    next_frames(cx);
+    to_the_end(&view, cx);
+    redraw(cx);
+    // Wheels of three cards' height or so: two at a time come in, one laid out above one that wasn't.
+    for step in 0..20 {
+        let (card, top) = first_in_view(cx, 300);
+        wheel(&view, cx, gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(250.))), false);
+        let now = cx.debug_bounds(format!("card 0/{card}").leak()).expect("the card stays drawn").top();
+        let moved = (now - top).as_f32();
+        assert!((moved - 250.).abs() < 1., "step {step}: card {card} moved {moved} px for a wheel of 250");
+    }
+}
+
+#[gpui::test]
+fn a_list_first_shown_on_a_card_far_down_shows_it(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    // The oldest task, at the to-do column's bottom.
+    view.update(cx, |view, cx| {
+        view.board.selected = Some(crate::state::Key::new(0, 1));
+        view.follow = true;
+        cx.notify();
+    });
+    next_frames(cx);
+    assert!(shown_in(cx, "card 0/1", "column todo"), "in the column");
+    // The frames a key asks for, as the platform draws them: the second goes to the row as laid out.
+    cx.simulate_keystrokes("v");
+    // The first frame puts it at the view's top as reckoned, with the headers above it reckoned too.
+    let list = cx.debug_bounds("task-list").expect("the list is drawn");
+    let row = cx.debug_bounds("row 0/1").expect("the row is drawn");
+    assert!(row.bottom() > list.top() && row.top() < list.bottom(), "the first frame shows it: {row:?} in {list:?}");
+    next_frames(cx);
+    assert!(shown_in(cx, "row 0/1", "task-list"), "the list layout shows it");
+    redraw(cx);
+    assert!(shown_in(cx, "row 0/1", "task-list"), "and the next");
+}
+
+#[gpui::test]
+fn a_list_first_shown_on_its_first_row_shows_it_whole(cx: &mut gpui::TestAppContext) {
+    let (view, cx, _dir) = small_board(cx);
+    // The newest task, the list's first row, with every row near it drawn: no box for the second frame to fill.
+    view.update(cx, |view, cx| {
+        view.board.selected = Some(crate::state::Key::new(0, 30));
+        view.follow = true;
+        cx.notify();
+    });
+    next_frames(cx);
+    cx.simulate_keystrokes("v");
+    // The headers above it are shorter than reckoned: the first frame leaves it part above the view.
+    next_frames(cx);
+    assert!(shown_in(cx, "row 0/30", "task-list"), "the second frame shows it whole");
 }

@@ -446,6 +446,27 @@ fn files_that_dont_read_as_entries_are_named_on_stderr() {
 }
 
 #[test]
+fn a_command_on_one_entry_reads_its_file_alone() {
+    let (central, repo) = (tempdir(), tempdir());
+    let run = |args: &[&str]| kb(repo.path(), central.path(), args, "");
+    ok(&run(&["init", "demo"]));
+    ok(&run(&["add", "one"]));
+    ok(&run(&["add", "two"]));
+    std::fs::write(repo.path().join(".brain/0007-broken.md"), "# Broken\n\nno id line\n").unwrap();
+    for args in [&["comment", "1", "looked"][..], &["describe", "1", "what"], &["ask", "1", "which?"], &["done", "1"]] {
+        let out = run(args);
+        assert!(out.status.success() && out.stderr.is_empty(), "{args:?}, #7's file unread: {out:?}");
+    }
+    assert!(ok(&run(&["show", "1"])).contains("which?"), "each written");
+    // Said as JSON, the entries linked to it are named; starting looks for room among the others: every entry is read,
+    // and the broken one said.
+    for args in [&["done", "2", "--json"][..], &["start", "2"], &["show", "2"]] {
+        let stderr = String::from_utf8(run(args).stderr).unwrap();
+        assert!(stderr.contains("kb: skipped 0007-broken.md"), "{args:?}: {stderr}");
+    }
+}
+
+#[test]
 fn renaming_a_project_takes_the_new_name_only_and_central_is_no_project() {
     let (central, repo) = (tempdir(), tempdir());
     let run = |args: &[&str]| kb(repo.path(), central.path(), args, "");
@@ -698,4 +719,48 @@ fn init_says_so_when_kb_isnt_on_the_path() {
     assert!(init("".as_ref()).contains(said), "agents and the hooks run it");
     let bin = Path::new(env!("CARGO_BIN_EXE_kb")).parent().unwrap();
     assert!(!init(bin.as_os_str()).contains(said));
+}
+
+/// How long `kb`'s commands take over a brain of 10,000 tasks to do, 2,000 done and 2,000 notes, for the performance
+/// work to measure itself by. Ignored by default and timed only in a release build (`cargo test --release -p
+/// kanbrain perf -- --ignored --nocapture`); it prints the times rather than assert them, since machines differ.
+#[test]
+#[ignore = "a benchmark: run in release with --ignored --nocapture"]
+fn perf_commands_over_ten_thousand_entries() {
+    use kanbrain_core::model::{Kind, Status, Task, now};
+    let (central, repo) = (tempdir(), tempdir());
+    let run = |args: &[&str], stdin: &str| kb(repo.path(), central.path(), args, stdin);
+    ok(&run(&["init", "demo"], ""));
+    let brain = repo.path().join(".brain");
+    let (todo, done, notes) = (10_000, 2_000, 2_000);
+    for id in 1..=todo + done + notes {
+        let mut task = Task::new(id, format!("task {id} with a title about as long as most"), now());
+        task.tags = vec![["auth", "api", "ui", "db", "perf", "bug"][id as usize % 6].to_string()];
+        if id > todo + done {
+            task.kind = Kind::Note;
+        } else if id > todo {
+            task.status = Status::Done;
+        }
+        let file = brain.join(format!("{id:04}-task-{id}-with-a-title-about-as-long-as-most.md"));
+        std::fs::write(file, task.to_markdown()).unwrap();
+    }
+    let hook = format!("{{\"cwd\":{:?}}}", repo.path());
+    let commands: [(&str, &[&str], &str); 9] = [
+        ("context", &["context"], ""),
+        ("show", &["show", "5000"], ""),
+        ("comment", &["comment", "5000", "a comment"], ""),
+        ("start", &["start", "5001"], ""),
+        ("done", &["done", "5001"], ""),
+        ("search", &["search", "title", "5000"], ""),
+        ("list todo", &["list", "todo"], ""),
+        ("add", &["add", "one more task"], ""),
+        ("hook tool", &["hook", "tool"], &hook),
+    ];
+    let mut times = Vec::new();
+    for (name, args, stdin) in commands {
+        let start = std::time::Instant::now();
+        ok(&run(args, stdin));
+        times.push(format!("{name} {:?}", start.elapsed()));
+    }
+    eprintln!("PERF kb at {}: {}", todo + done + notes, times.join(", "));
 }
