@@ -446,6 +446,27 @@ fn files_that_dont_read_as_entries_are_named_on_stderr() {
 }
 
 #[test]
+fn a_command_on_one_entry_reads_its_file_alone() {
+    let (central, repo) = (tempdir(), tempdir());
+    let run = |args: &[&str]| kb(repo.path(), central.path(), args, "");
+    ok(&run(&["init", "demo"]));
+    ok(&run(&["add", "one"]));
+    ok(&run(&["add", "two"]));
+    std::fs::write(repo.path().join(".brain/0007-broken.md"), "# Broken\n\nno id line\n").unwrap();
+    for args in [&["comment", "1", "looked"][..], &["describe", "1", "what"], &["ask", "1", "which?"], &["done", "1"]] {
+        let out = run(args);
+        assert!(out.status.success() && out.stderr.is_empty(), "{args:?}, #7's file unread: {out:?}");
+    }
+    assert!(ok(&run(&["show", "1"])).contains("which?"), "each written");
+    // Said as JSON, the entries linked to it are named; starting looks for room among the others: every entry is read,
+    // and the broken one said.
+    for args in [&["done", "2", "--json"][..], &["start", "2"], &["show", "2"]] {
+        let stderr = String::from_utf8(run(args).stderr).unwrap();
+        assert!(stderr.contains("kb: skipped 0007-broken.md"), "{args:?}: {stderr}");
+    }
+}
+
+#[test]
 fn renaming_a_project_takes_the_new_name_only_and_central_is_no_project() {
     let (central, repo) = (tempdir(), tempdir());
     let run = |args: &[&str]| kb(repo.path(), central.path(), args, "");

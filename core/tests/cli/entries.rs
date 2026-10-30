@@ -1,5 +1,5 @@
 use super::project::project_text;
-use super::wait::{Watch, minutes, settled};
+use super::wait::{Watch, minutes, read_for, settled};
 use super::*;
 use crate::api::ApiError;
 use crate::model::{Author, Changed};
@@ -386,6 +386,21 @@ fn waiting_on_an_entry_missing_from_one_look_carries_on() {
     brain.add_comment(task, "Per account").unwrap();
     let answered = watch.look(task, Ok(brain.store.load_entries().unwrap().0)).unwrap().unwrap();
     assert_eq!(answered, format!("#{task} Rate-limit login: answered\n\nPer account"));
+}
+
+#[test]
+fn a_wait_reads_its_entrys_file_alone_unless_renamed_by_hand() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut brain = Brain::open(crate::store::Store::at(dir.path()).unwrap()).unwrap();
+    for title in ["one", "two", "three"] {
+        brain.add(NewEntry { title: title.into(), ..NewEntry::default() }).unwrap();
+    }
+    let ids = |tasks: Vec<crate::model::Task>| tasks.iter().map(|task| task.id).collect::<Vec<_>>();
+    assert_eq!(ids(read_for(&brain.store, 2).unwrap()), [2]);
+    std::fs::rename(dir.path().join("0002-two.md"), dir.path().join("two.md")).unwrap();
+    let mut all = ids(read_for(&brain.store, 2).unwrap());
+    all.sort_unstable();
+    assert_eq!(all, [1, 2, 3], "every entry, to find it");
 }
 
 #[test]
