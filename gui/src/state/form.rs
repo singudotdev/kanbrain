@@ -8,7 +8,6 @@ use crate::text::editor::LineInput;
 use anyhow::Result;
 use kanbrain_core::brain::NewEntry;
 use kanbrain_core::model::{Kind, Status, Task};
-use std::collections::BTreeMap;
 
 impl Board {
     /// The kind of entry the form makes or changes, and the tags entries of that kind already use in
@@ -21,14 +20,14 @@ impl Board {
             FormTarget::Edit(key) => (key.src, self.task(key).map_or(Kind::Task, |t| t.kind)),
         };
         let typed = form.typed_tag();
-        let mut uses = BTreeMap::new();
-        for tag in self.brain(src).tasks.iter().filter(|t| t.kind == kind).flat_map(|t| &t.tags) {
-            *uses.entry(tag.as_str()).or_insert(0) += 1;
-        }
-        let tags = uses
-            .into_iter()
-            .filter(|&(tag, _)| tag.contains(typed.as_str()) && !form.tags.iter().any(|held| held == tag))
-            .map(|(tag, n)| (tag.to_string(), n))
+        // From the index: counting the brain's every tag took each frame of the form a while in a long brain.
+        let tags = self.sources[src]
+            .index()
+            .tags()
+            .iter()
+            .map(|(tag, uses)| (tag, uses[kind.position()]))
+            .filter(|&(tag, n)| n > 0 && tag.contains(typed.as_str()) && !form.tags.iter().any(|held| held == tag))
+            .map(|(tag, n)| (tag.clone(), n))
             .collect();
         (kind, tags)
     }

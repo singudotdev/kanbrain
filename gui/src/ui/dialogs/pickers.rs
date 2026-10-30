@@ -27,30 +27,24 @@ pub(super) fn links(
     let task = board.task(picker.key)?;
     let related = board.related_keys(picker.key);
     let candidates = board.link_candidates(picker);
-    let rows: Vec<_> = candidates
-        .iter()
-        .enumerate()
-        .map(|(index, &(key, other))| {
-            let linked = related.contains(&key);
-            let selector = if key.src == picker.key.src {
-                format!("link {}", key.id)
-            } else {
-                format!("link {}/{}", key.src, key.id)
-            };
-            row(("link", index), selector, index == picker.rows.sel, true)
-                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.toggle_link(index))))
-                .child(check(linked))
-                .child(entry_pill(other))
-                .child(div().flex_1().min_w_0().truncate().child(format!(
-                    "{} {}",
-                    board.link_name(picker.key.src, key),
-                    other.title
-                )))
-                .child(tag_chips(board, &other.tags).flex_nowrap().flex_none())
-        })
-        .collect();
+    let draw = |index: usize| {
+        let (key, other) = candidates[index];
+        let linked = related.contains(&key);
+        let selector =
+            if key.src == picker.key.src { format!("link {}", key.id) } else { format!("link {}/{}", key.src, key.id) };
+        row(("link", index), selector, index == picker.rows.sel, true)
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.toggle_link(index))))
+            .child(check(linked))
+            .child(entry_pill(other))
+            .child(div().flex_1().min_w_0().truncate().child(format!(
+                "{} {}",
+                board.link_name(picker.key.src, key),
+                other.title
+            )))
+            .child(tag_chips(board, &other.tags).flex_nowrap().flex_none())
+    };
     let empty = candidates.is_empty();
-    let list = list("links", rows, picker.rows.sel, MAX_ROWS, scroll, follow)
+    let list = list("links", candidates.len(), picker.rows.sel, MAX_ROWS, scroll, follow, draw)
         .when(empty, |d| d.child(dim("Nothing matches.")));
     let content = div()
         .flex()
@@ -74,27 +68,23 @@ pub(super) fn comments(
 ) -> Option<Div> {
     let task = board.task(picker.key)?;
     let key = picker.key;
-    let rows: Vec<_> = task
-        .comments
-        .iter()
-        .enumerate()
-        .map(|(index, comment)| {
-            let first = comment.first_line();
-            let by = if comment.author == Author::Agent { " · agent" } else { "" };
-            row(("comment", index), format!("comment {index}"), index == picker.sel, true)
-                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                    this.act(cx, |b| b.open_editor(Target::Comment(key, index)));
-                }))
-                .child(dim_small(format!("{}{by}", when(comment.created))).flex_none())
-                .child(div().flex_1().min_w_0().truncate().child(first.to_string()))
-        })
-        .collect();
+    let draw = |index: usize| {
+        let comment = &task.comments[index];
+        let first = comment.first_line();
+        let by = if comment.author == Author::Agent { " · agent" } else { "" };
+        row(("comment", index), format!("comment {index}"), index == picker.sel, true)
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                this.act(cx, |b| b.open_editor(Target::Comment(key, index)));
+            }))
+            .child(dim_small(format!("{}{by}", when(comment.created))).flex_none())
+            .child(div().flex_1().min_w_0().truncate().child(first.to_string()))
+    };
     let content = div()
         .flex()
         .flex_col()
         .gap_3()
         .child(dim_small("Enter (or a click) edits the highlighted comment; x deletes it, after asking."))
-        .child(list_box(list("comments", rows, picker.sel, MAX_ROWS, scroll, follow)));
+        .child(list_box(list("comments", task.comments.len(), picker.sel, MAX_ROWS, scroll, follow, draw)));
     let buttons = vec![action("comments-done", "Close", Kind::Primary, KeyCode::Esc, cx)];
     let title = format!("Comments on {} {}", board.entry_name(key), truncate(&task.title, 40));
     Some(dialog(title, content, buttons).w(px(WIDE_WIDTH)))
@@ -112,19 +102,17 @@ pub(super) fn place(
     let picker = &asked.picker;
     let candidates = board.where_candidates(picker, asked.then);
     let empty = candidates.is_empty();
-    let rows: Vec<_> = candidates
-        .into_iter()
-        .enumerate()
-        .map(|(index, (src, name))| {
-            let dir = board.brain(src).store.dir().display().to_string();
-            row(("where", index), format!("where {index}"), index == picker.sel, true)
-                .gap_3()
-                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.choose_where(index))))
-                .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(name))
-                .child(dim_small(dir).min_w_0().truncate())
-        })
-        .collect();
-    let list = list("where", rows, picker.sel, MAX_ROWS, scroll, follow)
+    let draw = |index: usize| {
+        let (src, name) = &candidates[index];
+        let src = *src;
+        let dir = board.brain(src).store.dir().display().to_string();
+        row(("where", index), format!("where {index}"), index == picker.sel, true)
+            .gap_3()
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.choose_where(index))))
+            .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(name.clone()))
+            .child(dim_small(dir).min_w_0().truncate())
+    };
+    let list = list("where", candidates.len(), picker.sel, MAX_ROWS, scroll, follow, draw)
         .when(empty, |d| d.child(dim("No project matches.").px_2().py_1()));
     let content = div()
         .flex()
@@ -161,39 +149,36 @@ pub(super) fn palette(
 ) -> Div {
     let commands = board.commands(picker);
     let empty = commands.is_empty();
-    let rows: Vec<_> = commands
-        .iter()
-        .enumerate()
-        .map(|(index, &&Action { shown, does, runs, .. })| {
-            // The first row of each section names it, its line above lighter than the others: a heading row would
-            // break the list's even rows, which its scrolling counts on.
-            let section = commands[index].section();
-            let starts = index == 0 || commands[index - 1].section() != section;
-            row(("command", index), format!("command {index}"), index == picker.sel, runs)
-                .gap_3()
-                .when(starts, |d| d.border_color(rgb(BORDER)))
-                .when(runs, |d| {
-                    d.on_click(
-                        cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.choose_command(index))),
-                    )
-                })
-                .child(div().flex_1().min_w_0().truncate().when(!runs, |d| d.text_color(rgb(theme::DIM))).child(does))
-                .children(starts.then(|| dim_small(section.title()).flex_none()))
-                .child(
-                    div()
-                        .flex_none()
-                        .px_1p5()
-                        .rounded_sm()
-                        .border_1()
-                        .border_color(rgb(BORDER))
-                        .bg(rgb(theme::INPUT))
-                        .text_size(px(12.))
-                        .font_family(theme::EDITOR_FONT)
-                        .child(shown),
-                )
-        })
-        .collect();
-    let list = list("commands", rows, picker.sel, PALETTE_ROWS, scroll, follow)
+    let draw = |index: usize| {
+        let &Action { shown, does, runs, .. } = commands[index];
+        // The first row of each section names it, its line above lighter than the others: a heading row would
+        // break the list's even rows, which its scrolling counts on.
+        let section = commands[index].section();
+        let starts = index == 0 || commands[index - 1].section() != section;
+        row(("command", index), format!("command {index}"), index == picker.sel, runs)
+            .gap_3()
+            .when(starts, |d| d.border_color(rgb(BORDER)))
+            .when(runs, |d| {
+                d.on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.choose_command(index))))
+            })
+            .child(div().flex_1().min_w_0().truncate().when(!runs, |d| d.text_color(rgb(theme::DIM))).child(does))
+            .children(
+                starts.then(|| dim_small(section.title()).flex_none().debug_selector(|| format!("heading {index}"))),
+            )
+            .child(
+                div()
+                    .flex_none()
+                    .px_1p5()
+                    .rounded_sm()
+                    .border_1()
+                    .border_color(rgb(BORDER))
+                    .bg(rgb(theme::INPUT))
+                    .text_size(px(12.))
+                    .font_family(theme::EDITOR_FONT)
+                    .child(shown),
+            )
+    };
+    let list = list("commands", commands.len(), picker.sel, PALETTE_ROWS, scroll, follow, draw)
         .when(empty, |d| d.child(dim("No command matches.").px_2().py_1()));
     let content = div()
         .flex()

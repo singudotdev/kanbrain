@@ -23,33 +23,29 @@ pub(super) fn draw(
     follow: bool,
     cx: &mut Context<BrainView>,
 ) -> Div {
-    let rows: Vec<_> = board
-        .add_project_options(&add.picker)
-        .into_iter()
-        .enumerate()
-        .map(|(index, option)| {
-            let row = row(
-                ("add-project-option", index),
-                format!("add project option {index}"),
-                index == add.picker.sel,
-                true,
-            )
-            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.choose_add_project(index))));
-            match option {
-                ProjectOption::New(name) => row
-                    .child(dim("+ New project").flex_none())
-                    .child(div().font_weight(FontWeight::MEDIUM).min_w_0().truncate().child(name)),
-                ProjectOption::Existing(name) => {
-                    let repos = counted(board.repos_of(&name).count(), "repository", "repositories");
-                    row.child(div().flex_none().font_weight(FontWeight::MEDIUM).child(name)).child(dim_small(repos))
-                }
+    let options = board.add_project_options(&add.picker);
+    let draw = |index: usize| {
+        let option = &options[index];
+        let row =
+            row(("add-project-option", index), format!("add project option {index}"), index == add.picker.sel, true)
+                .on_click(
+                    cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| b.choose_add_project(index))),
+                );
+        match option {
+            ProjectOption::New(name) => row
+                .child(dim("+ New project").flex_none())
+                .child(div().font_weight(FontWeight::MEDIUM).min_w_0().truncate().child(name.clone())),
+            ProjectOption::Existing(name) => {
+                let repos = counted(board.repos_of(name).count(), "repository", "repositories");
+                row.child(div().flex_none().font_weight(FontWeight::MEDIUM).child(name.clone())).child(dim_small(repos))
             }
-        })
-        .collect();
-    let empty = rows.is_empty();
-    let options = list_box(list("add-project-options", rows, add.picker.sel, PROJECT_ROWS, scroll, follow))
-        .text_size(px(13.))
-        .when(empty, |d| d.child(dim("Type the new project's name.").px_2()));
+        }
+    };
+    let empty = options.is_empty();
+    let options =
+        list_box(list("add-project-options", options.len(), add.picker.sel, PROJECT_ROWS, scroll, follow, draw))
+            .text_size(px(13.))
+            .when(empty, |d| d.child(dim("Type the new project's name.").px_2()));
     let project = div()
         .flex()
         .flex_col()

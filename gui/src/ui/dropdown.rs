@@ -55,23 +55,23 @@ impl Dropdown<'_> {
     /// are its list's (see [`list`]).
     pub fn draw(self, scroll: &ScrollHandle, follow: bool, cx: &mut Context<BrainView>) -> impl IntoElement {
         let Self { name, picker, search, rows, choose, width } = self;
-        let empty = rows.is_empty();
-        let rows: Vec<_> = rows
-            .into_iter()
-            .enumerate()
-            .map(|(index, option)| {
-                row((name, index), format!("{name} {index}"), index == picker.sel, true)
-                    .when(option.nested, Styled::pl_6)
-                    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| choose(b, index))))
-                    .child(div().w(px(14.)).flex_none().text_color(rgb(GREEN)).child(if option.checked {
-                        "✓"
-                    } else {
-                        ""
-                    }))
-                    .child(div().min_w_0().flex().items_center().child(option.content))
-            })
-            .collect();
-        let list = list((name, usize::MAX), rows, picker.sel, MAX_ROWS, scroll, follow)
+        let (count, empty) = (rows.len(), rows.is_empty());
+        // Each drawn once: taken out as it is.
+        let mut rows: Vec<Option<Row>> = rows.into_iter().map(Some).collect();
+        let draw = |index: usize| {
+            let drawn = row((name, index), format!("{name} {index}"), index == picker.sel, true)
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.act(cx, |b| choose(b, index))));
+            let Some(option) = rows[index].take() else { return drawn };
+            drawn
+                .when(option.nested, Styled::pl_6)
+                .child(div().w(px(14.)).flex_none().text_color(rgb(GREEN)).child(if option.checked {
+                    "✓"
+                } else {
+                    ""
+                }))
+                .child(div().min_w_0().flex().items_center().child(option.content))
+        };
+        let list = list((name, usize::MAX), count, picker.sel, MAX_ROWS, scroll, follow, draw)
             .when(empty, |d| d.child(dim(format!("No {name} matches.")).px_2().py_1()));
         let panel: Div = div()
             .occlude()
@@ -119,27 +119,30 @@ pub fn row(id: impl Into<ElementId>, selector: String, highlighted: bool, clicka
         .when(clickable && !highlighted, |d| d.hover(|s| s.bg(rgb(theme::HOVER))))
 }
 
-/// A list of `rows` (each `ROW_HEIGHT` tall) showing at most `max_rows` before it scrolls. While the
-/// keyboard moved the highlight (`follow`), row `sel` is scrolled into view; while rows are out of
-/// view below, a line under the list says how many, since GPUI draws no scroll bar.
+/// A list of `count` rows (each `ROW_HEIGHT` tall, `row` draws the one at an index) showing at most `max_rows` before
+/// it scrolls. While the keyboard moved the highlight (`follow`), row `sel` is scrolled into view; while rows are out
+/// of view below, a line under the list says how many, since GPUI draws no scroll bar. Only the rows of a view either
+/// side of the one shown are drawn, boxes of their height standing in for the rest: the link picker lists every entry,
+/// and drawing ten thousand rows took most of a second a frame.
 pub fn list(
     id: impl Into<ElementId>,
-    rows: Vec<Stateful<Div>>,
+    count: usize,
     sel: usize,
     max_rows: usize,
     scroll: &ScrollHandle,
     follow: bool,
+    mut row: impl FnMut(usize) -> Stateful<Div>,
 ) -> Div {
-    let count = rows.len();
-    if follow {
-        scroll.scroll_to_item(sel);
-    }
     // The offset is negative going down.
-    let (top, below) = hidden(count, sel, max_rows, f32::from(-scroll.offset().y), follow);
+    let was = f32::from(-scroll.offset().y);
+    // Scrolled here, by the rows' heights, rather than by GPUI's scroll to a child: that measures the child against
+    // the list as last laid out, which a list shown for the first time never was, and left it past the rows drawn.
+    let scrolled = if follow { followed(count, sel, max_rows, was) } else { was.clamp(0., most(count, max_rows)) };
+    scroll.set_offset(gpui::point(px(0.), px(-scrolled)));
+    let (top, below) = hidden(count, max_rows, scrolled);
+    let (first, end) = (top.saturating_sub(max_rows), (top + 2 * max_rows).min(count));
     let id = id.into();
-    let selector = format!("{id}-list");
-    let mut rows = rows.into_iter();
-    let first = rows.next();
+    let (selector, above, below_rows) = (format!("{id}-list"), format!("{id}-above"), format!("{id}-below"));
     let rows = div()
         .debug_selector(move || selector)
         .id(id)
@@ -148,8 +151,9 @@ pub fn list(
         .max_h(px(rows_height(max_rows)))
         .overflow_y_scroll()
         .track_scroll(scroll)
-        .children(first)
-        .children(rows.map(Styled::border_t_1));
+        .child(div().debug_selector(move || above).flex_none().h(px(rows_height(first))))
+        .children((first..end).map(|index| if index == 0 { row(index) } else { row(index).border_t_1() }))
+        .child(div().debug_selector(move || below_rows).flex_none().h(px(rows_height(count - end))));
     // A list that scrolls keeps the line's room even when nothing is below, so reaching the end
     // doesn't change its height: the dialogs are centered, and a jump would shift the rows under the
     // scroll the keyboard just asked for.
@@ -173,14 +177,24 @@ pub fn list(
 }
 
 /// How many of `count` rows are above the view and below it, with the list `scrolled` this far down: the first row in
-/// view is the first more than half shown. The offset is last frame's; when the keyboard moved (`follow`), the list is
-/// about to scroll just enough to show `sel`, so counted from where that leaves it.
-pub(super) fn hidden(count: usize, sel: usize, max_rows: usize, scrolled: f32, follow: bool) -> (usize, usize) {
-    let mut top = (0..count).take_while(|&i| rows_height(i) + ROW_HEIGHT / 2. <= scrolled).count();
-    if follow {
-        top = top.min(sel).max((sel + 1).saturating_sub(max_rows));
-    }
+/// view is the first more than half shown.
+pub(super) fn hidden(count: usize, max_rows: usize, scrolled: f32) -> (usize, usize) {
+    // Whole rows: a row is a pixel count small enough to be exact in an `f32`.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let top = (((scrolled + ROW_HEIGHT / 2.) / ROW_HEIGHT).floor().max(0.) as usize).min(count);
     (top, count.saturating_sub(top + max_rows))
+}
+
+/// How far down a list of `count` rows, showing `max_rows`, scrolled `was` far, scrolls to show row `sel`: just
+/// enough, and not past its end.
+pub(super) fn followed(count: usize, sel: usize, max_rows: usize, was: f32) -> f32 {
+    let (row_top, row_bottom) = (rows_height(sel), rows_height(sel + 1));
+    was.min(row_top).max(row_bottom - rows_height(max_rows)).clamp(0., most(count, max_rows))
+}
+
+/// How far down a list of `count` rows, showing `max_rows`, scrolls at most.
+fn most(count: usize, max_rows: usize) -> f32 {
+    (rows_height(count) - rows_height(max_rows)).max(0.)
 }
 
 /// How tall `n` rows are; lists are short, so `n` fits a `u16`.
