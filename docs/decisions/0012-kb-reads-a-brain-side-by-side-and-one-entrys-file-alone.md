@@ -33,8 +33,8 @@ A command can't always read its entry alone: `show` lists the entries linking to
 
 ## Consequences
 
-- At 14,000 entries, `show`, `list` and `context` take 40 ms instead of 54; `done` without a change, 16 ms instead of
-  54. A write adds the file's flush to disk, which the command waits for: about 27 ms on a spinning disk.
+- At 14,000 entries, `show`, `list` and `context` take 36 to 40 ms instead of 54 (the median of runs measured apart,
+  the thread counts compared in one); `done` without a change, 16 ms instead of 54. A write adds the file's flush to disk, which the command waits for: about 27 ms on a spinning disk.
 - An entry whose id another file shares under another name (not a sync tool's copy, which keeps the name) is commented
   on before the next whole read renumbers one of the two.
 - A broken file elsewhere in the brain isn't said by those commands: they never read it.

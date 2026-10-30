@@ -46,7 +46,7 @@ fn seen(path: &Path) -> Option<Seen> {
     fs::metadata(path).ok().as_ref().map(seen_in)
 }
 
-/// The file whose metadata this is, as [`seen`] says it.
+/// [`seen`] of a file already open, so it's looked up by its path once.
 fn seen_in(meta: &fs::Metadata) -> Seen {
     (meta.modified().ok(), meta.len())
 }
@@ -57,15 +57,15 @@ const READ_THREADS: usize = 4;
 pub(crate) const READ_PER_THREAD: usize = 512;
 
 /// An entry read from its file, with the file as it was before it was read (see [`seen`]), or why it isn't one.
-type Read = Result<(Task, Option<Seen>), Skipped>;
+type ReadEntry = Result<(Task, Option<Seen>), Skipped>;
 
-/// Reads the entries in the files at `paths`.
-fn read_entries(paths: &[PathBuf]) -> Vec<Read> {
+/// One thread's share of [`Store::load_entries`].
+fn read_entries(paths: &[PathBuf]) -> Vec<ReadEntry> {
     paths.iter().map(|path| read_entry(path)).collect()
 }
 
-/// Reads the entry in the file at `path`.
-fn read_entry(path: &Path) -> Read {
+/// What [`Store::load_entries`] and [`Store::load_files`] make of one file.
+fn read_entry(path: &Path) -> ReadEntry {
     // Before reading, of the file opened: changed in between, it reads as changed since, never as read when it wasn't.
     // Opened once for both, as looking a file up by its path costs as much as reading it.
     let mut was = None;
@@ -394,7 +394,7 @@ impl Store {
     }
 
     /// The entries read, each file remembered as read (see [`Store::known`]), and the files that didn't read as one.
-    fn keep_read(&self, read: impl IntoIterator<Item = Read>) -> (Vec<Task>, Vec<Skipped>) {
+    fn keep_read(&self, read: impl IntoIterator<Item = ReadEntry>) -> (Vec<Task>, Vec<Skipped>) {
         let (mut tasks, mut skipped) = (Vec::new(), Vec::new());
         let mut known = self.read.borrow_mut();
         for one in read {
@@ -431,7 +431,10 @@ impl Store {
             && let Some(was) = self.read.borrow().get(old).copied()
             && seen(old) != Some(was)
         {
-            bail!("{} changed on disk since it was read: not saved over it, read it again first", old.display());
+            bail!(
+                "{} changed or deleted on disk since it was read: not saved over it, read it again first",
+                old.display()
+            );
         }
         self.remember(&path);
         if let Some(old) = &task.path {

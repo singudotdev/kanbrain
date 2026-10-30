@@ -9,6 +9,7 @@ use crate::state::Key;
 use gpui::{AnyElement, Div, Pixels, ScrollHandle, div, prelude::*, px};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 /// A row's height reckoned before any was laid out: about a card of one line and a gap.
 const FIRST_GUESS: Pixels = px(48.);
@@ -22,6 +23,10 @@ pub struct Rows {
     pub scroll: ScrollHandle,
     /// What the last frames laid out.
     seen: RefCell<Seen>,
+    /// The row a list shown for the first time went to, to go to again once it's laid out: see [`Rows::frame`].
+    refollow: std::cell::Cell<Option<Key>>,
+    /// The heights of the rows the last frame laid out out of sight (see [`Frame::finish`]), at the rows' width then.
+    measured: Rc<RefCell<Vec<(Key, Pixels)>>>,
     /// How many frames showed a stand-in in view, for tests to tell a blank from a row drawn.
     #[cfg(test)]
     blanks: std::rc::Rc<std::cell::Cell<usize>>,
@@ -48,11 +53,15 @@ struct Seen {
     reckoned: Vec<Pixels>,
     /// Space before the first child, the list's padding.
     pad: Pixels,
+    /// Space left of the children, the list's padding too.
+    left: Pixels,
     /// Space between two children.
     gap: Pixels,
     /// The rows' width when the heights known were laid out: wider or narrower, rows wrap onto other lines, so the
     /// heights known then say nothing of those now.
     width: Pixels,
+    /// The rows the last frame laid out out of sight, to learn how tall they are before they're drawn.
+    measuring: Vec<Key>,
     /// The children that stood in, in the last frame.
     #[cfg(test)]
     stood_in: Vec<usize>,
@@ -65,6 +74,8 @@ enum Child {
     Drawn(Option<Key>, usize),
     /// An empty box standing in for rows out of view, as tall as they are with the gaps between them.
     Box,
+    /// The rows laid out out of sight, last: see [`Frame::finish`].
+    Measure,
 }
 
 /// What a frame does with one of the list's items.
@@ -82,6 +93,8 @@ impl Rows {
     /// This frame's items, the entry each shows in `order` (none for one that isn't a row, always drawn), the list
     /// scrolling to the item `follow`: which rows are drawn, and which a box stands in for.
     pub fn frame(&self, order: Vec<Option<Key>>, follow: Option<usize>) -> Frame<'_> {
+        let refollow = self.refollow.take().and_then(|key| order.iter().position(|k| *k == Some(key)));
+        let follow = follow.or(refollow);
         let mut seen = self.seen.borrow_mut();
         let view = self.scroll.bounds();
         // Laid out since with these children; not before the first frame, which keeps nothing.
@@ -118,27 +131,11 @@ impl Rows {
         // Scrolled to its end, the list stays there however long its rows turn out: GPUI clamps the scroll to it.
         if follow.is_none() && at_end {
             self.scroll.scroll_to_bottom();
+        } else if follow.is_none() {
+            self.keep_view(&seen, &order, &heights, anchor);
         }
-        // Rows above the view laid out at last, or reckoned anew, are taller or shorter than they were: the view stays
-        // on the row it showed, as GPUI keeps the scroll in pixels. Not when rows came or went above it, which moves
-        // the view's rows as it did before rows stood in.
-        else if follow.is_none()
-            && let Some(key) = anchor
-            && let Some(now) = order.iter().position(|k| *k == Some(key))
-            && let Some(then) = seen.order.iter().position(|k| *k == Some(key))
-            && order[..now] == seen.order[..then]
-            && let Some(was) = seen.reckoned.get(..then)
-        {
-            // Only the rows' heights: the items that aren't rows are laid out as they were, whatever was reckoned.
-            let rows = order[..now].iter().zip(&heights).zip(was).filter(|((key, _), _)| key.is_some());
-            let moved: Pixels = rows.map(|((_, height), was)| *height - *was).sum();
-            if moved != px(0.) {
-                let mut offset = self.scroll.offset();
-                offset.y = (offset.y - moved).min(px(0.));
-                self.scroll.set_offset(offset);
-            }
-        }
-        let shown = if view.size.height > px(0.) { view.size.height } else { FIRST_VIEW };
+        let laid_out = view.size.height > px(0.);
+        let shown = if laid_out { view.size.height } else { FIRST_VIEW };
         let top = match follow.and_then(|ix| tops.get(ix)) {
             // Scrolled to, the row shows at the view's top or bottom: either way, within a view of its top.
             Some(&top) => top,
@@ -147,12 +144,30 @@ impl Rows {
             // padding at the end, both well within a view.
             None => (-self.scroll.offset().y).clamp(px(0.), (y - shown).max(px(0.))),
         };
+        // Shown for the first time on the row it goes to: GPUI can't scroll to a row before the list was laid out (it
+        // measures the row against the list's bounds then, which it doesn't know yet), so the scroll is set here, the
+        // row at the view's top as reckoned, with no row drawn above it; the headers above it may be taller or shorter
+        // than reckoned, so the next frame, laid out, goes to it again.
+        let first_shown = follow.is_some() && !laid_out;
         // A view's worth above and below too, so the wheel finds them drawn.
-        let near = (top - shown, top + shown * 2.);
+        let near = (if first_shown { top } else { top - shown }, top + shown * 2.);
         let far = |ix: usize| {
             let top = tops[ix];
             order[ix].is_some() && Some(ix) != follow && (top + heights[ix] < near.0 || top > near.1)
         };
+        // A row above the view never laid out, drawn, would be as tall as it is, not as reckoned, and move the view's
+        // rows under it by the difference that very frame: none can be known before the layout. Laid out out of sight
+        // first, it's drawn the next frame as tall as it is, and the view stays on its row as for any row reckoned
+        // anew. Not while the list goes to a row or stays at its end, where GPUI sets the scroll after the layout.
+        let unseen_above = |ix: usize| {
+            follow.is_none()
+                && !at_end
+                && laid_out
+                && order[ix].is_some_and(|key| !seen.heights.contains_key(&key))
+                // Where GPUI clamps the scroll back to (see `top`): a list left shorter shows rows that were above it.
+                && tops[ix] + heights[ix] <= top
+        };
+        let mut measuring = Vec::new();
         // Each run of rows far from the view, one box as tall as they are and the gaps between them.
         let mut slots = Vec::with_capacity(order.len());
         let mut child = 0;
@@ -160,7 +175,8 @@ impl Rows {
         // Where the box for the run of far rows so far is, among the slots.
         let mut run = None;
         for (ix, &height) in heights.iter().enumerate() {
-            if !far(ix) {
+            let far = far(ix) || (unseen_above(ix) && order[ix].inspect(|&key| measuring.push((ix, key))).is_some());
+            if !far {
                 run = None;
                 if Some(ix) == follow {
                     follow_child = Some(child);
@@ -177,13 +193,51 @@ impl Rows {
             }
         }
         seen.reckoned = heights;
-        let gap = seen.gap;
+        let (gap, width, origin) = (seen.gap, seen.width, gpui::point(seen.left, seen.pad));
         drop(seen);
-        // By its place among the children, the boxes standing in for runs of rows.
-        if let Some(child) = follow_child {
+        if first_shown {
+            self.scroll.set_offset(gpui::point(self.scroll.offset().x, -top));
+            // Once: a list that's still not laid out then (no room for it) would ask for frames for ever.
+            if refollow.is_none() {
+                self.refollow.set(follow.and_then(|ix| order[ix]));
+            }
+        } else if let Some(child) = follow_child {
+            // By its place among the children, the boxes standing in for runs of rows.
             self.scroll.scroll_to_item(child);
         }
-        Frame { rows: self, order, slots, children: Vec::with_capacity(child), next: 0, gap }
+        Frame {
+            rows: self,
+            order,
+            slots,
+            children: Vec::with_capacity(child),
+            next: 0,
+            gap,
+            width,
+            origin,
+            measuring,
+            out_of_sight: Vec::new(),
+        }
+    }
+
+    /// Rows above the view laid out at last, or reckoned anew, are taller or shorter than they were: the view stays
+    /// on the row it showed, `anchor`, as GPUI keeps the scroll in pixels. Not when rows came or went above it, which
+    /// moves the view's rows as it did before rows stood in.
+    fn keep_view(&self, seen: &Seen, order: &[Option<Key>], heights: &[Pixels], anchor: Option<Key>) {
+        if let Some(key) = anchor
+            && let Some(now) = order.iter().position(|k| *k == Some(key))
+            && let Some(then) = seen.order.iter().position(|k| *k == Some(key))
+            && order[..now] == seen.order[..then]
+            && let Some(was) = seen.reckoned.get(..then)
+        {
+            // Only the rows' heights: the items that aren't rows are laid out as they were, whatever was reckoned.
+            let rows = order[..now].iter().zip(heights).zip(was).filter(|((key, _), _)| key.is_some());
+            let moved: Pixels = rows.map(|((_, height), was)| *height - *was).sum();
+            if moved != px(0.) {
+                let mut offset = self.scroll.offset();
+                offset.y = (offset.y - moved).min(px(0.));
+                self.scroll.set_offset(offset);
+            }
+        }
     }
 
     /// Learns from the last frame's layout each row's height, the list's padding and gap; and which row was the first
@@ -192,10 +246,14 @@ impl Rows {
     fn learn(&self, seen: &mut Seen) -> Option<Key> {
         let view = self.scroll.bounds();
         let bounds: Vec<_> = (0..seen.children.len()).filter_map(|ix| self.scroll.bounds_for_item(ix)).collect();
-        let Seen { heights, children, reckoned, pad, gap, width, .. } = seen;
+        let Seen { heights, children, reckoned, pad, left, gap, width, measuring, .. } = seen;
         // The first child's width: the rows', which the scrollbar's gutter narrows as the list gets long.
         let now = bounds.first().map_or(*width, |first| first.size.width);
-        if now != *width {
+        let measured = std::mem::take(&mut *self.measured.borrow_mut());
+        if now == *width {
+            // Laid out at the rows' width, which this frame's are too.
+            heights.extend(measured.into_iter().filter(|(key, _)| measuring.contains(key)));
+        } else {
             heights.clear();
             *width = now;
         }
@@ -210,15 +268,18 @@ impl Rows {
         }
         if let Some(first) = bounds.first() {
             *pad = first.top() - view.top();
+            *left = first.left() - view.left();
             // Kept from before with one child, which shows none: a list a search cut to one row learned a gap of none,
             // and the boxes, spaced by the gap learned, kept teaching it once the search was cleared.
             if let Some(next) = bounds.get(1) {
                 *gap = next.top() - first.bottom();
             }
         }
-        children.iter().find_map(|child| match child {
-            Child::Drawn(Some(key), _) => Some(*key),
-            Child::Drawn(None, _) | Child::Box => None,
+        // The first row drawn that shows: those above it may have been laid out out of sight, and reckoned anew.
+        let top = view.top() - self.scroll.offset().y;
+        children.iter().zip(&bounds).find_map(|(child, bounds)| match child {
+            Child::Drawn(Some(key), _) if bounds.bottom() > top => Some(*key),
+            Child::Drawn(..) | Child::Box | Child::Measure => None,
         })
     }
 }
@@ -237,6 +298,14 @@ pub struct Frame<'a> {
     next: usize,
     /// Space between two children, as last laid out.
     gap: Pixels,
+    /// The rows' width, as last laid out.
+    width: Pixels,
+    /// Where the rows start in the list, inside its padding, as last laid out.
+    origin: gpui::Point<Pixels>,
+    /// The items to lay out out of sight, and their entries.
+    measuring: Vec<(usize, Key)>,
+    /// Those items, as drawn.
+    out_of_sight: Vec<AnyElement>,
 }
 
 impl Frame<'_> {
@@ -245,43 +314,72 @@ impl Frame<'_> {
     pub fn child(&mut self, draw: impl FnOnce() -> AnyElement) -> Option<AnyElement> {
         let ix = self.next;
         self.next += 1;
+        if self.measuring.iter().any(|&(at, _)| at == ix) {
+            self.out_of_sight.push(draw());
+            return self.stand_in(ix);
+        }
         match self.slots.get(ix).copied().unwrap_or(Slot::Draw) {
             Slot::Draw => {
                 self.children.push(Child::Drawn(self.order.get(ix).copied().flatten(), ix));
                 Some(draw())
             }
-            Slot::Box(height) => {
-                self.children.push(Child::Box);
-                // Spaced from the next child as the rows are, for a list that spaces them by their margins.
-                Some(div().flex_none().h(height).mb(self.gap).into_any_element())
-            }
-            Slot::Skip => None,
+            Slot::Box(_) | Slot::Skip => self.stand_in(ix),
         }
     }
 
-    /// Ends the frame on `list`, the element that tracks the scroll and holds the children, in order. A box that
-    /// lands in view anyway (rows out of view that grew, or reckoned shorter than they are) draws the next frame too,
-    /// with the rows in their place.
-    pub fn finish(self, list: Div) -> Div {
-        let Frame { rows, order, children, .. } = self;
+    /// The box standing in for item `ix` and the rows after it far from the view, or none for one the box before it
+    /// stands in for.
+    fn stand_in(&mut self, ix: usize) -> Option<AnyElement> {
+        let Some(Slot::Box(height)) = self.slots.get(ix).copied() else { return None };
+        self.children.push(Child::Box);
+        // Spaced from the next child as the rows are, for a list that spaces them by their margins.
+        Some(div().flex_none().h(height).mb(self.gap).into_any_element())
+    }
+
+    /// Ends the frame on `list`, the element that tracks the scroll, holding `items`, the children given, in order. A
+    /// box that lands in view anyway (rows out of view that grew, or reckoned shorter than they are) draws the next
+    /// frame too, with the rows in their place. The rows to learn the height of go last, laid out at the rows' width but
+    /// neither painted nor in the way of the others (an absolute box, hidden), so the children before keep their place
+    /// among the list's.
+    pub fn finish(self, list: Div, items: Vec<AnyElement>) -> Div {
+        let Frame { rows, order, mut children, measuring, out_of_sight, width, origin, .. } = self;
+        let mut list = list.children(items);
+        let keys: Vec<Key> = measuring.iter().map(|&(_, key)| key).collect();
+        if !out_of_sight.is_empty() {
+            children.push(Child::Measure);
+            let (measured, keys) = (rows.measured.clone(), keys.clone());
+            // Where the rows start: an absolute box is placed from the list's edge, not inside its padding, and one in
+            // the padding would make what the list scrolls over that much longer and wider.
+            let out = div().absolute().top(origin.y).left(origin.x).w(width).invisible().children(out_of_sight);
+            list = list.child(out.on_children_prepainted(move |bounds, _, _| {
+                *measured.borrow_mut() = keys.iter().zip(bounds).map(|(key, row)| (*key, row.size.height)).collect();
+            }));
+        }
         let boxes: Vec<_> =
             children.iter().enumerate().filter_map(|(ix, c)| matches!(c, Child::Box).then_some(ix)).collect();
         let mut seen = rows.seen.borrow_mut();
         seen.children = children;
         seen.order = order;
+        seen.measuring = keys;
         #[cfg(test)]
         seen.stood_in.clone_from(&boxes);
         drop(seen);
-        if boxes.is_empty() {
+        // To go to the row again: see `Rows::frame`.
+        let refollow = rows.refollow.get().is_some();
+        if boxes.is_empty() && !refollow {
             return list;
         }
         let scroll = rows.scroll.clone();
         #[cfg(test)]
         let blanks = rows.blanks.clone();
+        // One listener: a list holds one, the last given.
         list.on_children_prepainted(move |_, window, _| {
-            if boxes.iter().any(|&ix| in_view(&scroll, ix)) {
-                #[cfg(test)]
+            let blank = boxes.iter().any(|&ix| in_view(&scroll, ix));
+            #[cfg(test)]
+            if blank {
                 blanks.set(blanks.get() + 1);
+            }
+            if blank || refollow {
                 // Asked for while this frame is drawn, it would be dropped.
                 window.on_next_frame(|window, _| window.refresh());
             }

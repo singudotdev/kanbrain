@@ -26,6 +26,7 @@ use crate::projects::{self, ProjectInfo};
 use crate::store::{self, Skipped, Store};
 use crate::tags::TagColors;
 use anyhow::{Context, Result};
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 /// Every entry in the data folder, with the tag colors.
@@ -149,18 +150,20 @@ impl Brain {
         }
         // As every read: a brain a newer kanbrain wrote is refused before anything misreads it.
         crate::migrate::check(dir)?;
-        // By the paths' text: both are the folder's joined with the name, and comparing them part by part for every
-        // entry of a long brain took a while.
-        let gone = |path: &PathBuf| files.iter().any(|file| file.as_os_str() == path.as_os_str());
+        // By their names, all in this folder: a path spelled otherwise (`dir/./x.md`) or given twice would leave the
+        // entry read before beside the one read again, two of one id.
+        let mut names: Vec<&OsStr> = files.iter().filter_map(|file| file.file_name()).collect();
+        names.sort_unstable();
+        names.dedup();
+        let gone = |path: &PathBuf| path.file_name().is_some_and(|name| names.binary_search(&name).is_ok());
         self.tasks.retain(|task| task.path.as_ref().is_none_or(|path| !gone(path)));
         // Said as `file: why` (see `Skipped`), the warnings of the files read again go before they're read.
-        let said: Vec<String> = files
-            .iter()
-            .filter_map(|file| file.file_name())
-            .map(|name| format!("{}: ", name.to_string_lossy()))
-            .collect();
-        self.warnings.retain(|warning| !said.iter().any(|file| warning.starts_with(file)));
-        let (tasks, skipped) = self.store.load_files(files);
+        let said = |warning: &String| {
+            names.iter().any(|name| warning.strip_prefix(&*name.to_string_lossy()).is_some_and(|w| w.starts_with(": ")))
+        };
+        self.warnings.retain(|warning| !said(warning));
+        let files: Vec<PathBuf> = names.iter().map(|name| dir.join(name)).collect();
+        let (tasks, skipped) = self.store.load_files(&files);
         self.tasks.extend(tasks);
         self.warnings.extend(skipped.iter().map(ToString::to_string));
         self.repair()

@@ -163,7 +163,7 @@ fn column(board: &Board, status: Status, rows: &Rows, follow: bool, cx: &mut Con
         more.and_then(|more| frame.child(|| div().flex().justify_center().mb_2().child(more).into_any_element())),
     );
     let body = frame
-        .finish(div())
+        .finish(div(), children)
         .id(("column", status as usize))
         .debug_selector(move || format!("column {}", status.as_str()))
         .flex_1()
@@ -172,8 +172,7 @@ fn column(board: &Board, status: Status, rows: &Rows, follow: bool, cx: &mut Con
         // A block, its children spaced by their margins, which GPUI leaves out of what scrolls, the last one's too: as
         // a flex column with a gap, taffy measured each card twice a frame (4.5 ms of a frame at 10,000 tasks, 3.4 ms
         // as a block).
-        .p_2()
-        .children(children);
+        .p_2();
     // The whole column, its header too.
     let over = scrollbar::Over::default();
     // In the cards' right padding, beside them.

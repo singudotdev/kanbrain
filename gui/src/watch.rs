@@ -1,7 +1,8 @@
 //! Noticing changes other programs make to the data folder, such as an agent running `kanbrain
 //! start 3`, so the board follows them. It polls instead of subscribing to file system events: a
-//! listing of a few hundred small files every second is cheap, and works the same on every platform
-//! and on network drives, where events are unreliable.
+//! listing every second works the same on every platform and on network drives, where events are
+//! unreliable, and it runs away from the window (see `ui::BrainView`), as listing ten thousand
+//! entries takes milliseconds.
 
 use std::cmp::Ordering;
 use std::fs;
