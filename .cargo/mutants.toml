@@ -38,8 +38,9 @@ exclude_re = [
     'gui/src/ui/dialogs/form\.rs:150:.*replace == with != in project_field$',
     'gui/src/ui/dialogs/pickers\.rs:74:.*replace == with != in comments$',
     'gui/src/ui/dialogs/pickers\.rs:164:.*delete ! in palette$',
-    # After the board's writes, a folder whose time shows nothing written since keeps its last listing: listing it
-    # again comes to the same, only slower.
+    # After the board's writes, a folder whose time shows nothing written since keeps its last listing. Listed again,
+    # a file another program wrote over in place since the last look is found at the next key rather than at the next
+    # tick, a second at most: the board reads it either way, and the store refuses to save over it meanwhile.
     'gui/src/watch\.rs:.*replace match guard folder_time\(dir\) == self\.last\[at\]\.changed with false in Watcher::sync$',
     # Runs the user's editor and waits for it: the choice of editor (`editor_of`) is what tests check.
     'gui/src/ui/mod\.rs:.*(replace run_editor_on -> Result| in run_editor_on$)',

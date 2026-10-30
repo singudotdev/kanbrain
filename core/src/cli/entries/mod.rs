@@ -341,7 +341,8 @@ impl EntryArgs {
 
     /// The entry the command reads and changes alone, if it does: a comment, a question, a description, a move to a
     /// status other than doing (which looks for room among the others), or waiting on it. Said as a line, never as JSON,
-    /// which names the entries linked to it.
+    /// which names the entries linked to it. Only for commands that touch nothing else of the brain: the one it
+    /// opens holds no tag colors nor project ([`Brain::open_for`]), which a command saving them would wipe.
     pub(crate) fn alone(&self) -> Option<u32> {
         match self.command {
             _ if self.json => None,
