@@ -437,7 +437,7 @@ fn comment_card(board: &Board, key: Key, index: usize, comment: &Comment, cx: &m
 
 /// What a comment's card says above it: an agent's kind of comment, when, and when it was edited.
 pub(super) fn comment_label(comment: &Comment) -> String {
-    let edited = comment.edited.map(|at| format!(" · edited {}", when(at))).unwrap_or_default();
+    let edited = comment.edited.map_or_default(|at| format!(" · edited {}", when(at)));
     let what = if comment.question { "question" } else { "comment" };
     let by = if comment.author == Author::Agent { format!("Agent {what} · ") } else { String::new() };
     format!("{by}{}{edited}", when(comment.created))

@@ -10,7 +10,7 @@ use gpui::{ClickEvent, Context, Div, div, prelude::*, px};
 
 /// Whether to tell the agent working on the entry what the save changes, with a note.
 pub(super) fn draw(board: &Board, tell: &Tell, cx: &mut Context<BrainView>) -> Div {
-    let name = tell.pending.key().map(|key| board.entry_name(key)).unwrap_or_default();
+    let name = tell.pending.key().map_or_default(|key| board.entry_name(key));
     let what = tell.pending.what();
     let content = div()
         .flex()

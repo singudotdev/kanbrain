@@ -183,7 +183,7 @@ pub(crate) fn join(root: &Path, name: Option<&str>, repo: Option<&str>, central:
     // The name goes on the card before registering, which tells repositories apart by it; only when it isn't
     // the folder's, so a card stays as it was for the usual case.
     let folder_name = projects::Repo { project: project.clone(), dir: dir.clone() }.folder();
-    let notes = card.as_ref().map(|card| card.notes.clone()).unwrap_or_default();
+    let notes = card.as_ref().map_or_default(|card| card.notes.clone());
     let new_card =
         projects::RepoCard { project: project.clone(), repo: (named != folder_name).then_some(named), notes };
     if card.as_ref() != Some(&new_card) {

@@ -137,6 +137,9 @@ fn sync_takes_as_seen_only_the_files_as_the_board_read_or_wrote_them() {
     let mut watcher = Watcher::new(vec![dir.path().to_path_buf()]);
     changed(&mut watcher);
     let read = [&a, &c].map(|file| (file.clone(), now(file)));
+    // So the folder's time shows the writes that follow: kept to a clock that ticks every few milliseconds (Windows'
+    // every 15 or so), it can read the same just after the listing.
+    std::thread::sleep(Duration::from_millis(20));
     // Another program, unseen yet: an edit in place, which the folder's time doesn't show, and a delete.
     fs::write(&a, "# a, edited elsewhere").unwrap();
     fs::remove_file(&c).unwrap();
@@ -180,6 +183,10 @@ fn a_brains_format_file_changing_is_noticed() {
     fs::write(dir.path().join("format"), "abc\n").unwrap();
     let mut watcher = Watcher::new(vec![dir.path().to_path_buf()]);
     changed(&mut watcher);
+    // Listed within a tick of the folder's last change, as a folder just made is: by its time alone, a file in it
+    // may have changed since. Not left to the clock, which a slow machine takes past the tick.
+    let listed = &mut watcher.last[0];
+    listed.at = listed.changed;
     // Repaired, a repository left out for it can be read again.
     fs::write(dir.path().join("format"), "1\n").unwrap();
     assert_eq!(changed(&mut watcher), 1);

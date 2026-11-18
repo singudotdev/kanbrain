@@ -104,7 +104,7 @@ impl Brain {
             facts.push(format!("{} for {}", task.status.as_str(), fmt_age(now - task.status_since())));
         }
         if !task.sessions.is_empty() {
-            let running = task.running_for(now).map(|r| format!(", running for {}", fmt_dur(r))).unwrap_or_default();
+            let running = task.running_for(now).map_or_default(|r| format!(", running for {}", fmt_dur(r)));
             let sessions = counted(task.sessions.len(), "session", "sessions");
             facts.push(format!("tracked {} in {sessions}{running}", fmt_dur(task.total(now))));
         }

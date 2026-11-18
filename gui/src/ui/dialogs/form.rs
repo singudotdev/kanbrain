@@ -80,7 +80,7 @@ fn theirs_title(board: &Board, form: &Form, theirs: &str, cx: &mut Context<Brain
     let given = form.target.key().and_then(|key| board.task(key)).and_then(|task| {
         task.activity.iter().rev().find(|a| matches!(&a.change, Changed::Title { to, .. } if to == theirs))
     });
-    let by = given.map(|a| format!(", by {} · {}", who(a.by).to_lowercase(), when(a.at))).unwrap_or_default();
+    let by = given.map_or_default(|a| format!(", by {} · {}", who(a.by).to_lowercase(), when(a.at)));
     let take = widgets::small(button("take-title", "Use it", Kind::Secondary))
         .tooltip(widgets::tooltip("Shortcut: Ctrl+T"))
         .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.act(cx, Board::take_theirs_title)));

@@ -2863,3 +2863,10 @@ fn a_drawer_closed_while_its_edge_is_dragged_ends_the_drag(cx: &mut gpui::TestAp
     let width = cx.debug_bounds("drawer panel").expect("open again").size.width;
     assert_eq!(width, px(420.), "the drawer doesn't follow it");
 }
+
+#[test]
+fn a_word_named_on_a_button_is_capitalized() {
+    assert_eq!(report::capitalized("week"), "Week");
+    assert_eq!(report::capitalized("état"), "État", "by its first character, not byte");
+    assert_eq!(report::capitalized(""), "");
+}

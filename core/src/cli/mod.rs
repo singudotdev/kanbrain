@@ -80,7 +80,7 @@ impl Program {
     /// `error`, then the usage lines of `command` (when it's one), and where the rest is: the whole usage would bury
     /// the one line that matters.
     fn misused(self, error: &anyhow::Error, command: Option<&str>) -> anyhow::Error {
-        let lines = command.map(|c| self.usage_of(c)).unwrap_or_default();
+        let lines = command.map_or_default(|c| self.usage_of(c));
         let help = format!("`{} --help` lists every command", self.name);
         if lines.is_empty() {
             anyhow!("{error:#}\n\n{help}")

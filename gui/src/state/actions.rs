@@ -28,13 +28,13 @@ impl Board {
         let name = self.entry_name(key);
         match self.brain_mut(key.src).set_status(key.id, status) {
             Ok(true) => {
-                let title = self.task(key).map(|t| t.title.clone()).unwrap_or_default();
+                let title = self.task(key).map_or_default(|t| t.title.clone());
                 self.notify(format!("{name} {title} → {}", status.as_str()));
             }
             Ok(false) => self.notify(format!("{name} is already {}", status.as_str())),
             // The refusal names the task already running (`#2 is in doing`), in the same brain.
             Err(e) => {
-                let at = self.source_label(key.src).map(|label| format!("{label} ")).unwrap_or_default();
+                let at = self.source_label(key.src).map_or_default(|label| format!("{label} "));
                 self.notify(format!("{at}{e:#}"));
             }
         }
@@ -154,7 +154,7 @@ impl Board {
         let Some(text) = self.text_of(target) else { return };
         let (editor, base) = (TextEditor::new(text), text.to_string());
         let comments = match target {
-            Target::Comment(key, _) => self.task(key).map(|t| t.comments.clone()).unwrap_or_default(),
+            Target::Comment(key, _) => self.task(key).map_or_default(|t| t.comments.clone()),
             _ => Vec::new(),
         };
         let decision = match target {

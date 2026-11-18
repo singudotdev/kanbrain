@@ -173,7 +173,7 @@ fn remind(event: HookEvent, input: &Value, cwd: &Path, central: &Path) -> Option
         ));
     }
     // A brain that can't be read only loses the reminder, never the turn.
-    let tasks = Store::at(&dir).and_then(|s| s.load_entries()).map(|(tasks, _)| tasks).unwrap_or_default();
+    let tasks = Store::at(&dir).and_then(|s| s.load_entries()).map_or_default(|(tasks, _)| tasks);
     // Each one: with subagents, an agent may have several running.
     reminders.extend(tasks.iter().filter(|t| uncommented(t)).map(|task| {
         // Which session started it isn't known, so the agent of another, or one that crashed, is told

@@ -11,6 +11,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   narrower than 320 px, nor so wide the board keeps less than 360; a double-click on the edge puts them back to 420
   px. The width lasts as long as the app runs.
 
+### Changed
+
+- `kb` and kanbrain-core need Rust 1.100 or newer to build (`cargo install kanbrain`); they needed 1.88.
+
+### Security
+
+- rustix is 1.1.6, for [RUSTSEC-2026-0486](https://rustsec.org/advisories/RUSTSEC-2026-0486), and pulldown-cmark,
+  which renders the app's markdown, 0.13.6, for [RUSTSEC-2026-0433](https://rustsec.org/advisories/RUSTSEC-2026-0433).
+
 ## [0.6.8] - 2026-10-30
 
 ### Changed
