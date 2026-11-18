@@ -2765,6 +2765,105 @@ fn a_list_first_shown_on_its_first_row_shows_it_whole(cx: &mut gpui::TestAppCont
     assert!(shown_in(cx, "row 0/30", "task-list"), "the second frame shows it whole");
 }
 
+#[gpui::test]
+fn the_drawers_edge_drags_it_wider_or_narrower_within_limits(cx: &mut gpui::TestAppContext) {
+    let (_view, cx, _dir) = window(cx, &["a"]);
+    cx.simulate_resize(gpui::size(px(1200.), px(800.)));
+    let card = cx.debug_bounds("card 0/1").expect("the card is drawn").center();
+    double_click(cx, card);
+    next_frames(cx);
+    let width =
+        |cx: &mut gpui::VisualTestContext| cx.debug_bounds("drawer panel").expect("the drawer is open").size.width;
+    let edge = |cx: &mut gpui::VisualTestContext| cx.debug_bounds("drawer edge").expect("its edge is drawn").center();
+    assert_eq!(width(cx), px(420.), "as wide as ever to begin with");
+    let at = edge(cx);
+    drag(cx, at, at - gpui::point(px(100.), px(0.)));
+    assert!((width(cx) - px(520.)).abs() < px(1.), "dragged 100 px left, 100 px wider: {:?}", width(cx));
+    // As far left as it goes: the board keeps 360 px, between the window's padding and the gap (12 px each).
+    let at = edge(cx);
+    drag(cx, at, gpui::point(px(0.), at.y));
+    let widest = px(1200. - 12. - 360. - 12. - 12.);
+    assert!((width(cx) - widest).abs() < px(1.), "the board keeps its 360 px: {:?}", width(cx));
+    // And right: the drawer keeps 320.
+    let at = edge(cx);
+    drag(cx, at, gpui::point(px(1199.), at.y));
+    assert!((width(cx) - px(320.)).abs() < px(1.), "the drawer keeps its 320 px: {:?}", width(cx));
+    let at = edge(cx);
+    double_click(cx, at);
+    next_frames(cx);
+    assert_eq!(width(cx), px(420.), "a double-click on the edge puts it back");
+}
+
+#[gpui::test]
+fn a_window_made_narrow_narrows_a_drawer_dragged_wide_and_widened_gives_its_width_back(cx: &mut gpui::TestAppContext) {
+    let (_view, cx, _dir) = window(cx, &["a"]);
+    cx.simulate_resize(gpui::size(px(1200.), px(800.)));
+    let card = cx.debug_bounds("card 0/1").expect("the card is drawn").center();
+    double_click(cx, card);
+    next_frames(cx);
+    let width =
+        |cx: &mut gpui::VisualTestContext| cx.debug_bounds("drawer panel").expect("the drawer is open").size.width;
+    let at = cx.debug_bounds("drawer edge").expect("its edge is drawn").center();
+    drag(cx, at, at - gpui::point(px(280.), px(0.)));
+    assert!((width(cx) - px(700.)).abs() < px(1.), "dragged to 700 px: {:?}", width(cx));
+    cx.simulate_resize(gpui::size(px(900.), px(800.)));
+    next_frames(cx);
+    let fits = px(900. - 12. - 360. - 12. - 12.);
+    assert!((width(cx) - fits).abs() < px(1.), "the board keeps its 360 px: {:?}", width(cx));
+    cx.simulate_resize(gpui::size(px(1200.), px(800.)));
+    next_frames(cx);
+    assert!((width(cx) - px(700.)).abs() < px(1.), "and the drawer its 700 again: {:?}", width(cx));
+}
+
+#[gpui::test]
+fn a_drag_of_the_drawers_edge_ends_when_its_button_comes_up(cx: &mut gpui::TestAppContext) {
+    let (_view, cx, _dir) = window(cx, &["a"]);
+    cx.simulate_resize(gpui::size(px(1200.), px(800.)));
+    let card = cx.debug_bounds("card 0/1").expect("the card is drawn").center();
+    double_click(cx, card);
+    next_frames(cx);
+    let width =
+        |cx: &mut gpui::VisualTestContext| cx.debug_bounds("drawer panel").expect("the drawer is open").size.width;
+    let none = gpui::Modifiers::none();
+    let at = cx.debug_bounds("drawer edge").expect("its edge is drawn").center();
+    // Another button let go meanwhile leaves the drag going.
+    cx.simulate_mouse_down(at, MouseButton::Left, none);
+    cx.simulate_mouse_up(at, MouseButton::Right, none);
+    cx.simulate_mouse_move(at - gpui::point(px(100.), px(0.)), MouseButton::Left, none);
+    assert!((width(cx) - px(520.)).abs() < px(1.), "still dragged: {:?}", width(cx));
+    cx.simulate_mouse_up(at - gpui::point(px(100.), px(0.)), MouseButton::Left, none);
+    // Once let go, a drag elsewhere (a card's, a selection's) leaves the drawer as it is.
+    cx.simulate_mouse_move(gpui::point(px(300.), at.y), MouseButton::Left, none);
+    assert!((width(cx) - px(520.)).abs() < px(1.), "let go: {:?}", width(cx));
+    // The button let go where the window couldn't see it: the next move, with none down, ends the drag.
+    let at = cx.debug_bounds("drawer edge").expect("its edge is drawn").center();
+    cx.simulate_mouse_down(at, MouseButton::Left, none);
+    cx.simulate_mouse_move(at, None, none);
+    cx.simulate_mouse_move(gpui::point(px(300.), at.y), MouseButton::Left, none);
+    assert!((width(cx) - px(520.)).abs() < px(1.), "let go outside: {:?}", width(cx));
+}
+
+#[gpui::test]
+fn a_drawer_closed_while_its_edge_is_dragged_ends_the_drag(cx: &mut gpui::TestAppContext) {
+    let (_view, cx, _dir) = window(cx, &["a"]);
+    cx.simulate_resize(gpui::size(px(1200.), px(800.)));
+    let card = cx.debug_bounds("card 0/1").expect("the card is drawn").center();
+    double_click(cx, card);
+    next_frames(cx);
+    let none = gpui::Modifiers::none();
+    let at = cx.debug_bounds("drawer edge").expect("its edge is drawn").center();
+    cx.simulate_mouse_down(at, MouseButton::Left, none);
+    cx.simulate_keystrokes("escape");
+    next_frames(cx);
+    assert!(cx.debug_bounds("drawer panel").is_none(), "closed");
+    cx.simulate_keystrokes("enter");
+    next_frames(cx);
+    // A drag that isn't the edge's, as of a card to another column.
+    cx.simulate_mouse_move(gpui::point(px(300.), at.y), MouseButton::Left, none);
+    let width = cx.debug_bounds("drawer panel").expect("open again").size.width;
+    assert_eq!(width, px(420.), "the drawer doesn't follow it");
+}
+
 #[test]
 fn a_word_named_on_a_button_is_capitalized() {
     assert_eq!(report::capitalized("week"), "Week");
