@@ -175,13 +175,7 @@ fn event_row(
     let id = event.id;
     let entry = Key::new(event.source, id);
     let selected = board.selected == Some(entry) && board.drawer;
-    let time = match event.what {
-        What::Worked { end } if wide => {
-            let end = end.map_or_else(|| "now".to_string(), |e| local(e).strftime("%H:%M").to_string());
-            format!("{}–{end}", local(event.at).strftime("%H:%M"))
-        }
-        _ => local(event.at).strftime("%H:%M").to_string(),
-    };
+    let time = event_time(event, wide);
     let title = div()
         .min_w_0()
         .when(wide, Styled::truncate)
@@ -220,6 +214,18 @@ fn event_row(
         .child(title)
         .children(excerpt)
         .when(wide, |r| r.child(div().flex_1()).child(tag_chips(board, &event.tags).flex_nowrap().flex_none()))
+}
+
+/// When the interaction happened, in local time: in the day view (`wide`), a session from its start to its end, or
+/// to `now` while it runs.
+pub(super) fn event_time(event: &Event, wide: bool) -> String {
+    match event.what {
+        What::Worked { end } if wide => {
+            let end = end.map_or_else(|| "now".to_string(), |e| local(e).strftime("%H:%M").to_string());
+            format!("{}–{end}", local(event.at).strftime("%H:%M"))
+        }
+        _ => local(event.at).strftime("%H:%M").to_string(),
+    }
 }
 
 /// What happened to the entry that day, colored by kind: its last move (`doing → parked`), else
