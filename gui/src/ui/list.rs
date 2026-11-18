@@ -92,13 +92,7 @@ fn header(board: &Board, status: Status, shown: usize, cx: &mut Context<BrainVie
 
 /// A task on one line: brain and id, title, tags, what it carries, its clock while running, and how
 /// long it's been in its status.
-fn row(
-    board: &Board,
-    key: Key,
-    task: &Task,
-    now: chrono::DateTime<chrono::Local>,
-    cx: &mut Context<BrainView>,
-) -> Stateful<Div> {
+fn row(board: &Board, key: Key, task: &Task, now: jiff::Timestamp, cx: &mut Context<BrainView>) -> Stateful<Div> {
     let id = task.id;
     let selected = board.selected == Some(key);
     let running = task.running_for(now);

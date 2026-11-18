@@ -217,7 +217,7 @@ fn acting_right_after_another_program_keeps_its_change(cx: &mut gpui::TestAppCon
 fn the_calendar_opens_an_entry_from_its_interactions(cx: &mut gpui::TestAppContext) {
     let (view, cx, _dir) = window(cx, &["a", "b"]);
     cx.simulate_keystrokes("5 m");
-    let today = chrono::Local::now().date_naive();
+    let today = jiff::ZonedDateTime::now().date();
     // `debug_bounds` takes a `&'static str`.
     let selector = format!("day {today}").leak();
     let day = cx.debug_bounds(selector).expect("today is in the month").center();
@@ -328,7 +328,7 @@ fn calendar_lines_stay_inside_narrow_week_columns(cx: &mut gpui::TestAppContext)
     cx.simulate_keystrokes("s p 5");
     cx.simulate_resize(gpui::size(px(700.), px(700.)));
     cx.run_until_parked();
-    let today = chrono::Local::now().date_naive();
+    let today = jiff::ZonedDateTime::now().date();
     let column = cx.debug_bounds(format!("week day {today}").leak()).expect("the week shows today");
     let what = cx.debug_bounds("event what 0/1").expect("the task's move is drawn");
     assert!(what.right() <= column.right(), "the move wraps under the time, inside the column: {what:?} in {column:?}");
@@ -1193,8 +1193,8 @@ fn a_field_typed_past_its_edge_a_key_at_a_time_stops_redrawing(cx: &mut gpui::Te
 fn the_details_list_changes_among_the_comments_by_time(cx: &mut gpui::TestAppContext) {
     let (view, cx, _dir) = window(cx, &["a"]);
     view.update(cx, |view, cx| {
-        let t0 = chrono::Local::now() - chrono::Duration::hours(1);
-        let at = |minutes| t0 + chrono::Duration::minutes(minutes);
+        let t0 = kanbrain_core::model::now() - jiff::SignedDuration::from_hours(1);
+        let at = |minutes| t0 + jiff::SignedDuration::from_mins(minutes);
         let task = &mut view.board.brain_mut(0).tasks[0];
         task.set_title("b".into(), at(0), Author::Agent);
         task.comments.push(kanbrain_core::model::Comment::new(at(1), "why".into(), Author::Human));
@@ -1212,7 +1212,7 @@ fn the_details_list_changes_among_the_comments_by_time(cx: &mut gpui::TestAppCon
 #[test]
 fn the_thread_says_who_wrote_and_who_changed() {
     use kanbrain_core::model::{Activity, Changed, Comment};
-    let at = chrono::Local::now();
+    let at = kanbrain_core::model::now();
     let when = when(at);
     let mut comment = Comment::new(at, "x".into(), Author::Human);
     assert_eq!(drawer::comment_label(&comment), when, "yours carry no mark");

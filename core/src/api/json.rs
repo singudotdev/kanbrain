@@ -143,7 +143,7 @@ impl<'a> Entry<'a> {
             description: &task.description,
             comments: task.comments.iter().map(EntryComment::new).collect(),
             activity: task.activity.iter().map(EntryChange::new).collect(),
-            tracked_minutes: (!task.sessions.is_empty()).then(|| task.total(now).num_minutes()),
+            tracked_minutes: (!task.sessions.is_empty()).then(|| task.total(now).as_mins()),
             running: task.is_running(),
             path: task.path.as_ref().map(|p| p.display().to_string()),
         }

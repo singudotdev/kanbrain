@@ -74,7 +74,7 @@ pub(super) fn read_for(store: &Store, id: u32) -> Result<Vec<Task>> {
 #[derive(Default)]
 pub(super) struct Watch {
     /// The question it found waiting: answered and then moved before the next look, the answer is still what's said.
-    asked_at: Option<chrono::DateTime<chrono::Local>>,
+    asked_at: Option<jiff::Timestamp>,
     /// Whether it looked before: the first look fails at once on a brain it can't read or without the entry, as
     /// waiting on either would only wait out the time limit.
     looked: bool,
@@ -113,7 +113,7 @@ impl Watch {
 /// What `wait` prints once `task` no longer waits on a person, or `None` while it does: a decision that
 /// left proposed, with its verdict's comment; a task's answer, also when it was moved after it (the question
 /// `wait` found waiting was asked at `asked_at`); or that the task waits on nothing (never asked, or picked up since).
-pub(super) fn settled(task: &Task, asked_at: Option<chrono::DateTime<chrono::Local>>) -> Option<String> {
+pub(super) fn settled(task: &Task, asked_at: Option<jiff::Timestamp>) -> Option<String> {
     let head = format!("#{} {}", task.id, task.title);
     if task.kind == Kind::Decision {
         if task.decision == DecisionState::Proposed {

@@ -3,6 +3,7 @@
 use super::*;
 use crate::api::ApiError;
 use crate::model::{Changed, Session, now};
+use jiff::SignedDuration;
 use tempfile::TempDir;
 
 /// A brain over a fresh folder holding `tasks`; the folder lives as long as the fixture.
@@ -118,10 +119,10 @@ fn parking_for_the_day_stops_peoples_clocks_and_leaves_agents_running() {
 
 #[test]
 fn loading_keeps_one_task_doing() {
-    let t0 = now() - chrono::Duration::hours(2);
+    let t0 = now() - SignedDuration::from_hours(2);
     let doing = |id: u32, minutes: i64| {
         let mut task = Task::new(id, format!("task {id}"), t0);
-        task.set_status(Status::Doing, t0 + chrono::Duration::minutes(minutes), Author::Human);
+        task.set_status(Status::Doing, t0 + SignedDuration::from_mins(minutes), Author::Human);
         task
     };
     let dir = tempfile::tempdir().unwrap();
@@ -318,11 +319,10 @@ fn updating_renames_the_file_and_deleting_removes_it() {
 #[test]
 fn report_sums_sessions_per_task_and_tag() {
     use crate::period::{Period, Unit};
-    use chrono::Duration;
     let t0 = crate::model::parse_ts("2026-09-24 09:00").unwrap();
     let session = |start: i64, minutes: i64| Session {
-        start: t0 + Duration::minutes(start),
-        end: Some(t0 + Duration::minutes(start + minutes)),
+        start: t0 + SignedDuration::from_mins(start),
+        end: Some(t0 + SignedDuration::from_mins(start + minutes)),
     };
     let mut feature = Task::new(1, "feature".into(), t0);
     feature.tags = vec!["backend".into()];
@@ -332,28 +332,27 @@ fn report_sums_sessions_per_task_and_tag() {
     fix.sessions = vec![session(60, 30)];
     let f = Fixture::new(vec![feature, fix]);
 
-    let mut view = ReportView::new(Period::containing(Unit::Day, t0.naive_local()));
+    let mut view = ReportView::new(Period::containing(Unit::Day, crate::model::local(t0).datetime()));
     let report = f.brain.report(&view);
-    assert_eq!(report.total, Duration::minutes(120));
-    let rows: Vec<_> = report.rows.iter().map(|r| (r.label.as_str(), r.total.num_minutes())).collect();
+    assert_eq!(report.total, SignedDuration::from_mins(120));
+    let rows: Vec<_> = report.rows.iter().map(|r| (r.label.as_str(), r.total.as_mins())).collect();
     assert_eq!(rows, [("#1 feature", 90), ("#2 fix", 30)]);
     assert_eq!(report.timeline.len(), 3);
 
     view.group = Group::Tag;
-    let rows: Vec<_> = f.brain.report(&view).rows.iter().map(|r| (r.label.clone(), r.total.num_minutes())).collect();
+    let rows: Vec<_> = f.brain.report(&view).rows.iter().map(|r| (r.label.clone(), r.total.as_mins())).collect();
     assert_eq!(rows, [("#backend".to_string(), 120), ("#prod".to_string(), 30)]);
 
     view.query = "fix".into();
-    assert_eq!(f.brain.report(&view).total, Duration::minutes(30), "a search keeps only the tasks matching it");
+    assert_eq!(f.brain.report(&view).total, SignedDuration::from_mins(30), "a search keeps only the tasks matching it");
 }
 
 #[test]
 fn the_calendar_lists_each_days_interactions() {
     use crate::model::{Comment, StatusChange};
     use crate::period::{Period, Unit};
-    use chrono::Duration;
     let t0 = crate::model::parse_ts("2026-09-24 09:00").unwrap();
-    let at = |minutes: i64| t0 + Duration::minutes(minutes);
+    let at = |minutes: i64| t0 + SignedDuration::from_mins(minutes);
     let mut feature = Task::new(1, "feature".into(), t0);
     feature.tags = vec!["backend".into()];
     feature.status = Status::Parked;
@@ -371,7 +370,7 @@ fn the_calendar_lists_each_days_interactions() {
     late.sessions = vec![Session { start: at(14 * 60), end: Some(at(16 * 60)) }];
     let f = Fixture::new(vec![feature, note, late]);
 
-    let mut view = CalendarView::new(Period::containing(Unit::Week, t0.naive_local()));
+    let mut view = CalendarView::new(Period::containing(Unit::Week, crate::model::local(t0).datetime()));
     let calendar = f.brain.calendar(&view);
     assert_eq!(calendar.days.len(), 7);
     let thursday = &calendar.days[3];
@@ -381,14 +380,14 @@ fn the_calendar_lists_each_days_interactions() {
     assert_eq!(
         what,
         [
-            (3, What::Created, Duration::minutes(60), 0),
-            (1, What::Moved { from: Status::Doing, to: Status::Parked }, Duration::minutes(60), 1),
+            (3, What::Created, SignedDuration::from_mins(60), 0),
+            (1, What::Moved { from: Status::Doing, to: Status::Parked }, SignedDuration::from_mins(60), 1),
         ]
     );
-    assert_eq!(thursday.tracked, Duration::minutes(60 + 60), "the late session counts until midnight");
+    assert_eq!(thursday.tracked, SignedDuration::from_mins(60 + 60), "the late session counts until midnight");
     let friday = &calendar.days[4];
     assert_eq!(friday.events.iter().map(|e| e.id).collect::<Vec<_>>(), [3, 2], "midnight, then the note");
-    assert_eq!(calendar.tracked, Duration::minutes(180));
+    assert_eq!(calendar.tracked, SignedDuration::from_mins(180));
     assert_eq!(calendar.ids(), [3, 1, 2]);
 
     view.show = Show::Comments;
@@ -396,20 +395,21 @@ fn the_calendar_lists_each_days_interactions() {
     view.show = Show::All;
     view.tag = Some("backend".into());
     let calendar = f.brain.calendar(&view);
-    assert_eq!((calendar.ids(), calendar.tracked), (vec![1], Duration::minutes(60)));
+    assert_eq!((calendar.ids(), calendar.tracked), (vec![1], SignedDuration::from_mins(60)));
 }
 
 #[test]
 fn a_calendar_day_of_several_sessions_spans_from_the_first() {
     use crate::period::{Period, Unit};
-    use chrono::Duration;
     let t0 = crate::model::parse_ts("2026-09-24 09:00").unwrap();
-    let session =
-        |start: i64, end: i64| Session { start: t0 + Duration::minutes(start), end: Some(t0 + Duration::minutes(end)) };
-    let mut task = Task::new(1, "twice".into(), t0 - Duration::days(1));
+    let session = |start: i64, end: i64| Session {
+        start: t0 + SignedDuration::from_mins(start),
+        end: Some(t0 + SignedDuration::from_mins(end)),
+    };
+    let mut task = Task::new(1, "twice".into(), t0 - SignedDuration::from_hours(24));
     task.sessions = vec![session(0, 10), session(60, 61)];
     let f = Fixture::new(vec![task]);
-    let mut view = CalendarView::new(Period::containing(Unit::Day, t0.naive_local()));
+    let mut view = CalendarView::new(Period::containing(Unit::Day, crate::model::local(t0).datetime()));
     view.show = Show::Time;
     let calendar = f.brain.calendar(&view);
     let event = &calendar.days[0].events[0];
@@ -417,16 +417,20 @@ fn a_calendar_day_of_several_sessions_spans_from_the_first() {
         What::Worked { end } => end,
         _ => None,
     };
-    assert_eq!((event.at, end, event.worked), (t0, Some(t0 + Duration::minutes(61)), Duration::minutes(11)));
+    assert_eq!(
+        (event.at, end, event.worked),
+        (t0, Some(t0 + SignedDuration::from_mins(61)), SignedDuration::from_mins(11))
+    );
 }
 
 #[test]
 fn the_timeline_shows_untracked_gaps_of_five_minutes_or_more() {
     use crate::period::{Period, Unit};
-    use chrono::Duration;
     let t0 = crate::model::parse_ts("2026-09-24 09:00").unwrap();
-    let session =
-        |start: i64, end: i64| Session { start: t0 + Duration::minutes(start), end: Some(t0 + Duration::minutes(end)) };
+    let session = |start: i64, end: i64| Session {
+        start: t0 + SignedDuration::from_mins(start),
+        end: Some(t0 + SignedDuration::from_mins(end)),
+    };
     let mut long = Task::new(1, "long".into(), t0);
     // 09:00-10:00, then 10:04-10:10 (a 4-minute pause: not shown) and 10:30-10:40 (20 minutes: shown).
     long.sessions = vec![session(0, 60), session(64, 70), session(90, 100)];
@@ -435,11 +439,11 @@ fn the_timeline_shows_untracked_gaps_of_five_minutes_or_more() {
     inside.sessions = vec![session(10, 20)];
     let report = Fixture::new(vec![long, inside])
         .brain
-        .report(&ReportView::new(Period::containing(Unit::Day, t0.naive_local())));
+        .report(&ReportView::new(Period::containing(Unit::Day, crate::model::local(t0).datetime())));
     let gaps: Vec<_> = report
-        .timeline_with_gaps(t0 + Duration::minutes(120))
+        .timeline_with_gaps(t0 + SignedDuration::from_mins(120))
         .iter()
-        .map(|(gap, slot)| (slot.id, gap.map(|g| g.num_minutes())))
+        .map(|(gap, slot)| (slot.id, gap.map(|g| g.as_mins())))
         .collect();
     assert_eq!(gaps, [(1, None), (2, None), (1, None), (1, Some(20))]);
 }
@@ -447,41 +451,45 @@ fn the_timeline_shows_untracked_gaps_of_five_minutes_or_more() {
 #[test]
 fn reports_and_calendars_of_several_brains_merge_counting_overlaps_once() {
     use crate::period::{Period, Unit};
-    use chrono::Duration;
     let t0 = crate::model::parse_ts("2026-09-24 09:00").unwrap();
     let worked = |id: u32, title: &str, start: i64| {
         let mut task = Task::new(id, title.into(), t0);
         task.tags = vec!["backend".into()];
-        task.sessions =
-            vec![Session { start: t0 + Duration::minutes(start), end: Some(t0 + Duration::minutes(start + 30)) }];
+        task.sessions = vec![Session {
+            start: t0 + SignedDuration::from_mins(start),
+            end: Some(t0 + SignedDuration::from_mins(start + 30)),
+        }];
         task
     };
     // 09:00–09:30 and 09:15–09:45: 45 minutes of the day, though each task has 30.
     let (api, web) = (Fixture::new(vec![worked(1, "fix", 0)]), Fixture::new(vec![worked(1, "export", 15)]));
-    let mut view = ReportView::new(Period::containing(Unit::Day, t0.naive_local()));
+    let mut view = ReportView::new(Period::containing(Unit::Day, crate::model::local(t0).datetime()));
     let merged = Report::merge(
         vec![(Some("api".into()), api.brain.report(&view)), (Some("web".into()), web.brain.report(&view))],
         &view,
     );
-    let rows: Vec<_> = merged.rows.iter().map(|r| (r.label.as_str(), r.total.num_minutes())).collect();
+    let rows: Vec<_> = merged.rows.iter().map(|r| (r.label.as_str(), r.total.as_mins())).collect();
     assert_eq!(rows, [("api #1 fix", 30), ("web #1 export", 30)], "each task keeps its own time");
-    assert_eq!(merged.total, Duration::minutes(45), "the overlap counts once");
+    assert_eq!(merged.total, SignedDuration::from_mins(45), "the overlap counts once");
     assert_eq!(merged.timeline[1].label(), "web #1 export");
     view.group = Group::Tag;
     let merged = Report::merge(vec![(None, api.brain.report(&view)), (None, web.brain.report(&view))], &view);
-    let rows: Vec<_> = merged.rows.iter().map(|r| (r.label.as_str(), r.total.num_minutes())).collect();
+    let rows: Vec<_> = merged.rows.iter().map(|r| (r.label.as_str(), r.total.as_mins())).collect();
     assert_eq!(rows, [("#backend", 45)], "one #backend row, by the clock too");
 
-    let view = CalendarView::new(Period::containing(Unit::Day, t0.naive_local()));
+    let view = CalendarView::new(Period::containing(Unit::Day, crate::model::local(t0).datetime()));
     let calendar = Calendar::merge(vec![api.brain.calendar(&view), web.brain.calendar(&view)]);
     assert_eq!(calendar.entries(), [(0, 1), (1, 1)]);
-    assert_eq!(calendar.tracked, Duration::minutes(45));
+    assert_eq!(calendar.tracked, SignedDuration::from_mins(45));
 }
 
 #[test]
 fn a_months_calendar_is_whole_weeks() {
     use crate::period::{Period, Unit};
-    let september = Period::containing(Unit::Month, crate::model::parse_ts("2026-09-24 09:00").unwrap().naive_local());
+    let september = Period::containing(
+        Unit::Month,
+        crate::model::local(crate::model::parse_ts("2026-09-24 09:00").unwrap()).datetime(),
+    );
     let calendar = Fixture::with_titles(&[]).brain.calendar(&CalendarView::new(september));
     let first = &calendar.days[0];
     assert_eq!((first.date.to_string(), first.in_period), ("2026-08-31".to_string(), false));

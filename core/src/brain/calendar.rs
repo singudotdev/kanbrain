@@ -8,7 +8,8 @@ use super::Brain;
 use crate::enums::named_enum;
 use crate::model::{Kind, Status, Task, covered, now};
 use crate::period::{Period, Unit};
-use chrono::{DateTime, Duration, Local, NaiveDate, NaiveTime};
+use jiff::civil::Date;
+use jiff::{SignedDuration, Timestamp, ToSpan};
 
 named_enum! {
     /// Which interactions the calendar shows. `next()` cycles through them.
@@ -54,7 +55,7 @@ pub enum What {
     /// A session, clipped to its day. `end` is `None` while it's still running.
     Worked {
         /// When it stopped, or the end of the day if it went on past midnight.
-        end: Option<DateTime<Local>>,
+        end: Option<Timestamp>,
     },
     /// The task's status changed.
     Moved {
@@ -90,7 +91,7 @@ impl What {
 #[derive(Debug, Clone)]
 pub struct Event {
     /// When it happened; for a session, when it started that day.
-    pub at: DateTime<Local>,
+    pub at: Timestamp,
     /// The entry's id.
     pub id: u32,
     /// The entry's title.
@@ -104,7 +105,7 @@ pub struct Event {
     /// Which brain it's from, as the index of its calendar in [`Calendar::merge`]; 0 otherwise.
     pub source: usize,
     /// Time worked on the entry that day, up to now while it runs.
-    pub worked: Duration,
+    pub worked: SignedDuration,
     /// Comments written on the entry that day.
     pub comments: usize,
 }
@@ -113,17 +114,17 @@ pub struct Event {
 #[derive(Debug)]
 pub struct Day {
     /// The date.
-    pub date: NaiveDate,
+    pub date: Date,
     /// Whether it's in the period. A month's grid starts on a Monday and ends on a Sunday, so its
     /// first and last weeks have days of the months around it, which stay empty.
     pub in_period: bool,
     /// Time worked that day on the entries the tag filter keeps, by the clock: tasks that ran at once
     /// count that time once.
-    pub tracked: Duration,
+    pub tracked: SignedDuration,
     /// One summary per entry with interactions shown, in time order.
     pub events: Vec<Event>,
     /// The day's sessions, clipped to it, from which `tracked` is worked out again when calendars merge.
-    worked: Vec<(DateTime<Local>, DateTime<Local>)>,
+    worked: Vec<(Timestamp, Timestamp)>,
 }
 
 /// A computed calendar: whole weeks for a month, otherwise the period's days.
@@ -132,7 +133,7 @@ pub struct Calendar {
     /// Every day of the grid, in order.
     pub days: Vec<Day>,
     /// Time worked in the period, counted like each day's.
-    pub tracked: Duration,
+    pub tracked: SignedDuration,
 }
 
 impl Calendar {
@@ -146,7 +147,7 @@ impl Calendar {
     pub fn merge(parts: Vec<Calendar>) -> Calendar {
         let mut parts = parts.into_iter().enumerate();
         let Some((_, mut merged)) = parts.next() else {
-            return Calendar { days: Vec::new(), tracked: Duration::zero() };
+            return Calendar { days: Vec::new(), tracked: SignedDuration::ZERO };
         };
         for (source, calendar) in parts {
             for (day, other) in merged.days.iter_mut().zip(calendar.days) {
@@ -188,13 +189,19 @@ impl Brain {
             .filter(|t| view.tag.as_ref().is_none_or(|tag| t.tags.contains(tag)) && t.matches(&view.query))
             .collect();
         let days: Vec<Day> = first
-            .iter_days()
+            .series(1.day())
             .take_while(|&date| date <= last)
             .map(|date| {
-                let day = Period::containing(Unit::Day, date.and_time(NaiveTime::MIN));
+                let day = Period::containing(Unit::Day, date.at(0, 0, 0, 0));
                 let in_period = view.period.contains(day.start) || day.contains(view.period.start);
                 if !in_period {
-                    return Day { date, in_period, tracked: Duration::zero(), events: Vec::new(), worked: Vec::new() };
+                    return Day {
+                        date,
+                        in_period,
+                        tracked: SignedDuration::ZERO,
+                        events: Vec::new(),
+                        worked: Vec::new(),
+                    };
                 }
                 let (from, to) = day.bounds();
                 let worked: Vec<_> = tasks.iter().flat_map(|t| &t.sessions).map(|s| s.span(from, to, now)).collect();
@@ -212,12 +219,12 @@ impl Brain {
 
 /// The first and last dates the calendar shows for `period`: Monday to Sunday around a month,
 /// otherwise its own days.
-fn grid(period: Period) -> (NaiveDate, NaiveDate) {
+fn grid(period: Period) -> (Date, Date) {
     let first = period.start.date();
-    let last = (period.end() - Duration::seconds(1)).date();
+    let last = (period.end() - 1.second()).date();
     if period.unit == Unit::Month {
         let monday = Period::containing(Unit::Week, period.start).start.date();
-        let sunday = Period::containing(Unit::Week, last.and_time(NaiveTime::MIN)).end().date() - Duration::days(1);
+        let sunday = Period::containing(Unit::Week, last.at(0, 0, 0, 0)).end().date() - 1.day();
         (monday, sunday)
     } else {
         (first, last)
@@ -227,14 +234,14 @@ fn grid(period: Period) -> (NaiveDate, NaiveDate) {
 /// `task`'s day in `[from, to)` as one event: its last status change, else its creation, else its
 /// last comment, else its last session; with the time worked and the comments of that day. `None`
 /// when nothing `show` keeps happened to it.
-fn summary(task: &Task, from: DateTime<Local>, to: DateTime<Local>, now: DateTime<Local>, show: Show) -> Option<Event> {
+fn summary(task: &Task, from: Timestamp, to: Timestamp, now: Timestamp, show: Show) -> Option<Event> {
     let mut all: Vec<Event> = interactions(task, from, to, now).into_iter().filter(|e| e.what.shown_by(show)).collect();
     all.sort_by_key(|e| e.at);
     let worked = all
         .iter()
         .map(|e| match e.what {
             What::Worked { end } => end.unwrap_or(now) - e.at,
-            _ => Duration::zero(),
+            _ => SignedDuration::ZERO,
         })
         .sum();
     let comments = all.iter().filter(|e| matches!(e.what, What::Commented { .. })).count();
@@ -252,7 +259,7 @@ fn summary(task: &Task, from: DateTime<Local>, to: DateTime<Local>, now: DateTim
 }
 
 /// Everything that happened to `task` in `[from, to)`.
-fn interactions(task: &Task, from: DateTime<Local>, to: DateTime<Local>, now: DateTime<Local>) -> Vec<Event> {
+fn interactions(task: &Task, from: Timestamp, to: Timestamp, now: Timestamp) -> Vec<Event> {
     let event = |at, what| Event {
         at,
         id: task.id,
@@ -261,10 +268,10 @@ fn interactions(task: &Task, from: DateTime<Local>, to: DateTime<Local>, now: Da
         tags: task.tags.clone(),
         what,
         source: 0,
-        worked: Duration::zero(),
+        worked: SignedDuration::ZERO,
         comments: 0,
     };
-    let within = |at: DateTime<Local>| from <= at && at < to;
+    let within = |at: Timestamp| from <= at && at < to;
     let mut events = Vec::new();
     if within(task.created) {
         events.push(event(task.created, What::Created));

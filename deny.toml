@@ -11,8 +11,8 @@ ignore = [
     { id = "RUSTSEC-2026-0370", reason = "zvariant, merged into zbus 6, through gpui on Linux" },
     { id = "RUSTSEC-2026-0371", reason = "zbus_names, merged into zbus 6, through gpui on Linux" },
     { id = "RUSTSEC-2026-0372", reason = "zvariant_derive, merged into zbus 6, through gpui on Linux" },
-    # No release fixes it. The core moves off it to jiff; GPUI keeps it.
-    { id = "RUSTSEC-2026-0543", reason = "chrono, unmaintained, through gpui and the core until it moves to jiff" },
+    # No release fixes it. The core and the app moved off it to jiff (docs/decisions/0014); GPUI keeps it.
+    { id = "RUSTSEC-2026-0543", reason = "chrono, unmaintained, through gpui" },
 ]
 
 [licenses]

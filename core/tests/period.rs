@@ -1,7 +1,7 @@
 use super::*;
 
-fn at(s: &str) -> NaiveDateTime {
-    NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").unwrap()
+fn at(s: &str) -> DateTime {
+    DateTime::strptime("%Y-%m-%d %H:%M", s).unwrap()
 }
 
 #[test]

@@ -54,7 +54,7 @@ use super::time::{fmt_dur, fmt_ts, now, parse_ts};
 use super::{
     Activity, Author, Changed, Comment, DecisionState, Kind, RepoLink, Session, Status, StatusChange, Task, Unknown,
 };
-use chrono::{DateTime, Local};
+use jiff::Timestamp;
 use std::fmt::Write;
 
 impl Task {
@@ -301,7 +301,7 @@ struct Parsed<'a> {
     /// From `- tags:`.
     tags: Vec<String>,
     /// From `- created:`.
-    created: Option<DateTime<Local>>,
+    created: Option<Timestamp>,
     /// Lines of the description, joined at the end.
     description: Vec<&'a str>,
     /// Each comment with its body lines, joined at the end.

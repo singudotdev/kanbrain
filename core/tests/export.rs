@@ -1,10 +1,10 @@
 use super::*;
 use crate::brain::ReportRow;
 use crate::period::Period;
-use chrono::NaiveDateTime;
+use jiff::civil::DateTime;
 
 fn view(unit: Unit, group: Group, tag: Option<&str>) -> ReportView {
-    let at = NaiveDateTime::parse_from_str("2026-09-24 10:00", "%Y-%m-%d %H:%M").unwrap();
+    let at = DateTime::strptime("%Y-%m-%d %H:%M", "2026-09-24 10:00").unwrap();
     ReportView { group, tag: tag.map(String::from), ..ReportView::new(Period::containing(unit, at)) }
 }
 
@@ -18,11 +18,11 @@ fn file_names() {
 #[test]
 fn table_escapes_pipes_and_adds_a_tags_column() {
     let report = Report {
-        total: Duration::hours(1),
+        total: SignedDuration::from_hours(1),
         rows: vec![ReportRow {
             label: "#1 a | b".into(),
             tags: vec!["prod".into()],
-            total: Duration::hours(1),
+            total: SignedDuration::from_hours(1),
             cells: Vec::new(),
         }],
         columns: Vec::new(),

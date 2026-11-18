@@ -369,7 +369,7 @@ fn the_calendar_filters_like_the_report_and_selects_what_it_shows() {
     assert!(f.board.visible_ids().is_empty(), "nothing happened last month");
     assert_eq!((f.board.selected, f.board.drawer), (None, false));
     f.press(KeyCode::Char('t'));
-    let today = chrono::Local::now().date_naive();
+    let today = jiff::ZonedDateTime::now().date();
     f.board.calendar_day(today);
     assert_eq!(f.board.calendar.period.unit, Unit::Day);
     assert_eq!(f.board.visible_ids(), [k(2)]);

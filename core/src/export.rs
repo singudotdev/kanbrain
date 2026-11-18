@@ -1,13 +1,14 @@
 //! Reports as markdown: what the desktop app's report shows, as tables.
 
 use crate::brain::{Group, Report, ReportView};
+use crate::model::local;
 use crate::model::{fmt_dur, infallible, slugify};
 use crate::period::Unit;
-use chrono::{DateTime, Datelike, Duration, Local};
+use jiff::{SignedDuration, Timestamp};
 use std::fmt::{self, Write};
 
 /// Markdown version of a report.
-pub fn to_markdown(report: &Report, view: &ReportView, now: DateTime<Local>) -> String {
+pub fn to_markdown(report: &Report, view: &ReportView, now: Timestamp) -> String {
     let mut out = String::new();
     infallible(write_report(&mut out, report, view, now));
     out
@@ -17,13 +18,13 @@ pub fn to_markdown(report: &Report, view: &ReportView, now: DateTime<Local>) -> 
 pub fn file_name(view: &ReportView) -> String {
     let start = view.period.start;
     let mut name = match view.period.unit {
-        Unit::Hour => start.format("report-%Y-%m-%d-%Hh").to_string(),
-        Unit::Day => start.format("report-%Y-%m-%d").to_string(),
+        Unit::Hour => start.strftime("report-%Y-%m-%d-%Hh").to_string(),
+        Unit::Day => start.strftime("report-%Y-%m-%d").to_string(),
         Unit::Week => {
-            let week = start.iso_week();
+            let week = start.date().iso_week_date();
             format!("report-{}-W{:02}", week.year(), week.week())
         }
-        Unit::Month => start.format("report-%Y-%m").to_string(),
+        Unit::Month => start.strftime("report-%Y-%m").to_string(),
     };
     if view.group == Group::Tag {
         name.push_str("-by-tag");
@@ -37,7 +38,7 @@ pub fn file_name(view: &ReportView) -> String {
 }
 
 /// Writes the whole report: summary, table and (for hours and days) the timeline.
-fn write_report(out: &mut String, report: &Report, view: &ReportView, now: DateTime<Local>) -> fmt::Result {
+fn write_report(out: &mut String, report: &Report, view: &ReportView, now: Timestamp) -> fmt::Result {
     let period = view.period;
     writeln!(out, "# Time report · {}\n", period.label())?;
     writeln!(out, "- period: {}", period.unit.as_str())?;
@@ -49,7 +50,7 @@ fn write_report(out: &mut String, report: &Report, view: &ReportView, now: DateT
         writeln!(out, "- only tasks matching: {}", view.query.trim())?;
     }
     writeln!(out, "- tracked: **{}**", fmt_dur(report.total))?;
-    writeln!(out, "- generated: {}\n", now.format("%Y-%m-%d %H:%M"))?;
+    writeln!(out, "- generated: {}\n", local(now).strftime("%Y-%m-%d %H:%M"))?;
 
     if report.rows.is_empty() {
         return writeln!(out, "Nothing tracked in this period.");
@@ -96,7 +97,7 @@ fn write_table(out: &mut String, report: &Report, group: Group) -> fmt::Result {
 }
 
 /// Every session in order, with untracked gaps between them.
-fn write_timeline(out: &mut String, report: &Report, now: DateTime<Local>) -> fmt::Result {
+fn write_timeline(out: &mut String, report: &Report, now: Timestamp) -> fmt::Result {
     writeln!(out, "\n## Timeline\n")?;
     table_row(out, &["start", "end", "duration", "task", "tags"].map(String::from))?;
     table_row(out, &["---", "---", "---:", "---", "---"].map(String::from))?;
@@ -108,8 +109,8 @@ fn write_timeline(out: &mut String, report: &Report, now: DateTime<Local>) -> fm
         table_row(
             out,
             &[
-                slot.start.format("%H:%M").to_string(),
-                slot.end.map_or_else(|| "running".to_string(), |e| e.format("%H:%M").to_string()),
+                local(slot.start).strftime("%H:%M").to_string(),
+                slot.end.map_or_else(|| "running".to_string(), |e| local(e).strftime("%H:%M").to_string()),
                 fmt_dur(end - slot.start),
                 escape(&slot.label()),
                 slot.tags.join(", "),
@@ -125,7 +126,7 @@ fn table_row(out: &mut String, cells: &[String]) -> fmt::Result {
 }
 
 /// Empty cells stay blank so the table is easy to scan.
-fn cell(d: Duration) -> String {
+fn cell(d: SignedDuration) -> String {
     if d.is_zero() { String::new() } else { fmt_dur(d) }
 }
 

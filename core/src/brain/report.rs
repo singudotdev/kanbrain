@@ -4,7 +4,7 @@ use super::Brain;
 use crate::enums::named_enum;
 use crate::model::{Session, Task, covered, now};
 use crate::period::Period;
-use chrono::{DateTime, Duration, Local};
+use jiff::{SignedDuration, Timestamp};
 use std::collections::BTreeMap;
 
 named_enum! {
@@ -49,9 +49,9 @@ const MIN_GAP_MINUTES: i64 = 5;
 #[derive(Debug)]
 pub struct Slot {
     /// When the session started (or the period started, if later).
-    pub start: DateTime<Local>,
+    pub start: Timestamp,
     /// `None` while still running.
-    pub end: Option<DateTime<Local>>,
+    pub end: Option<Timestamp>,
     /// Id of the task the session belongs to.
     pub id: u32,
     /// Title of the task.
@@ -80,9 +80,9 @@ pub struct ReportRow {
     /// The task's tags; empty for tag rows.
     pub tags: Vec<String>,
     /// Time in the whole period; for a tag, time two of its tasks ran at once counts once.
-    pub total: Duration,
+    pub total: SignedDuration,
     /// Time per breakdown column, parallel to `Report::columns`.
-    pub cells: Vec<Duration>,
+    pub cells: Vec<SignedDuration>,
 }
 
 /// A computed report, rendered both in the desktop app and as markdown (`export`).
@@ -90,25 +90,25 @@ pub struct ReportRow {
 pub struct Report {
     /// Time worked, by the clock: when tasks ran at once (an agent's subagents, say) that time counts once,
     /// so task rows can add up to more, and tag rows too (a task with several tags counts under each).
-    pub total: Duration,
+    pub total: SignedDuration,
     /// Tasks (or tags) with tracked time, busiest first.
     pub rows: Vec<ReportRow>,
     /// Breakdown column labels (days of a week, weeks of a month); empty for hour/day.
     pub columns: Vec<String>,
     /// Time worked in each breakdown column, counted like `total`.
-    pub column_totals: Vec<Duration>,
+    pub column_totals: Vec<SignedDuration>,
     /// Every session in the period, in start order.
     pub timeline: Vec<Slot>,
 }
 
 impl Report {
     /// Each timeline slot with the untracked gap (if long enough) right before it.
-    pub fn timeline_with_gaps(&self, now: DateTime<Local>) -> Vec<(Option<Duration>, &Slot)> {
-        let mut prev_end: Option<DateTime<Local>> = None;
+    pub fn timeline_with_gaps(&self, now: Timestamp) -> Vec<(Option<SignedDuration>, &Slot)> {
+        let mut prev_end: Option<Timestamp> = None;
         self.timeline
             .iter()
             .map(|slot| {
-                let gap = prev_end.map(|p| slot.start - p).filter(|g| *g >= Duration::minutes(MIN_GAP_MINUTES));
+                let gap = prev_end.map(|p| slot.start - p).filter(|g| *g >= SignedDuration::from_mins(MIN_GAP_MINUTES));
                 let end = slot.end.unwrap_or(now);
                 prev_end = Some(prev_end.map_or(end, |p| p.max(end)));
                 (gap, slot)
@@ -132,7 +132,7 @@ impl Report {
     }
 
     /// The report of `timeline`, every session in `view`'s period: rows, breakdown columns and totals.
-    fn from_timeline(mut timeline: Vec<Slot>, view: &ReportView, now: DateTime<Local>) -> Report {
+    fn from_timeline(mut timeline: Vec<Slot>, view: &ReportView, now: Timestamp) -> Report {
         let (from, to) = view.period.bounds();
         // Breakdown columns, clipped to the period (a month's first and last weeks).
         let (columns, ranges): (Vec<String>, Vec<_>) = view
@@ -145,7 +145,7 @@ impl Report {
             })
             .unzip();
         timeline.sort_by_key(|s| s.start);
-        let time = |slots: &[&Slot], (a, b): (DateTime<Local>, DateTime<Local>)| {
+        let time = |slots: &[&Slot], (a, b): (Timestamp, Timestamp)| {
             covered(slots.iter().map(|s| Session { start: s.start, end: s.end }.span(a, b, now)))
         };
         let all: Vec<&Slot> = timeline.iter().collect();
@@ -205,12 +205,7 @@ fn row_labels(slot: &Slot, group: Group) -> Vec<String> {
 }
 
 /// The task's sessions that fall in `[from, to)`, clipped to it.
-fn slots(
-    task: &Task,
-    from: DateTime<Local>,
-    to: DateTime<Local>,
-    now: DateTime<Local>,
-) -> impl Iterator<Item = Slot> + '_ {
+fn slots(task: &Task, from: Timestamp, to: Timestamp, now: Timestamp) -> impl Iterator<Item = Slot> + '_ {
     task.sessions.iter().filter(move |s| !s.overlap(from, to, now).is_zero()).map(move |s| Slot {
         start: s.start.max(from),
         end: s.end.map(|e| e.min(to)),

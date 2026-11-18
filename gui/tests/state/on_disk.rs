@@ -178,11 +178,11 @@ fn an_open_dialog_says_until_closed_that_kb_changed_what_it_edits() {
     f.press(KeyCode::Esc);
     // Another put at its index, its text the same: the one before it deleted.
     let mut task = f.on_disk(2);
-    let at = now() - chrono::Duration::minutes(5);
+    let at = now() - jiff::SignedDuration::from_mins(5);
     task.comments = ["first", "same", "same"]
         .into_iter()
         .zip(0..)
-        .map(|(body, s)| Comment::new(at + chrono::Duration::seconds(s), body.into(), Author::Agent))
+        .map(|(body, s)| Comment::new(at + jiff::SignedDuration::from_secs(s), body.into(), Author::Agent))
         .collect();
     Store::at(f.dir.path()).unwrap().save(&mut task).unwrap();
     f.board.reload().unwrap();

@@ -14,10 +14,10 @@ pub(crate) use text::infallible;
 pub use text::{counted, one_line, parse_tags, sanitize_comment, sanitize_description, slugify};
 #[cfg(test)]
 pub use time::parse_ts;
-pub use time::{covered, fmt_age, fmt_clock, fmt_dur, fmt_ts, now};
+pub use time::{covered, fmt_age, fmt_clock, fmt_dur, fmt_ts, local, local_moment, now};
 
 use crate::enums::named_enum;
-use chrono::{DateTime, Duration, Local};
+use jiff::{SignedDuration, Timestamp};
 use std::path::PathBuf;
 
 named_enum! {
@@ -84,7 +84,7 @@ named_enum! {
 #[non_exhaustive]
 pub struct StatusChange {
     /// When the status changed.
-    pub at: DateTime<Local>,
+    pub at: Timestamp,
     /// The status before.
     pub from: Status,
     /// The status after.
@@ -98,31 +98,26 @@ pub struct StatusChange {
 #[non_exhaustive]
 pub struct Session {
     /// When the session started.
-    pub start: DateTime<Local>,
+    pub start: Timestamp,
     /// `None` while the session is still running.
-    pub end: Option<DateTime<Local>>,
+    pub end: Option<Timestamp>,
 }
 
 impl Session {
     /// How long the session lasted, or has lasted so far if it's running.
-    pub fn duration(&self, now: DateTime<Local>) -> Duration {
-        (self.end.unwrap_or(now) - self.start).max(Duration::zero())
+    pub fn duration(&self, now: Timestamp) -> SignedDuration {
+        (self.end.unwrap_or(now) - self.start).max(SignedDuration::ZERO)
     }
 
     /// Part of this session that falls inside `[from, to)`.
-    pub fn overlap(&self, from: DateTime<Local>, to: DateTime<Local>, now: DateTime<Local>) -> Duration {
+    pub fn overlap(&self, from: Timestamp, to: Timestamp, now: Timestamp) -> SignedDuration {
         let (start, end) = self.span(from, to, now);
-        (end - start).max(Duration::zero())
+        (end - start).max(SignedDuration::ZERO)
     }
 
     /// Where this session starts and ends within `[from, to)`, a running one ending `now`; the end is
     /// before the start when it falls outside.
-    pub fn span(
-        &self,
-        from: DateTime<Local>,
-        to: DateTime<Local>,
-        now: DateTime<Local>,
-    ) -> (DateTime<Local>, DateTime<Local>) {
+    pub fn span(&self, from: Timestamp, to: Timestamp, now: Timestamp) -> (Timestamp, Timestamp) {
         (self.start.max(from), self.end.unwrap_or(now).min(to))
     }
 }
@@ -132,9 +127,9 @@ impl Session {
 #[non_exhaustive]
 pub struct Comment {
     /// When the comment was written.
-    pub created: DateTime<Local>,
+    pub created: Timestamp,
     /// Set when the body was changed after posting.
-    pub edited: Option<DateTime<Local>>,
+    pub edited: Option<Timestamp>,
     /// The comment text (markdown).
     pub body: String,
     /// Who wrote it.
@@ -155,7 +150,7 @@ impl Comment {
     }
 
     /// A plain comment by `author`.
-    pub fn new(created: DateTime<Local>, body: String, author: Author) -> Self {
+    pub fn new(created: Timestamp, body: String, author: Author) -> Self {
         Self { created, edited: None, body, author, question: false, answer: false, unknown: Vec::new() }
     }
 }
@@ -218,7 +213,7 @@ pub struct Task {
     /// Decisions only: whether it's in force, proposed or rejected.
     pub decision: DecisionState,
     /// When the task was created.
-    pub created: DateTime<Local>,
+    pub created: Timestamp,
     /// Free text describing the task.
     pub description: String,
     /// Oldest first.
@@ -256,7 +251,7 @@ pub struct Unknown {
 #[non_exhaustive]
 pub struct Activity {
     /// When it was made.
-    pub at: DateTime<Local>,
+    pub at: Timestamp,
     /// Who made it.
     pub by: Author,
     /// What it changed.
@@ -265,7 +260,7 @@ pub struct Activity {
 
 impl Activity {
     /// A change `by` someone `at` a time.
-    pub fn new(at: DateTime<Local>, by: Author, change: Changed) -> Self {
+    pub fn new(at: Timestamp, by: Author, change: Changed) -> Self {
         Self { at, by, change }
     }
 }
@@ -385,7 +380,7 @@ fn combine(added: &mut Vec<String>, removed: &mut Vec<String>, more: Vec<String>
 
 impl Task {
     /// A new `todo` task.
-    pub fn new(id: u32, title: String, now: DateTime<Local>) -> Self {
+    pub fn new(id: u32, title: String, now: Timestamp) -> Self {
         Self {
             id,
             kind: Kind::Task,
@@ -410,7 +405,7 @@ impl Task {
     /// may be behind). The latest change, when the same author made it in the same second to the same thing, takes it
     /// in (the app saves a form's related entries one at a time), and one that ends up changing nothing goes; any
     /// other change between them keeps them apart, so the activity still says what came first.
-    pub fn log(&mut self, at: DateTime<Local>, by: Author, change: Changed) {
+    pub fn log(&mut self, at: Timestamp, by: Author, change: Changed) {
         let place = self.activity.partition_point(|a| a.at <= at);
         let mut change = change;
         if let Some(latest) = place.checked_sub(1).filter(|&i| self.activity[i].at == at && self.activity[i].by == by) {
@@ -430,7 +425,7 @@ impl Task {
     }
 
     /// Gives the entry `title`, made `by` someone `at` a time, and logs it; returns whether it changed.
-    pub fn set_title(&mut self, title: String, at: DateTime<Local>, by: Author) -> bool {
+    pub fn set_title(&mut self, title: String, at: Timestamp, by: Author) -> bool {
         if title == self.title {
             return false;
         }
@@ -441,7 +436,7 @@ impl Task {
 
     /// Gives the entry `tags`, made `by` someone `at` a time, and logs which it got and lost; returns whether they
     /// changed, the order included.
-    pub fn set_tags(&mut self, tags: Vec<String>, at: DateTime<Local>, by: Author) -> bool {
+    pub fn set_tags(&mut self, tags: Vec<String>, at: Timestamp, by: Author) -> bool {
         if tags == self.tags {
             return false;
         }
@@ -453,7 +448,7 @@ impl Task {
     }
 
     /// Gives the entry `description`, made `by` someone `at` a time, and logs that it changed; returns whether it did.
-    pub fn set_description(&mut self, description: String, at: DateTime<Local>, by: Author) -> bool {
+    pub fn set_description(&mut self, description: String, at: Timestamp, by: Author) -> bool {
         if description == self.description {
             return false;
         }
@@ -464,14 +459,14 @@ impl Task {
 
     /// Logs that the entry was related to the entries `added` names and unrelated from those `removed` names (see
     /// [`Changed::Related`]), by someone `at` a time. Whichever side keeps the link, both entries log it.
-    pub fn relate(&mut self, at: DateTime<Local>, by: Author, added: &[String], removed: &[String]) {
+    pub fn relate(&mut self, at: Timestamp, by: Author, added: &[String], removed: &[String]) {
         self.log(at, by, Changed::Related { added: added.to_vec(), removed: removed.to_vec() });
     }
 
     /// Moves the task to `status` and records the change, made `by` someone. Returns false if it already
     /// was there. Leaving `doing` closes the open session, so a clock never keeps running on a task that
     /// isn't being worked on.
-    pub fn set_status(&mut self, status: Status, now: DateTime<Local>, by: Author) -> bool {
+    pub fn set_status(&mut self, status: Status, now: Timestamp, by: Author) -> bool {
         if self.status == status {
             return false;
         }
@@ -489,31 +484,31 @@ impl Task {
     }
 
     /// How long the open session has been running, if any.
-    pub fn running_for(&self, now: DateTime<Local>) -> Option<Duration> {
+    pub fn running_for(&self, now: Timestamp) -> Option<SignedDuration> {
         self.sessions.last().filter(|s| s.end.is_none()).map(|s| s.duration(now))
     }
 
     /// Opens a session now, unless one is already running. The caller moves the task to `doing`.
-    pub fn start_session(&mut self, now: DateTime<Local>) {
+    pub fn start_session(&mut self, now: Timestamp) {
         if !self.is_running() {
             self.sessions.push(Session { start: now, end: None });
         }
     }
 
     /// Closes the open session, if any.
-    pub fn stop_session(&mut self, now: DateTime<Local>) {
+    pub fn stop_session(&mut self, now: Timestamp) {
         if let Some(session) = self.sessions.last_mut().filter(|s| s.end.is_none()) {
             session.end = Some(now.max(session.start));
         }
     }
 
     /// Time tracked in all sessions.
-    pub fn total(&self, now: DateTime<Local>) -> Duration {
+    pub fn total(&self, now: Timestamp) -> SignedDuration {
         self.sessions.iter().map(|s| s.duration(now)).sum()
     }
 
     /// Time tracked inside `[from, to)`: sessions are clipped to the range. For several tasks, see [`worked`].
-    pub fn time_between(&self, from: DateTime<Local>, to: DateTime<Local>, now: DateTime<Local>) -> Duration {
+    pub fn time_between(&self, from: Timestamp, to: Timestamp, now: Timestamp) -> SignedDuration {
         self.sessions.iter().map(|s| s.overlap(from, to, now)).sum()
     }
 
@@ -530,7 +525,7 @@ impl Task {
     }
 
     /// When the status last changed (or the task was created, if never); used for sorting.
-    pub fn status_since(&self) -> DateTime<Local> {
+    pub fn status_since(&self) -> Timestamp {
         self.history.last().map_or(self.created, |c| c.at)
     }
 
@@ -607,10 +602,10 @@ impl Task {
 /// [`covered`]), so agents' tasks running in parallel don't make a day longer than it was.
 pub fn worked<'a>(
     tasks: impl IntoIterator<Item = &'a Task>,
-    from: DateTime<Local>,
-    to: DateTime<Local>,
-    now: DateTime<Local>,
-) -> Duration {
+    from: Timestamp,
+    to: Timestamp,
+    now: Timestamp,
+) -> SignedDuration {
     covered(tasks.into_iter().flat_map(|t| &t.sessions).map(|s| s.span(from, to, now)))
 }
 
