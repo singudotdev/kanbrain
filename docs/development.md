@@ -147,10 +147,11 @@ The crates use the **Rust 2024 edition**. Shared versions and lints are in the w
 | [`similar`](https://docs.rs/similar) | 3.2 | `gui`: the line diff and three-way merge of what the editor and `kb` changed meanwhile (`text::merge`) |
 | [`tempfile`](https://docs.rs/tempfile) | 3 | tests only: temporary data folders |
 
-The minimum supported Rust version of the core and the command line is **1.88** (`rust-version` in the workspace's
-`Cargo.toml`, which both inherit): the code uses let chains (`if a && let Some(b) = c`), which edition 2024 allows from
-Rust 1.88. Cargo picks dependency versions that still support it. CI checks it with Rust 1.88, and it's fine to develop
-on any newer Rust.
+The minimum supported Rust version of the core and the command line is **1.100** (`rust-version` in the workspace's
+`Cargo.toml`, which both inherit), the stable Rust CI's lints run on: the code uses what it has, such as
+[`Option::map_or_default`](https://doc.rust-lang.org/1.100.0/std/option/enum.Option.html#method.map_or_default) (1.98)
+and let chains (1.88). Cargo picks dependency versions that still support it. CI checks it with Rust 1.100, and it's
+fine to develop on any newer Rust.
 The kanban app follows GPUI, which needs a recent stable Rust.
 Keep `Cargo.lock` committed: kanbrain is an application, and the lockfile makes builds reproducible.
 
@@ -548,7 +549,7 @@ needs it (see below):
   PowerShell 7 and Windows PowerShell 5.1, from a folder with an accented name), after `shellcheck` and
   PSScriptAnalyzer on every script
 - `cargo test --workspace` on Linux, macOS and Windows
-- `cargo test` (core and command line) with the minimum supported Rust version (1.88)
+- `cargo test` (core and command line) with the minimum supported Rust version (1.100)
 - mutation testing of the change (`cargo mutants --in-diff`), failing on a mutant no test catches: its own
   workflow, `mutants.yml`, in eight shards, testing the lines changed since the last commit whose run passed, so
   every push's lines are tested though a newer push replaces a run still waiting

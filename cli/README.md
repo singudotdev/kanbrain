@@ -16,7 +16,7 @@ on GPUI from Zed's repository): get it from the
 cargo install kanbrain
 ```
 
-It needs Rust 1.88 or newer. Update it the same way, then refresh your projects' agent instructions with
+It needs Rust 1.100 or newer. Update it the same way, then refresh your projects' agent instructions with
 `kb init --all`.
 
 ## Connect a project to its agents

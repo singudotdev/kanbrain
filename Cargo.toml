@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["core", "cli", "gui", "xtask"]
-# `cargo build` / `cargo test` at the top cover the command line only, which builds fast and on Rust 1.88.
+# `cargo build` / `cargo test` at the top cover the command line only, which builds fast and on Rust 1.100.
 # The kanban app needs GPUI: add `-p kanbrain-app` or `--workspace` (see docs/development.md).
 default-members = ["core", "cli"]
 
@@ -10,7 +10,7 @@ version = "0.6.8"
 edition = "2024"
 # The core's and the command line's, which CI's "minimum Rust version" job builds with; the kanban app follows
 # GPUI's requirements instead, so it doesn't inherit it.
-rust-version = "1.88"
+rust-version = "1.100"
 repository = "https://github.com/singudotdev/kanbrain"
 license = "AGPL-3.0-only"
 
@@ -22,8 +22,8 @@ chrono = "0.4.45"
 dirs = "7"
 # The effective user id for the root check, without `unsafe` (already in the tree through tempfile and GPUI).
 rustix = { version = "1.1.5", default-features = false, features = ["std", "process"] }
-# A brain's write lock, so commands an agent runs in parallel don't overwrite each other's changes. On every
-# platform with Rust 1.88, which std's `File::lock` (1.89) isn't.
+# A brain's write lock, so commands an agent runs in parallel don't overwrite each other's changes. Chosen when the
+# minimum Rust was 1.88, before std's `File::lock` (1.89).
 fs4 = { version = "1.1.0", default-features = false, features = ["sync"] }
 serde = { version = "1.0.228", features = ["derive"] }
 # preserve_order: settings files `init` merges into keep their keys in the order they had.
