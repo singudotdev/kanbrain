@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- The kanban app's details, beside the board or list, are made wider or narrower by dragging their left edge, never
+  narrower than 320 px, nor so wide the board keeps less than 360; a double-click on the edge puts them back to 420
+  px. The width lasts as long as the app runs.
+
 ## [0.6.8] - 2026-10-30
 
 ### Changed

@@ -10,12 +10,117 @@ use super::widgets::{
 use super::{BrainView, action, entry_action, markdown, when};
 use crate::state::{Board, COLUMNS, Key, Target, When};
 use crate::text::event::KeyCode;
-use gpui::{ClickEvent, Context, Div, ElementId, FontWeight, ScrollHandle, Stateful, div, prelude::*, px, rgb};
+use gpui::{
+    ClickEvent, Context, CursorStyle, DispatchPhase, Div, ElementId, FontWeight, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, Pixels, ScrollHandle, Stateful, canvas, div, prelude::*, px, rgb,
+};
 use kanbrain_core::model::{
     Activity, Asked, Author, Comment, DecisionState, Kind as EntryKind, StatusChange, Task, ThreadItem, counted,
     fmt_age, fmt_clock, fmt_dur, now,
 };
 use kanbrain_core::period::{Period, Unit};
+
+/// The drawer's width until its edge is dragged; a double-click on the edge puts it back.
+pub const WIDTH: Pixels = px(420.);
+
+/// The narrowest its edge drags it to.
+const NARROWEST: Pixels = px(320.);
+
+/// What the drawer leaves the board or list, however wide it's dragged.
+const BOARD_LEAST: Pixels = px(360.);
+
+/// The window's padding around the board and the drawer, and the gap between them (`p_3`, `gap_3`), which the
+/// drawer's edge is drawn in.
+const SPACE: Pixels = px(12.);
+
+/// How wide the drawer is drawn in a window `window` wide, `wanted` as its edge was dragged: never narrower than
+/// [`NARROWEST`], nor so wide the board gets less than [`BOARD_LEAST`]; [`NARROWEST`] in a window too narrow for
+/// both. Kept as wanted, so a window made narrow then wide again gives the drawer its width back.
+pub fn width(wanted: Pixels, window: Pixels) -> Pixels {
+    wanted.min(window - SPACE * 3. - BOARD_LEAST).max(NARROWEST)
+}
+
+/// `drawer`, `width` wide, with its left edge, in the gap beside it, to drag it wider or narrower.
+pub fn framed(drawer: Div, width: Pixels, resizing: bool, cx: &mut Context<BrainView>) -> Div {
+    let press = cx.listener(move |this, event: &MouseDownEvent, window, cx| {
+        if event.click_count == 2 {
+            this.drawer_width = WIDTH;
+        } else {
+            // So the edge stays where it was grabbed, not under the pointer.
+            this.resizing = Some(window.viewport_size().width - SPACE - width - event.position.x);
+        }
+        cx.stop_propagation();
+        cx.notify();
+    });
+    let line = div()
+        .mx_auto()
+        .w(px(2.))
+        .h_full()
+        .rounded_full()
+        .when(resizing, |line| line.bg(rgb(theme::ACCENT)))
+        .group_hover("drawer edge", |line| line.bg(rgb(theme::ACCENT)));
+    let edge = div()
+        .id("drawer-edge")
+        .debug_selector(|| "drawer edge".into())
+        .group("drawer edge")
+        .absolute()
+        .top_0()
+        .bottom_0()
+        .left(-SPACE)
+        .w(SPACE)
+        .cursor_ew_resize()
+        .on_mouse_down(MouseButton::Left, press)
+        .child(line);
+    div()
+        .relative()
+        .flex_none()
+        .flex()
+        .w(width)
+        .child(drawer.flex_1().min_w_0().debug_selector(|| "drawer panel".into()))
+        .child(edge)
+        .when(resizing, |frame| frame.child(follow_resize(cx)))
+}
+
+/// Window-wide listeners while the drawer's edge is dragged, so the drag follows the mouse anywhere in the window,
+/// with the cursor as over the edge: registered again every frame, with that frame's window size.
+fn follow_resize(cx: &mut Context<BrainView>) -> impl IntoElement {
+    let view = cx.entity().downgrade();
+    canvas(
+        |_, _, _| {},
+        move |_, (), window, _| {
+            window.set_window_cursor_style(CursorStyle::ResizeLeftRight);
+            let moved = view.clone();
+            window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+                if phase != DispatchPhase::Bubble {
+                    return;
+                }
+                let shown = window.viewport_size().width;
+                _ = moved.update(cx, |this, cx| {
+                    let Some(grabbed) = this.resizing else {
+                        return;
+                    };
+                    // The button came up where the window couldn't see it.
+                    if event.dragging() {
+                        this.drawer_width = width(shown - SPACE - event.position.x - grabbed, shown);
+                    } else {
+                        this.resizing = None;
+                    }
+                    cx.notify();
+                });
+            });
+            window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
+                if phase == DispatchPhase::Bubble && event.button == MouseButton::Left {
+                    _ = view.update(cx, |this, cx| {
+                        this.resizing = None;
+                        cx.notify();
+                    });
+                }
+            });
+        },
+    )
+    .absolute()
+    .size_0()
+}
 
 /// The drawer for `task`, which `key` names.
 pub fn draw(board: &Board, key: Key, task: &Task, scroll: &ScrollHandle, cx: &mut Context<BrainView>) -> Div {
