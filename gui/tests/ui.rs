@@ -1210,6 +1210,31 @@ fn the_details_list_changes_among_the_comments_by_time(cx: &mut gpui::TestAppCon
 }
 
 #[test]
+fn times_shown_are_local_and_a_days_sessions_show_their_span() {
+    use kanbrain_core::brain::{Event, What};
+    use kanbrain_core::model::local_moment;
+    let at = |s: &str| local_moment(jiff::civil::DateTime::strptime("%Y-%m-%d %H:%M", s).unwrap()).unwrap();
+    assert_eq!(when(at("2026-09-24 10:15")), "Thu 24 Sep 2026 10:15");
+    let worked = |end| Event {
+        at: at("2026-09-24 09:00"),
+        id: 1,
+        title: "a".into(),
+        kind: Kind::Task,
+        tags: Vec::new(),
+        what: What::Worked { end },
+        source: 0,
+        worked: jiff::SignedDuration::ZERO,
+        comments: 0,
+    };
+    let done = worked(Some(at("2026-09-24 10:30")));
+    assert_eq!(calendar::event_time(&done, true), "09:00–10:30", "the day view");
+    assert_eq!(calendar::event_time(&worked(None), true), "09:00–now", "still running");
+    assert_eq!(calendar::event_time(&done, false), "09:00", "a week's narrow column");
+    let created = Event { what: What::Created, ..done };
+    assert_eq!(calendar::event_time(&created, true), "09:00");
+}
+
+#[test]
 fn the_thread_says_who_wrote_and_who_changed() {
     use kanbrain_core::model::{Activity, Changed, Comment};
     let at = kanbrain_core::model::now();

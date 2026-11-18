@@ -399,6 +399,18 @@ fn the_calendar_lists_each_days_interactions() {
 }
 
 #[test]
+fn a_calendar_day_ends_before_the_next_midnight() {
+    use crate::period::{Period, Unit};
+    let noon = crate::model::parse_ts("2026-09-24 12:00").unwrap();
+    let day = Period::containing(Unit::Day, crate::model::local(noon).datetime());
+    let next = day.bounds().1;
+    let late = Task::new(1, "late".into(), next - SignedDuration::from_secs(1));
+    let tomorrow = Task::new(2, "tomorrow".into(), next);
+    let f = Fixture::new(vec![late, tomorrow]);
+    assert_eq!(f.brain.calendar(&CalendarView::new(day)).ids(), [1], "the next day's midnight is the next day's");
+}
+
+#[test]
 fn a_calendar_day_of_several_sessions_spans_from_the_first() {
     use crate::period::{Period, Unit};
     let t0 = crate::model::parse_ts("2026-09-24 09:00").unwrap();
