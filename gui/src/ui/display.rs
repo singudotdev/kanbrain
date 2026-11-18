@@ -107,7 +107,7 @@ fn x11_sockets(display: &str) -> Vec<Socket> {
             Socket::Unix(PathBuf::from(path)),
         ];
     }
-    number.checked_add(6000).map(|port| vec![Socket::Tcp(host.to_string(), port)]).unwrap_or_default()
+    number.checked_add(6000).map_or_default(|port| vec![Socket::Tcp(host.to_string(), port)])
 }
 
 /// Whether something accepts a connection at `socket`; closed right away, which a compositor or an X server takes

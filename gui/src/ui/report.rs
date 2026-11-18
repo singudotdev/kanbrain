@@ -163,7 +163,7 @@ fn duration_cell(d: Duration) -> Div {
 /// `week` → `Week`.
 pub(super) fn capitalized(word: &str) -> String {
     let mut chars = word.chars();
-    chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default()
+    chars.next().map_or_default(|c| c.to_uppercase().chain(chars).collect())
 }
 
 /// The key event of a plain character key.

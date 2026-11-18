@@ -15,7 +15,7 @@ impl Board {
 
     /// Asks for the repository's new name in its project, starting from the one it has.
     pub fn ask_rename_repo(&mut self, src: usize) {
-        let name = self.brain(src).project.as_ref().map(|p| p.repo.clone()).unwrap_or_default();
+        let name = self.brain(src).project.as_ref().map_or_default(|p| p.repo.clone());
         self.mode = Mode::Manage(Manage::RenameRepo { src, name: Picker::named(&name) });
     }
 
