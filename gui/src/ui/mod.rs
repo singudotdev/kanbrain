@@ -85,9 +85,6 @@ const TICK: Duration = Duration::from_millis(500);
 /// Ticks between redraws with nothing running and no message: a minute, as cards give their ages.
 const IDLE_TICKS: u32 = 120;
 
-/// Width of the details drawer.
-const DRAWER_WIDTH: f32 = 420.;
-
 /// The fonts the window draws with, IBM Plex Sans and Lilex (licenses beside them in `gui/fonts/`): GPUI takes "IBM
 /// Plex Sans" for the system font on Linux, where few have it, and found none to make bold or italic in its stead.
 /// Lilex is the editor's and code's monospace on every platform.
@@ -186,6 +183,10 @@ pub struct BrainView {
     follow: bool,
     /// The field or editor a mouse drag that selects text started in, while the button is down.
     drag: Option<pointer::TextBox>,
+    /// The details drawer's width as its edge was last dragged, for this run: see [`drawer::width`].
+    drawer_width: gpui::Pixels,
+    /// While the drawer's edge is dragged, how far left of the drawer the pointer grabbed it.
+    resizing: Option<gpui::Pixels>,
     /// Where the last right click was, in the window: where its menu is drawn while it's open.
     menu_at: Option<gpui::Point<gpui::Pixels>>,
     /// The text last put in the primary selection, so it's only replaced when the selection changes.
@@ -303,6 +304,8 @@ impl BrainView {
             menu_at: None,
             follow: true,
             drag: None,
+            drawer_width: drawer::WIDTH,
+            resizing: None,
             #[cfg(any(target_os = "linux", target_os = "freebsd"))]
             shared: None,
             _tick: tick,
@@ -602,6 +605,10 @@ impl Render for BrainView {
                 board.drawer_task().map(|task| drawer::draw(board, key, task, &self.scroll.drawer, cx))
             })
             .flatten();
+        // Closed while its edge was dragged, the drawer's listeners went with it: none would see the button let go.
+        if drawer.is_none() {
+            self.resizing = None;
+        }
         let body = div()
             .flex_1()
             .min_h_0()
@@ -609,7 +616,10 @@ impl Render for BrainView {
             .gap_3()
             .p_3()
             .child(div().flex_1().min_w_0().min_h_0().flex().flex_col().child(content))
-            .children(drawer.map(|d| d.w(px(DRAWER_WIDTH)).flex_none()));
+            .children(drawer.map(|d| {
+                let width = drawer::width(self.drawer_width, window.viewport_size().width);
+                drawer::framed(d, width, self.resizing.is_some(), cx)
+            }));
         let topbar = topbar::draw(board, &self.scroll, follow, cx);
         let status = status_bar(board, self.updating, cx);
         // Over a dialog only its own text counts: a selection left under it would be copied from a field in it with

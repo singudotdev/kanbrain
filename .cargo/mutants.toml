@@ -99,4 +99,6 @@ exclude_re = [
     # Which phase of a window-wide mouse event a scrollbar acts in: it acts once either way, and only another listener
     # stopping the event between the two phases could tell. Acting in neither (`with false`) is caught.
     'gui/src/ui/scrollbar\.rs:.*(replace bubbling -> bool with true|replace == with != in bubbling)$',
+    # The same for the drawer's edge while dragged (by their columns, so the check on the button let go stays tested).
+    'gui/src/ui/drawer\.rs:(94|112):26: replace (!= with ==|== with !=) in follow_resize$',
 ]
