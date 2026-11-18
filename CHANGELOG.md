@@ -8,6 +8,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - `kb` and kanbrain-core need Rust 1.100 or newer to build (`cargo install kanbrain`); they needed 1.88.
+- kanbrain-core 0.7.0 keeps times with jiff rather than chrono, which is unmaintained
+  ([RUSTSEC-2026-0543](https://rustsec.org/advisories/RUSTSEC-2026-0543)): its public API takes and gives
+  `jiff::Timestamp` for `DateTime<Local>`, `jiff::civil` dates and times for chrono's naive ones and
+  `jiff::SignedDuration` for `chrono::Duration` (see `docs/decisions/0014-times-with-jiff-not-chrono.md`). Files are
+  written and read as before.
+- Around a DST change, a time typed by hand in the hour the clocks repeat reads as the first of the two on every
+  platform (on Linux and macOS it read as the second), and a report of hours puts both in the row of the first.
+- A `TZ` that names no time zone shows times in UTC, where it fell back to the system's setting; on Windows, `TZ` is
+  now taken.
+
+### Fixed
+
+- A time typed by hand in a task file within the hour the clocks skip in spring reads, as many minutes past the
+  change: the file didn't read.
 
 ### Security
 
