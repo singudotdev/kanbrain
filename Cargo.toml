@@ -21,7 +21,7 @@ anyhow = "1.0.104"
 chrono = "0.4.45"
 dirs = "7"
 # The effective user id for the root check, without `unsafe` (already in the tree through tempfile and GPUI).
-rustix = { version = "1.1.5", default-features = false, features = ["std", "process"] }
+rustix = { version = "1.1.6", default-features = false, features = ["std", "process"] }
 # A brain's write lock, so commands an agent runs in parallel don't overwrite each other's changes. Chosen when the
 # minimum Rust was 1.88, before std's `File::lock` (1.89).
 fs4 = { version = "1.1.0", default-features = false, features = ["sync"] }
