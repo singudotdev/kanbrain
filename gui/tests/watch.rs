@@ -137,6 +137,9 @@ fn sync_takes_as_seen_only_the_files_as_the_board_read_or_wrote_them() {
     let mut watcher = Watcher::new(vec![dir.path().to_path_buf()]);
     changed(&mut watcher);
     let read = [&a, &c].map(|file| (file.clone(), now(file)));
+    // So the folder's time shows the writes that follow: kept to a clock that ticks every few milliseconds (Windows'
+    // every 15 or so), it can read the same just after the listing.
+    std::thread::sleep(Duration::from_millis(20));
     // Another program, unseen yet: an edit in place, which the folder's time doesn't show, and a delete.
     fs::write(&a, "# a, edited elsewhere").unwrap();
     fs::remove_file(&c).unwrap();
@@ -180,6 +183,10 @@ fn a_brains_format_file_changing_is_noticed() {
     fs::write(dir.path().join("format"), "abc\n").unwrap();
     let mut watcher = Watcher::new(vec![dir.path().to_path_buf()]);
     changed(&mut watcher);
+    // Listed within a tick of the folder's last change, as a folder just made is: by its time alone, a file in it
+    // may have changed since. Not left to the clock, which a slow machine takes past the tick.
+    let listed = &mut watcher.last[0];
+    listed.at = listed.changed;
     // Repaired, a repository left out for it can be read again.
     fs::write(dir.path().join("format"), "1\n").unwrap();
     assert_eq!(changed(&mut watcher), 1);
@@ -222,43 +229,4 @@ fn the_timers_listing_is_not_taken_once_the_folder_changed_since() {
     fs::write(&b, "# b").unwrap();
     let files: Vec<_> = watcher.changed().into_iter().flat_map(|c| c.files).collect();
     assert_eq!(files, [a, b], "listed again: the timer's listing missed what was added after it");
-}
-
-// TEMPORARY: diagnoses the Windows runner's folder times; removed before merging.
-#[test]
-fn zz_diagnose_folder_times() {
-    let ms = |t: Option<SystemTime>, from: SystemTime| {
-        t.map(|t| match t.duration_since(from) {
-            Ok(d) => format!("+{:.3}", d.as_secs_f64() * 1000.),
-            Err(e) => format!("-{:.3}", e.duration().as_secs_f64() * 1000.),
-        })
-    };
-    let mut out = String::new();
-    let dir = tempfile::tempdir().unwrap();
-    let start = SystemTime::now();
-    let folder = || folder_time(dir.path());
-    out += &format!("created {:?}\n", ms(folder(), start));
-    fs::write(dir.path().join("format"), "abc\n").unwrap();
-    out += &format!("format written {:?} now {:?}\n", ms(folder(), start), ms(Some(SystemTime::now()), start));
-    let mut watcher = Watcher::new(vec![dir.path().to_path_buf()]);
-    let n = changed(&mut watcher);
-    let l = &watcher.last[0];
-    out += &format!("first look {n}: changed {:?} at {:?}\n", ms(l.changed, start), ms(l.at, start));
-    fs::write(dir.path().join("format"), "1\n").unwrap();
-    out += &format!("format in place {:?} now {:?}\n", ms(folder(), start), ms(Some(SystemTime::now()), start));
-    out += &format!("unchanged? {}\n", unchanged(dir.path(), &watcher.last[0]));
-    let n = changed(&mut watcher);
-    out += &format!("second look {n}\n");
-    fs::write(dir.path().join("0001-a.md"), "x").unwrap();
-    out += &format!("a added {:?} now {:?}\n", ms(folder(), start), ms(Some(SystemTime::now()), start));
-    fs::remove_file(dir.path().join("0001-a.md")).unwrap();
-    out += &format!("a removed {:?} now {:?}\n", ms(folder(), start), ms(Some(SystemTime::now()), start));
-    std::thread::sleep(Duration::from_millis(20));
-    fs::write(dir.path().join("0002-b.md"), "x").unwrap();
-    out += &format!("b added after 20 ms {:?} now {:?}\n", ms(folder(), start), ms(Some(SystemTime::now()), start));
-    for _ in 0..5 {
-        std::thread::sleep(Duration::from_millis(5));
-        out += &format!("  later {:?} now {:?}\n", ms(folder(), start), ms(Some(SystemTime::now()), start));
-    }
-    panic!("DIAGNOSIS\n{out}");
 }
