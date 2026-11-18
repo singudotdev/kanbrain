@@ -64,6 +64,9 @@ exclude_re = [
     # The border of today's day in the month and the week (by their lines): a color, and the window tests read bounds,
     # not colors (the calendar's tests check the days and what each lists).
     'gui/src/ui/calendar\.rs:(96|135):.*replace == with != in (month|week)$',
+    # The highlight of the calendar's selected interaction and its hover style (by their line): a color, and the window
+    # tests read bounds, not colors, with no pointer to hover with (the state tests check which entry is selected).
+    'gui/src/ui/calendar\.rs:177:.*replace (== with !=|&& with \|\|) in event_row$',
     # A date's key for element ids only has to differ from every other date's, which hours times 24 does as well as
     # hours over 24.
     'gui/src/ui/calendar\.rs:.*replace / with \* in date_key$',
