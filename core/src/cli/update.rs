@@ -140,7 +140,7 @@ pub fn cargo_update_command(program: Program, release: Option<&str>) -> String {
     if program.name != "kanbrain" {
         return "cargo install kanbrain".to_string();
     }
-    let tag = release.map(|version| format!(" --tag v{version}")).unwrap_or_default();
+    let tag = release.map_or_default(|version| format!(" --tag v{version}"));
     format!("cargo install --locked --git https://github.com/singudotdev/kanbrain{tag} kanbrain-app")
 }
 

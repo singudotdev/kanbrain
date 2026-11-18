@@ -182,15 +182,15 @@ fn what_a_crash_left_of_a_write_goes_once_the_lock_is_taken() {
         file.set_modified(std::time::SystemTime::now() - age).unwrap();
         path
     };
-    let crashed = left(".0001-a.md.4242-0.tmp", Duration::from_secs(2 * 60 * 60));
-    let in_report = left("reports/.week.md.4242-1.tmp", Duration::from_secs(2 * 60 * 60));
+    let crashed = left(".0001-a.md.4242-0.tmp", Duration::from_hours(2));
+    let in_report = left("reports/.week.md.4242-1.tmp", Duration::from_hours(2));
     let writing = left(".0002-b.md.4243-0.tmp", Duration::ZERO);
     // As versions before 0.4.0 named them.
-    let old_id = left(".last-id.tmp", Duration::from_secs(2 * 60 * 60));
+    let old_id = left(".last-id.tmp", Duration::from_hours(2));
     // Another program's, in a central brain that is a notes vault.
     let editors =
         [".notes.swp.tmp", ".sync.tmp", "reports/.backup.4242-1.tmp", ".notes.md.backup-1.tmp", ".notes.md.4242-x.tmp"]
-            .map(|name| left(name, Duration::from_secs(2 * 60 * 60)));
+            .map(|name| left(name, Duration::from_hours(2)));
     drop(Store::at(dir.path()).unwrap().lock().unwrap());
     assert!(!crashed.exists() && !in_report.exists() && !old_id.exists());
     assert!(writing.exists(), "maybe still being written, by a write made without the lock");

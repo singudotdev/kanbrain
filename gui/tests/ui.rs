@@ -2764,3 +2764,10 @@ fn a_list_first_shown_on_its_first_row_shows_it_whole(cx: &mut gpui::TestAppCont
     next_frames(cx);
     assert!(shown_in(cx, "row 0/30", "task-list"), "the second frame shows it whole");
 }
+
+#[test]
+fn a_word_named_on_a_button_is_capitalized() {
+    assert_eq!(report::capitalized("week"), "Week");
+    assert_eq!(report::capitalized("état"), "État", "by its first character, not byte");
+    assert_eq!(report::capitalized(""), "");
+}

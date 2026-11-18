@@ -16,7 +16,7 @@ const WAIT_POLL: Duration = Duration::from_secs(1);
 /// longer a conversation, and the next session's `context` picks it up. Under the 10 minutes Claude Code
 /// gives a tool call at most, so the agent gets this message, which says to stop, rather than a killed
 /// command it takes as a hiccup and runs again.
-const WAIT_DEFAULT: Duration = Duration::from_secs(8 * 60);
+const WAIT_DEFAULT: Duration = Duration::from_mins(8);
 
 /// `--timeout MINUTES` after `wait`'s id: `None` for 0 (no limit). Without it, `KANBRAIN_WAIT_TIMEOUT`
 /// (same minutes), so a run with nobody to answer, such as `e2e/agent.sh`, can make every wait short
