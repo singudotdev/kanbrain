@@ -1,7 +1,7 @@
 //! Text as the window shows it: cut to a width, a date, and a field's text with its selection highlighted.
 
 use super::theme::{self, Line, Span};
-use chrono::{DateTime, Local};
+use jiff::Timestamp;
 
 /// Cuts `s` to `width` characters, ending with `…` when shortened.
 pub(super) fn truncate(s: &str, width: usize) -> String {
@@ -26,8 +26,8 @@ pub(super) fn truncate_words(s: &str, width: usize) -> String {
 }
 
 /// "Thu 24 Sep 2026 10:15" in local time.
-pub(super) fn when(dt: DateTime<Local>) -> String {
-    dt.format("%a %d %b %Y %H:%M").to_string()
+pub(super) fn when(at: Timestamp) -> String {
+    kanbrain_core::model::local(at).strftime("%a %d %b %Y %H:%M").to_string()
 }
 
 /// Text being typed into, the characters from `start` to `end` of `selection` highlighted.

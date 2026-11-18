@@ -7,9 +7,11 @@ use super::widgets::{Kind, card, dim, dim_small, segment, segmented, tag_chips};
 use super::{BrainView, action};
 use crate::state::{Board, Key};
 use crate::text::event::KeyCode;
-use chrono::{DateTime, Datelike, Local, NaiveDate};
 use gpui::{ClickEvent, Context, Div, FontWeight, ScrollHandle, Stateful, Styled, div, prelude::*, px, rgb};
+use jiff::Timestamp;
+use jiff::civil::Date;
 use kanbrain_core::brain::{Day, Event, Show, What};
+use kanbrain_core::model::local;
 use kanbrain_core::model::{counted, fmt_dur, now};
 use kanbrain_core::period::Unit;
 
@@ -71,9 +73,9 @@ pub fn draw(board: &Board, scroll: &ScrollHandle, cx: &mut Context<BrainView>) -
 
 /// Weeks of seven days, each with its time and first interactions (`shop/api #3` when several brains are shown, as
 /// a week's and a day's name them); clicking a day shows it whole.
-fn month(board: &Board, days: &[Day], now: DateTime<Local>, cx: &mut Context<BrainView>) -> Div {
+fn month(board: &Board, days: &[Day], now: Timestamp, cx: &mut Context<BrainView>) -> Div {
     let names = days.iter().take(7).map(|d| {
-        div().flex_1().min_w_0().px_2().text_size(px(12.)).text_color(rgb(DIM)).child(d.date.format("%a").to_string())
+        div().flex_1().min_w_0().px_2().text_size(px(12.)).text_color(rgb(DIM)).child(d.date.strftime("%a").to_string())
     });
     let weeks = days.chunks(7).map(|week| {
         div().flex().gap_1().children(week.iter().map(|d| {
@@ -91,7 +93,7 @@ fn month(board: &Board, days: &[Day], now: DateTime<Local>, cx: &mut Context<Bra
                 .p_1p5()
                 .rounded_md()
                 .border_1()
-                .border_color(rgb(if date == now.date_naive() { theme::ACCENT } else { BORDER }))
+                .border_color(rgb(if date == local(now).date() { theme::ACCENT } else { BORDER }))
                 .overflow_hidden()
                 .text_size(px(11.))
                 .when(!d.in_period, |c| c.opacity(0.35))
@@ -117,7 +119,7 @@ fn month(board: &Board, days: &[Day], now: DateTime<Local>, cx: &mut Context<Bra
 }
 
 /// Seven columns, each day's interactions in time order.
-fn week(board: &Board, days: &[Day], now: DateTime<Local>, cx: &mut Context<BrainView>) -> Div {
+fn week(board: &Board, days: &[Day], now: Timestamp, cx: &mut Context<BrainView>) -> Div {
     div().flex().gap_2().children(days.iter().map(|d| {
         let date = d.date;
         div()
@@ -130,7 +132,7 @@ fn week(board: &Board, days: &[Day], now: DateTime<Local>, cx: &mut Context<Brai
             .p_1p5()
             .rounded_md()
             .border_1()
-            .border_color(rgb(if d.date == now.date_naive() { theme::ACCENT } else { BORDER }))
+            .border_color(rgb(if d.date == local(now).date() { theme::ACCENT } else { BORDER }))
             .bg(rgb(theme::BG))
             .child(day_heading(d, "%a %d").text_size(px(12.)).pb_1())
             .children(d.events.iter().enumerate().map(|(i, e)| event_row(board, e, (d.date, i), false, cx)))
@@ -157,7 +159,7 @@ fn day_heading(d: &Day, format: &str) -> Div {
         .flex()
         .justify_between()
         .gap_1()
-        .child(div().font_weight(FontWeight::SEMIBOLD).child(d.date.format(format).to_string()))
+        .child(div().font_weight(FontWeight::SEMIBOLD).child(d.date.strftime(format).to_string()))
         .when(!d.tracked.is_zero(), |h| h.child(div().text_color(rgb(theme::GREEN)).child(fmt_dur(d.tracked))))
 }
 
@@ -166,20 +168,14 @@ fn day_heading(d: &Day, format: &str) -> Div {
 fn event_row(
     board: &Board,
     event: &Event,
-    key: (NaiveDate, usize),
+    key: (Date, usize),
     wide: bool,
     cx: &mut Context<BrainView>,
 ) -> Stateful<Div> {
     let id = event.id;
     let entry = Key::new(event.source, id);
     let selected = board.selected == Some(entry) && board.drawer;
-    let time = match event.what {
-        What::Worked { end } if wide => {
-            let end = end.map_or_else(|| "now".to_string(), |e| e.format("%H:%M").to_string());
-            format!("{}–{end}", event.at.format("%H:%M"))
-        }
-        _ => event.at.format("%H:%M").to_string(),
-    };
+    let time = event_time(event, wide);
     let title = div()
         .min_w_0()
         .when(wide, Styled::truncate)
@@ -218,6 +214,18 @@ fn event_row(
         .child(title)
         .children(excerpt)
         .when(wide, |r| r.child(div().flex_1()).child(tag_chips(board, &event.tags).flex_nowrap().flex_none()))
+}
+
+/// When the interaction happened, in local time: in the day view (`wide`), a session from its start to its end, or
+/// to `now` while it runs.
+pub(super) fn event_time(event: &Event, wide: bool) -> String {
+    match event.what {
+        What::Worked { end } if wide => {
+            let end = end.map_or_else(|| "now".to_string(), |e| local(e).strftime("%H:%M").to_string());
+            format!("{}–{end}", local(event.at).strftime("%H:%M"))
+        }
+        _ => local(event.at).strftime("%H:%M").to_string(),
+    }
 }
 
 /// What happened to the entry that day, colored by kind: its last move (`doing → parked`), else
@@ -265,6 +273,6 @@ fn marker(event: &Event, compact: bool) -> Div {
 }
 
 /// A number unique to each date, for element ids.
-fn date_key(date: NaiveDate) -> usize {
-    usize::try_from(date.num_days_from_ce()).unwrap_or_default()
+fn date_key(date: Date) -> usize {
+    usize::try_from(date.duration_since(Date::MIN).as_hours() / 24).unwrap_or_default()
 }

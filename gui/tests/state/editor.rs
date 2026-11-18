@@ -396,7 +396,7 @@ fn the_editor_doesnt_save_a_comment_over_another_moved_to_its_place_meanwhile() 
     type Meanwhile = fn(&mut Brain);
     let mut f = Fixture::new(&["feature"]);
     // Written in one second, as an agent's quick comments are, with the same text: neither tells them apart.
-    let at = now() - chrono::Duration::minutes(5);
+    let at = now() - jiff::SignedDuration::from_mins(5);
     let mut task = f.on_disk(1);
     for _ in 0..3 {
         task.comments.push(Comment::new(at, "ok".into(), Author::Agent));
@@ -458,7 +458,7 @@ fn the_editor_doesnt_save_a_comment_over_another_moved_to_its_place_meanwhile() 
     // The last one replaced in its file by one written when it was, by someone else; or by the same author, later.
     let replacements = [
         Comment::new(at, "new".into(), Author::Human),
-        Comment::new(at + chrono::Duration::seconds(1), "new".into(), Author::Agent),
+        Comment::new(at + jiff::SignedDuration::from_secs(1), "new".into(), Author::Agent),
     ];
     for replacement in replacements {
         let store = Store::at(f.dir.path()).unwrap();

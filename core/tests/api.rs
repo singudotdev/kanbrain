@@ -2,6 +2,7 @@ use super::*;
 use crate::api::text::line;
 use crate::model::{Asked, Author, Changed, DecisionState};
 use crate::store::Store;
+use jiff::SignedDuration;
 
 /// A brain over a fresh folder; the folder lives as long as the returned guard.
 fn brain() -> (Brain, tempfile::TempDir) {
@@ -257,7 +258,7 @@ fn show_lists_changes_among_the_comments_by_time() {
     let (mut brain, _dir) = brain();
     let id = brain.add(new(Kind::Task, "Fix login")).unwrap();
     let t0 = crate::model::parse_ts("2026-10-16 10:00").unwrap();
-    let at = |minutes| t0 + chrono::Duration::minutes(minutes);
+    let at = |minutes| t0 + SignedDuration::from_mins(minutes);
     let task = &mut brain.tasks[0];
     task.set_title("Fix the login".into(), at(1), Author::Agent);
     task.set_tags(vec!["ux".into()], at(1), Author::Human);

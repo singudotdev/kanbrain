@@ -37,7 +37,7 @@ use crate::period::{Period, Unit};
 use crate::store::{self, SkipReason, Skipped, Store};
 use crate::{export, platform, projects};
 use anyhow::{Context, Result, anyhow, bail};
-use chrono::{DateTime, Local};
+use jiff::Timestamp;
 use std::fmt::Write;
 use std::io::{IsTerminal, Read};
 use std::path::{Path, PathBuf};
@@ -568,7 +568,7 @@ fn author(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Result<Author> {
 /// answer, if any. Looks in every brain, wherever it's run from, since each runs its own tasks; a project's task says
 /// which project, and several are joined: `shop/api #3 Fix login 00:42:17 · blog #1 Post 00:05:00 · 2 waiting`. A brain
 /// it can't read (one a newer kanbrain wrote, say) is left out rather than the whole line lost.
-fn status_line(central: &Path, now: DateTime<Local>) -> Result<String> {
+fn status_line(central: &Path, now: Timestamp) -> Result<String> {
     let mut running = Vec::new();
     let mut waiting = 0;
     for (project, tasks) in every_brain(central)? {

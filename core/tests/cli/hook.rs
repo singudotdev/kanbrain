@@ -1,5 +1,6 @@
 use super::*;
 use crate::projects;
+use jiff::SignedDuration;
 
 /// What the hook says for `input`, run in a folder outside any project.
 fn hook(event: HookEvent, input: &str, central: &Path) -> Option<String> {
@@ -108,11 +109,11 @@ fn a_task_an_agent_started_and_never_commented_on_is_reminded_once() {
 /// A task an agent started at `start`, with `comments` (who, how many seconds after the start) in that order.
 fn running(comments: &[(Author, i64)]) -> Task {
     let start = crate::model::now();
-    let mut task = Task::new(1, "Cache sessions".into(), start - chrono::Duration::hours(1));
+    let mut task = Task::new(1, "Cache sessions".into(), start - SignedDuration::from_hours(1));
     task.set_status(Status::Doing, start, Author::Agent);
     task.start_session(start);
     for &(author, after) in comments {
-        let created = start + chrono::Duration::seconds(after);
+        let created = start + SignedDuration::from_secs(after);
         task.comments.push(crate::model::Comment::new(created, "…".into(), author));
     }
     task
@@ -172,7 +173,7 @@ fn the_users_comment_on_an_agents_task_reaches_it_before_its_next_tool_call_unti
     brain.add_comment(before, "a day is enough").unwrap();
     // Written a while before, as it would be: times are to the second.
     let mut earlier = brain.task(before).unwrap().clone();
-    earlier.comments[0].created -= chrono::Duration::minutes(5);
+    earlier.comments[0].created -= SignedDuration::from_mins(5);
     brain.store.save(&mut earlier).unwrap();
     let mut brain = crate::brain::Brain::open(Store::at(root.join(".brain")).unwrap()).unwrap();
     brain.author = Author::Human;

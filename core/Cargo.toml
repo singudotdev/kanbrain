@@ -14,9 +14,9 @@ autotests = false
 
 [dependencies]
 anyhow.workspace = true
-chrono.workspace = true
 dirs.workspace = true
 fs4.workspace = true
+jiff.workspace = true
 # JSON output for agents and scripts (`--json`).
 serde.workspace = true
 serde_json.workspace = true

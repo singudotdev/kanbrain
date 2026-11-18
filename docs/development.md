@@ -134,7 +134,7 @@ The crates use the **Rust 2024 edition**. Shared versions and lints are in the w
 | crate | version | used for |
 | --- | --- | --- |
 | [`gpui`](https://www.gpui.rs) | Zed 1.23.2 (git) | `gui`: the kanban app's window, layout, input and drag and drop. From Zed's repository, pinned to a tag: the crates.io release (0.2.2) can't draw on NVIDIA with Wayland, and newer GPUI isn't published. The workspace `Cargo.toml` carries the `[patch]` entries Zed builds it with |
-| [`chrono`](https://docs.rs/chrono) | 0.4 | dates, times, time zones |
+| [`jiff`](https://docs.rs/jiff/1.0.1) | 1.0 | dates, times, time zones: the files' timestamps in local time, report periods, ages and durations ([decision 14](decisions/0014-times-with-jiff-not-chrono.md)) |
 | [`dirs`](https://docs.rs/dirs) | 7 | platform data folder |
 | [`anyhow`](https://docs.rs/anyhow) | 1 | error handling |
 | [`serde`](https://serde.rs), [`serde_json`](https://docs.rs/serde_json) | 1 | `--json` output; merging Claude Code's settings (`preserve_order` keeps their keys' order) |

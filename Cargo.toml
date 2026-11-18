@@ -18,7 +18,9 @@ license = "AGPL-3.0-only"
 # The version is what crates.io resolves it to: keep it at the workspace version.
 kanbrain-core = { path = "core", version = "0.6.8" }
 anyhow = "1.0.104"
-chrono = "0.4.45"
+# Times: the files' timestamps in local time, report periods, ages and durations. In chrono's place, unmaintained
+# (RUSTSEC-2026-0543): see docs/decisions/0014-times-with-jiff-not-chrono.md.
+jiff = "1.0.1"
 dirs = "7"
 # The effective user id for the root check, without `unsafe` (already in the tree through tempfile and GPUI).
 rustix = { version = "1.1.6", default-features = false, features = ["std", "process"] }

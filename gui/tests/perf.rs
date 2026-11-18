@@ -14,7 +14,7 @@ const TAGS: [&str; 12] = ["auth", "api", "ui", "db", "perf", "bug", "docs", "ci"
 /// Writes a board of `todo` tasks to do, `done` done ones and `notes` notes into `dir`, as markdown files the way the
 /// store names them, with tags, links, comments and time worked, and one task running.
 pub(super) fn generate(dir: &std::path::Path, todo: u32, done: u32, notes: u32) {
-    let at = now() - chrono::Duration::days(30);
+    let at = now() - jiff::SignedDuration::from_hours(720);
     for id in 1..=todo + done + notes {
         let mut task = Task::new(id, format!("task {id} with a title about as long as most"), at);
         let n = id as usize;
@@ -32,11 +32,12 @@ pub(super) fn generate(dir: &std::path::Path, todo: u32, done: u32, notes: u32) 
             task.kind = Kind::Note;
         } else if id > todo {
             task.status = Status::Done;
-            let end = at + chrono::Duration::hours(1);
+            let end = at + jiff::SignedDuration::from_hours(1);
             sessions = format!("\n## Sessions\n\n- {} -> {} (1h 00m)\n", fmt_ts(at), fmt_ts(end));
         } else if id == todo {
             task.status = Status::Doing;
-            sessions = format!("\n## Sessions\n\n- {} -> running\n", fmt_ts(now() - chrono::Duration::minutes(5)));
+            sessions =
+                format!("\n## Sessions\n\n- {} -> running\n", fmt_ts(now() - jiff::SignedDuration::from_mins(5)));
         }
         let file = dir.join(format!("{id:04}-task-{id}-with-a-title-about-as-long-as-most.md"));
         std::fs::write(file, task.to_markdown() + &sessions).unwrap();

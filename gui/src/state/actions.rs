@@ -7,7 +7,7 @@ use super::{
 use crate::text::editor::{LineInput, TextEditor};
 use crate::text::merge::{Merged, merge};
 use anyhow::Result;
-use chrono::{NaiveDate, NaiveTime};
+use jiff::civil::Date;
 use kanbrain_core::cli::update;
 use kanbrain_core::model::{Author, Comment, DecisionState, Kind, Status};
 use kanbrain_core::period::{Period, Unit};
@@ -65,8 +65,8 @@ impl Board {
     }
 
     /// Shows one day of the calendar, from a click on it in the month.
-    pub fn calendar_day(&mut self, date: NaiveDate) {
-        let midnight = date.and_time(NaiveTime::MIN);
+    pub fn calendar_day(&mut self, date: Date) {
+        let midnight = date.at(0, 0, 0, 0);
         self.calendar.period = Period::containing(Unit::Day, midnight);
         self.keep_selection();
     }

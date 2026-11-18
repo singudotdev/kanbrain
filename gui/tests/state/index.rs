@@ -23,7 +23,7 @@ fn board(n: u32) -> (Board, TempDir, TempDir) {
     for (dir, other) in [(central.path(), None), (repos[0].as_path(), Some("web")), (repos[1].as_path(), Some("api"))] {
         let store = Store::at(dir).unwrap();
         for id in 1..=n {
-            let mut task = Task::new(id, format!("entry {id}"), now() - chrono::Duration::minutes(i64::from(id)));
+            let mut task = Task::new(id, format!("entry {id}"), now() - jiff::SignedDuration::from_mins(i64::from(id)));
             task.kind = [Kind::Task, Kind::Task, Kind::Note, Kind::Decision][id as usize % 4];
             task.tags = ["auth", "api", "ui"].iter().take(id as usize % 4).map(ToString::to_string).collect();
             if id > 2 && id % 3 == 0 {

@@ -226,13 +226,7 @@ pub(super) fn empty_hint(board: &Board, status: Status) -> String {
 
 /// A card: id (and brain, when several are shown), age in its column, title, tags, and what it
 /// carries (comments, links, time).
-fn draw_card(
-    board: &Board,
-    key: Key,
-    task: &Task,
-    now: chrono::DateTime<chrono::Local>,
-    cx: &mut Context<BrainView>,
-) -> Stateful<Div> {
+fn draw_card(board: &Board, key: Key, task: &Task, now: jiff::Timestamp, cx: &mut Context<BrainView>) -> Stateful<Div> {
     let id = task.id;
     let selected = board.selected == Some(key);
     let running = task.running_for(now);
@@ -326,7 +320,7 @@ fn asked(task: &Task) -> Option<Div> {
 
 /// What a task carries, for its card or row: `2 comments · 1 link · 1h 05m`. The time is left out while
 /// it runs, since [`clock`] shows it then.
-pub(super) fn meta(board: &Board, key: Key, task: &Task, now: chrono::DateTime<chrono::Local>) -> String {
+pub(super) fn meta(board: &Board, key: Key, task: &Task, now: jiff::Timestamp) -> String {
     let links = board.related_keys(key).len();
     // Words rather than emoji: GPUI has no emoji fallback, so without an emoji font installed they draw as boxes.
     let meta = [
@@ -338,7 +332,7 @@ pub(super) fn meta(board: &Board, key: Key, task: &Task, now: chrono::DateTime<c
 }
 
 /// A running task's clock, in `color` (see [`theme::running_color`]).
-pub(super) fn clock(running: chrono::Duration, color: u32) -> Div {
+pub(super) fn clock(running: jiff::SignedDuration, color: u32) -> Div {
     div().text_color(rgb(color)).font_family(theme::EDITOR_FONT).child(format!("▶ {}", fmt_clock(running)))
 }
 

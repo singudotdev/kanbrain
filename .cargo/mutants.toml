@@ -61,6 +61,15 @@ exclude_re = [
     # Which field a mouse press makes the one typed into: the state tests drive keys, and the window tests read bounds
     # without a pointer to press with.
     'gui/src/ui/pointer\.rs:.*replace focus with \(\)',
+    # The border of today's day in the month and the week (by their lines): a color, and the window tests read bounds,
+    # not colors (the calendar's tests check the days and what each lists).
+    'gui/src/ui/calendar\.rs:(96|135):.*replace == with != in (month|week)$',
+    # The highlight of the calendar's selected interaction and its hover style (by their line): a color, and the window
+    # tests read bounds, not colors, with no pointer to hover with (the state tests check which entry is selected).
+    'gui/src/ui/calendar\.rs:177:.*replace (== with !=|&& with \|\|) in event_row$',
+    # A date's key for element ids only has to differ from every other date's, which hours times 24 does as well as
+    # hours over 24.
+    'gui/src/ui/calendar\.rs:.*replace / with \* in date_key$',
     # Downloads the installer from GitHub and runs it: the installer is checked by e2e/install.sh, not by tests.
     'core/src/cli/update\.rs:.*(replace run_installer -> Result| in run_installer$)',
     # Two brains are never the same one (callers move or link across two), so `a <= b` splits where `a < b` does.

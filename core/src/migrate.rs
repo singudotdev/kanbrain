@@ -148,7 +148,7 @@ fn migrate_with(store: &Store, migrations: &[Migration], target: u32) -> Result<
 /// Copies the brain in `dir`, every file and folder in it, to `<cache>/kanbrain/backups/<key>/<time>-<from>-<to>`,
 /// and returns where.
 fn back_up(dir: &Path, from: u32, to: u32) -> Result<PathBuf> {
-    let at = crate::model::now().format("%Y%m%dT%H%M%S");
+    let at = crate::model::local(crate::model::now()).strftime("%Y%m%dT%H%M%S");
     let backup = store::cache_dir_of(dir, "backups")?.join(format!("{at}-format-{from}-to-{to}"));
     copy_dir(dir, &backup)?;
     Ok(backup)
