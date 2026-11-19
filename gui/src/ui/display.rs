@@ -47,7 +47,7 @@ fn ensure_display_on(
 ) -> Result<()> {
     let shown = |name| var(name).unwrap_or_default().to_string_lossy().into_owned();
     match compositor {
-        "Headless" => bail!(
+        "headless" => bail!(
             "there's no display to open the board's window on (no WAYLAND_DISPLAY or DISPLAY): {RUN_FROM_DESKTOP}"
         ),
         // A socket handed down by a compositor that started the app is already connected.

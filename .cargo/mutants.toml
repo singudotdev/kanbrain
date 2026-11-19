@@ -89,10 +89,11 @@ exclude_re = [
     # no step whose format to check, checks nothing either way.
     'core/src/migrate\.rs:[0-9]+:[0-9]+: replace [^ ]+ with [^ ]+$',
     # The app's entry, and opening its real window (on the user's own board, from a test on a desktop): what goes to the
-    # window is tested by `start`, the startup error's view by `StartupError` in a test window, the checks `open` makes
-    # first by themselves (`ensure_display_on`, the core's root check), and the smoke checks start the app.
+    # window is tested by `start`, telling a failed connection from a bug by `connecting`, the startup error's view by
+    # `StartupError` in a test window, the checks `open` makes first by themselves (`ensure_display_on`, the core's
+    # root check), and the smoke checks start the app.
     'gui/src/main\.rs:.*replace (main|open) -> ',
-    'gui/src/ui/mod\.rs:.*replace run with \(\)',
+    'gui/src/ui/mod\.rs:.*replace (run|launch) with \(\)',
     # Reads the process's environment, which tests can't set (`set_var` is unsafe, and unsafe code is forbidden):
     # `ensure_display_on`, what it makes of it, is what's tested; the Linux smoke check runs the app with dead displays.
     'gui/src/ui/display\.rs:.*replace ensure_display -> ',

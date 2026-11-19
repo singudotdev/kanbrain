@@ -2562,6 +2562,33 @@ fn a_bar_draws_its_track_and_thumb_inside_its_edges() {
     assert_eq!(thumb, Bounds::new(point(px(40.), px(21.)), size(px(25.), px(6.))));
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+#[test]
+fn the_app_connects_to_wayland_or_x11_and_never_starts_headless() {
+    use gpui::WindowingModes;
+    assert_eq!(windowing(), WindowingModes::WAYLAND | WindowingModes::X11);
+}
+
+#[test]
+fn a_panic_before_the_app_launched_is_its_failing_to_connect() {
+    use std::sync::atomic::Ordering::Relaxed;
+    assert_eq!(connecting(|_| -> () { panic!("{} failed", "X11Client::new") }), Err("X11Client::new failed".into()));
+    assert_eq!(connecting(|launched| launched.store(true, Relaxed)), Ok(()));
+}
+
+#[test]
+fn a_panic_once_the_app_launched_stays_a_panic() {
+    use std::sync::atomic::Ordering::Relaxed;
+    let panic = std::panic::catch_unwind(|| {
+        connecting(|launched| {
+            launched.store(true, Relaxed);
+            panic!("a bug in the board")
+        })
+    })
+    .expect_err("not taken for the window system's");
+    assert_eq!(panic_message(panic.as_ref()), "a bug in the board");
+}
+
 #[test]
 fn a_panic_says_its_message() {
     let formatted: Box<dyn std::any::Any + Send> = Box::new(format!("{} failed", "X11Client::new"));

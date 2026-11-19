@@ -28,16 +28,19 @@ pub(super) fn report(error: &anyhow::Error) {
 pub fn fail(error: &anyhow::Error) -> ! {
     report(error);
     // With no display (over ssh, or under sudo, which drops DISPLAY and WAYLAND_DISPLAY: the root check's own case)
-    // GPUI runs headless, where the window opens unseen and its loop never ends; with a dead one it panics, or hangs
-    // in libxcb's fallback to TCP: either way the window wouldn't show, so the error is said on stderr only.
+    // GPUI refuses to start, as the app allows it no headless mode; with a dead one it panics, or hangs in libxcb's
+    // fallback to TCP: either way the window wouldn't show, so the error is said on stderr only.
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     if super::display::ensure_display().is_err() {
         std::process::exit(1);
     }
     let message = message(error);
-    super::application().run(move |cx| {
-        super::load_fonts(cx);
-        show(message, cx);
+    super::launch(|app, launched| {
+        app.run(move |cx| {
+            launched.store(true, std::sync::atomic::Ordering::Relaxed);
+            super::load_fonts(cx);
+            show(message, cx);
+        });
     });
     std::process::exit(1)
 }

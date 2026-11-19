@@ -261,7 +261,7 @@ gui/src/             kanbrain: the kanban app, and `cli::Program` when given arg
     ├── drawer.rs    the details beside the board or list, resized by dragging their left edge (width)
     ├── entries.rs   the notes and decisions lists
     ├── report.rs    the report tab
-    ├── display.rs   Linux and FreeBSD only: whether there's a display to show the board on, and the one named answers (Wayland's socket, the X server's socket or TCP port), before GPUI would run headless or panic
+    ├── display.rs   Linux and FreeBSD only: whether there's a display to show the board on, and the one named answers (Wayland's socket, the X server's socket or TCP port), before GPUI would refuse to start or panic
     ├── startup.rs   the small window saying why the app couldn't open the board or its window (no console to print it to when started from a menu), with Copy, closed by Enter, Esc or Close; none without a display on Linux (`display.rs`)
     ├── calendar.rs  the calendar tab: day, week and month
     ├── dialogs/     dialogs over the window; a delete's confirmation in mod.rs
