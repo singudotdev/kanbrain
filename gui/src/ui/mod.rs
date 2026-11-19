@@ -49,6 +49,7 @@ mod theme;
 mod topbar;
 mod widgets;
 
+use crate::remembered;
 use crate::state::{Board, COLUMNS, Clock, Layout, Mode, Request, Tab};
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::update;
@@ -183,8 +184,14 @@ pub struct BrainView {
     follow: bool,
     /// The field or editor a mouse drag that selects text started in, while the button is down.
     drag: Option<pointer::TextBox>,
-    /// The details drawer's width as its edge was last dragged, for this run: see [`drawer::width`].
+    /// The details drawer's width as its edge was last dragged, in this run or the last: see [`drawer::width`].
     drawer_width: gpui::Pixels,
+    /// Where the drawer's width is remembered between sessions (`remembered::folder`).
+    remembered: Option<PathBuf>,
+    /// The width last remembered there, so a drag back to it writes nothing; none once a write failed.
+    remembered_width: Option<gpui::Pixels>,
+    /// The last write of the drawer's width, which the next waits for: writes run in order, the last width last.
+    remembering: Option<gpui::Task<()>>,
     /// While the drawer's edge is dragged, how far left of the drawer the pointer grabbed it.
     resizing: Option<gpui::Pixels>,
     /// Where the last right click was, in the window: where its menu is drawn while it's open.
@@ -287,6 +294,8 @@ impl BrainView {
                 }
             }
         });
+        let remembered = remembered::folder();
+        let drawer_width = remembered.as_deref().and_then(remembered::drawer_width).map_or(drawer::WIDTH, gpui::px);
         let mut board = board;
         let executor = cx.background_executor().clone();
         board.clock = Clock::new(move || executor.now());
@@ -304,7 +313,10 @@ impl BrainView {
             menu_at: None,
             follow: true,
             drag: None,
-            drawer_width: drawer::WIDTH,
+            drawer_width,
+            remembered,
+            remembered_width: Some(drawer_width),
+            remembering: None,
             resizing: None,
             #[cfg(any(target_os = "linux", target_os = "freebsd"))]
             shared: None,
@@ -312,6 +324,36 @@ impl BrainView {
             blink: Self::blinking(cx),
             drawer_shown: false,
         }
+    }
+
+    /// Ends a drag of the drawer's edge, if one is on, remembering the width it left.
+    fn end_resize(&mut self, cx: &mut Context<Self>) {
+        if self.resizing.take().is_some() {
+            self.remember_drawer_width(cx);
+        }
+    }
+
+    /// Remembers the drawer's width for the next session, off the window's thread, unless it's what was last.
+    fn remember_drawer_width(&mut self, cx: &mut Context<Self>) {
+        let Some(folder) = self.remembered.clone().filter(|_| Some(self.drawer_width) != self.remembered_width) else {
+            return;
+        };
+        self.remembered_width = Some(self.drawer_width);
+        let width = f32::from(self.drawer_width);
+        let before = self.remembering.take();
+        self.remembering = Some(cx.spawn(async move |this, cx| {
+            if let Some(before) = before {
+                before.await;
+            }
+            let write = async move { remembered::remember_drawer_width(&folder, width) };
+            if let Err(e) = cx.background_executor().spawn(write).await {
+                _ = this.update(cx, |this, cx| {
+                    this.remembered_width = None;
+                    this.board.notify(format!("Couldn't remember the details' width for next time: {e}"));
+                    cx.notify();
+                });
+            }
+        }));
     }
 
     /// Asks whether a newer release is out now and every `update::CHECK_EVERY`, off the window's thread. Not being
@@ -589,6 +631,11 @@ impl Render for BrainView {
                 cx.notify();
             });
         }
+        let drawer_shown = self.board.tab != Tab::Report && self.board.drawer_task().is_some();
+        // Closed while its edge was dragged, the drawer's listeners went with it: none would see the button let go.
+        if !drawer_shown {
+            self.end_resize(cx);
+        }
         let board = &self.board;
         let content = match board.tab {
             Tab::Board => match board.layout {
@@ -599,16 +646,12 @@ impl Render for BrainView {
             Tab::Report => report::draw(board, &self.scroll.report, cx),
             Tab::Calendar => calendar::draw(board, &self.scroll.calendar, cx),
         };
-        let drawer = (board.tab != Tab::Report)
+        let drawer = drawer_shown
             .then(|| {
                 let key = board.selected?;
                 board.drawer_task().map(|task| drawer::draw(board, key, task, &self.scroll.drawer, cx))
             })
             .flatten();
-        // Closed while its edge was dragged, the drawer's listeners went with it: none would see the button let go.
-        if drawer.is_none() {
-            self.resizing = None;
-        }
         let body = div()
             .flex_1()
             .min_h_0()

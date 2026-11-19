@@ -2918,7 +2918,7 @@ dependencies = [
 
 [[package]]
 name = "kanbrain"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "kanbrain-core",
@@ -2927,9 +2927,10 @@ dependencies = [
 
 [[package]]
 name = "kanbrain-app"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
+ "dirs 7.0.0",
  "gpui",
  "gpui_platform",
  "image",
@@ -2943,7 +2944,7 @@ dependencies = [
 
 [[package]]
 name = "kanbrain-core"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "dirs 7.0.0",
@@ -7018,7 +7019,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "serde",

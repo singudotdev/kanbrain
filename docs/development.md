@@ -225,6 +225,7 @@ gui/icons/           the app's icons, made from docs/images/logo.svg by make.sh:
 gui/fonts/           IBM Plex Sans and Lilex (from Zed's repository, with their licenses), embedded: the window's text and code
 gui/src/             kanbrain: the kanban app, and `cli::Program` when given arguments
 ├── main.rs          entry point: the command line given arguments, else the root and display checks and opening the window (an error before the board opens shown in a window, ui/startup.rs)
+├── remembered.rs    what the app remembers between sessions for whoever runs it, never in a brain: the details' width, in kanbrain-app in the state folder (decision 0015)
 ├── update.rs        the app's update: a newer release asked for daily, installed in place of the app (on Windows by PowerShell once it closes), which then starts again
 ├── watch.rs         polls the data folders (names, sizes, times) every second, away from the window, naming the files other programs changed
 ├── state/           what's on screen and every action, without GPUI (tested without a window)
@@ -441,8 +442,8 @@ what the binary prints.
 it over HTTP on `127.0.0.1` and install it with `install.sh` / `install.ps1` into a throwaway home, as a user would
 (`KANBRAIN_BASE_URL` points the installer at it). They check that the download's checksum is verified and a wrong
 one refused, that the installed `kb` is this build, that `init --all` brought a registered project's agent section
-up to date, that uninstalling takes it out, and that `--purge` deletes the central brain's files and kanbrain's
-locks and backups in the cache, leftover temporary files included, keeps a file kanbrain didn't create, and refuses
+up to date, that uninstalling takes it out, and that `--purge` deletes the central brain's files, kanbrain's
+locks and backups in the cache and what the app remembered, leftover temporary files included, keeps a file kanbrain didn't create, and refuses
 a relative `KANBRAIN_DIR`. Both also install the kanban app (`kb` standing in for it, so GPUI isn't built) and check
 its launcher: the menu entry and icon on Linux, the app bundle on macOS, the Start Menu shortcut on Windows, where
 both apps install at once. CI runs them on all three systems, after `shellcheck` on the shell scripts and

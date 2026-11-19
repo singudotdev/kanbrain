@@ -123,11 +123,15 @@ try {
     & (Join-Path $repo 'install.ps1') *>&1 | Out-Null
     if ((Test-Path $installed) -or (Test-Path $app) -or (Test-Path $shortcut)) { Fail 'uninstall left an app or the shortcut' }
 
-    # Purging deletes the central brain's data and kanbrain's locks and backups in the cache, nothing else of either.
+    # Purging deletes the central brain's data, kanbrain's locks and backups in the cache and what the app remembered,
+    # nothing else of any.
     $env:LOCALAPPDATA = Join-Path $work 'localappdata'
     $cache = Join-Path $env:LOCALAPPDATA 'kanbrain'
     New-Item -ItemType Directory -Force -Path (Join-Path $cache 'locks'), (Join-Path $cache 'backups\0123456789abcdef') | Out-Null
     Set-Content -Path (Join-Path $cache 'locks\0123456789abcdef.lock') -Value ''
+    $remembered = Join-Path $env:LOCALAPPDATA 'kanbrain-app'
+    New-Item -ItemType Directory -Force -Path $remembered | Out-Null
+    Set-Content -Path (Join-Path $remembered 'drawer-width') -Value '520'
     # Shared with notes of the user's own, as in an Obsidian vault: purge takes only what kanbrain made, by what each
     # file holds, not by its name.
     $data = $env:KANBRAIN_DIR
@@ -160,6 +164,7 @@ try {
     if (-not (Test-Path (Join-Path $data '0007-mine.md'))) { Fail 'a refused purge deleted something' }
     & (Join-Path $repo 'install.ps1') *>&1 | Out-Null
     if (Test-Path $cache) { Fail "purge left kanbrain's cache" }
+    if (Test-Path $remembered) { Fail 'purge left what the app remembered' }
     foreach ($gone in '0007-mine.md', 'projects.md', '.0001-left-by-a-crash.md.4242-0.tmp', 'projects\demo.md',
         'projects\.demo.md.4242-1.tmp', 'reports\kanbrain-week.md') {
         if (Test-Path (Join-Path $data $gone)) { Fail "purge kept kanbrain's $gone" }

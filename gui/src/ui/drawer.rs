@@ -45,6 +45,7 @@ pub fn framed(drawer: Div, width: Pixels, resizing: bool, cx: &mut Context<Brain
     let press = cx.listener(move |this, event: &MouseDownEvent, window, cx| {
         if event.click_count == 2 {
             this.drawer_width = WIDTH;
+            this.remember_drawer_width(cx);
         } else {
             // So the edge stays where it was grabbed, not under the pointer.
             this.resizing = Some(window.viewport_size().width - SPACE - width - event.position.x);
@@ -103,7 +104,7 @@ fn follow_resize(cx: &mut Context<BrainView>) -> impl IntoElement {
                     if event.dragging() {
                         this.drawer_width = width(shown - SPACE - event.position.x - grabbed, shown);
                     } else {
-                        this.resizing = None;
+                        this.end_resize(cx);
                     }
                     cx.notify();
                 });
@@ -111,7 +112,7 @@ fn follow_resize(cx: &mut Context<BrainView>) -> impl IntoElement {
             window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
                 if phase == DispatchPhase::Bubble && event.button == MouseButton::Left {
                     _ = view.update(cx, |this, cx| {
-                        this.resizing = None;
+                        this.end_resize(cx);
                         cx.notify();
                     });
                 }

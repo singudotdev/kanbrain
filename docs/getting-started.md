@@ -45,7 +45,7 @@ curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/inst
 A specific release:
 
 ```sh
-curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh -s -- --version v0.7.0
+curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh -s -- --version v0.7.1
 ```
 
 Another folder in your home (the default is `~/.local/bin`):
@@ -83,7 +83,7 @@ $env:KANBRAIN_APP = "both"; irm https://github.com/singudotdev/kanbrain/releases
 A specific release:
 
 ```powershell
-$env:KANBRAIN_VERSION = "v0.7.0"; irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
+$env:KANBRAIN_VERSION = "v0.7.1"; irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
 ```
 
 Another folder in your profile:
@@ -210,6 +210,8 @@ What purge does:
 - **It also clears kanbrain's cache folder** (`~/.cache/kanbrain` on Linux, `~/Library/Caches/kanbrain` on macOS,
   `%LOCALAPPDATA%\kanbrain` on Windows): each brain's write lock, and the backups taken before migrating one, which
   are copies of its data. Only those two go; anything else there is kept.
+- **And what the kanban app remembers** for you, the details' width (`~/.local/state/kanbrain-app` on Linux,
+  `~/Library/Application Support/kanbrain-app` on macOS, `%LOCALAPPDATA%\kanbrain-app` on Windows). Only that goes.
 - **It refuses** to work on your home folder or a drive root.
 
 Purge can't be undone. To keep a copy first, on Linux or macOS:
