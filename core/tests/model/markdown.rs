@@ -183,11 +183,12 @@ fn authors_questions_and_decision_states_round_trip() {
 #[test]
 fn hand_written_headers_and_unknown_authors_still_read() {
     let md = "# x\n\n- id: 1\n- status: parked\n\n## Comments\n\n### 2026-09-24 10:00 (edited 2026-09-24 10:05)\n\n\
-              old form\n\n### Steps (draft)\n\nnot a header\n\n## History\n\n- 2026-09-24 11:00 todo -> parked (robot)\n";
+              old form\n\n### Steps (draft)\n\nnot a header\n\n### 2026-09-24T10:12Z\n\nnor this\n\n## History\n\n- 2026-09-24 11:00 todo -> parked (robot)\n";
     let task = Task::from_markdown(md).unwrap();
     assert_eq!(task.comments.len(), 1);
     assert_eq!(task.comments[0].edited, parse_ts("2026-09-24 10:05"));
     assert!(task.comments[0].body.contains("### Steps (draft)"));
+    assert!(task.comments[0].body.contains("### 2026-09-24T10:12Z"), "a time older versions didn't read either");
     assert_eq!(task.history[0].by, Author::Human, "an unknown name doesn't lose the file");
 }
 

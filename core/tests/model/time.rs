@@ -28,6 +28,46 @@ fn stored_timestamps_are_written_as_they_always_were() {
 }
 
 #[test]
+fn a_local_offset_with_seconds_is_written_to_the_minute_at_the_same_moment() {
+    // Madrid kept its local mean time, -00:14:44, until 1901: written with its seconds, no kanbrain would read it.
+    let madrid = jiff::tz::db().get("Europe/Madrid").unwrap();
+    let at: Timestamp = "1890-01-01T12:00:00Z".parse().unwrap();
+    let written = fmt_in(at, madrid);
+    assert_eq!(written, "1890-01-01T11:45:00-00:15");
+    assert_eq!(parse_ts(&written), Some(at));
+}
+
+#[test]
+fn only_what_older_versions_read_as_a_time_reads_as_one() {
+    // chrono's RFC 3339 took a minus sign (U+2212) for the offset's, and the 60th second (a leap second, which it
+    // kept as the 59th's last: in whole seconds, the 59th, as jiff reads it).
+    assert_eq!(parse_ts("2026-09-24T06:12:00\u{2212}02:00"), parse_ts("2026-09-24T08:12:00Z"));
+    assert_eq!(parse_ts("2026-09-24T08:12:60Z"), parse_ts("2026-09-24T08:12:59Z"));
+    // ISO 8601 forms jiff reads but chrono didn't, so a `### ` line or a history item written so stays text.
+    let refused = [
+        "2026-09-24T10:12Z",
+        "2026-09-24T10:12+02:00",
+        "2026-09-24 10Z",
+        "2026-09-24T10+02",
+        "20260924T1012Z",
+        "20260924T101200Z",
+        "2026-09-24T10:12:00+0200",
+        "2026-09-24T10:12:00+02",
+        "2026-09-24T10:12:00,5Z",
+        "2026-09-24T10:12:00+02:00[Europe/Madrid]",
+        "2026-09-24T10:12:00+24:00",
+        "2026-09-24T10:12:00+02:00:00",
+        "+002026-09-24T10:12:00Z",
+        "2026\u{2212}09-24T10:12:00Z",
+        "+ 2026-09-24 10:12",
+        "- 2026-09-24 10:12",
+    ];
+    for refused in refused {
+        assert_eq!(parse_ts(refused), None, "{refused}");
+    }
+}
+
+#[test]
 fn a_time_typed_in_an_hour_a_dst_change_skips_or_repeats_reads() {
     let madrid = jiff::tz::db().get("Europe/Madrid").unwrap();
     let at = |typed| moment_in(&madrid, DateTime::strptime("%Y-%m-%d %H:%M", typed).unwrap()).map(|at| at.to_string());

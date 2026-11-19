@@ -52,8 +52,19 @@ system's setting) with a time zone database (the system's on Unix, one bundled o
   chrono ignored `TZ`, it's taken. On Windows the zone's rules come from the database bundled in kanbrain's build,
   not the system's: a country changing its rules needs a newer kanbrain.
 - jiff's parser ([`Timestamp`'s `FromStr`](https://docs.rs/jiff/1.0.1/jiff/struct.Timestamp.html#impl-FromStr-for-Timestamp))
-  also reads a timestamp with its seconds left out; it reads at most nine digits of a fraction of a second (chrono
-  dropped the rest) and a leap second `:60` as `:59`. kanbrain writes neither. An offset with seconds, which local
-  time had before about 1972 in some zones, is written with them (`-00:14:44`), which kanbrain before 0.7.0 can't
-  read; chrono rounded it to the minute.
+  reads more of ISO 8601 than chrono's
+  [`parse_from_rfc3339`](https://docs.rs/chrono/0.4.45/chrono/struct.DateTime.html#method.parse_from_rfc3339) did
+  (seconds left out, `+0200`, a time zone's name), and a `### ` line or a history item is a comment's or a change's
+  only if its time reads. So `model::time::rfc3339` lets through to jiff only the form chrono 0.4.45 took
+  (`format/parse.rs`: `YYYY-MM-DD`, `T`, `t` or a space, `hh:mm:ss`, a fraction, `Z`, `z` or `±hh:mm` up to 23:59,
+  `−` U+2212 for its minus), the fraction cut to nine digits, as chrono did; and a hand-typed year whose sign stands
+  apart from its digits (`+ 2026`), which jiff's `%Y` takes, reads as no time, as before
+  (`only_what_older_versions_read_as_a_time_reads_as_one`). Strings mutated from valid ones and read by 0.6.8's
+  parser and this one (400,000 in each of UTC, Europe/Madrid and America/New_York, a million more in Madrid) read
+  alike but for years out of jiff's range (−9999 to 9999), which chrono read. A leap second `:60` reads as `:59`, as
+  chrono's instant in whole seconds.
+- An offset with seconds, local mean time before standard time zones (Madrid's `-00:14:44` until 1901), is written
+  in the offset to the nearest minute at the same moment (`1890-01-01T11:45:00-00:15`), which every kanbrain reads;
+  chrono rounded the offset alone, so its written time was up to 30 seconds off
+  (`a_local_offset_with_seconds_is_written_to_the_minute_at_the_same_moment`).
 - One more dependency in the tree until GPUI moves off chrono.
