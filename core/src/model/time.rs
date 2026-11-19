@@ -1,7 +1,7 @@
 //! Timestamps as stored in task files, and ages and durations as shown on screen.
 
 use jiff::civil::DateTime;
-use jiff::tz::TimeZone;
+use jiff::tz::{Offset, TimeZone};
 use jiff::{SignedDuration, Timestamp, ZonedDateTime};
 
 /// RFC 3339 with the local UTC offset, e.g. `2026-09-24T10:12:00+02:00`.
@@ -40,9 +40,13 @@ pub fn fmt_ts(at: Timestamp) -> String {
     fmt_in(at, TimeZone::system())
 }
 
-/// [`fmt_ts`] in `tz`.
+/// [`fmt_ts`] in `tz`. An offset with seconds (local mean time, before standard time zones) is written in the offset
+/// to the nearest minute, at the same moment: [`rfc3339`] reads none with seconds, as no kanbrain before 0.7.0 did.
 fn fmt_in(at: Timestamp, tz: TimeZone) -> String {
-    at.to_zoned_datetime(tz).strftime(TIMESTAMP_FORMAT).to_string()
+    let seconds = tz.to_offset(at).seconds();
+    // Only the offset is written, so a fixed one in place of the zone's writes the same.
+    let to_the_minute = Offset::from_seconds((seconds + 30 * seconds.signum()) / 60 * 60).map_or(tz, TimeZone::fixed);
+    at.to_zoned_datetime(to_the_minute).strftime(TIMESTAMP_FORMAT).to_string()
 }
 
 /// Accepts RFC 3339 plus the hand-typing friendly local formats above.

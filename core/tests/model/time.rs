@@ -28,6 +28,16 @@ fn stored_timestamps_are_written_as_they_always_were() {
 }
 
 #[test]
+fn a_local_offset_with_seconds_is_written_to_the_minute_at_the_same_moment() {
+    // Madrid kept its local mean time, -00:14:44, until 1901: written with its seconds, no kanbrain would read it.
+    let madrid = jiff::tz::db().get("Europe/Madrid").unwrap();
+    let at: Timestamp = "1890-01-01T12:00:00Z".parse().unwrap();
+    let written = fmt_in(at, madrid);
+    assert_eq!(written, "1890-01-01T11:45:00-00:15");
+    assert_eq!(parse_ts(&written), Some(at));
+}
+
+#[test]
 fn only_what_older_versions_read_as_a_time_reads_as_one() {
     // chrono's RFC 3339 took a minus sign (U+2212) for the offset's, and the 60th second (a leap second, which it
     // kept as the 59th's last: in whole seconds, the 59th, as jiff reads it).
