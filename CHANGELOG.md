@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The kanban app is built on GPUI from Zed 1.29.2 (it was 1.23.2): it wraps text at the line breaks Unicode
+  allows (UAX #14), and no longer pulls in the unmaintained paste crate.
+
 ## [0.7.1] - 2026-11-19
 
 ### Added

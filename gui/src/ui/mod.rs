@@ -64,6 +64,8 @@ use keys::{key_events, key_name};
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::time::Duration;
 use text::{byte_at, edited, truncate, truncate_words, when};
 use widgets::Kind;
@@ -118,20 +120,52 @@ fn window_options(size: gpui::Size<gpui::Pixels>, cx: &GpuiApp) -> WindowOptions
     }
 }
 
-/// GPUI's app, connected to the window system. GPUI panics when that fails: a Wayland compositor or X server that
-/// refuses it, or one that's gone (on Linux `display` catches most of those first). That would end the app with 101 and
-/// Rust's panic message, so it exits with 1 saying why instead.
+/// GPUI's app for this platform. On Linux it connects to Wayland or X11 only, never starting headless, where the
+/// window would open unseen and its loop never end: GPUI panics instead, which [`launch`] says as an error.
 fn application() -> gpui::Application {
-    let hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
-    let app = std::panic::catch_unwind(gpui_platform::application);
-    std::panic::set_hook(hook);
-    app.unwrap_or_else(|panic| {
-        let error = anyhow::anyhow!("{}", panic_message(panic.as_ref()))
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    return gpui_platform::linux(windowing());
+    #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+    gpui_platform::application()
+}
+
+/// The window systems the app may connect to on Linux: every one GPUI has but headless.
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+fn windowing() -> gpui::WindowingModes {
+    gpui::WindowingModes::all().difference(gpui::WindowingModes::HEADLESS)
+}
+
+/// Runs GPUI's app with `start`, which sets `launched` first thing in [`gpui::Application::run`]'s closure. GPUI panics
+/// when it can't connect to the window system: a Wayland compositor or X server that refuses it, or one that's gone
+/// (on Linux `display` catches most of those first), when the app is made or, on Linux since Zed 1.29, as it starts
+/// running. That would end the app with 101 and Rust's panic message, so it exits with 1 saying why instead.
+fn launch(start: impl FnOnce(gpui::Application, Arc<AtomicBool>)) {
+    if let Err(panic) = connecting(|launched| start(application(), launched)) {
+        let error = anyhow::anyhow!("{panic}")
             .context("couldn't connect to the window system: run kanbrain from the desktop session");
         startup::report(&error);
         std::process::exit(1)
-    })
+    }
+}
+
+/// Runs `start`, which sets the flag it's given once the window system is connected. A panic before then is GPUI
+/// failing to connect: its message, which no panic hook says. One after is a bug, unwound on like any other.
+fn connecting<R>(start: impl FnOnce(Arc<AtomicBool>) -> R) -> Result<R, String> {
+    let launched = Arc::new(AtomicBool::new(false));
+    let hook: Arc<dyn Fn(&std::panic::PanicHookInfo<'_>) + Send + Sync> = std::panic::take_hook().into();
+    let (seen, said) = (launched.clone(), hook.clone());
+    std::panic::set_hook(Box::new(move |info| {
+        if seen.load(Relaxed) {
+            said(info);
+        }
+    }));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| start(launched.clone())));
+    std::panic::set_hook(Box::new(move |info| hook(info)));
+    match result {
+        Ok(done) => Ok(done),
+        Err(panic) if !launched.load(Relaxed) => Err(panic_message(panic.as_ref()).to_owned()),
+        Err(panic) => std::panic::resume_unwind(panic),
+    }
 }
 
 /// What a panic said, from its payload: `panic!`'s message, formatted or not.
@@ -146,28 +180,31 @@ fn panic_message(payload: &(dyn std::any::Any + Send)) -> &str {
 /// Opens the window and runs until it's closed or the board quits. If it can't open, says why as an error before the
 /// board opens does ([`startup`]) and exits with 1.
 pub fn run(board: Board) {
-    application().run(move |cx: &mut GpuiApp| {
-        load_fonts(cx);
-        let opened = cx.open_window(window_options(size(px(1400.), px(860.)), cx), |window, cx| {
-            window.set_window_title(&board.title());
-            cx.new(|cx| BrainView::new(board, window, cx))
-        });
-        match opened {
-            // Only once it's open: the startup error's window exits with 1 when closed, where this would quit with 0.
-            Ok(_) => cx
-                .on_window_closed(|cx, _window| {
-                    if cx.windows().is_empty() {
-                        cx.quit();
-                    }
-                })
-                .detach(),
-            Err(e) => {
-                let error = e.context("couldn't open the board's window");
-                startup::report(&error);
-                startup::show(startup::message(&error), cx);
+    launch(|app, launched| {
+        app.run(move |cx: &mut GpuiApp| {
+            launched.store(true, Relaxed);
+            load_fonts(cx);
+            let opened = cx.open_window(window_options(size(px(1400.), px(860.)), cx), |window, cx| {
+                window.set_window_title(&board.title());
+                cx.new(|cx| BrainView::new(board, window, cx))
+            });
+            match opened {
+                // Only once it's open: the startup error's window exits with 1 when closed, where this would quit with 0.
+                Ok(_) => cx
+                    .on_window_closed(|cx, _window| {
+                        if cx.windows().is_empty() {
+                            cx.quit();
+                        }
+                    })
+                    .detach(),
+                Err(e) => {
+                    let error = e.context("couldn't open the board's window");
+                    startup::report(&error);
+                    startup::show(startup::message(&error), cx);
+                }
             }
-        }
-        cx.activate(true);
+            cx.activate(true);
+        });
     });
 }
 

@@ -36,7 +36,9 @@ fn local_x(n: u16) -> Vec<Socket> {
 
 #[test]
 fn without_a_display_the_app_says_to_run_it_from_the_desktop() {
-    let (error, tried) = check("Headless", &[], &[]);
+    // What GPUI says itself with no display, so its renaming that (Zed 1.29 made it lowercase) fails here, not as a
+    // hung app.
+    let (error, tried) = check(gpui::GraphicalEnvironment::default().guess_compositor(), &[], &[]);
     let error = error.expect("GPUI would run headless, its loop never ending");
     assert!(error.contains("no WAYLAND_DISPLAY or DISPLAY") && error.contains("run kanbrain from the desktop session"));
     assert_eq!(tried, Vec::new());

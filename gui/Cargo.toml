@@ -21,11 +21,11 @@ anyhow.workspace = true
 # Where the app remembers the details' width between sessions (`remembered`), as kanbrain-core finds the central brain.
 dirs.workspace = true
 jiff.workspace = true
-# GPUI from Zed 1.23.2: the crates.io release (0.2.2) can't draw on NVIDIA + Wayland
+# GPUI from Zed 1.29.2: the crates.io release (0.2.2) can't draw on NVIDIA + Wayland
 # (its Vulkan surface stays "out of date" and the window never updates). Newer GPUI isn't on crates.io.
 # The `[patch]` entries Zed builds it with are in the workspace Cargo.toml.
-gpui = { git = "https://github.com/zed-industries/zed", tag = "v1.23.2", version = "0.2.2" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", tag = "v1.23.2", features = ["wayland", "x11"] }
+gpui = { git = "https://github.com/zed-industries/zed", tag = "v1.29.2", version = "0.2.2" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", tag = "v1.29.2", features = ["wayland", "x11"] }
 pulldown-cmark = { version = "0.13", default-features = false }
 # The editor's three-way merge of a text `kb` changed while it was open: `TextMerge` gives each region (changed on one
 # side, both, or in conflict) as data, where diffy's merge only writes conflict markers into the text.
@@ -40,7 +40,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 winresource = { version = "0.1.31", default-features = false }
 
 [dev-dependencies]
-gpui = { git = "https://github.com/zed-industries/zed", tag = "v1.23.2", version = "0.2.2", features = ["test-support"] }
+gpui = { git = "https://github.com/zed-industries/zed", tag = "v1.29.2", version = "0.2.2", features = ["test-support"] }
 tempfile.workspace = true
 
 [lints]
