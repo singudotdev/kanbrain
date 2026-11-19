@@ -48,10 +48,63 @@ fn fmt_in(at: Timestamp, tz: TimeZone) -> String {
 /// Accepts RFC 3339 plus the hand-typing friendly local formats above.
 pub fn parse_ts(s: &str) -> Option<Timestamp> {
     let s = s.trim();
-    if let Ok(at) = s.parse::<Timestamp>() {
+    if let Some(at) = rfc3339(s) {
         return Some(at);
     }
+    // jiff's `%Y` takes whitespace between a year's sign and its digits (`parse_number` skips it), which chrono's
+    // didn't: `+ 2026-…` is no time, as before.
+    let sign_apart = s.strip_prefix(['+', '-']).is_some_and(|rest| rest.starts_with(char::is_whitespace));
+    if sign_apart {
+        return None;
+    }
     HAND_TYPED_FORMATS.iter().find_map(|format| DateTime::strptime(format, s).ok()).and_then(local_moment)
+}
+
+/// RFC 3339 as chrono 0.4.45's `parse_from_rfc3339`, which every kanbrain before 0.7.0 read files with, took it
+/// (`format/parse.rs`, `parse_rfc3339`): `YYYY-MM-DD`, `T`, `t` or a space, `hh:mm:ss`, a fraction of any length (to
+/// the nanosecond), then `Z`, `z` or `±hh:mm` up to 23:59, its minus sign `-` or `−` (U+2212). jiff reads more of ISO
+/// 8601 (no seconds, `+0200`, a time zone's name, …), which a `### ` line or a history item older versions kept as
+/// text would read as a time: what's outside this goes to the hand-typed formats, as it did.
+fn rfc3339(s: &str) -> Option<Timestamp> {
+    let (date_time, rest) = (s.get(..19)?, s.get(19..)?);
+    // By bytes: a range of the `str` could cut a character in two (`−` where a digit or `-` should be) and panic.
+    let shape = date_time.bytes().zip(b"dddd-dd-ddTdd:dd:dd").all(|(b, of)| match of {
+        b'd' => b.is_ascii_digit(),
+        b'T' => matches!(b, b'T' | b't' | b' '),
+        _ => b == *of,
+    });
+    if !shape {
+        return None;
+    }
+    let (fraction, offset) = match rest.strip_prefix('.') {
+        Some(rest) => {
+            let end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+            if end == 0 {
+                return None;
+            }
+            (&rest[..end.min(9)], &rest[end..])
+        }
+        None => ("", rest),
+    };
+    let offset = match offset {
+        "Z" | "z" => "Z".to_string(),
+        _ => {
+            let (sign, hm) = if let Some(hm) = offset.strip_prefix('+') {
+                ('+', hm)
+            } else {
+                ('-', offset.strip_prefix('-').or_else(|| offset.strip_prefix('\u{2212}'))?)
+            };
+            let (h, m) = hm.split_once(':')?;
+            // What isn't digits jiff refuses.
+            let in_range = h.len() == 2 && m.len() == 2 && h <= "23" && m <= "59";
+            if !in_range {
+                return None;
+            }
+            format!("{sign}{h}:{m}")
+        }
+    };
+    let fraction = if fraction.is_empty() { String::new() } else { format!(".{fraction}") };
+    format!("{date_time}{fraction}{offset}").parse().ok()
 }
 
 /// How long ago, rounded down: `<1m`, `5m`, `3h`, `2d`, `6w`.
