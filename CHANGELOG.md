@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-19
+
 ### Added
 
 - The kanban app's details, beside the board or list, are made wider or narrower by dragging their left edge, never
@@ -28,6 +30,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - A time typed by hand in a task file within the hour the clocks skip in spring reads, as many minutes past the
   change: the file didn't read.
+- A time before standard time zones (in Madrid, before 1901) is written to the second it is: its offset, which had
+  seconds, is written to the nearest minute with the time to match, where the time was kept and up to 30 seconds off.
 
 ### Security
 
@@ -754,7 +758,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.8...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/singudotdev/kanbrain/compare/v0.6.8...v0.7.0
 [0.6.8]: https://github.com/singudotdev/kanbrain/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/singudotdev/kanbrain/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/singudotdev/kanbrain/compare/v0.6.5...v0.6.6
