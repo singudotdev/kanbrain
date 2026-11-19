@@ -124,7 +124,7 @@ pub fn blocks(resolve: impl Fn(Option<&str>, u32) -> Option<Key>, text: &str) ->
         b.event(event);
     }
     b.flush();
-    b.open.into_iter().next().map(|(_, blocks)| blocks).unwrap_or_default()
+    b.open.into_iter().next().map_or_default(|(_, blocks)| blocks)
 }
 
 impl Builder<'_> {

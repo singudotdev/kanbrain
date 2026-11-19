@@ -1,6 +1,6 @@
 use super::*;
 use crate::model::{one_line, sanitize_comment, sanitize_description};
-use chrono::Duration;
+use jiff::SignedDuration;
 
 #[test]
 fn round_trip() {
@@ -10,15 +10,15 @@ fn round_trip() {
     task.comments = vec![
         Comment::new(t0, "first\n\nwith a blank line".into(), Author::Human),
         Comment {
-            edited: Some(t0 + Duration::minutes(9)),
-            ..Comment::new(t0 + Duration::minutes(5), "second".into(), Author::Human)
+            edited: Some(t0 + SignedDuration::from_mins(9)),
+            ..Comment::new(t0 + SignedDuration::from_mins(5), "second".into(), Author::Human)
         },
-        Comment::new(t0 + Duration::minutes(7), String::new(), Author::Human),
+        Comment::new(t0 + SignedDuration::from_mins(7), String::new(), Author::Human),
     ];
     task.tags = vec!["prod".into(), "support".into()];
-    task.set_status(Status::Doing, t0 + Duration::minutes(10), Author::Human);
-    task.start_session(t0 + Duration::minutes(10));
-    task.set_status(Status::Done, t0 + Duration::hours(2), Author::Human);
+    task.set_status(Status::Doing, t0 + SignedDuration::from_mins(10), Author::Human);
+    task.start_session(t0 + SignedDuration::from_mins(10));
+    task.set_status(Status::Done, t0 + SignedDuration::from_hours(2), Author::Human);
 
     let back = Task::from_markdown(&task.to_markdown()).unwrap();
     assert_eq!(back.id, 7);
@@ -30,7 +30,7 @@ fn round_trip() {
     assert_eq!(back.tags, task.tags);
     assert_eq!(back.history, task.history);
     assert_eq!(back.sessions, task.sessions);
-    assert_eq!(back.total(t0), Duration::minutes(110));
+    assert_eq!(back.total(t0), SignedDuration::from_mins(110));
 }
 
 #[test]
@@ -183,11 +183,12 @@ fn authors_questions_and_decision_states_round_trip() {
 #[test]
 fn hand_written_headers_and_unknown_authors_still_read() {
     let md = "# x\n\n- id: 1\n- status: parked\n\n## Comments\n\n### 2026-09-24 10:00 (edited 2026-09-24 10:05)\n\n\
-              old form\n\n### Steps (draft)\n\nnot a header\n\n## History\n\n- 2026-09-24 11:00 todo -> parked (robot)\n";
+              old form\n\n### Steps (draft)\n\nnot a header\n\n### 2026-09-24T10:12Z\n\nnor this\n\n## History\n\n- 2026-09-24 11:00 todo -> parked (robot)\n";
     let task = Task::from_markdown(md).unwrap();
     assert_eq!(task.comments.len(), 1);
     assert_eq!(task.comments[0].edited, parse_ts("2026-09-24 10:05"));
     assert!(task.comments[0].body.contains("### Steps (draft)"));
+    assert!(task.comments[0].body.contains("### 2026-09-24T10:12Z"), "a time older versions didn't read either");
     assert_eq!(task.history[0].by, Author::Human, "an unknown name doesn't lose the file");
 }
 
@@ -248,8 +249,8 @@ impl Rng {
             .join(if self.below(2) == 0 { "\n" } else { "\n\n" })
     }
 
-    fn time(&mut self, base: DateTime<Local>) -> DateTime<Local> {
-        base + Duration::seconds(i64::try_from(self.below(400_000)).unwrap())
+    fn time(&mut self, base: Timestamp) -> Timestamp {
+        base + SignedDuration::from_secs(i64::try_from(self.below(400_000)).unwrap())
     }
 }
 
@@ -292,7 +293,7 @@ fn random_task(rng: &mut Rng, id: u32) -> Task {
             if to == task.status {
                 continue;
             }
-            at += Duration::minutes(1 + i64::try_from(rng.below(300)).unwrap());
+            at += SignedDuration::from_mins(1 + i64::try_from(rng.below(300)).unwrap());
             task.set_status(to, at, [Author::Human, Author::Agent][rng.below(2)]);
         }
     }
@@ -368,13 +369,13 @@ fn with_activity() -> Task {
             Author::Human,
             Changed::Title { from: "Fix it -> now (agent)".into(), to: "Fix login".into() },
         ),
-        Activity::new(t0 + Duration::minutes(1), Author::Agent, tags(&["ux", "-odd"], &["bug"])),
+        Activity::new(t0 + SignedDuration::from_mins(1), Author::Agent, tags(&["ux", "-odd"], &["bug"])),
         Activity::new(
-            t0 + Duration::minutes(2),
+            t0 + SignedDuration::from_mins(2),
             Author::Agent,
             Changed::Related { added: vec!["5".into(), "shop-api#3".into()], removed: vec!["9".into()] },
         ),
-        Activity::new(t0 + Duration::minutes(3), Author::Human, Changed::Description),
+        Activity::new(t0 + SignedDuration::from_mins(3), Author::Human, Changed::Description),
     ];
     task
 }
@@ -382,7 +383,7 @@ fn with_activity() -> Task {
 #[test]
 fn activity_is_written_after_the_comments_one_line_a_change() {
     let text = with_activity().to_markdown();
-    let at = |minutes| fmt_ts(parse_ts("2026-10-16 10:00").unwrap() + Duration::minutes(minutes));
+    let at = |minutes| fmt_ts(parse_ts("2026-10-16 10:00").unwrap() + SignedDuration::from_mins(minutes));
     let expected = format!(
         "## Comments\n\n## Activity\n\n\
          - {} title\n  - from: Fix it -> now (agent)\n  - to: Fix login\n\

@@ -3,10 +3,9 @@ use super::*;
 /// The commands each event's hooks run, in `path`'s settings.
 fn commands(path: &Path, event: &str) -> Vec<String> {
     let settings: Value = serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
-    settings["hooks"][event]
-        .as_array()
-        .map(|groups| groups.iter().map(|g| g["hooks"][0]["command"].as_str().unwrap().to_string()).collect())
-        .unwrap_or_default()
+    settings["hooks"][event].as_array().map_or_default(|groups| {
+        groups.iter().map(|g| g["hooks"][0]["command"].as_str().unwrap().to_string()).collect()
+    })
 }
 
 #[test]

@@ -7,7 +7,7 @@ use super::{
 use crate::text::editor::{LineInput, TextEditor};
 use crate::text::merge::{Merged, merge};
 use anyhow::Result;
-use chrono::{NaiveDate, NaiveTime};
+use jiff::civil::Date;
 use kanbrain_core::cli::update;
 use kanbrain_core::model::{Author, Comment, DecisionState, Kind, Status};
 use kanbrain_core::period::{Period, Unit};
@@ -28,13 +28,13 @@ impl Board {
         let name = self.entry_name(key);
         match self.brain_mut(key.src).set_status(key.id, status) {
             Ok(true) => {
-                let title = self.task(key).map(|t| t.title.clone()).unwrap_or_default();
+                let title = self.task(key).map_or_default(|t| t.title.clone());
                 self.notify(format!("{name} {title} → {}", status.as_str()));
             }
             Ok(false) => self.notify(format!("{name} is already {}", status.as_str())),
             // The refusal names the task already running (`#2 is in doing`), in the same brain.
             Err(e) => {
-                let at = self.source_label(key.src).map(|label| format!("{label} ")).unwrap_or_default();
+                let at = self.source_label(key.src).map_or_default(|label| format!("{label} "));
                 self.notify(format!("{at}{e:#}"));
             }
         }
@@ -65,8 +65,8 @@ impl Board {
     }
 
     /// Shows one day of the calendar, from a click on it in the month.
-    pub fn calendar_day(&mut self, date: NaiveDate) {
-        let midnight = date.and_time(NaiveTime::MIN);
+    pub fn calendar_day(&mut self, date: Date) {
+        let midnight = date.at(0, 0, 0, 0);
         self.calendar.period = Period::containing(Unit::Day, midnight);
         self.keep_selection();
     }
@@ -154,7 +154,7 @@ impl Board {
         let Some(text) = self.text_of(target) else { return };
         let (editor, base) = (TextEditor::new(text), text.to_string());
         let comments = match target {
-            Target::Comment(key, _) => self.task(key).map(|t| t.comments.clone()).unwrap_or_default(),
+            Target::Comment(key, _) => self.task(key).map_or_default(|t| t.comments.clone()),
             _ => Vec::new(),
         };
         let decision = match target {

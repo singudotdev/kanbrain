@@ -5,6 +5,39 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-19
+
+### Added
+
+- The kanban app's details, beside the board or list, are made wider or narrower by dragging their left edge, never
+  narrower than 320 px, nor so wide the board keeps less than 360; a double-click on the edge puts them back to 420
+  px. The width lasts as long as the app runs.
+
+### Changed
+
+- `kb` and kanbrain-core need Rust 1.100 or newer to build (`cargo install kanbrain`); they needed 1.88.
+- kanbrain-core 0.7.0 keeps times with jiff rather than chrono, which is unmaintained
+  ([RUSTSEC-2026-0543](https://rustsec.org/advisories/RUSTSEC-2026-0543)): its public API takes and gives
+  `jiff::Timestamp` for `DateTime<Local>`, `jiff::civil` dates and times for chrono's naive ones and
+  `jiff::SignedDuration` for `chrono::Duration` (see `docs/decisions/0014-times-with-jiff-not-chrono.md`). Files are
+  written and read as before.
+- Around a DST change, a time typed by hand in the hour the clocks repeat reads as the first of the two on every
+  platform (on Linux and macOS it read as the second), and a report of hours puts both in the row of the first.
+- A `TZ` that names no time zone shows times in UTC, where it fell back to the system's setting; on Windows, `TZ` is
+  now taken.
+
+### Fixed
+
+- A time typed by hand in a task file within the hour the clocks skip in spring reads, as many minutes past the
+  change: the file didn't read.
+- A time before standard time zones (in Madrid, before 1901) is written to the second it is: its offset, which had
+  seconds, is written to the nearest minute with the time to match, where the time was kept and up to 30 seconds off.
+
+### Security
+
+- rustix is 1.1.6, for [RUSTSEC-2026-0486](https://rustsec.org/advisories/RUSTSEC-2026-0486), and pulldown-cmark,
+  which renders the app's markdown, 0.13.6, for [RUSTSEC-2026-0433](https://rustsec.org/advisories/RUSTSEC-2026-0433).
+
 ## [0.6.8] - 2026-10-30
 
 ### Changed
@@ -725,7 +758,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.6.8...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/singudotdev/kanbrain/compare/v0.6.8...v0.7.0
 [0.6.8]: https://github.com/singudotdev/kanbrain/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/singudotdev/kanbrain/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/singudotdev/kanbrain/compare/v0.6.5...v0.6.6

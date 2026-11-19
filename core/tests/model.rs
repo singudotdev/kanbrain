@@ -1,22 +1,32 @@
 use super::*;
-use chrono::Duration;
+use jiff::SignedDuration;
 
 #[test]
 fn status_changes_are_recorded_once() {
     let t0 = parse_ts("2026-09-24 09:00").unwrap();
     let mut task = Task::new(1, "x".into(), t0);
     assert_eq!(task.status_since(), t0);
-    assert!(task.set_status(Status::Doing, t0 + Duration::hours(1), Author::Human));
-    assert!(!task.set_status(Status::Doing, t0 + Duration::hours(2), Author::Human), "already doing");
-    assert!(task.set_status(Status::Done, t0 + Duration::hours(3), Author::Human));
+    assert!(task.set_status(Status::Doing, t0 + SignedDuration::from_hours(1), Author::Human));
+    assert!(!task.set_status(Status::Doing, t0 + SignedDuration::from_hours(2), Author::Human), "already doing");
+    assert!(task.set_status(Status::Done, t0 + SignedDuration::from_hours(3), Author::Human));
     assert_eq!(
         task.history,
         [
-            StatusChange { at: t0 + Duration::hours(1), from: Status::Todo, to: Status::Doing, by: Author::Human },
-            StatusChange { at: t0 + Duration::hours(3), from: Status::Doing, to: Status::Done, by: Author::Human },
+            StatusChange {
+                at: t0 + SignedDuration::from_hours(1),
+                from: Status::Todo,
+                to: Status::Doing,
+                by: Author::Human
+            },
+            StatusChange {
+                at: t0 + SignedDuration::from_hours(3),
+                from: Status::Doing,
+                to: Status::Done,
+                by: Author::Human
+            },
         ]
     );
-    assert_eq!(task.status_since(), t0 + Duration::hours(3));
+    assert_eq!(task.status_since(), t0 + SignedDuration::from_hours(3));
 }
 
 #[test]
@@ -25,17 +35,17 @@ fn leaving_doing_closes_the_session() {
     let mut task = Task::new(1, "x".into(), t0);
     task.set_status(Status::Doing, t0, Author::Human);
     task.start_session(t0);
-    assert_eq!(task.running_for(t0 + Duration::minutes(5)), Some(Duration::minutes(5)));
-    task.set_status(Status::Parked, t0 + Duration::minutes(30), Author::Human);
-    assert_eq!(task.sessions[0].end, Some(t0 + Duration::minutes(30)));
-    assert_eq!(task.total(t0 + Duration::hours(2)), Duration::minutes(30));
+    assert_eq!(task.running_for(t0 + SignedDuration::from_mins(5)), Some(SignedDuration::from_mins(5)));
+    task.set_status(Status::Parked, t0 + SignedDuration::from_mins(30), Author::Human);
+    assert_eq!(task.sessions[0].end, Some(t0 + SignedDuration::from_mins(30)));
+    assert_eq!(task.total(t0 + SignedDuration::from_hours(2)), SignedDuration::from_mins(30));
 }
 
 #[test]
 fn time_between_clips_sessions_to_the_range() {
     let session = Session { start: parse_ts("2026-09-23 23:00").unwrap(), end: parse_ts("2026-09-24 01:30") };
     let (from, to) = (parse_ts("2026-09-24 00:00").unwrap(), parse_ts("2026-09-25 00:00").unwrap());
-    assert_eq!(session.overlap(from, to, now()), Duration::minutes(90));
+    assert_eq!(session.overlap(from, to, now()), SignedDuration::from_mins(90));
 }
 
 #[test]
@@ -56,7 +66,7 @@ fn search() {
 #[test]
 fn a_question_waits_for_a_person_until_the_task_is_picked_up() {
     let t0 = now();
-    let at = |minutes| t0 + Duration::minutes(minutes);
+    let at = |minutes| t0 + SignedDuration::from_mins(minutes);
     let mut task = Task::new(1, "Pick a cache".into(), t0);
     task.set_status(Status::Doing, at(1), Author::Agent);
     task.comments.push(Comment { question: true, ..Comment::new(at(2), "Redis?".into(), Author::Agent) });
@@ -91,7 +101,7 @@ fn edits_are_logged_with_who_made_them_and_only_when_they_change_something() {
     assert!(!task.set_description(String::new(), t0, Author::Agent));
     assert!(task.activity.is_empty(), "nothing changed");
 
-    let t1 = t0 + Duration::minutes(1);
+    let t1 = t0 + SignedDuration::from_mins(1);
     assert!(task.set_title("New".into(), t1, Author::Agent));
     assert!(task.set_tags(vec!["api".into(), "ux".into()], t1, Author::Human));
     assert!(task.set_description("text".into(), t1, Author::Agent));
@@ -139,7 +149,7 @@ fn a_change_takes_in_the_next_of_its_kind_by_its_author_in_its_second() {
 
     task.set_description("x".into(), t0, Author::Human);
     task.set_description("y".into(), t0, Author::Agent);
-    task.set_description("z".into(), t0 + Duration::seconds(1), Author::Agent);
+    task.set_description("z".into(), t0 + SignedDuration::from_secs(1), Author::Agent);
     assert_eq!(task.activity.len(), 6, "another author, or another second, is another change: {:?}", task.activity);
 }
 
@@ -148,10 +158,10 @@ fn a_change_logged_with_an_earlier_time_goes_in_its_place() {
     // Another computer's clock, behind this one's.
     let t0 = parse_ts("2026-10-16 10:00").unwrap();
     let mut task = Task::new(1, "A".into(), t0);
-    task.set_description("x".into(), t0 + Duration::minutes(5), Author::Human);
+    task.set_description("x".into(), t0 + SignedDuration::from_mins(5), Author::Human);
     task.set_title("B".into(), t0, Author::Agent);
     let times: Vec<_> = task.activity.iter().map(|a| a.at).collect();
-    assert_eq!(times, [t0, t0 + Duration::minutes(5)]);
+    assert_eq!(times, [t0, t0 + SignedDuration::from_mins(5)]);
 }
 
 #[test]
@@ -181,7 +191,7 @@ fn a_change_says_what_it_did() {
 fn the_thread_has_comments_and_changes_by_time_a_change_first_in_its_second() {
     let t0 = parse_ts("2026-10-16 10:00").unwrap();
     let mut task = Task::new(1, "A".into(), t0);
-    let at = |minutes| t0 + Duration::minutes(minutes);
+    let at = |minutes| t0 + SignedDuration::from_mins(minutes);
     task.comments =
         vec![Comment::new(at(1), "one".into(), Author::Human), Comment::new(at(3), "two".into(), Author::Agent)];
     task.set_title("B".into(), at(0), Author::Human);

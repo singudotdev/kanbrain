@@ -159,7 +159,8 @@ When typing times by hand, all of these are accepted:
 2026-09-24T10:12
 ```
 
-Times without an offset are read as your local time. On the next save they're rewritten in the full format.
+Times without an offset are read as your local time: in the hour a DST change repeats, the first of the two; in the
+hour it skips, as many minutes past the change. On the next save they're rewritten in the full format.
 
 ### Fixing mistakes
 

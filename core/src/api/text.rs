@@ -6,7 +6,7 @@
 use super::ApiError;
 use crate::brain::Brain;
 use crate::model::{Author, Comment, DecisionState, Task, ThreadItem, counted, fmt_age, fmt_dur, infallible, now};
-use chrono::{DateTime, Local};
+use jiff::Timestamp;
 use std::fmt::Write;
 
 /// Status changes `show` lists, latest last; the rest are counted.
@@ -65,8 +65,8 @@ fn comment_heading(comment: &Comment) -> String {
 }
 
 /// A time as `2026-10-08 10:40`: minutes are precise enough to act on, and the files keep the rest.
-fn when(at: DateTime<Local>) -> String {
-    at.format("%Y-%m-%d %H:%M").to_string()
+fn when(at: Timestamp) -> String {
+    crate::model::local(at).strftime("%Y-%m-%d %H:%M").to_string()
 }
 
 impl Brain {
@@ -104,7 +104,7 @@ impl Brain {
             facts.push(format!("{} for {}", task.status.as_str(), fmt_age(now - task.status_since())));
         }
         if !task.sessions.is_empty() {
-            let running = task.running_for(now).map(|r| format!(", running for {}", fmt_dur(r))).unwrap_or_default();
+            let running = task.running_for(now).map_or_default(|r| format!(", running for {}", fmt_dur(r)));
             let sessions = counted(task.sessions.len(), "session", "sessions");
             facts.push(format!("tracked {} in {sessions}{running}", fmt_dur(task.total(now))));
         }

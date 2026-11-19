@@ -583,7 +583,7 @@ fn forget_gone_temp_brains(lock: &Path) {
 }
 
 /// How old a write's temporary file has to be to count as a crash's leftover: no write takes that long.
-const CUT_WRITE_AGE: Duration = Duration::from_secs(60 * 60);
+const CUT_WRITE_AGE: Duration = Duration::from_hours(1);
 
 /// Deletes the temporary files of writes a crash cut short (see [`write_file`]) in the brain in `dir` and its
 /// folders, best effort. Each has a name of its own, so no later write replaces it. Run once its lock is taken,

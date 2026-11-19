@@ -45,7 +45,7 @@ curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/inst
 A specific release:
 
 ```sh
-curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh -s -- --version v0.6.8
+curl -fsSL https://github.com/singudotdev/kanbrain/releases/latest/download/install.sh | sh -s -- --version v0.7.0
 ```
 
 Another folder in your home (the default is `~/.local/bin`):
@@ -83,7 +83,7 @@ $env:KANBRAIN_APP = "both"; irm https://github.com/singudotdev/kanbrain/releases
 A specific release:
 
 ```powershell
-$env:KANBRAIN_VERSION = "v0.6.8"; irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
+$env:KANBRAIN_VERSION = "v0.7.0"; irm https://github.com/singudotdev/kanbrain/releases/latest/download/install.ps1 | iex
 ```
 
 Another folder in your profile:
@@ -231,7 +231,7 @@ Your data then stays in the [data folder](#where-your-data-lives); delete it by 
 
 ### Requirements
 
-- **Rust 1.88 or newer** for the command line; the kanban app needs a recent stable Rust. Install it with [rustup](https://rustup.rs):
+- **Rust 1.100 or newer** for the command line; the kanban app needs a recent stable Rust. Install it with [rustup](https://rustup.rs):
   - Linux / macOS: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
   - Arch Linux: `sudo pacman -S rustup && rustup default stable`
   - Windows: download `rustup-init.exe` from [rustup.rs](https://rustup.rs)

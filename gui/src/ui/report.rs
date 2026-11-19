@@ -6,9 +6,10 @@ use super::widgets::{Kind, card, dim, section, segment, segmented, tag_chip};
 use super::{BrainView, action};
 use crate::state::Board;
 use crate::text::event::{KeyCode, KeyEvent, KeyModifiers};
-use chrono::Duration;
 use gpui::{ClickEvent, Context, Div, FontWeight, ScrollHandle, div, prelude::*, px, rgb};
+use jiff::SignedDuration;
 use kanbrain_core::brain::{Group, Report, ReportRow, ReportView};
+use kanbrain_core::model::local;
 use kanbrain_core::model::{counted, fmt_dur, now};
 use kanbrain_core::period::Unit;
 
@@ -109,7 +110,7 @@ fn timeline(board: &Board, report: &Report) -> Div {
         if let Some(gap) = gap {
             lines = lines.child(dim(format!("untracked {}", fmt_dur(gap))).italic().pl_4());
         }
-        let end = slot.end.map_or_else(|| "now".to_string(), |e| e.format("%H:%M").to_string());
+        let end = slot.end.map_or_else(|| "now".to_string(), |e| local(e).strftime("%H:%M").to_string());
         lines = lines.child(
             div()
                 .flex()
@@ -120,7 +121,7 @@ fn timeline(board: &Board, report: &Report) -> Div {
                         .w(px(100.))
                         .flex_none()
                         .text_color(rgb(DIM))
-                        .child(format!("{}–{end}", slot.start.format("%H:%M"))),
+                        .child(format!("{}–{end}", local(slot.start).strftime("%H:%M"))),
                 )
                 .child(div().w(px(64.)).flex_none().text_right().child(fmt_dur(slot.end.unwrap_or(now) - slot.start)))
                 .child(div().min_w_0().truncate().child(slot.label()))
@@ -156,14 +157,14 @@ fn cell(text: impl Into<gpui::SharedString>) -> Div {
 }
 
 /// A duration cell; empty ones show a dim dot so the table is easy to scan.
-fn duration_cell(d: Duration) -> Div {
+fn duration_cell(d: SignedDuration) -> Div {
     if d.is_zero() { cell("·").text_color(rgb(DIM)) } else { cell(fmt_dur(d)) }
 }
 
 /// `week` → `Week`.
 pub(super) fn capitalized(word: &str) -> String {
     let mut chars = word.chars();
-    chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default()
+    chars.next().map_or_default(|c| c.to_uppercase().chain(chars).collect())
 }
 
 /// The key event of a plain character key.

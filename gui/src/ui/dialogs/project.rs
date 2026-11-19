@@ -92,7 +92,7 @@ fn repo_block(
     repo: usize,
     src: usize,
     several: bool,
-    now: chrono::DateTime<chrono::Local>,
+    now: jiff::Timestamp,
     cx: &mut Context<BrainView>,
 ) -> Div {
     let brain = board.brain(repo);

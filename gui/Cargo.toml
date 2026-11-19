@@ -18,7 +18,7 @@ path = "src/main.rs"
 [dependencies]
 kanbrain-core.workspace = true
 anyhow.workspace = true
-chrono.workspace = true
+jiff.workspace = true
 # GPUI from Zed 1.23.2: the crates.io release (0.2.2) can't draw on NVIDIA + Wayland
 # (its Vulkan surface stays "out of date" and the window never updates). Newer GPUI isn't on crates.io.
 # The `[patch]` entries Zed builds it with are in the workspace Cargo.toml.

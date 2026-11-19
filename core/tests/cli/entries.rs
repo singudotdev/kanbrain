@@ -273,7 +273,7 @@ fn questions_proposals_and_verdicts() {
 
 #[test]
 fn wait_ends_on_a_persons_answer_or_verdict() {
-    let eight = Some(Duration::from_secs(8 * 60));
+    let eight = Some(Duration::from_mins(8));
     assert_eq!(parse(&["wait", "#6"]).unwrap().command, EntryCommand::Wait(6, eight));
     let two = Some(Duration::from_secs(120));
     assert_eq!(parse(&["wait", "6", "--timeout", "2"]).unwrap().command, EntryCommand::Wait(6, two));
