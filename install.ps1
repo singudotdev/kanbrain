@@ -169,7 +169,7 @@ function Install-Kanbrain {
                 })
                 $entries = @($owned | Where-Object { $_.DirectoryName -eq $full -and $_.Name -match '^\d{4,}-.*\.md$' }).Count
                 Say "data folder: $data"
-                Say "this permanently deletes $entries entry file(s), tags.md, the project registry and cards, exported reports, and the backups taken before migrations"
+                Say "this permanently deletes $entries entry file(s), tags.md, the project registry and cards, exported reports, the backups taken before migrations, and what the app remembers"
                 Say "projects' own .brain folders are kept"
                 if ($env:KANBRAIN_YES -ne '1') {
                     $answer = ''
@@ -221,6 +221,17 @@ function Install-Kanbrain {
             }
             if (-not (Get-ChildItem -LiteralPath $cache -Force)) { Remove-Item -LiteralPath $cache -Force; Say "removed $cache" }
             else { Say "deleted kanbrain's locks and backups; kept $cache because it contains other files" }
+        }
+        # The kanban app's folder of what it remembers for whoever runs it (the details' width), as the app finds it:
+        # only what it writes there goes.
+        $remembered = Join-Path $env:LOCALAPPDATA 'kanbrain-app'
+        if ($purge -and (Test-Path -LiteralPath $remembered -PathType Container)) {
+            foreach ($file in 'drawer-width', '.drawer-width.tmp') {
+                $path = Join-Path $remembered $file
+                if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+            }
+            if (-not (Get-ChildItem -LiteralPath $remembered -Force)) { Remove-Item -LiteralPath $remembered -Force; Say "removed $remembered" }
+            else { Say "deleted what the app remembered; kept $remembered because it contains other files" }
         }
         return
     }

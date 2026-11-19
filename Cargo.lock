@@ -2930,6 +2930,7 @@ name = "kanbrain-app"
 version = "0.7.0"
 dependencies = [
  "anyhow",
+ "dirs 7.0.0",
  "gpui",
  "gpui_platform",
  "image",

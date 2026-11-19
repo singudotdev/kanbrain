@@ -2889,6 +2889,101 @@ fn a_drawer_closed_while_its_edge_is_dragged_ends_the_drag(cx: &mut gpui::TestAp
     assert_eq!(width, px(420.), "the drawer doesn't follow it");
 }
 
+#[gpui::test]
+fn the_drawers_width_is_remembered_for_the_next_time_the_app_opens(cx: &mut gpui::TestAppContext) {
+    let state = tempfile::tempdir().unwrap();
+    crate::remembered::remember_in(state.path());
+    let (_view, cx, dir) = window(cx, &["a"]);
+    cx.simulate_resize(gpui::size(px(1200.), px(800.)));
+    let card = cx.debug_bounds("card 0/1").expect("the card is drawn").center();
+    double_click(cx, card);
+    next_frames(cx);
+    let remembered = || std::fs::read_to_string(state.path().join("drawer-width")).ok();
+    let at = cx.debug_bounds("drawer edge").expect("its edge is drawn").center();
+    let none = gpui::Modifiers::none();
+    cx.simulate_mouse_down(at, MouseButton::Left, none);
+    cx.simulate_mouse_move(at - gpui::point(px(100.), px(0.)), MouseButton::Left, none);
+    cx.run_until_parked();
+    assert_eq!(remembered(), None, "not while it's dragged");
+    cx.simulate_mouse_up(at - gpui::point(px(100.), px(0.)), MouseButton::Left, none);
+    cx.run_until_parked();
+    assert_eq!(remembered().as_deref(), Some("520"), "once let go");
+    // Opened again, as the next session: as wide as it was left.
+    let board = Board::open(dir.path(), None).unwrap();
+    let (_again, cx) = cx.add_window_view(|window, cx| BrainView::new(board, window, cx));
+    cx.simulate_resize(gpui::size(px(1200.), px(800.)));
+    let card = cx.debug_bounds("card 0/1").expect("the card is drawn").center();
+    double_click(cx, card);
+    next_frames(cx);
+    let width =
+        |cx: &mut gpui::VisualTestContext| cx.debug_bounds("drawer panel").expect("the drawer is open").size.width;
+    assert!((width(cx) - px(520.)).abs() < px(1.), "as wide as it was left: {:?}", width(cx));
+    // A drag let go where the window can't see it, or cut short by closing the drawer, is remembered as well.
+    let at = cx.debug_bounds("drawer edge").expect("its edge is drawn").center();
+    cx.simulate_mouse_down(at, MouseButton::Left, none);
+    cx.simulate_mouse_move(at - gpui::point(px(50.), px(0.)), MouseButton::Left, none);
+    cx.simulate_mouse_move(at, None, none);
+    cx.run_until_parked();
+    assert_eq!(remembered().as_deref(), Some("570"), "let go outside");
+    let at = cx.debug_bounds("drawer edge").expect("its edge is drawn").center();
+    cx.simulate_mouse_down(at, MouseButton::Left, none);
+    cx.simulate_mouse_move(at + gpui::point(px(30.), px(0.)), MouseButton::Left, none);
+    cx.simulate_keystrokes("escape");
+    next_frames(cx);
+    assert_eq!(remembered().as_deref(), Some("540"), "closed while dragged");
+    cx.simulate_keystrokes("enter");
+    next_frames(cx);
+    let at = cx.debug_bounds("drawer edge").expect("its edge is drawn").center();
+    double_click(cx, at);
+    next_frames(cx);
+    assert_eq!(remembered().as_deref(), Some("420"), "put back by a double-click");
+}
+
+/// Background tasks run in a random order in tests, as on a pool of threads they may.
+#[gpui::test(iterations = 20)]
+fn the_drawers_width_last_left_is_remembered_however_its_writes_run(cx: &mut gpui::TestAppContext) {
+    let state = tempfile::tempdir().unwrap();
+    crate::remembered::remember_in(state.path());
+    let (view, cx, _dir) = window(cx, &["a"]);
+    // Dragged, then put back before the first write ran.
+    view.update(cx, |view, cx| {
+        for width in [520., 600., 420.] {
+            view.drawer_width = px(width);
+            view.remember_drawer_width(cx);
+        }
+    });
+    cx.run_until_parked();
+    let remembered = std::fs::read_to_string(state.path().join("drawer-width")).ok();
+    assert_eq!(remembered.as_deref(), Some("420"), "the last width, written last");
+    view.read_with(cx, |view, _| assert_eq!(view.board.message(), None, "no write failed"));
+}
+
+#[gpui::test]
+fn a_width_that_couldnt_be_remembered_says_so_and_is_written_next_time(cx: &mut gpui::TestAppContext) {
+    let state = tempfile::tempdir().unwrap();
+    // A file where the folder's parent should be: no folder can be made there.
+    let blocked = state.path().join("state");
+    std::fs::write(&blocked, "").unwrap();
+    crate::remembered::remember_in(&blocked.join("kanbrain-app"));
+    let (view, cx, _dir) = window(cx, &["a"]);
+    let remember = |view: &gpui::Entity<BrainView>, cx: &mut gpui::VisualTestContext| {
+        view.update(cx, |view, cx| {
+            view.drawer_width = px(520.);
+            view.remember_drawer_width(cx);
+        });
+        cx.run_until_parked();
+    };
+    remember(&view, cx);
+    view.read_with(cx, |view, _| {
+        let said = view.board.message().unwrap_or_default();
+        assert!(said.starts_with("Couldn't remember the details' width"), "{said:?}");
+    });
+    std::fs::remove_file(&blocked).unwrap();
+    remember(&view, cx);
+    let remembered = std::fs::read_to_string(blocked.join("kanbrain-app/drawer-width")).ok();
+    assert_eq!(remembered.as_deref(), Some("520"), "the same width, not taken as remembered");
+}
+
 #[test]
 fn a_word_named_on_a_button_is_capitalized() {
     assert_eq!(report::capitalized("week"), "Week");

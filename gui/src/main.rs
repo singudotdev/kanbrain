@@ -7,6 +7,7 @@
 // board is shown in a window (`ui::startup`).
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+mod remembered;
 mod state;
 mod text;
 mod ui;

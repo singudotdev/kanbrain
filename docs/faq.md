@@ -116,8 +116,8 @@ No, on purpose. Each user runs the installer themselves and gets their own copy 
 
 ### How do I uninstall, or remove all my data?
 
-`--uninstall` removes only the program. `--purge` also deletes the central brain's data and kanbrain's cache (write
-locks, the backups taken before migrations), after asking; projects' `.brain/` folders are kept. It never deletes files that kanbrain didn't create.
+`--uninstall` removes only the program. `--purge` also deletes the central brain's data, kanbrain's cache (write
+locks, the backups taken before migrations) and what the kanban app remembers (the details' width), after asking; projects' `.brain/` folders are kept. It never deletes files that kanbrain didn't create.
 See [Uninstalling](getting-started.md#uninstalling).
 
 ### Does kanbrain connect to the internet?

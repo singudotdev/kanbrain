@@ -127,7 +127,7 @@ aren't text to select: dragging them moves them, and their title and tags are se
 | **Tags ▾**, then tags in the list | add or take out each as `#tag` in the search box; type in its box to filter, click outside to close |
 | click an interaction in the calendar | show its entry's details |
 | **Park & quit**, at the end of the projects row while a task of yours runs | park your running tasks and quit, as `Q` |
-| drag the details' left edge | make them wider or narrower: never narrower than 320 px, nor so wide the board keeps less than 360 (in a window too narrow for both, the details keep their 320); for as long as the app runs |
+| drag the details' left edge | make them wider or narrower: never narrower than 320 px, nor so wide the board keeps less than 360 (in a window too narrow for both, the details keep their 320); remembered for the next time the app opens |
 | double-click the details' left edge | put them back to 420 px |
 | click an entry under "Related" | go to it |
 | click a link in a description or comment | open it in the browser |
