@@ -9,6 +9,8 @@ test_workspace = true
 # tests lay out hundreds of cards a frame: they fail, in over 300 s on the CI's two cores.
 minimum_test_timeout = 600
 exclude_re = [
+    # The folder the app remembers in: compiled out of every test, which would otherwise write the user's own.
+    'gui/src/remembered\.rs:.*replace folder -> Option<PathBuf>',
     # Starts the installer and the app's processes: run by the installers' end-to-end checks, not by tests.
     'gui/src/update\.rs:.*replace (install|install_after_exit|install_now) -> Result',
     # Starts that install in the background, and closes the app once it's done: no test runs the installer.

@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- The kanban app remembers the details' width for the next time it opens, for each person on each computer: in
+  `~/.local/state/kanbrain-app` (`$XDG_STATE_HOME/kanbrain-app` if set) on Linux,
+  `~/Library/Application Support/kanbrain-app` on macOS and `AppData\Local\kanbrain-app` on Windows, never in a
+  brain. The installers' purge deletes it too.
+
 ## [0.7.0] - 2026-11-19
 
 ### Added

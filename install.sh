@@ -11,9 +11,9 @@
 #   --dir PATH         install directory inside your home (default: ~/.local/bin)
 #   --uninstall        remove the app(s) (your tasks are kept)
 #   --purge            remove the app(s) AND your central brain's data: entries, tags.md, the project registry
-#                      and cards, exported reports, and kanbrain's cache: write locks, backups taken before
-#                      migrations (asks for confirmation; add --yes to skip it). Projects' own .brain/ folders are
-#                      kept.
+#                      and cards, exported reports, kanbrain's cache: write locks, backups taken before
+#                      migrations, and what the kanban app remembers (the details' width) (asks for confirmation;
+#                      add --yes to skip it). Projects' own .brain/ folders are kept.
 #
 # kanbrain is installed and used per user: this script refuses to run as root/sudo and only
 # installs inside $HOME. (If root is your only user, e.g. in a container: KANBRAIN_ALLOW_ROOT=1.)
@@ -136,6 +136,19 @@ data_dir() {
     fi
 }
 
+# The kanban app's folder of what it remembers for whoever runs it (the details' width), as the app finds it.
+remembered_dir() {
+    if [ "$(uname -s)" = Darwin ]; then
+        printf '%s\n' "$HOME/Library/Application Support/kanbrain-app"
+    else
+        # Only an absolute one, as the app takes it (dirs' `state_dir`).
+        case "${XDG_STATE_HOME:-}" in
+            /*) printf '%s\n' "$XDG_STATE_HOME/kanbrain-app" ;;
+            *) printf '%s\n' "$HOME/.local/state/kanbrain-app" ;;
+        esac
+    fi
+}
+
 # kanbrain's folder in the user's cache, as `kb` finds it: each brain's write lock, and the copies taken before
 # migrating one, which hold its data.
 cache_dir() {
@@ -218,7 +231,7 @@ if [ "$UNINSTALL" = 1 ]; then
             # `grep -c` counts 0 with a failing status, which `set -e` would take for an error.
             entries=$(owned_files "$data" | grep -c '/[0-9][0-9][0-9][0-9][^/]*-[^/]*\.md$' || true)
             say "data folder: $data"
-            say "this permanently deletes $entries entry file(s), tags.md, the project registry and cards, exported reports, and the backups taken before migrations"
+            say "this permanently deletes $entries entry file(s), tags.md, the project registry and cards, exported reports, the backups taken before migrations, and what the app remembers"
             say "projects' own .brain/ folders are kept"
             # Not an error, as install.ps1 has it: the answer was no.
             if ! confirm "delete your kanbrain data?"; then
@@ -272,6 +285,16 @@ if [ "$UNINSTALL" = 1 ]; then
             say "removed $cache"
         else
             say "deleted kanbrain's locks and backups; kept $cache because it contains other files"
+        fi
+    fi
+    # Only what the app writes there.
+    remembered=$(remembered_dir)
+    if [ "$PURGE" = 1 ] && [ -d "$remembered" ]; then
+        rm -f -- "$remembered/drawer-width" "$remembered/.drawer-width.tmp"
+        if rmdir "$remembered" 2>/dev/null; then
+            say "removed $remembered"
+        else
+            say "deleted what the app remembered; kept $remembered because it contains other files"
         fi
     fi
     exit 0

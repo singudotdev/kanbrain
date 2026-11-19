@@ -25,6 +25,8 @@ cleanup() {
 trap cleanup EXIT
 
 export HOME="$work/home" KANBRAIN_DIR="$work/home/central"
+# What the app remembers goes under the sandboxed home, never the user's own.
+unset XDG_STATE_HOME
 unset "${agent_variables[@]}"
 mkdir -p "$KANBRAIN_DIR" "$out"
 # The app takes `kb`'s commands with arguments: the demo tasks, none running.

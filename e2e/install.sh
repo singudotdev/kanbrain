@@ -4,8 +4,8 @@
 #
 # - the download is checked against its checksum, and refused when that doesn't match;
 # - the installed `kb` runs, and `init --all` has brought a registered project's agent section up to date;
-# - `--uninstall` takes it out again; `--purge` deletes the central brain's files and kanbrain's locks and backups in
-#   the cache, keeping files it didn't create though named like its own, through a linked data folder, and refusing
+# - `--uninstall` takes it out again; `--purge` deletes the central brain's files, kanbrain's locks and backups in
+#   the cache and what the app remembered, keeping files it didn't create though named like its own, through a linked data folder, and refusing
 #   the home folder however it's written and a relative KANBRAIN_DIR;
 # - the kanban app gets its launcher with the logo: an application menu entry and icon on Linux, an app bundle on
 #   macOS. `kb` stands in for the app, which takes the same commands, so GPUI needn't be built.
@@ -70,8 +70,9 @@ done
 curl -fsS -o /dev/null "http://127.0.0.1:$port/$asset.sha256" || fail "the test server didn't start: $(cat "$work/server.log")"
 
 export HOME="$work/home" KANBRAIN_DIR="$work/home/central" SHELL=/bin/bash
-# The menu entry and icon then go under $HOME/.local/share, where the checks below look.
-unset XDG_DATA_HOME
+# The menu entry and icon then go under $HOME/.local/share, and what the app remembers under $HOME/.local/state,
+# where the checks below look, never the user's own.
+unset XDG_DATA_HOME XDG_STATE_HOME
 export KANBRAIN_BASE_URL="http://127.0.0.1:$port"
 mkdir -p "$HOME/code/demo"
 
@@ -149,11 +150,14 @@ case "$(uname -s)" in
     Darwin) [ ! -e "$HOME/Applications/kanbrain.app" ] || fail "uninstall left the app bundle" ;;
 esac
 
-# --purge deletes the central brain's data and kanbrain's locks and backups in the cache, and nothing else of either.
+# --purge deletes the central brain's data, kanbrain's locks and backups in the cache and what the app remembered,
+# and nothing else of any.
 case "$(uname -s)" in
-    Darwin) cache="$HOME/Library/Caches/kanbrain" ;;
-    *) cache="${XDG_CACHE_HOME:-$HOME/.cache}/kanbrain" ;;
+    Darwin) cache="$HOME/Library/Caches/kanbrain" remembered="$HOME/Library/Application Support/kanbrain-app" ;;
+    *) cache="${XDG_CACHE_HOME:-$HOME/.cache}/kanbrain" remembered="$HOME/.local/state/kanbrain-app" ;;
 esac
+mkdir -p "$remembered"
+printf '520' >"$remembered/drawer-width"
 mkdir -p "$cache/locks" "$cache/backups/0123456789abcdef/20261013T120000-format-1-to-2"
 : >"$cache/locks/0123456789abcdef.lock"
 [ -d "$KANBRAIN_DIR" ] || fail "the central brain wasn't there to purge"
@@ -191,6 +195,7 @@ fi
 [ -e "$data/0007-mine.md" ] || fail "a refused purge deleted something"
 sh "$repo/install.sh" --purge --yes >/dev/null || fail "purging failed"
 [ ! -e "$cache" ] || fail "purge left kanbrain's cache"
+[ ! -e "$remembered" ] || fail "purge left what the app remembered"
 for gone in 0007-mine.md projects.md tags.md .0001-left-by-a-crash.md.4242-0.tmp projects/demo.md \
     projects/.demo.md.4242-1.tmp reports/kanbrain-week.md; do
     [ ! -e "$data/$gone" ] || fail "purge kept kanbrain's $gone"
