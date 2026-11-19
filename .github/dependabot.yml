@@ -2,6 +2,8 @@ version: 2
 updates:
   - package-ecosystem: cargo
     directory: /
+    # Changes go to develop and reach main only through a tested release; PRs against main were closed unmerged.
+    target-branch: develop
     schedule:
       interval: weekly
     # One PR a week for compatible bumps instead of one per crate; breaking ones still come alone.
@@ -15,6 +17,7 @@ updates:
       - dependency-name: gpui_platform
   - package-ecosystem: github-actions
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
     groups:
