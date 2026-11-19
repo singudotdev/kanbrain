@@ -37,7 +37,7 @@ jobs:
       upgrade: ${{ steps.plan.outputs.upgrade }}
       app: ${{ steps.plan.outputs.app }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # The commit the change is measured from, however far back.
           fetch-depth: 0
@@ -47,7 +47,7 @@ jobs:
           BEFORE: ${{ github.event.before }}
         run: .github/plan.sh ci
       # This run's tree, for a later run of the same tree to find (.github/plan.sh).
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ci-tree-${{ steps.plan.outputs.tree }}
           path: .github/plan.sh
@@ -68,11 +68,11 @@ jobs:
     # Every job gets one: a hung test or e2e server would otherwise hold a runner for GitHub's default six hours.
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - if: runner.os == 'Linux'
         run: |
           # shellcheck disable=SC2086 # one package per word
@@ -96,15 +96,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # deny.toml: licenses an AGPL-3.0-only program may include, the allowed git sources, and the advisories
       # ignored with their reason. A new advisory fails the build until it's fixed or ignored there.
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: EmbarkStudios/cargo-deny-action@70f81531115945ba6eb6b941ec9d39d063438eb9 # v2
       # The third-party notices the release archives carry: they must keep generating, with every license accepted.
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
       # cargo-about resolves the whole dependency graph, GPUI's git repository included.
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
         with:
           tool: cargo-about@0.9.2
       - name: Third-party notices
@@ -123,9 +123,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - if: runner.os == 'Linux'
         run: |
           # shellcheck disable=SC2086 # one package per word
@@ -143,9 +143,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       # Static checks first: shellcheck is on Ubuntu's runners.
       - if: runner.os == 'Linux'
         run: shellcheck -x install.sh e2e/lib.sh e2e/install.sh e2e/agent.sh e2e/upgrade.sh e2e/update.sh e2e/smoke-app.sh gui/icons/make.sh .github/plan.sh
@@ -180,12 +180,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # The release tags it downloads each `kb` of.
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: e2e/upgrade.sh
       - run: e2e/update.sh
 
@@ -201,9 +201,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       # A display with no GPU: Xvfb, with Mesa's software Vulkan; ImageMagick for the screenshot.
       - if: runner.os == 'Linux'
         run: |
@@ -218,7 +218,7 @@ jobs:
         shell: pwsh
         run: ./e2e/smoke-app.ps1
       - if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: app-smoke-${{ runner.os }}
           path: target/smoke
@@ -231,9 +231,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # Keep in sync with `rust-version` in the workspace's Cargo.toml, which the core and the command line inherit.
       # The kanban app follows GPUI's own requirements instead, so this checks the default members.
-      - uses: dtolnay/rust-toolchain@1.100
-      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@d5e4d57b030548f435d0befec15ff413a2c60eff # 1.100
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: cargo test --locked
