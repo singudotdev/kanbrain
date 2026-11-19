@@ -5,7 +5,7 @@
 use super::theme::{BORDER, DIM, TEXT};
 use gpui::{
     Along, Axis, Bounds, DispatchPhase, Div, ElementId, Hitbox, HitboxBehavior, MouseButton, MouseDownEvent,
-    MouseExitEvent, MouseMoveEvent, MouseUpEvent, Pixels, ScrollHandle, ScrollWheelEvent, Window, canvas, div, fill,
+    MouseExitEvent, MouseMoveEvent, MouseUpEvent, Pixels, ScrollEvent, ScrollHandle, Window, canvas, div, fill,
     prelude::*, px, rgb,
 };
 use std::cell::{Cell, RefCell};
@@ -103,7 +103,7 @@ pub fn bar(scroll: &ScrollHandle, axis: Axis, id: impl Into<ElementId>, over: &O
             // the area from here, its own way, or the other for a wheel that only turns that way.
             // A line as tall as the board's text, where GPUI's own scrolling measures it, not the window's default.
             let wheeled = (hitbox.clone(), scroll.clone(), window.line_height());
-            window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, _| {
+            window.on_mouse_event(move |event: &ScrollEvent, phase, window, _| {
                 let (hitbox, scroll, line_height) = &wheeled;
                 if bubbling(phase) && hitbox.should_handle_scroll(window) && !scroll.bounds().contains(&event.position)
                 {

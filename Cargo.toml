@@ -6,7 +6,7 @@ members = ["core", "cli", "gui", "xtask"]
 default-members = ["core", "cli"]
 
 [workspace.package]
-version = "0.7.1"
+version = "0.7.2"
 edition = "2024"
 # The core's and the command line's, which CI's "minimum Rust version" job builds with; the kanban app follows
 # GPUI's requirements instead, so it doesn't inherit it.
@@ -16,7 +16,7 @@ license = "AGPL-3.0-only"
 
 [workspace.dependencies]
 # The version is what crates.io resolves it to: keep it at the workspace version.
-kanbrain-core = { path = "core", version = "0.7.1" }
+kanbrain-core = { path = "core", version = "0.7.2" }
 anyhow = "1.0.104"
 # Times: the files' timestamps in local time, report periods, ages and durations. In chrono's place, unmaintained
 # (RUSTSEC-2026-0543): see docs/decisions/0014-times-with-jiff-not-chrono.md.
@@ -49,9 +49,9 @@ return_self_not_must_use = "allow"
 strip = true
 lto = true
 
-# The patches Zed 1.23.2 builds GPUI with (from its workspace Cargo.toml and Cargo.lock), for the kanban app;
+# The patches Zed 1.29.2 builds GPUI with (from its workspace Cargo.toml and Cargo.lock), for the kanban app;
 # a git dependency doesn't carry them over. The command line doesn't use these crates.
 [patch.crates-io]
 async-process = { git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d" }
-async-task = { git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd71e4e94fbda54ce6302444de14f4d190e" }
-calloop = { git = "https://github.com/zed-industries/calloop", rev = "eb6b4fd17b9af5ecc226546bdd04185391b3e265" }
+async-task = { git = "https://github.com/zed-industries/async-task.git", rev = "015845a19fc31752c02367567d3b8900a406f9da" }
+calloop = { git = "https://github.com/zed-industries/calloop", rev = "3759371fee14c40066d64777e2a36b6ffcc22590" }

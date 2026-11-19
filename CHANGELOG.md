@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-19
+
+### Changed
+
+- The kanban app is built on GPUI from Zed 1.29.2 (it was 1.23.2): it wraps text at the line breaks Unicode
+  allows (UAX #14), and no longer pulls in the unmaintained paste crate.
+
 ## [0.7.1] - 2026-11-19
 
 ### Added
@@ -767,7 +774,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/singudotdev/kanbrain/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/singudotdev/kanbrain/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/singudotdev/kanbrain/compare/v0.6.8...v0.7.0
 [0.6.8]: https://github.com/singudotdev/kanbrain/compare/v0.6.7...v0.6.8
