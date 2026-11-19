@@ -6,7 +6,7 @@ members = ["core", "cli", "gui", "xtask"]
 default-members = ["core", "cli"]
 
 [workspace.package]
-version = "0.6.8"
+version = "0.7.0"
 edition = "2024"
 # The core's and the command line's, which CI's "minimum Rust version" job builds with; the kanban app follows
 # GPUI's requirements instead, so it doesn't inherit it.
@@ -16,7 +16,7 @@ license = "AGPL-3.0-only"
 
 [workspace.dependencies]
 # The version is what crates.io resolves it to: keep it at the workspace version.
-kanbrain-core = { path = "core", version = "0.6.8" }
+kanbrain-core = { path = "core", version = "0.7.0" }
 anyhow = "1.0.104"
 # Times: the files' timestamps in local time, report periods, ages and durations. In chrono's place, unmaintained
 # (RUSTSEC-2026-0543): see docs/decisions/0014-times-with-jiff-not-chrono.md.
