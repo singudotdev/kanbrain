@@ -17,7 +17,6 @@ accepted = [
     "Unicode-3.0",
     "Unlicense",
     "Zlib",
-    "bzip2-1.0.6",
 ]
 # Only what ends up in the binaries: build scripts, proc macros' build tools and tests don't.
 ignore-build-dependencies = true

@@ -25,7 +25,7 @@ fn window<'a>(
 
 #[test]
 fn keystrokes_become_board_keys() {
-    let key = |s: &str| key_events(&Keystroke::parse(s).unwrap());
+    let key = |s: &'static str| key_events(&Keystroke::parse(s).unwrap());
     let char = |c| vec![KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)];
     assert_eq!(key("n"), char('n'));
     assert_eq!(key("shift-l"), char('L'));
@@ -435,7 +435,13 @@ fn a_long_list_draws_only_the_rows_near_its_view(cx: &mut gpui::TestAppContext) 
     // Fifty rows down, so none is cut at its edges.
     let delta = gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(-50. * super::dropdown::ROW_HEIGHT)));
     let touch_phase = gpui::TouchPhase::Moved;
-    cx.simulate_event(gpui::ScrollWheelEvent { position: list.center(), delta, modifiers, touch_phase });
+    cx.simulate_event(gpui::ScrollEvent {
+        position: list.center(),
+        delta,
+        modifiers,
+        touch_phase,
+        source: gpui::ScrollSource::Pointer,
+    });
     next_frames(cx);
     let (rows, shown) = drawn(cx);
     assert!(rows <= 3 * MAX_ROWS && shown == MAX_ROWS, "scrolled: {rows} drawn, {shown} shown");
@@ -1678,7 +1684,13 @@ fn wheel_at(
     let before = scrolled(view, cx);
     let modifiers = gpui::Modifiers { shift, ..gpui::Modifiers::none() };
     let touch_phase = gpui::TouchPhase::Moved;
-    cx.simulate_event(gpui::ScrollWheelEvent { position, delta, modifiers, touch_phase });
+    cx.simulate_event(gpui::ScrollEvent {
+        position,
+        delta,
+        modifiers,
+        touch_phase,
+        source: gpui::ScrollSource::Pointer,
+    });
     next_frames(cx);
     let after = scrolled(view, cx);
     (after.0 - before.0, after.1 - before.1)
@@ -2098,7 +2110,13 @@ fn the_card_in_view_stays_put_as_the_cards_above_it_are_reckoned_anew(cx: &mut g
     let column = cx.debug_bounds("column todo").expect("the column is drawn");
     let delta = gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(-8000.)));
     let (modifiers, touch_phase) = (gpui::Modifiers::none(), gpui::TouchPhase::Moved);
-    cx.simulate_event(gpui::ScrollWheelEvent { position: column.center(), delta, modifiers, touch_phase });
+    cx.simulate_event(gpui::ScrollEvent {
+        position: column.center(),
+        delta,
+        modifiers,
+        touch_phase,
+        source: gpui::ScrollSource::Pointer,
+    });
     let (card, top) = first_in_view(cx, 300);
     // The cards reckoned above it now as tall as those laid out on average: the column longer above the view.
     next_frames(cx);

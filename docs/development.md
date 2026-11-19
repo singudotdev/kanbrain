@@ -133,7 +133,7 @@ The crates use the **Rust 2024 edition**. Shared versions and lints are in the w
 
 | crate | version | used for |
 | --- | --- | --- |
-| [`gpui`](https://www.gpui.rs) | Zed 1.23.2 (git) | `gui`: the kanban app's window, layout, input and drag and drop. From Zed's repository, pinned to a tag: the crates.io release (0.2.2) can't draw on NVIDIA with Wayland, and newer GPUI isn't published. The workspace `Cargo.toml` carries the `[patch]` entries Zed builds it with |
+| [`gpui`](https://www.gpui.rs) | Zed 1.29.2 (git) | `gui`: the kanban app's window, layout, input and drag and drop. From Zed's repository, pinned to a tag: the crates.io release (0.2.2) can't draw on NVIDIA with Wayland, and newer GPUI isn't published. The workspace `Cargo.toml` carries the `[patch]` entries Zed builds it with |
 | [`jiff`](https://docs.rs/jiff/1.0.1) | 1.0 | dates, times, time zones: the files' timestamps in local time, report periods, ages and durations ([decision 14](decisions/0014-times-with-jiff-not-chrono.md)) |
 | [`dirs`](https://docs.rs/dirs) | 7 | platform data folder |
 | [`anyhow`](https://docs.rs/anyhow) | 1 | error handling |
@@ -141,7 +141,7 @@ The crates use the **Rust 2024 edition**. Shared versions and lints are in the w
 | [`rustix`](https://docs.rs/rustix) | 1 | Unix only: the effective user id for the root check, without `unsafe` |
 | [`pulldown-cmark`](https://docs.rs/pulldown-cmark) | 0.13 | `gui`: parsing descriptions and comments to draw them as markdown; the version Zed uses |
 | [`fs4`](https://docs.rs/fs4) | 1.1 | each brain's write lock, an advisory lock on a file in the cache (`Store::lock`) |
-| `gpui_platform` | Zed 1.23.2 (git) | `gui`: GPUI's window system backends, Wayland and X11 on Linux |
+| `gpui_platform` | Zed 1.29.2 (git) | `gui`: GPUI's window system backends, Wayland and X11 on Linux |
 | [`image`](https://docs.rs/image) | 0.25 | `gui`, Linux and FreeBSD only: decoding the window icon (PNG) for X11; only its `png` feature |
 | [`winresource`](https://docs.rs/winresource) | 0.1 | `gui`, Windows only, at build time: the program's icon and version in its `.exe` |
 | [`similar`](https://docs.rs/similar) | 3.2 | `gui`: the line diff and three-way merge of what the editor and `kb` changed meanwhile (`text::merge`) |
