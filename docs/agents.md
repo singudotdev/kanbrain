@@ -245,7 +245,7 @@ hand.
 
 | command | does |
 | --- | --- |
-| `context` | markdown summary: the project's description, answered tasks (with the answer), tasks in doing (with their latest comment), parked (with the question they wait on) and todo; the latest done; decisions (proposed and rejected ones marked); notes; outside a project, also how to use the commands |
+| `context` | markdown summary: the project's description, answered tasks (with the answer), tasks in doing (with their latest comment, and the notes and decisions in force linked to them), parked (with the question they wait on) and todo; the latest done; decisions (an accepted one with what it decided, proposed and rejected ones marked); notes; outside a project, also how to use the commands |
 | `add [--note\|--decision] [--tag TAG]… [--link ID]… [--body TEXT\|-] [--start] TITLE…` | creates an entry, prints `#id title (state)` |
 | `show ID` | the entry as compact text: state, time tracked, description, comments with the latest changes to the title, tags, related entries and description among them, related entries, latest status changes, file path |
 | `list notes decisions` | every note and decision (add statuses such as `doing` to include tasks) |
