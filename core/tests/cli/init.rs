@@ -69,6 +69,16 @@ fn the_section_asks_for_the_description_the_hook_and_context_ask_for() {
 }
 
 #[test]
+fn the_section_has_notes_their_own_bullet_saying_when_to_write_one() {
+    // Squeezed into the decisions bullet, a sentence long, no agent ever wrote one: 0 notes against 10 decisions.
+    let words = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let section = words(SECTION);
+    assert!(section.contains("- Notes: what you learned"), "a bullet of its own");
+    assert!(section.contains("Before you finish a task"), "tied to a moment agents already stop at");
+    assert!(section.contains("`add --note --link ID --body - TITLE`"));
+}
+
+#[test]
 fn registers_the_project_and_joins_repositories_of_the_same_one() {
     let (code, central) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let (api, web) = (code.path().join("api"), code.path().join("web"));
