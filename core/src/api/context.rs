@@ -133,7 +133,15 @@ fn decided(task: &Task) -> Option<String> {
     if task.kind != Kind::Decision || task.decision != DecisionState::Accepted {
         return None;
     }
-    task.comments.iter().rev().find_map(|c| c.body.trim_start().strip_prefix("Accepted: ")).map(cut)
+    // The latest acceptance decides, even a bare `Accepted.`: an older one's reason was of a verdict since reversed.
+    task.comments
+        .iter()
+        .rev()
+        .find_map(|c| match c.body.trim() {
+            "Accepted." => Some(None),
+            body => body.strip_prefix("Accepted: ").map(|reason| Some(cut(reason))),
+        })
+        .flatten()
 }
 
 /// `first line…`: a text's first line that isn't blank, cut to [`EXCERPT_CHARS`], with `…` when more follows.

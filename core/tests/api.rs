@@ -118,6 +118,12 @@ fn context_says_what_an_accepted_decision_decided() {
     brain.resolve(reversed, DecisionState::Rejected, "x").unwrap();
     brain.resolve(reversed, DecisionState::Accepted, "Once chosen").unwrap();
     brain.resolve(reversed, DecisionState::Rejected, "Changed our minds").unwrap();
+    // Accepted with a reason, rejected, accepted again with none: the old reason isn't what it decided now.
+    let flipped = brain.add(new(Kind::Decision, "Flipped")).unwrap();
+    brain.resolve(flipped, DecisionState::Rejected, "x").unwrap();
+    brain.resolve(flipped, DecisionState::Accepted, "Stale option").unwrap();
+    brain.resolve(flipped, DecisionState::Rejected, "y").unwrap();
+    brain.resolve(flipped, DecisionState::Accepted, "").unwrap();
     // Only a decision has one.
     let task = brain.add(new(Kind::Task, "A task")).unwrap();
     brain.add_comment(task, "Accepted: the plan").unwrap();
@@ -125,6 +131,7 @@ fn context_says_what_an_accepted_decision_decided() {
     let context = brain.context_markdown();
     assert!(context.contains("  decided: Option 2\n"), "a single line ends without a cut mark: {context}");
     assert!(!context.contains("Once chosen") && !context.contains("the plan"), "{context}");
+    assert!(!context.contains("Stale option"), "the latest acceptance had no reason: {context}");
     // The latest acceptance, its first line, and not the "Accepted: " the comment starts with.
     assert!(context.contains("Activity log: v0.6.0 or v0.5.3\n  decided: Option 1, in v0.6.0.…\n"), "{context}");
     assert!(!context.contains("too big") && !context.contains("Second line"), "{context}");
