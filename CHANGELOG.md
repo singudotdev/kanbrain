@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- `kb context` says what each accepted decision decided (`  decided: …`, the first line of its latest acceptance, cut
+  at 120 characters), since a title like "A or B" doesn't, and lists under each task in doing the notes and decisions
+  in force linked to it (`  related: …`, three at most, then how many more), so an agent finds what bears on its
+  task among more than the newest twenty.
+
 ### Changed
 
 - The section `kb init` writes in `CLAUDE.md` / `AGENTS.md` gives notes a bullet of their own, saying what is worth
