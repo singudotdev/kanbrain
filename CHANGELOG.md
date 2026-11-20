@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The section `kb init` writes in `CLAUDE.md` / `AGENTS.md` gives notes a bullet of their own, saying what is worth
+  one and when to write it (before finishing a task): they were a sentence inside the decisions bullet, and no
+  agent wrote any. `kb init --all` brings existing projects up to it.
+
 ## [0.7.2] - 2026-11-19
 
 ### Changed
