@@ -70,7 +70,7 @@ jobs:
       - run: |
           # shellcheck disable=SC2086 # one package per word
           sudo apt-get update && sudo apt-get install -y $GUI_LINUX_DEPS
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2
         with:
           tool: cargo-mutants@27.1.0
       - name: Mutants of the changed lines

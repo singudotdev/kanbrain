@@ -125,7 +125,8 @@ list; questions don't get one. See [For coding agents](docs/agents.md) for what 
 
 The output is kept small so it doesn't waste the agent's context, and the CLI costs nothing until it's called.
 `context` lists titles and ids, capped at 20 per section (5 for the latest done), and the first line of the latest
-comment of a task in doing or parked, usually where the work stopped. Write commands reply with one line, like
+comment of a task in doing or parked, usually where the work stopped, what an accepted decision decided and, under a
+task in doing, the notes and decisions in force linked to it. Write commands reply with one line, like
 `#4 Fix login 500 (doing) #auth`. `show ID` is how an agent reads one entry in full.
 
 ## 3. Commands you'll use most

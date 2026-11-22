@@ -69,9 +69,11 @@ The user follows them live on a kanban board: keep it showing what you're doing 
   the chat instead, `start` the task (that ends the wait). `accept`/`reject` a decision only when the user tells
   you to.
 - Choosing between approaches within your task: `search` for earlier decisions (only accepted ones are in force),
-  then `add --decision --link ID --body - TITLE` with Context / Decision / Consequences on stdin. Non-obvious
-  findings: `add --note --link ID --body - TITLE`; a problem someone has to fix is a task instead, in the
-  repository that has to change.
+  then `add --decision --link ID --body - TITLE` with Context / Decision / Consequences on stdin.
+- Notes: what you learned that neither the code nor the task says and the next session would otherwise rediscover
+  (a cause you traced, a constraint, a trap, how something really behaves). Before you finish a task, if you
+  learned one: `add --note --link ID --body - TITLE`, what it is and how you know. A problem someone has to fix is
+  a task instead, in the repository that has to change.
 - Always base what you do and write on official documentation: that of the language, library, tool or API, at the
   version this repository pins (its manifest or lockfile), never on memory or posts elsewhere. Whatever you write
   that rests on it (a description, decision, note or comment) links the page it rests on with a markdown link,

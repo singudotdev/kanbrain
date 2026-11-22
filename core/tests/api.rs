@@ -96,6 +96,105 @@ fn context_shows_where_work_stopped_and_stays_short() {
 }
 
 #[test]
+fn context_says_what_an_accepted_decision_decided() {
+    let (mut brain, _dir) = brain();
+    let chosen = brain.add(new(Kind::Decision, "Activity log: v0.6.0 or v0.5.3")).unwrap();
+    brain.resolve(chosen, DecisionState::Rejected, "too big").unwrap();
+    brain.resolve(chosen, DecisionState::Accepted, "Option 1, in v0.6.0.\nSecond line").unwrap();
+    let bare = brain.add(new(Kind::Decision, "Bare")).unwrap();
+    brain.resolve(bare, DecisionState::Rejected, "no").unwrap();
+    brain.resolve(bare, DecisionState::Accepted, "").unwrap();
+    let rejected = brain.add(new(Kind::Decision, "Refused")).unwrap();
+    brain.resolve(rejected, DecisionState::Rejected, "Not doing this").unwrap();
+    let long = brain.add(new(Kind::Decision, "Long")).unwrap();
+    brain.resolve(long, DecisionState::Rejected, "x").unwrap();
+    brain.resolve(long, DecisionState::Accepted, &"y".repeat(200)).unwrap();
+
+    let plain = brain.add(new(Kind::Decision, "Plain")).unwrap();
+    brain.resolve(plain, DecisionState::Rejected, "x").unwrap();
+    brain.resolve(plain, DecisionState::Accepted, "Option 2").unwrap();
+    // Accepted, then rejected: it isn't in force, so what it once decided doesn't count.
+    let reversed = brain.add(new(Kind::Decision, "Reversed")).unwrap();
+    brain.resolve(reversed, DecisionState::Rejected, "x").unwrap();
+    brain.resolve(reversed, DecisionState::Accepted, "Once chosen").unwrap();
+    brain.resolve(reversed, DecisionState::Rejected, "Changed our minds").unwrap();
+    // Accepted with a reason, rejected, accepted again with none: the old reason isn't what it decided now.
+    let flipped = brain.add(new(Kind::Decision, "Flipped")).unwrap();
+    brain.resolve(flipped, DecisionState::Rejected, "x").unwrap();
+    brain.resolve(flipped, DecisionState::Accepted, "Stale option").unwrap();
+    brain.resolve(flipped, DecisionState::Rejected, "y").unwrap();
+    brain.resolve(flipped, DecisionState::Accepted, "").unwrap();
+    // Only a decision has one.
+    let task = brain.add(new(Kind::Task, "A task")).unwrap();
+    brain.add_comment(task, "Accepted: the plan").unwrap();
+
+    let context = brain.context_markdown();
+    assert!(context.contains("  decided: Option 2\n"), "a single line ends without a cut mark: {context}");
+    assert!(!context.contains("Once chosen") && !context.contains("the plan"), "{context}");
+    assert!(!context.contains("Stale option"), "the latest acceptance had no reason: {context}");
+    // The latest acceptance, its first line, and not the "Accepted: " the comment starts with.
+    assert!(context.contains("Activity log: v0.6.0 or v0.5.3\n  decided: Option 1, in v0.6.0.…\n"), "{context}");
+    assert!(!context.contains("too big") && !context.contains("Second line"), "{context}");
+    // Nothing to say when it was accepted without a reason, nor when it isn't in force.
+    assert!(context.contains(&format!("- #{bare} Bare\n")), "no reason, no line: {context}");
+    assert!(context.contains("Refused · rejected\n") && !context.contains("Not doing this"), "{context}");
+    assert!(context.contains(&format!("  decided: {}…\n", "y".repeat(120))), "cut like a last comment: {context}");
+}
+
+#[test]
+fn context_lists_what_is_in_force_for_the_tasks_in_progress() {
+    let (mut brain, _dir) = brain();
+    let task = brain.add(NewEntry { start: true, ..new(Kind::Task, "Fix login") }).unwrap();
+    let parked = brain.add(new(Kind::Task, "Other")).unwrap();
+    let in_force = brain.add(NewEntry { links: vec![task, parked], ..new(Kind::Decision, "Sessions in cookies") });
+    let in_force = in_force.unwrap();
+    let note = brain.add(NewEntry { links: vec![task], ..new(Kind::Note, "nginx timeout is 30s") }).unwrap();
+    let refused = brain.add(NewEntry { links: vec![task], ..new(Kind::Decision, "JWT") }).unwrap();
+    brain.resolve(refused, DecisionState::Rejected, "no").unwrap();
+    let other = brain.add(NewEntry { links: vec![task], ..new(Kind::Task, "A linked task") }).unwrap();
+
+    let context = brain.context_markdown();
+    let line = format!("  related: #{note} nginx timeout is 30s · #{in_force} Sessions in cookies\n");
+    assert!(context.contains(&format!("- #{task} Fix login · running")), "{context}");
+    assert!(context.contains(&line), "notes then decisions in force: {context}");
+    assert_eq!(context.matches("  related:").count(), 1, "only under the task in progress: {context}");
+    assert!(
+        !context
+            .lines()
+            .any(|l| l.starts_with("  related:") && (l.contains("JWT") || l.contains(&format!("#{other} "))))
+    );
+
+    brain.add(NewEntry { links: vec![task], ..new(Kind::Note, "the third") }).unwrap();
+    let context = brain.context_markdown();
+    assert!(context.contains("the third") && !context.contains("more"), "exactly three: nothing more: {context}");
+    for i in 0..3 {
+        brain.add(NewEntry { links: vec![task], ..new(Kind::Note, &format!("extra {i}")) }).unwrap();
+    }
+    let context = brain.context_markdown();
+    let related = context.lines().find(|l| l.starts_with("  related:")).unwrap();
+    assert_eq!(related.matches(" · ").count(), 3, "three and how many more: {related}");
+    assert!(related.ends_with(" · +3 more"), "{related}");
+}
+
+#[test]
+fn context_shows_a_last_comment_only_under_tasks_in_progress_or_parked() {
+    let (mut brain, _dir) = brain();
+    let todo = brain.add(new(Kind::Task, "Not started")).unwrap();
+    brain.add_comment(todo, "a todo's comment").unwrap();
+    let doing = brain.add(NewEntry { start: true, ..new(Kind::Task, "Started") }).unwrap();
+    brain.add_comment(doing, "a doing's comment").unwrap();
+    for i in 0..5 {
+        let id = brain.add(new(Kind::Task, &format!("finished {i}"))).unwrap();
+        brain.add_comment(id, "a done's comment").unwrap();
+        brain.set_status(id, Status::Done).unwrap();
+    }
+    let context = brain.context_markdown();
+    assert!(context.contains("a doing's comment"), "{context}");
+    assert!(!context.contains("a todo's comment") && !context.contains("a done's comment"), "{context}");
+    assert!(!context.contains("more:"), "five done tasks are exactly what it lists: {context}");
+}
+
+#[test]
 fn context_starts_with_what_the_project_is_about() {
     use crate::projects;
     let (central, code) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
