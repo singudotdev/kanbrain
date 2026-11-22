@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-11-22
+
 ### Added
 
 - `kb context` says what each accepted decision decided (`  decided: …`, the first line of its latest acceptance, cut
@@ -17,6 +19,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The section `kb init` writes in `CLAUDE.md` / `AGENTS.md` gives notes a bullet of their own, saying what is worth
   one and when to write it (before finishing a task): they were a sentence inside the decisions bullet, and no
   agent wrote any. `kb init --all` brings existing projects up to it.
+
+### Security
+
+- The kanban app is built with `url` 2.5.9, which fixes RUSTSEC-2026-0592 (a stack overflow on nested `blob:`
+  URLs). `kb` doesn't use it.
 
 ## [0.7.2] - 2026-11-19
 
@@ -787,7 +794,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Licensed AGPL-3.0-only with additional terms in `NOTICE`: attribution, no presenting kanbrain as one's own work,
   modified versions marked as such, and no rights to the kanbrain name or logo.
 
-[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/singudotdev/kanbrain/compare/v0.7.3...HEAD
+[0.7.3]: https://github.com/singudotdev/kanbrain/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/singudotdev/kanbrain/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/singudotdev/kanbrain/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/singudotdev/kanbrain/compare/v0.6.8...v0.7.0
