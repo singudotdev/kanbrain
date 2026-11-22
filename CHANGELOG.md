@@ -20,6 +20,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   one and when to write it (before finishing a task): they were a sentence inside the decisions bullet, and no
   agent wrote any. `kb init --all` brings existing projects up to it.
 
+### Security
+
+- The kanban app is built with `url` 2.5.9, which fixes RUSTSEC-2026-0592 (a stack overflow on nested `blob:`
+  URLs). `kb` doesn't use it.
+
 ## [0.7.2] - 2026-11-19
 
 ### Changed
