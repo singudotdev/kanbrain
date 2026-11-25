@@ -5,6 +5,16 @@ fn changed(watcher: &mut Watcher) -> usize {
     watcher.changed().len()
 }
 
+/// Saves `text` to `path` as `kb` and the app do: to a hidden file beside it, then renamed over it, which changes the
+/// folder's time. A file written over in place leaves it as it was, which only the timer's listing finds (see
+/// `a_folder_unchanged_a_tick_after_its_listing_is_not_listed_again`): a look a tick after the files were made, as on a
+/// slow runner, would pass over it.
+fn save(path: &Path, text: &str) {
+    let tmp = path.with_file_name(format!(".{}.tmp", path.file_name().unwrap().to_string_lossy()));
+    fs::write(&tmp, text).unwrap();
+    fs::rename(&tmp, path).unwrap();
+}
+
 #[test]
 fn changes_to_markdown_files_are_noticed_once() {
     let dir = tempfile::tempdir().unwrap();
@@ -13,7 +23,7 @@ fn changes_to_markdown_files_are_noticed_once() {
     fs::write(dir.path().join("0001-a.md"), "# a").unwrap();
     assert_eq!(changed(&mut watcher), 1, "a new file");
     assert_eq!(changed(&mut watcher), 0, "only once");
-    fs::write(dir.path().join("0001-a.md"), "# a, longer").unwrap();
+    save(&dir.path().join("0001-a.md"), "# a, longer");
     assert_eq!(changed(&mut watcher), 1, "an edit");
     fs::rename(dir.path().join("0001-a.md"), dir.path().join("0001-b.md")).unwrap();
     assert_eq!(changed(&mut watcher), 1, "a rename");
@@ -42,7 +52,7 @@ fn the_files_changed_added_or_deleted_are_named() {
         fs::write(dir.path().join(name), "# x").unwrap();
     }
     assert_eq!(files(&mut watcher), ["0001-a.md", "0002-b.md", "0003-c.md"]);
-    fs::write(dir.path().join("0002-b.md"), "# b, longer").unwrap();
+    save(&dir.path().join("0002-b.md"), "# b, longer");
     assert_eq!(files(&mut watcher), ["0002-b.md"], "an edit");
     fs::rename(dir.path().join("0003-c.md"), dir.path().join("0000-c.md")).unwrap();
     assert_eq!(files(&mut watcher), ["0000-c.md", "0003-c.md"], "a rename: the new name and the old");
